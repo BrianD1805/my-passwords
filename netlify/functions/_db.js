@@ -1,6 +1,7 @@
+import { getDatabase } from '@netlify/database';
 import { neon } from '@neondatabase/serverless';
 
-export const APP_VERSION = 'My Passwords Ver-0.002';
+export const APP_VERSION = 'My Passwords Ver-0.002B';
 
 export function jsonResponse(statusCode, body) {
   return {
@@ -24,9 +25,18 @@ export function getDatabaseUrl() {
 }
 
 export function getSql() {
+  // Netlify Database's current recommended path is @netlify/database.
+  // It automatically resolves the correct production or deploy-preview database branch.
+  try {
+    const db = getDatabase();
+    if (db?.sql) return db.sql;
+  } catch (error) {
+    // Fall back to a manual connection string for older/local setups.
+  }
+
   const databaseUrl = getDatabaseUrl();
-  if (!databaseUrl) return null;
-  return neon(databaseUrl);
+  if (databaseUrl) return neon(databaseUrl);
+  return null;
 }
 
 export function parseBody(event) {

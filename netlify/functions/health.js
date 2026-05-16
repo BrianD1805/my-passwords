@@ -1,10 +1,12 @@
-import { APP_VERSION, jsonResponse } from './_db.js';
-
 export async function handler() {
-  return jsonResponse(200, {
-    ok: true,
-    app: 'My Passwords',
-    version: APP_VERSION,
-    mode: 'pwa-foundation-with-database-sync-layer'
-  });
+  return {
+    statusCode: 200,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    body: JSON.stringify({
+      ok: true,
+      app: 'My Passwords',
+      version: 'My Passwords Ver-0.002B',
+      mode: 'pwa-foundation-with-netlify-database-helper'
+    }, null, 2)
+  };
 }
