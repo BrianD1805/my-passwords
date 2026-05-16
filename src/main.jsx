@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Plus, RefreshCw, Search, ShieldCheck, Trash2, Unlock, UserRoundCheck } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.002B';
+const VERSION = 'My Passwords Ver-0.002D';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -35,7 +35,7 @@ const starterItems = [
       url: '',
       username: 'Trusted person access',
       password: 'Not enabled yet',
-      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.002B prepares the tenant/user database foundation.'
+      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.002D prepares the tenant/user database foundation.'
     },
     updatedAt: new Date().toISOString()
   }
@@ -153,7 +153,7 @@ function App() {
       const existing = await decryptVault(masterPassword);
       if (existing) {
         setItems(existing);
-        setMessage('Vault unlocked. Ver-0.002B can now push encrypted snapshots to the database once configured.');
+        setMessage('Vault unlocked. Ver-0.002D can now push encrypted snapshots to the database once configured.');
       } else {
         await encryptVault(starterItems, masterPassword);
         setItems(starterItems);
@@ -276,7 +276,7 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Private encrypted PWA foundation</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock your local encrypted vault. Ver-0.002B adds database connection checks, admin tenant bootstrap and encrypted snapshot sync.</p>
+          <p className="intro">Unlock your local encrypted vault. Ver-0.002D adds database connection checks, admin tenant bootstrap and encrypted snapshot sync.</p>
           <form onSubmit={unlockVault} className="unlock-form">
             <label>Master vault password</label>
             <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" autoFocus />
@@ -309,7 +309,7 @@ function App() {
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.002B database foundation</p><h2><Cloud size={21} /> Encrypted sync setup</h2></div>
+          <div><p className="eyebrow">Ver-0.002D database foundation</p><h2><Cloud size={21} /> Encrypted sync setup</h2></div>
           <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check DB</button>
         </div>
         <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
