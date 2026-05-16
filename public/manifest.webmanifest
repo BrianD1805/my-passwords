@@ -1,0 +1,13 @@
+{
+  "name": "My Passwords",
+  "short_name": "Passwords",
+  "description": "Private encrypted vault PWA foundation",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#1d3557",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

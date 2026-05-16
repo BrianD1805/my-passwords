@@ -1,0 +1,21 @@
+{
+  "name": "my-passwords",
+  "private": true,
+  "version": "0.001.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "netlify:dev": "netlify dev"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest",
+    "@netlify/database": "latest"
+  },
+  "devDependencies": {}
+}
