@@ -1,11 +1,11 @@
-# My Passwords Ver-0.002D — Version labels and database runtime diagnostics
+# My Passwords Ver-0.002E — Version labels and database runtime diagnostics
 
 This patch is an overwrite patch for the existing My Passwords project.
 
 ## What changed
 
-- Bumped visible app/function version labels to `My Passwords Ver-0.002D`.
-- Bumped service worker cache to `my-passwords-v0.002D`.
+- Bumped visible app/function version labels to `My Passwords Ver-0.002E`.
+- Bumped service worker cache to `my-passwords-v0.002E`.
 - Pinned Vite and React plugin dependencies for stable Netlify builds.
 - Reworked `/.netlify/functions/db-health` so it gives detailed runtime diagnostics:
   - whether `@netlify/database` imports successfully
@@ -28,7 +28,7 @@ npm run build
 ```bat
 git status
 git add .
-git commit -m "My Passwords Ver-0.002D fix version labels and database runtime diagnostics"
+git commit -m "My Passwords Ver-0.002E fix version labels and database runtime diagnostics"
 git push origin main
 ```
 

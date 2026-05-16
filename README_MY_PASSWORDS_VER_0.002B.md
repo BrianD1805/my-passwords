@@ -1,4 +1,4 @@
-# My Passwords Ver-0.002D — Netlify Database Helper & Migration Fix
+# My Passwords Ver-0.002E — Netlify Database Helper & Migration Fix
 
 This patch fixes the Netlify Database connection method after Netlify CLI reported:
 
@@ -14,8 +14,8 @@ Migrations directory: netlify/database/migrations
 - Updated Netlify Functions to use Netlify's official database helper.
 - Kept the older manual connection-string fallback for safety.
 - Added the first migration at `netlify/database/migrations/0001_initial_schema/migration.sql`.
-- Bumped visible app/function version to `My Passwords Ver-0.002D`.
-- Bumped service worker cache to `my-passwords-v0.002D`.
+- Bumped visible app/function version to `My Passwords Ver-0.002E`.
+- Bumped service worker cache to `my-passwords-v0.002E`.
 - Kept the existing local vault storage keys so your local Ver-0.002 vault data is not thrown away.
 
 ## Overwrite instructions
@@ -53,7 +53,7 @@ http://localhost:8888/.netlify/functions/db-health
 ```bat
 git status
 git add .
-git commit -m "My Passwords Ver-0.002D use Netlify Database helper and migration"
+git commit -m "My Passwords Ver-0.002E use Netlify Database helper and migration"
 git push origin main
 ```
 
@@ -73,7 +73,7 @@ Expected DB health result after migration/deploy:
   "ok": true,
   "connected": true,
   "app": "My Passwords",
-  "version": "My Passwords Ver-0.002D",
+  "version": "My Passwords Ver-0.002E",
   "database_driver": "@netlify/database"
 }
 ```
