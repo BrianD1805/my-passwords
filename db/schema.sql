@@ -1,67 +1,77 @@
--- My Passwords Ver-0.001 SaaS-ready database foundation
--- Run this once Netlify Database / Postgres is provisioned.
--- Sensitive values should be stored only inside encrypted_payload.
-
-create extension if not exists pgcrypto;
+-- My Passwords Ver-0.002
+-- SaaS-ready Netlify Database / Postgres schema.
+-- IMPORTANT: Sensitive fields are stored as encrypted blobs only.
+-- Do not add plain-text password, bank PIN, API secret, or recovery-code columns.
 
 create table if not exists tenants (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  slug text unique not null,
+  id text primary key,
+  name text not null unique,
   plan text not null default 'private_founder',
   status text not null default 'active',
-  owner_user_id uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create table if not exists users (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid references tenants(id) on delete cascade,
+  id text primary key,
+  tenant_id text not null references tenants(id) on delete cascade,
   email text not null,
-  display_name text,
-  role text not null default 'member',
+  display_name text not null,
+  role text not null default 'administrator',
   status text not null default 'active',
-  last_login_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (tenant_id, email)
 );
 
-alter table tenants
-  add constraint tenants_owner_user_fk foreign key (owner_user_id) references users(id) deferrable initially deferred;
-
 create table if not exists categories (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references tenants(id) on delete cascade,
+  id text primary key,
+  tenant_id text not null references tenants(id) on delete cascade,
   name text not null,
-  icon text,
-  sort_order integer not null default 100,
+  icon text not null default 'folder',
+  sort_order integer not null default 0,
   created_at timestamptz not null default now(),
   unique (tenant_id, name)
 );
 
 create table if not exists vault_items (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references tenants(id) on delete cascade,
-  owner_user_id uuid references users(id) on delete set null,
-  category_id uuid references categories(id) on delete set null,
-  title text not null,
-  search_title text,
+  id text primary key,
+  tenant_id text not null references tenants(id) on delete cascade,
+  owner_user_id text not null references users(id) on delete cascade,
+  category_id text references categories(id) on delete set null,
+  title_search text,
   encrypted_payload text not null,
-  encryption_version text not null default 'client-aes-gcm-v1',
+  encrypted_payload_version text not null default 'aes-gcm-browser-v1',
   favourite boolean not null default false,
   archived boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+-- Ver-0.002 encrypted sync foundation.
+-- This table stores a full encrypted browser vault snapshot.
+-- The server/database cannot read the original secrets without the user's master password.
+create table if not exists vault_sync_snapshots (
+  id text primary key,
+  tenant_id text not null references tenants(id) on delete cascade,
+  user_id text not null references users(id) on delete cascade,
+  encrypted_blob text not null,
+  local_salt text not null,
+  local_iv text not null,
+  item_count integer not null default 0,
+  client_updated_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_vault_sync_snapshots_tenant_user_created
+on vault_sync_snapshots (tenant_id, user_id, created_at desc);
+
 create table if not exists emergency_users (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references tenants(id) on delete cascade,
-  owner_user_id uuid references users(id) on delete cascade,
+  id text primary key,
+  tenant_id text not null references tenants(id) on delete cascade,
+  owner_user_id text not null references users(id) on delete cascade,
   emergency_user_email text not null,
-  status text not null default 'invited',
+  status text not null default 'pending',
   access_level text not null default 'selected_categories',
   waiting_period_days integer not null default 14,
   created_at timestamptz not null default now(),
@@ -69,26 +79,25 @@ create table if not exists emergency_users (
 );
 
 create table if not exists emergency_requests (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references tenants(id) on delete cascade,
-  emergency_user_id uuid not null references emergency_users(id) on delete cascade,
+  id text primary key,
+  tenant_id text not null references tenants(id) on delete cascade,
+  emergency_user_id text not null references emergency_users(id) on delete cascade,
   status text not null default 'requested',
   requested_at timestamptz not null default now(),
-  unlock_after timestamptz not null,
+  unlock_after timestamptz,
   cancelled_at timestamptz,
   approved_at timestamptz
 );
 
 create table if not exists audit_log (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid references tenants(id) on delete cascade,
-  user_id uuid references users(id) on delete set null,
+  id text primary key,
+  tenant_id text references tenants(id) on delete cascade,
+  user_id text references users(id) on delete set null,
   action text not null,
-  item_id uuid,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
-create index if not exists vault_items_tenant_idx on vault_items(tenant_id);
-create index if not exists vault_items_search_idx on vault_items using gin (to_tsvector('english', coalesce(search_title, title)));
-create index if not exists audit_log_tenant_created_idx on audit_log(tenant_id, created_at desc);
+create index if not exists idx_users_tenant_email on users (tenant_id, email);
+create index if not exists idx_vault_items_tenant_owner on vault_items (tenant_id, owner_user_id);
+create index if not exists idx_audit_log_tenant_created on audit_log (tenant_id, created_at desc);

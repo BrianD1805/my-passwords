@@ -1,13 +1,12 @@
 {
   "name": "My Passwords",
-  "short_name": "Passwords",
-  "description": "Private encrypted vault PWA foundation",
+  "short_name": "My Passwords",
+  "description": "Private encrypted SaaS-ready password vault PWA.",
   "start_url": "/",
-  "scope": "/",
   "display": "standalone",
-  "background_color": "#f4f7fb",
+  "background_color": "#edf3f8",
   "theme_color": "#1d3557",
   "icons": [
-    { "src": "/icons/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
 }

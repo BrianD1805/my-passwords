@@ -1,7 +1,7 @@
 {
   "name": "my-passwords",
   "private": true,
-  "version": "0.001.0",
+  "version": "0.002.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,7 @@
     "react": "latest",
     "react-dom": "latest",
     "lucide-react": "latest",
-    "@netlify/database": "latest"
+    "@neondatabase/serverless": "latest"
   },
   "devDependencies": {}
 }

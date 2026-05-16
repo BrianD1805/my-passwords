@@ -1,10 +1,10 @@
-export default async () => {
-  return new Response(JSON.stringify({
+import { APP_VERSION, jsonResponse } from './_db.js';
+
+export async function handler() {
+  return jsonResponse(200, {
     ok: true,
     app: 'My Passwords',
-    version: 'Ver-0.001',
-    note: 'Netlify Functions are wired. Database save/sync will be added after Netlify Database is provisioned.'
-  }), {
-    headers: { 'content-type': 'application/json' }
+    version: APP_VERSION,
+    mode: 'pwa-foundation-with-database-sync-layer'
   });
-};
+}
