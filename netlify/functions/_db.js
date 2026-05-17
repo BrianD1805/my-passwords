@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 
-export const APP_VERSION = 'My Passwords Ver-0.002E';
+export const APP_VERSION = 'My Passwords Ver-0.002F';
 
 export function jsonResponse(statusCode, body) {
   return {
