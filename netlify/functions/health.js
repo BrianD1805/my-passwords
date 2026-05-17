@@ -5,6 +5,6 @@ export async function handler() {
     ok: true,
     app: 'My Passwords',
     version: APP_VERSION,
-    mode: 'pwa-foundation-with-supabase-database-layer'
+    mode: 'pwa-foundation-with-supabase-sync-verification'
   });
 }

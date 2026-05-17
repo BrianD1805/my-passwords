@@ -1,4 +1,4 @@
-# My Passwords Ver-0.003 — Supabase Setup
+# My Passwords Ver-0.004 — Supabase Setup
 
 This patch switches the cloud database layer from Netlify Database to Supabase while keeping Netlify hosting and Netlify Functions.
 
@@ -31,7 +31,7 @@ Remove or ignore the old variable:
 NETLIFY_DATABASE_URL
 ```
 
-Ver-0.003 no longer uses Netlify Database for app writes.
+Ver-0.004 no longer uses Netlify Database for app writes.
 
 ## Important cleanup
 

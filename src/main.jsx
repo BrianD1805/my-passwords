@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Plus, RefreshCw, Search, ShieldCheck, Trash2, Unlock, UserRoundCheck } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.003';
+const VERSION = 'My Passwords Ver-0.004';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -35,7 +35,7 @@ const starterItems = [
       url: '',
       username: 'Trusted person access',
       password: 'Not enabled yet',
-      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.003 switches the cloud layer to Supabase while keeping encrypted snapshots browser-generated.'
+      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.004 tests encrypted Supabase snapshots, shows visible sync status and removes old Netlify Database dependency messaging.'
     },
     updatedAt: new Date().toISOString()
   }
@@ -141,6 +141,7 @@ function App() {
     catch { return { email: '', displayName: 'Brian', tenantName: 'Brian Private Vault', tenantId: '', userId: '' }; }
   });
   const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'No encrypted cloud sync has run yet.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0 });
 
   useEffect(() => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
@@ -167,7 +168,7 @@ function App() {
       const existing = await decryptVault(masterPassword);
       if (existing) {
         setItems(existing);
-        setMessage('Vault unlocked. Ver-0.003 can now push encrypted snapshots to Supabase once configured.');
+        setMessage('Vault unlocked. Ver-0.004 can now save and verify encrypted snapshots in Supabase.');
       } else {
         await encryptVault(starterItems, masterPassword);
         setItems(starterItems);
@@ -226,8 +227,8 @@ function App() {
     setDbStatus({ checked: true, connected: false, message: 'Checking database...' });
     try {
       const result = await fetch('/.netlify/functions/db-health').then((res) => res.json());
-      setDbStatus({ checked: true, connected: !!result.connected, message: result.connected ? 'Supabase connected.' : result.message || 'Supabase not connected yet.' });
-      setMessage(result.connected ? 'Supabase health check passed.' : result.message || 'Supabase not connected yet.');
+      setDbStatus({ checked: true, connected: !!result.connected && !!result.schema_ready, message: result.connected && result.schema_ready ? 'Supabase connected and schema ready.' : result.message || 'Supabase not ready yet.' });
+      setMessage(result.connected && result.schema_ready ? 'Supabase health check passed. Schema is ready.' : result.message || 'Supabase not ready yet.');
     } catch (error) {
       setDbStatus({ checked: true, connected: false, message: 'Could not reach db-health function. Use netlify dev locally or test after deploy.' });
       setMessage('Could not reach db-health function. Use Netlify Dev locally or test after deploy.');
@@ -261,9 +262,18 @@ function App() {
 
   async function syncEncryptedVault() {
     const envelope = getLocalEnvelope();
-    if (!envelope) return setMessage('No local encrypted vault envelope found yet.');
-    if (!bootstrap.tenantId || !bootstrap.userId) return setMessage('Bootstrap the admin tenant first so the app has a tenantId and userId.');
+    if (!envelope) {
+      const note = 'No local encrypted vault envelope found yet.';
+      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: items.length });
+      return setMessage(note);
+    }
+    if (!bootstrap.tenantId || !bootstrap.userId) {
+      const note = 'Bootstrap the admin tenant first so the app has a tenantId and userId.';
+      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: items.length });
+      return setMessage(note);
+    }
     setSyncing(true);
+    setSyncStatus({ state: 'syncing', message: 'Encrypting and sending vault snapshot to Supabase...', lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount: items.length });
     try {
       const result = await postJson('/.netlify/functions/sync-vault', {
         tenantId: bootstrap.tenantId,
@@ -274,9 +284,30 @@ function App() {
         itemCount: items.length,
         clientUpdatedAt: envelope.updatedAt
       });
-      setMessage(result.message || (result.ok ? 'Encrypted vault synced to Supabase.' : 'Encrypted vault did not sync.'));
+      if (!result.ok) {
+        const note = `${result.message || 'Encrypted vault did not sync.'}${result.error ? ` Error: ${result.error}` : ''}`;
+        setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: items.length });
+        setMessage(note);
+        return;
+      }
+      const verified = await fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(bootstrap.tenantId)}&userId=${encodeURIComponent(bootstrap.userId)}`).then((res) => res.json());
+      const verifiedSnapshot = verified?.snapshot || null;
+      const lastSyncAt = new Date().toISOString();
+      const note = verified?.hasSnapshot
+        ? `Encrypted vault synced and verified in Supabase. Snapshot ${verifiedSnapshot?.id || result.snapshotId || 'saved'} contains ${verifiedSnapshot?.item_count ?? items.length} item(s).`
+        : 'Encrypted vault saved, but latest snapshot verification did not return a row yet.';
+      setSyncStatus({
+        state: verified?.hasSnapshot ? 'success' : 'warning',
+        message: note,
+        lastSyncAt,
+        lastSnapshotId: verifiedSnapshot?.id || result.snapshotId || '',
+        itemCount: Number(verifiedSnapshot?.item_count ?? items.length)
+      });
+      setMessage(note);
     } catch (error) {
-      setMessage('Could not reach sync function. Use Netlify Dev locally or test after deploy.');
+      const note = `Could not complete encrypted sync test. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`;
+      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: items.length });
+      setMessage(note);
     } finally {
       setSyncing(false);
     }
@@ -296,7 +327,7 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Private encrypted PWA foundation</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock your local encrypted vault. Ver-0.003 switches the cloud database layer to Supabase while keeping secrets encrypted in the browser.</p>
+          <p className="intro">Unlock your local encrypted vault. Ver-0.004 tests encrypted Supabase snapshots, shows visible sync status and keeps secrets encrypted in the browser.</p>
           <form onSubmit={unlockVault} className="unlock-form">
             <label>Master vault password</label>
             <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" autoFocus />
@@ -329,10 +360,15 @@ function App() {
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.003 Supabase foundation</p><h2><Cloud size={21} /> Encrypted sync setup</h2></div>
+          <div><p className="eyebrow">Ver-0.004 Supabase foundation</p><h2><Cloud size={21} /> Encrypted sync setup</h2></div>
           <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check Supabase</button>
         </div>
         <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
+        <div className={`sync-status-card ${syncStatus.state}`}>
+          <strong>{syncStatus.state === 'success' ? 'Encrypted cloud sync verified' : syncStatus.state === 'syncing' ? 'Sync in progress' : syncStatus.state === 'error' ? 'Sync needs attention' : syncStatus.state === 'warning' ? 'Sync warning' : 'Encrypted cloud sync status'}</strong>
+          <span>{syncStatus.message}</span>
+          {syncStatus.lastSyncAt && <small>Last sync: {new Date(syncStatus.lastSyncAt).toLocaleString()} · Items: {syncStatus.itemCount}{syncStatus.lastSnapshotId ? ` · Snapshot: ${syncStatus.lastSnapshotId}` : ''}</small>}
+        </div>
         {message && <p className="message sync-message">{message}</p>}
         <form className="bootstrap-grid" onSubmit={bootstrapAdmin}>
           <label>Admin email<input value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
@@ -340,7 +376,7 @@ function App() {
           <label>Tenant / vault name<input value={bootstrap.tenantName} onChange={(e) => setBootstrap({ ...bootstrap, tenantName: e.target.value })} /></label>
           <div className="button-stack">
             <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Bootstrap admin</button>
-            <button type="button" className="secondary-button" disabled={syncing} onClick={syncEncryptedVault}><Cloud size={18} /> Sync encrypted vault</button>
+            <button type="button" className="secondary-button" disabled={syncing} onClick={syncEncryptedVault}><Cloud size={18} /> {syncing ? 'Syncing...' : 'Sync encrypted vault'}</button>
           </div>
         </form>
         {(bootstrap.tenantId || bootstrap.userId) && <p className="ids-line">Tenant ID: <code>{bootstrap.tenantId}</code> · User ID: <code>{bootstrap.userId}</code></p>}
@@ -384,7 +420,7 @@ function App() {
         </section>
       </section>
 
-      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud layer</footer>
+      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud layer · Netlify Database removed from app code</footer>
     </main>
   );
 }

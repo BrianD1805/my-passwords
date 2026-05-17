@@ -91,3 +91,22 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
   .lock-card { padding: 24px; }
 }
 .sync-message { margin-top: 12px; margin-bottom: 0; }
+
+.sync-status-card {
+  display: grid;
+  gap: 5px;
+  margin: 12px 0;
+  padding: 13px 15px;
+  border-radius: 16px;
+  border: 1px solid #d9e5ee;
+  background: #f8fbfe;
+  color: #314b63;
+  line-height: 1.45;
+}
+.sync-status-card strong { color: #17283d; }
+.sync-status-card small { color: #64778a; overflow-wrap: anywhere; }
+.sync-status-card.success { background: #edf8f0; border-color: #c9e8d2; color: #245b34; }
+.sync-status-card.success strong { color: #245b34; }
+.sync-status-card.syncing { background: #eaf3fb; border-color: #c6dff1; color: #24506d; }
+.sync-status-card.warning { background: #fff6db; border-color: #f2d58a; color: #74530b; }
+.sync-status-card.error { background: #fff1f0; border-color: #f0c1bd; color: #8a302b; }

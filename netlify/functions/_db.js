@@ -1,4 +1,4 @@
-export const APP_VERSION = 'My Passwords Ver-0.003';
+export const APP_VERSION = 'My Passwords Ver-0.004';
 
 export function jsonResponse(statusCode, body) {
   return {
@@ -22,8 +22,6 @@ export function getEnvironmentFlags() {
   return {
     has_SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
     has_SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-    has_NETLIFY_DATABASE_URL: Boolean(process.env.NETLIFY_DATABASE_URL),
-    has_DATABASE_URL: Boolean(process.env.DATABASE_URL),
     has_NETLIFY: Boolean(process.env.NETLIFY),
     has_CONTEXT: Boolean(process.env.CONTEXT),
     has_URL: Boolean(process.env.URL)

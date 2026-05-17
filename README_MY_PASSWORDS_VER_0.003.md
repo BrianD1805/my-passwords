@@ -1,4 +1,4 @@
-# My Passwords Ver-0.003 — Supabase Database Layer
+# My Passwords Ver-0.004 — Supabase Database Layer
 
 ## Purpose
 
@@ -23,15 +23,15 @@ Supabase gives us a clearer service-role server write path for this password vau
 
 ## What changed
 
-- Version bumped to `My Passwords Ver-0.003`
-- Service worker cache bumped to `my-passwords-v0.003`
+- Version bumped to `My Passwords Ver-0.004`
+- Service worker cache bumped to `my-passwords-v0.004`
 - Removed Netlify Database/Neon runtime code from app functions
 - Added Supabase REST server-side database layer using Netlify Functions
 - Added Supabase health check
 - Added Supabase admin bootstrap
 - Added Supabase encrypted snapshot sync
 - Added `db/schema.sql` for Supabase SQL Editor
-- Added `docs/SUPABASE_SETUP_VER_0.003.md`
+- Added `docs/SUPABASE_SETUP_VER_0.004.md`
 - Moved app messages into the sync panel so errors are visible immediately
 
 ## Netlify environment variables needed
@@ -55,7 +55,7 @@ npm run build
 ```bat
 git status
 git add .
-git commit -m "My Passwords Ver-0.003 switch database layer to Supabase"
+git commit -m "My Passwords Ver-0.004 switch database layer to Supabase"
 git push origin main
 ```
 
