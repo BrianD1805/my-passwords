@@ -110,3 +110,31 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
 .sync-status-card.syncing { background: #eaf3fb; border-color: #c6dff1; color: #24506d; }
 .sync-status-card.warning { background: #fff6db; border-color: #f2d58a; color: #74530b; }
 .sync-status-card.error { background: #fff1f0; border-color: #f0c1bd; color: #8a302b; }
+
+/* Ver-0.005 form and snapshot layout polish */
+.status-grid { grid-template-columns: repeat(4, 1fr); }
+.sync-actions { display: flex; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
+.snapshot-history-card { margin: 12px 0; border: 1px solid #d9e5ee; background: #f8fbfe; border-radius: 16px; padding: 13px 15px; display: grid; gap: 10px; }
+.snapshot-history-title { display: grid; gap: 4px; color: #314b63; }
+.snapshot-history-title strong { color: #17283d; }
+.snapshot-history-title span { font-size: .9rem; color: #64778a; }
+.snapshot-list { display: grid; gap: 7px; }
+.snapshot-row { display: grid; grid-template-columns: 1.2fr .7fr 1fr; gap: 8px; align-items: center; background: #fff; border: 1px solid #e0e9f0; border-radius: 12px; padding: 9px 10px; }
+.snapshot-row code { background: #eef4f8; border-radius: 8px; padding: 4px 7px; overflow-wrap: anywhere; }
+.snapshot-row span, .snapshot-row small { color: #64778a; }
+.form-helper { margin: -4px 0 2px; color: #637489; line-height: 1.45; font-size: .92rem; }
+.secret-input-row { display: grid; grid-template-columns: 1fr 46px; gap: 8px; }
+.mini-button { border-radius: 13px; background: #e9f0f7; color: #22374d; display: grid; place-items: center; }
+.favourite-toggle { display: flex; align-items: center; gap: 10px; background: #f8fbfe; border: 1px solid #d9e5ee; border-radius: 14px; padding: 11px 13px; }
+.favourite-toggle input { width: auto; accent-color: #1d3557; }
+.form-buttons { display: grid; grid-template-columns: 1fr auto; gap: 9px; }
+.card-actions { display: flex; gap: 8px; }
+.favourite-card { border-color: #f0d17a; box-shadow: 0 14px 36px rgba(122,86,5,.1); }
+.favourite-card .category-pill { background: #fff6db; color: #74530b; }
+.card-title-row h3 { display: flex; align-items: center; gap: 7px; }
+.url-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.url-line button, .notes-block button { border-radius: 12px; background: #e9f0f7; color: #22374d; min-height: 34px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 800; }
+.notes-block { display: grid; gap: 8px; }
+.notes-block button { justify-self: start; }
+@media (max-width: 1060px) { .status-grid { grid-template-columns: repeat(2, 1fr); } .snapshot-row { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .status-grid { grid-template-columns: 1fr; } .form-buttons { grid-template-columns: 1fr; } .sync-actions { justify-content: stretch; } .sync-actions button { width: 100%; } }

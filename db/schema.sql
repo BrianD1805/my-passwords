@@ -1,4 +1,4 @@
--- My Passwords Ver-0.004 Supabase schema
+-- My Passwords Ver-0.005 Supabase schema
 -- Run this in Supabase SQL Editor for the project used by the Netlify app.
 
 create table if not exists public.tenants (
