@@ -5,6 +5,6 @@ export async function handler() {
     ok: true,
     app: 'My Passwords',
     version: APP_VERSION,
-    mode: 'pwa-foundation-with-improved-vault-forms-and-snapshot-history'
+    mode: 'cloud-first-encrypted-vault-sync'
   });
 }

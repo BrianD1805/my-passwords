@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.006';
+const VERSION = 'My Passwords Ver-0.007';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -144,15 +144,21 @@ async function encryptVault(items, masterPassword) {
   return envelope;
 }
 
+async function decryptEnvelope(envelope, masterPassword) {
+  const salt = envelope.salt || envelope.local_salt || envelope.localSalt;
+  const iv = envelope.iv || envelope.local_iv || envelope.localIv;
+  const encrypted = envelope.encrypted || envelope.encrypted_blob || envelope.encryptedBlob;
+  if (!salt || !iv || !encrypted) throw new Error('Encrypted vault envelope is incomplete.');
+  const key = await deriveKey(masterPassword, salt);
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToArrayBuffer(iv) }, key, base64ToArrayBuffer(encrypted));
+  return JSON.parse(new TextDecoder().decode(decrypted));
+}
+
 async function decryptVault(masterPassword) {
   const stored = readStoredVault();
   if (!stored) return null;
   const parsed = JSON.parse(stored.raw);
-  const salt = parsed.salt || localStorage.getItem(SALT_KEY) || localStorage.getItem(LEGACY_SALT_KEY);
-  if (!salt) return null;
-  const key = await deriveKey(masterPassword, salt);
-  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToArrayBuffer(parsed.iv) }, key, base64ToArrayBuffer(parsed.encrypted));
-  const items = JSON.parse(new TextDecoder().decode(decrypted));
+  const items = await decryptEnvelope(parsed, masterPassword);
   if (stored.source === 'legacy') await encryptVault(items, masterPassword);
   return items;
 }
@@ -160,6 +166,20 @@ async function decryptVault(masterPassword) {
 function getLocalEnvelope() {
   const raw = localStorage.getItem(STORAGE_KEY);
   return raw ? JSON.parse(raw) : null;
+}
+
+function storeCloudSnapshotLocally(snapshot) {
+  const envelope = {
+    version: VERSION,
+    iv: snapshot.local_iv,
+    salt: snapshot.local_salt,
+    encrypted: snapshot.encrypted_blob,
+    updatedAt: snapshot.client_updated_at || snapshot.created_at || new Date().toISOString(),
+    cloudSnapshotId: snapshot.id || ''
+  };
+  localStorage.setItem(SALT_KEY, envelope.salt);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
+  return envelope;
 }
 
 async function postJson(url, payload) {
@@ -229,6 +249,34 @@ function App() {
     localStorage.setItem(BOOTSTRAP_KEY, JSON.stringify(bootstrap));
   }, [bootstrap]);
 
+  async function fetchLatestCloudSnapshot() {
+    if (!bootstrap.tenantId || !bootstrap.userId) return { ok: false, hasSnapshot: false, message: 'Admin tenant is not bootstrapped on this device yet.' };
+    return fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(bootstrap.tenantId)}&userId=${encodeURIComponent(bootstrap.userId)}`).then((res) => res.json());
+  }
+
+  async function restoreLatestCloudVault(passwordToUse, { showSuccess = true } = {}) {
+    const latest = await fetchLatestCloudSnapshot();
+    if (!latest?.ok || !latest?.hasSnapshot || !latest.snapshot) return { restored: false, latest };
+    const restoredItems = await decryptEnvelope(latest.snapshot, passwordToUse);
+    storeCloudSnapshotLocally(latest.snapshot);
+    setHasLocalVault(true);
+    setCreateMode(false);
+    setConfirmMasterPassword('');
+    setItems(restoredItems);
+    const snapshotCount = Number(latest.snapshotCount || snapshotHistory.total || 1);
+    setSyncStatus((current) => ({
+      ...current,
+      state: 'success',
+      message: `Latest encrypted cloud vault restored on this device. ${restoredItems.length} item(s) loaded.`,
+      lastSyncAt: latest.snapshot.created_at || latest.snapshot.client_updated_at || new Date().toISOString(),
+      lastSnapshotId: latest.snapshot.id || current.lastSnapshotId,
+      itemCount: Number(latest.snapshot.item_count ?? restoredItems.length),
+      snapshotCount
+    }));
+    if (showSuccess) setMessage(`Latest encrypted cloud vault restored on this device. ${restoredItems.length} item(s) loaded.`);
+    return { restored: true, items: restoredItems, latest };
+  }
+
   async function unlockVault(event) {
     event.preventDefault();
     if (masterPassword.length < 8) {
@@ -237,18 +285,36 @@ function App() {
     }
     try {
       const localVault = readStoredVault();
+      const canCheckCloud = Boolean(bootstrap.tenantId && bootstrap.userId);
+
+      if (canCheckCloud) {
+        try {
+          const cloudRestore = await restoreLatestCloudVault(masterPassword, { showSuccess: false });
+          if (cloudRestore.restored) {
+            setLocked(false);
+            setMessage(`Vault unlocked from latest encrypted Supabase snapshot. ${cloudRestore.items.length} item(s) loaded on this device.`);
+            return;
+          }
+        } catch (cloudError) {
+          if (!localVault) {
+            setMessage('Could not decrypt the latest cloud vault with that password. Nothing was saved on this device.');
+            return;
+          }
+        }
+      }
+
       if (localVault) {
         const existing = await decryptVault(masterPassword);
         if (!existing) throw new Error('Vault could not be decrypted.');
         setItems(existing);
-        setMessage('Vault unlocked. Ver-0.006 keeps bootstrap repeat-safe and prevents accidental wrong-password vault creation.');
+        setMessage(canCheckCloud ? 'Vault unlocked locally. Cloud snapshot was checked, but local copy was used.' : 'Vault unlocked locally. Bootstrap admin on this device to enable cloud-first restore.');
         setLocked(false);
         return;
       }
 
       if (!createMode) {
         setCreateMode(true);
-        setMessage('No local vault exists on this device. Confirm your master password to create a new encrypted local vault.');
+        setMessage('No local vault or decryptable cloud snapshot exists on this device. Confirm your master password to create a new encrypted local vault.');
         return;
       }
 
@@ -262,16 +328,19 @@ function App() {
       setCreateMode(false);
       setConfirmMasterPassword('');
       setItems(starterItems);
-      setMessage('New encrypted local vault created on this device. Delete the demo records when ready.');
+      setMessage('New encrypted local vault created on this device. Future changes will auto-sync after admin bootstrap.');
       setLocked(false);
     } catch (error) {
       setMessage('Could not unlock. Check your master password. Nothing new was saved.');
     }
   }
 
-  async function saveItems(nextItems) {
+  async function saveItems(nextItems, options = {}) {
     setItems(nextItems);
-    await encryptVault(nextItems, masterPassword);
+    const envelope = await encryptVault(nextItems, masterPassword);
+    if (options.autoSync) {
+      await syncEncryptedVault({ envelope, nextItems, silent: options.silentAutoSync !== false });
+    }
   }
 
   function lockVault(note = 'Vault locked.') {
@@ -313,21 +382,21 @@ function App() {
       },
       ...items
     ];
-    await saveItems(next);
+    await saveItems(next, { autoSync: true });
     setForm({ title: '', category: form.category, url: '', username: '', password: '', notes: '', favourite: false });
     setShowFormSecret(false);
-    setMessage('Encrypted item saved locally. Use Sync encrypted vault to update the Supabase snapshot.');
+    setMessage(bootstrap.tenantId && bootstrap.userId ? 'Encrypted item saved locally and auto-sync requested.' : 'Encrypted item saved locally. Bootstrap admin to enable automatic cloud sync.');
   }
 
   async function deleteItem(id) {
-    await saveItems(items.filter((item) => item.id !== id));
-    setMessage('Item deleted from encrypted local vault. Sync again to update the cloud snapshot.');
+    await saveItems(items.filter((item) => item.id !== id), { autoSync: true });
+    setMessage(bootstrap.tenantId && bootstrap.userId ? 'Item deleted and encrypted cloud sync requested.' : 'Item deleted locally. Bootstrap admin to enable automatic cloud sync.');
   }
 
   async function toggleFavourite(id) {
     const next = items.map((item) => item.id === id ? { ...item, favourite: !item.favourite, updatedAt: new Date().toISOString() } : item);
-    await saveItems(next);
-    setMessage('Favourite status updated locally. Sync again to update the cloud snapshot.');
+    await saveItems(next, { autoSync: true });
+    setMessage(bootstrap.tenantId && bootstrap.userId ? 'Favourite status updated and encrypted cloud sync requested.' : 'Favourite status updated locally. Bootstrap admin to enable automatic cloud sync.');
   }
 
   async function copyText(label, value) {
@@ -409,20 +478,24 @@ function App() {
     }
   }
 
-  async function syncEncryptedVault() {
-    const envelope = getLocalEnvelope();
+  async function syncEncryptedVault(options = {}) {
+    const effectiveItems = options.nextItems || items;
+    const envelope = options.envelope || getLocalEnvelope();
+    const silent = Boolean(options.silent);
     if (!envelope) {
       const note = 'No local encrypted vault envelope found yet.';
-      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: items.length, snapshotCount: snapshotHistory.total });
-      return setMessage(note);
+      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
+      if (!silent) setMessage(note);
+      return { ok: false, message: note };
     }
     if (!bootstrap.tenantId || !bootstrap.userId) {
       const note = 'Bootstrap the admin tenant first so the app has a tenantId and userId.';
-      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: items.length, snapshotCount: snapshotHistory.total });
-      return setMessage(note);
+      setSyncStatus({ state: 'warning', message: note, lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
+      if (!silent) setMessage(note);
+      return { ok: false, message: note };
     }
     setSyncing(true);
-    setSyncStatus({ state: 'syncing', message: 'Encrypting and sending vault snapshot to Supabase...', lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount: items.length, snapshotCount: snapshotHistory.total });
+    setSyncStatus({ state: 'syncing', message: silent ? 'Auto-syncing encrypted vault to Supabase...' : 'Encrypting and sending vault snapshot to Supabase...', lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
     try {
       const result = await postJson('/.netlify/functions/sync-vault', {
         tenantId: bootstrap.tenantId,
@@ -430,14 +503,14 @@ function App() {
         encryptedBlob: envelope.encrypted,
         localSalt: envelope.salt,
         localIv: envelope.iv,
-        itemCount: items.length,
+        itemCount: effectiveItems.length,
         clientUpdatedAt: envelope.updatedAt
       });
       if (!result.ok) {
         const note = `${result.message || 'Encrypted vault did not sync.'}${result.error ? ` Error: ${result.error}` : ''}`;
-        setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: items.length, snapshotCount: snapshotHistory.total });
-        setMessage(note);
-        return;
+        setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
+        if (!silent) setMessage(note);
+        return result;
       }
       const verified = await fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(bootstrap.tenantId)}&userId=${encodeURIComponent(bootstrap.userId)}`).then((res) => res.json());
       const verifiedSnapshot = verified?.snapshot || null;
@@ -445,23 +518,35 @@ function App() {
       const lastSyncAt = new Date().toISOString();
       const snapshotCount = history?.total || snapshotHistory.total || (verified?.hasSnapshot ? 1 : 0);
       const note = verified?.hasSnapshot
-        ? `Encrypted vault synced and verified in Supabase. ${snapshotCount} cloud snapshot(s) now recorded. Latest snapshot contains ${verifiedSnapshot?.item_count ?? items.length} item(s).`
+        ? `${silent ? 'Auto-sync complete.' : 'Encrypted vault synced and verified in Supabase.'} ${snapshotCount} cloud snapshot(s) now recorded. Latest snapshot contains ${verifiedSnapshot?.item_count ?? effectiveItems.length} item(s).`
         : 'Encrypted vault saved, but latest snapshot verification did not return a row yet.';
       setSyncStatus({
         state: verified?.hasSnapshot ? 'success' : 'warning',
         message: note,
         lastSyncAt,
         lastSnapshotId: verifiedSnapshot?.id || result.snapshotId || '',
-        itemCount: Number(verifiedSnapshot?.item_count ?? items.length),
+        itemCount: Number(verifiedSnapshot?.item_count ?? effectiveItems.length),
         snapshotCount
       });
-      setMessage(note);
+      if (!silent) setMessage(note);
+      return { ...result, verified };
     } catch (error) {
-      const note = `Could not complete encrypted sync test. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`;
-      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: items.length, snapshotCount: snapshotHistory.total });
-      setMessage(note);
+      const note = `Could not complete encrypted sync. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`;
+      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
+      if (!silent) setMessage(note);
+      return { ok: false, message: note };
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function restoreCloudToThisDevice() {
+    if (!masterPassword) return setMessage('Unlock the vault first so the app can use your master password to decrypt the cloud snapshot.');
+    try {
+      const result = await restoreLatestCloudVault(masterPassword, { showSuccess: true });
+      if (!result.restored) setMessage(result.latest?.message || 'No encrypted cloud snapshot found yet.');
+    } catch (error) {
+      setMessage('Could not decrypt the latest cloud snapshot with this master password. Local vault was not overwritten.');
     }
   }
 
@@ -479,7 +564,7 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Private encrypted PWA foundation</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock your local encrypted vault. Ver-0.006 prevents accidental wrong-password vault creation and makes admin bootstrap safe to run more than once.</p>
+          <p className="intro">Unlock your encrypted vault. Ver-0.007 checks the latest encrypted Supabase snapshot on unlock and safely restores it on this device when your password decrypts it.</p>
           <form onSubmit={unlockVault} className="unlock-form">
             <label>{hasLocalVault ? 'Master vault password' : 'Create master vault password'}</label>
             <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Create a strong master password'} autoFocus />
@@ -521,10 +606,11 @@ function App() {
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.006 Supabase foundation</p><h2><Cloud size={21} /> Encrypted sync and admin status</h2></div>
+          <div><p className="eyebrow">Ver-0.007 cloud-first Supabase sync</p><h2><Cloud size={21} /> Cloud-first encrypted sync and admin status</h2></div>
           <div className="sync-actions">
             <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check Supabase</button>
             <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Snapshot history</button>
+            <button type="button" className="secondary-button" disabled={syncing} onClick={restoreCloudToThisDevice}><RefreshCw size={16} /> Pull latest cloud vault</button>
           </div>
         </div>
         <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
@@ -554,7 +640,7 @@ function App() {
           <label>Tenant / vault name<input value={bootstrap.tenantName} onChange={(e) => setBootstrap({ ...bootstrap, tenantName: e.target.value })} /></label>
           <div className="button-stack">
             <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Bootstrap admin</button>
-            <button type="button" className="secondary-button" disabled={syncing} onClick={syncEncryptedVault}><Cloud size={18} /> {syncing ? 'Syncing...' : 'Sync encrypted vault'}</button>
+            <button type="button" className="secondary-button" disabled={syncing} onClick={syncEncryptedVault}><Cloud size={18} /> {syncing ? 'Syncing...' : 'Push encrypted vault'}</button>
           </div>
         </form>
         {(bootstrap.tenantId || bootstrap.userId) && <p className="ids-line">Tenant ID: <code>{bootstrap.tenantId}</code> · User ID: <code>{bootstrap.userId}</code></p>}
@@ -611,7 +697,7 @@ function App() {
         </section>
       </section>
 
-      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud layer · repeat-safe bootstrap · safer local vault creation</footer>
+      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud-first sync · safe restore on unlock · automatic encrypted upload</footer>
     </main>
   );
 }
