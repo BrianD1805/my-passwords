@@ -1,7 +1,7 @@
 import { APP_VERSION, getSql, jsonResponse, parseBody, publicId } from './_db.js';
 
 export async function handler(event) {
-  const sql = getSql();
+  const sql = await getSql();
   if (!sql) {
     return jsonResponse(200, {
       ok: false,

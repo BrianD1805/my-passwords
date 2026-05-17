@@ -1,4 +1,4 @@
-# My Passwords Ver-0.002F — Netlify Vite executable fallback
+# My Passwords Ver-0.002G — Netlify Vite executable fallback
 
 This patch fixes the repeated Netlify build error:
 
@@ -10,9 +10,9 @@ Netlify was installing dependencies and detecting Vite, but the shell could not 
 
 ## What changed
 
-- Visible version bumped to `My Passwords Ver-0.002F`.
+- Visible version bumped to `My Passwords Ver-0.002G`.
 - Package version bumped to `0.2.6`.
-- Service worker cache bumped to `my-passwords-v0.002F`.
+- Service worker cache bumped to `my-passwords-v0.002G`.
 - Build script changed from:
 
 ```json
@@ -39,7 +39,7 @@ npm run build
 ```bat
 git status
 git add .
-git commit -m "My Passwords Ver-0.002F fix Netlify Vite build executable"
+git commit -m "My Passwords Ver-0.002G fix Netlify Vite build executable"
 git push origin main
 ```
 

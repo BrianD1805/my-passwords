@@ -4,7 +4,7 @@ const defaultCategories = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stu
 
 export async function handler(event) {
   if (!requirePost(event)) return jsonResponse(405, { ok: false, message: 'POST required.' });
-  const sql = getSql();
+  const sql = await getSql();
   if (!sql) {
     return jsonResponse(200, {
       ok: false,
@@ -60,6 +60,12 @@ export async function handler(event) {
       message: 'Admin tenant bootstrap completed. Save these IDs locally inside the app.'
     });
   } catch (error) {
-    return jsonResponse(500, { ok: false, connected: true, message: 'Bootstrap failed.', error: error.message });
+    return jsonResponse(500, {
+      ok: false,
+      connected: true,
+      version: APP_VERSION,
+      message: 'Bootstrap failed. The database connection was reached, but the insert/update step failed.',
+      error: error.message
+    });
   }
 }

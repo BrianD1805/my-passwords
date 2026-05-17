@@ -5,8 +5,8 @@ export async function handler() {
     body: JSON.stringify({
       ok: true,
       app: 'My Passwords',
-      version: 'My Passwords Ver-0.002F',
-      mode: 'pwa-foundation-with-netlify-database-runtime-diagnostics'
+      version: 'My Passwords Ver-0.002G',
+      mode: 'pwa-foundation-with-bootstrap-fix'
     }, null, 2)
   };
 }

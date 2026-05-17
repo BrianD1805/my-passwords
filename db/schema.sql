@@ -1,4 +1,4 @@
--- My Passwords Ver-0.002F
+-- My Passwords Ver-0.002G
 -- SaaS-ready Netlify Database / Postgres schema.
 -- IMPORTANT: Sensitive fields are stored as encrypted blobs only.
 -- Do not add plain-text password, bank PIN, API secret, or recovery-code columns.

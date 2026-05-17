@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Plus, RefreshCw, Search, ShieldCheck, Trash2, Unlock, UserRoundCheck } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.002F';
+const VERSION = 'My Passwords Ver-0.002G';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -35,7 +35,7 @@ const starterItems = [
       url: '',
       username: 'Trusted person access',
       password: 'Not enabled yet',
-      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.002F prepares the tenant/user database foundation.'
+      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.002G prepares the tenant/user database foundation.'
     },
     updatedAt: new Date().toISOString()
   }
@@ -109,7 +109,21 @@ async function postJson(url, payload) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  return response.json();
+  let data = {};
+  try {
+    data = await response.json();
+  } catch (error) {
+    data = { ok: false, message: 'Function returned a non-JSON response.' };
+  }
+  if (!response.ok) {
+    return {
+      ...data,
+      ok: false,
+      httpStatus: response.status,
+      message: data.message || `Function failed with HTTP ${response.status}.`
+    };
+  }
+  return data;
 }
 
 function App() {
@@ -153,7 +167,7 @@ function App() {
       const existing = await decryptVault(masterPassword);
       if (existing) {
         setItems(existing);
-        setMessage('Vault unlocked. Ver-0.002F can now push encrypted snapshots to the database once configured.');
+        setMessage('Vault unlocked. Ver-0.002G can now push encrypted snapshots to the database once configured.');
       } else {
         await encryptVault(starterItems, masterPassword);
         setItems(starterItems);
@@ -222,18 +236,24 @@ function App() {
 
   async function bootstrapAdmin(event) {
     event.preventDefault();
+    const email = String(bootstrap.email || '').trim();
+    if (!email || !email.includes('@')) {
+      setMessage('Please enter a valid admin email before bootstrapping.');
+      return;
+    }
     setSyncing(true);
+    setMessage('Bootstrapping admin tenant...');
     try {
-      const result = await postJson('/.netlify/functions/bootstrap-admin', bootstrap);
+      const result = await postJson('/.netlify/functions/bootstrap-admin', { ...bootstrap, email });
       if (result.ok) {
-        const next = { ...bootstrap, tenantId: result.tenantId, userId: result.userId };
+        const next = { ...bootstrap, email, tenantId: result.tenantId, userId: result.userId };
         setBootstrap(next);
         setMessage('Admin tenant bootstrap completed and IDs saved locally.');
       } else {
-        setMessage(result.message || 'Bootstrap did not complete.');
+        setMessage(`${result.message || 'Bootstrap did not complete.'}${result.error ? ` Error: ${result.error}` : ''}`);
       }
     } catch (error) {
-      setMessage('Could not reach bootstrap function. Use Netlify Dev locally or test after deploy.');
+      setMessage(`Could not reach bootstrap function. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`);
     } finally {
       setSyncing(false);
     }
@@ -276,7 +296,7 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Private encrypted PWA foundation</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock your local encrypted vault. Ver-0.002F adds database connection checks, admin tenant bootstrap and encrypted snapshot sync.</p>
+          <p className="intro">Unlock your local encrypted vault. Ver-0.002G adds database connection checks, admin tenant bootstrap and encrypted snapshot sync.</p>
           <form onSubmit={unlockVault} className="unlock-form">
             <label>Master vault password</label>
             <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" autoFocus />
@@ -309,7 +329,7 @@ function App() {
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.002F database foundation</p><h2><Cloud size={21} /> Encrypted sync setup</h2></div>
+          <div><p className="eyebrow">Ver-0.002G database foundation</p><h2><Cloud size={21} /> Encrypted sync setup</h2></div>
           <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check DB</button>
         </div>
         <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
