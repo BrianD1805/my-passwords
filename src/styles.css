@@ -162,3 +162,67 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
 .link-danger:hover {
   color: #7f1d1d;
 }
+
+/* Ver-0.008 tasteful toast notifications */
+.toast-viewport {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 9999;
+  display: grid;
+  gap: 10px;
+  width: min(390px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  align-items: start;
+  gap: 10px;
+  text-align: left;
+  border-radius: 18px;
+  padding: 13px 15px;
+  border: 1px solid rgba(29, 53, 87, 0.12);
+  background: rgba(255, 255, 255, 0.96);
+  color: #20364d;
+  box-shadow: 0 18px 46px rgba(29, 53, 87, 0.20);
+  line-height: 1.42;
+  font-weight: 750;
+  backdrop-filter: blur(12px);
+  animation: toast-in 180ms ease-out both;
+}
+
+.toast:hover { transform: translateY(-1px); }
+.toast-dot { width: 10px; height: 10px; border-radius: 999px; margin-top: 5px; background: #457b9d; box-shadow: 0 0 0 4px rgba(69,123,157,.12); }
+.toast.success { background: rgba(239, 250, 243, 0.97); border-color: #c7ead2; color: #245b34; }
+.toast.success .toast-dot { background: #2f9b57; box-shadow: 0 0 0 4px rgba(47,155,87,.13); }
+.toast.error { background: rgba(255, 243, 242, 0.98); border-color: #f0c1bd; color: #8a302b; }
+.toast.error .toast-dot { background: #c9483f; box-shadow: 0 0 0 4px rgba(201,72,63,.13); }
+.toast.warning { background: rgba(255, 248, 226, 0.98); border-color: #f2d58a; color: #74530b; }
+.toast.warning .toast-dot { background: #d89c1d; box-shadow: 0 0 0 4px rgba(216,156,29,.14); }
+.toast.copy { background: rgba(239, 247, 255, 0.98); border-color: #c6dff1; color: #24506d; }
+.toast.copy .toast-dot { background: #357dae; box-shadow: 0 0 0 4px rgba(53,125,174,.14); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 860px) {
+  .toast-viewport {
+    left: 50%;
+    right: auto;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    width: min(440px, calc(100vw - 24px));
+  }
+  .toast {
+    border-radius: 17px;
+    padding: 12px 13px;
+    font-size: .94rem;
+    box-shadow: 0 14px 34px rgba(29, 53, 87, 0.18);
+  }
+}

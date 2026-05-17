@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.007';
+const VERSION = 'My Passwords Ver-0.008';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -210,6 +210,21 @@ function shortId(value) {
   return value.length > 18 ? `${value.slice(0, 10)}...${value.slice(-6)}` : value;
 }
 
+
+function ToastViewport({ toasts, onDismiss }) {
+  if (!toasts.length) return null;
+  return (
+    <div className="toast-viewport" aria-live="polite" aria-atomic="true">
+      {toasts.map((toast) => (
+        <button key={toast.id} type="button" className={`toast ${toast.type}`} onClick={() => onDismiss(toast.id)} title="Dismiss notification">
+          <span className="toast-dot" aria-hidden="true" />
+          <span>{toast.text}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function App() {
   const [locked, setLocked] = useState(true);
   const [masterPassword, setMasterPassword] = useState('');
@@ -231,8 +246,36 @@ function App() {
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'No encrypted cloud sync has run yet.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
   const [snapshotHistory, setSnapshotHistory] = useState({ loaded: false, loading: false, total: 0, snapshots: [], message: 'Snapshot history has not been loaded yet.' });
+  const [toasts, setToasts] = useState([]);
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
+
+  function toastTypeFromMessage(text) {
+    const value = String(text || '').toLowerCase();
+    if (value.includes('failed') || value.includes('could not') || value.includes('wrong') || value.includes('error') || value.includes('not ready') || value.includes('nothing was saved') || value.includes('needs attention')) return 'error';
+    if (value.includes('warning') || value.includes('bootstrap') || value.includes('confirm') || value.includes('not synced') || value.includes('pending')) return 'warning';
+    if (value.includes('copied')) return 'copy';
+    if (value.includes('complete') || value.includes('verified') || value.includes('saved') || value.includes('ready') || value.includes('passed') || value.includes('restored') || value.includes('unlocked') || value.includes('synced')) return 'success';
+    return 'info';
+  }
+
+  function showToast(text, type = 'info') {
+    const id = crypto.randomUUID();
+    setToasts((current) => [...current.slice(-3), { id, text, type }]);
+    window.setTimeout(() => {
+      setToasts((current) => current.filter((toast) => toast.id !== id));
+    }, type === 'error' ? 6400 : 4200);
+  }
+
+  function showMessage(text, type) {
+    const safeText = String(text || '');
+    setMessage(safeText);
+    if (safeText.trim()) showToast(safeText, type || toastTypeFromMessage(safeText));
+  }
+
+  function dismissToast(id) {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  }
 
   useEffect(() => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
@@ -273,14 +316,14 @@ function App() {
       itemCount: Number(latest.snapshot.item_count ?? restoredItems.length),
       snapshotCount
     }));
-    if (showSuccess) setMessage(`Latest encrypted cloud vault restored on this device. ${restoredItems.length} item(s) loaded.`);
+    if (showSuccess) showMessage(`Latest encrypted cloud vault restored on this device. ${restoredItems.length} item(s) loaded.`);
     return { restored: true, items: restoredItems, latest };
   }
 
   async function unlockVault(event) {
     event.preventDefault();
     if (masterPassword.length < 8) {
-      setMessage('Use at least 8 characters for this foundation build. A stronger rule can be added later.');
+      showMessage('Use at least 8 characters for this foundation build. A stronger rule can be added later.');
       return;
     }
     try {
@@ -292,12 +335,12 @@ function App() {
           const cloudRestore = await restoreLatestCloudVault(masterPassword, { showSuccess: false });
           if (cloudRestore.restored) {
             setLocked(false);
-            setMessage(`Vault unlocked from latest encrypted Supabase snapshot. ${cloudRestore.items.length} item(s) loaded on this device.`);
+            showMessage(`Vault unlocked from latest encrypted Supabase snapshot. ${cloudRestore.items.length} item(s) loaded on this device.`);
             return;
           }
         } catch (cloudError) {
           if (!localVault) {
-            setMessage('Could not decrypt the latest cloud vault with that password. Nothing was saved on this device.');
+            showMessage('Could not decrypt the latest cloud vault with that password. Nothing was saved on this device.');
             return;
           }
         }
@@ -307,19 +350,19 @@ function App() {
         const existing = await decryptVault(masterPassword);
         if (!existing) throw new Error('Vault could not be decrypted.');
         setItems(existing);
-        setMessage(canCheckCloud ? 'Vault unlocked locally. Cloud snapshot was checked, but local copy was used.' : 'Vault unlocked locally. Bootstrap admin on this device to enable cloud-first restore.');
+        showMessage(canCheckCloud ? 'Vault unlocked locally. Cloud snapshot was checked, but local copy was used.' : 'Vault unlocked locally. Bootstrap admin on this device to enable cloud-first restore.');
         setLocked(false);
         return;
       }
 
       if (!createMode) {
         setCreateMode(true);
-        setMessage('No local vault or decryptable cloud snapshot exists on this device. Confirm your master password to create a new encrypted local vault.');
+        showMessage('No local vault or decryptable cloud snapshot exists on this device. Confirm your master password to create a new encrypted local vault.');
         return;
       }
 
       if (masterPassword !== confirmMasterPassword) {
-        setMessage('The two master password entries do not match. Nothing has been saved.');
+        showMessage('The two master password entries do not match. Nothing has been saved.');
         return;
       }
 
@@ -328,10 +371,10 @@ function App() {
       setCreateMode(false);
       setConfirmMasterPassword('');
       setItems(starterItems);
-      setMessage('New encrypted local vault created on this device. Future changes will auto-sync after admin bootstrap.');
+      showMessage('New encrypted local vault created on this device. Future changes will auto-sync after admin bootstrap.');
       setLocked(false);
     } catch (error) {
-      setMessage('Could not unlock. Check your master password. Nothing new was saved.');
+      showMessage('Could not unlock. Check your master password. Nothing new was saved.');
     }
   }
 
@@ -349,7 +392,7 @@ function App() {
     setShowSecrets({});
     setMasterPassword('');
     setConfirmMasterPassword('');
-    setMessage(note);
+    showMessage(note);
   }
 
 
@@ -365,12 +408,12 @@ function App() {
     setCreateMode(true);
     setMasterPassword('');
     setConfirmMasterPassword('');
-    setMessage('Local encrypted vault cleared on this device. You can now create a fresh local vault with confirmed password entry.');
+    showMessage('Local encrypted vault cleared on this device. You can now create a fresh local vault with confirmed password entry.');
   }
 
   async function addItem(event) {
     event.preventDefault();
-    if (!form.title.trim()) return setMessage('Add a title first.');
+    if (!form.title.trim()) return showMessage('Add a title first.');
     const next = [
       {
         id: crypto.randomUUID(),
@@ -385,30 +428,30 @@ function App() {
     await saveItems(next, { autoSync: true });
     setForm({ title: '', category: form.category, url: '', username: '', password: '', notes: '', favourite: false });
     setShowFormSecret(false);
-    setMessage(bootstrap.tenantId && bootstrap.userId ? 'Encrypted item saved locally and auto-sync requested.' : 'Encrypted item saved locally. Bootstrap admin to enable automatic cloud sync.');
+    showMessage(bootstrap.tenantId && bootstrap.userId ? 'Encrypted item saved locally and auto-sync requested.' : 'Encrypted item saved locally. Bootstrap admin to enable automatic cloud sync.');
   }
 
   async function deleteItem(id) {
     await saveItems(items.filter((item) => item.id !== id), { autoSync: true });
-    setMessage(bootstrap.tenantId && bootstrap.userId ? 'Item deleted and encrypted cloud sync requested.' : 'Item deleted locally. Bootstrap admin to enable automatic cloud sync.');
+    showMessage(bootstrap.tenantId && bootstrap.userId ? 'Item deleted and encrypted cloud sync requested.' : 'Item deleted locally. Bootstrap admin to enable automatic cloud sync.');
   }
 
   async function toggleFavourite(id) {
     const next = items.map((item) => item.id === id ? { ...item, favourite: !item.favourite, updatedAt: new Date().toISOString() } : item);
     await saveItems(next, { autoSync: true });
-    setMessage(bootstrap.tenantId && bootstrap.userId ? 'Favourite status updated and encrypted cloud sync requested.' : 'Favourite status updated locally. Bootstrap admin to enable automatic cloud sync.');
+    showMessage(bootstrap.tenantId && bootstrap.userId ? 'Favourite status updated and encrypted cloud sync requested.' : 'Favourite status updated locally. Bootstrap admin to enable automatic cloud sync.');
   }
 
   async function copyText(label, value) {
-    if (!value) return setMessage(`Nothing to copy for ${label}.`);
+    if (!value) return showMessage(`Nothing to copy for ${label}.`);
     await navigator.clipboard.writeText(value);
-    setMessage(`${label} copied.`);
+    showMessage(`${label} copied.`);
   }
 
   function clearForm() {
     setForm({ title: '', category: form.category, url: '', username: '', password: '', notes: '', favourite: false });
     setShowFormSecret(false);
-    setMessage('Form cleared.');
+    showMessage('Form cleared.');
   }
 
   async function checkDbHealth() {
@@ -416,10 +459,10 @@ function App() {
     try {
       const result = await fetch('/.netlify/functions/db-health').then((res) => res.json());
       setDbStatus({ checked: true, connected: !!result.connected && !!result.schema_ready, message: result.connected && result.schema_ready ? 'Supabase connected and schema ready.' : result.message || 'Supabase not ready yet.' });
-      setMessage(result.connected && result.schema_ready ? 'Supabase health check passed. Schema is ready.' : result.message || 'Supabase not ready yet.');
+      showMessage(result.connected && result.schema_ready ? 'Supabase health check passed. Schema is ready.' : result.message || 'Supabase not ready yet.');
     } catch (error) {
       setDbStatus({ checked: true, connected: false, message: 'Could not reach db-health function. Use netlify dev locally or test after deploy.' });
-      setMessage('Could not reach db-health function. Use Netlify Dev locally or test after deploy.');
+      showMessage('Could not reach db-health function. Use Netlify Dev locally or test after deploy.');
     }
   }
 
@@ -427,32 +470,32 @@ function App() {
     event.preventDefault();
     const email = String(bootstrap.email || '').trim();
     if (!email || !email.includes('@')) {
-      setMessage('Please enter a valid admin email before bootstrapping.');
+      showMessage('Please enter a valid admin email before bootstrapping.');
       return;
     }
     setSyncing(true);
-    setMessage('Bootstrapping admin tenant...');
+    showMessage('Bootstrapping admin tenant...');
     try {
       const result = await postJson('/.netlify/functions/bootstrap-admin', { ...bootstrap, email });
       if (result.ok) {
         const next = { ...bootstrap, email, tenantId: result.tenantId, userId: result.userId };
         setBootstrap(next);
-        setMessage(result.message || 'Admin tenant bootstrap completed in Supabase and IDs saved locally.');
+        showMessage(result.message || 'Admin tenant bootstrap completed in Supabase and IDs saved locally.');
       } else {
-        setMessage(`${result.message || 'Bootstrap did not complete.'}${result.error ? ` Error: ${result.error}` : ''}`);
+        showMessage(`${result.message || 'Bootstrap did not complete.'}${result.error ? ` Error: ${result.error}` : ''}`);
       }
     } catch (error) {
-      setMessage(`Could not reach bootstrap function. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`);
+      showMessage(`Could not reach bootstrap function. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`);
     } finally {
       setSyncing(false);
     }
   }
 
-  async function loadSnapshotHistory(showMessage = true) {
+  async function loadSnapshotHistory(shouldShowMessage = true) {
     if (!bootstrap.tenantId || !bootstrap.userId) {
       const note = 'Bootstrap the admin tenant first so snapshot history can be loaded.';
       setSnapshotHistory((current) => ({ ...current, loaded: true, loading: false, message: note }));
-      if (showMessage) setMessage(note);
+      if (shouldShowMessage) showMessage(note);
       return null;
     }
     setSnapshotHistory((current) => ({ ...current, loading: true, message: 'Loading encrypted snapshot history...' }));
@@ -468,12 +511,12 @@ function App() {
       };
       setSnapshotHistory(next);
       setSyncStatus((current) => ({ ...current, snapshotCount: next.total }));
-      if (showMessage) setMessage(next.message);
+      if (shouldShowMessage) showMessage(next.message);
       return next;
     } catch (error) {
       const note = `Could not load snapshot history. ${error.message || ''}`.trim();
       setSnapshotHistory((current) => ({ ...current, loaded: true, loading: false, message: note }));
-      if (showMessage) setMessage(note);
+      if (shouldShowMessage) showMessage(note);
       return null;
     }
   }
@@ -485,13 +528,13 @@ function App() {
     if (!envelope) {
       const note = 'No local encrypted vault envelope found yet.';
       setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
-      if (!silent) setMessage(note);
+      if (!silent) showMessage(note);
       return { ok: false, message: note };
     }
     if (!bootstrap.tenantId || !bootstrap.userId) {
       const note = 'Bootstrap the admin tenant first so the app has a tenantId and userId.';
       setSyncStatus({ state: 'warning', message: note, lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
-      if (!silent) setMessage(note);
+      if (!silent) showMessage(note);
       return { ok: false, message: note };
     }
     setSyncing(true);
@@ -509,7 +552,7 @@ function App() {
       if (!result.ok) {
         const note = `${result.message || 'Encrypted vault did not sync.'}${result.error ? ` Error: ${result.error}` : ''}`;
         setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
-        if (!silent) setMessage(note);
+        if (!silent) showMessage(note);
         return result;
       }
       const verified = await fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(bootstrap.tenantId)}&userId=${encodeURIComponent(bootstrap.userId)}`).then((res) => res.json());
@@ -528,12 +571,12 @@ function App() {
         itemCount: Number(verifiedSnapshot?.item_count ?? effectiveItems.length),
         snapshotCount
       });
-      if (!silent) setMessage(note);
+      if (!silent) showMessage(note);
       return { ...result, verified };
     } catch (error) {
       const note = `Could not complete encrypted sync. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`;
       setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
-      if (!silent) setMessage(note);
+      if (!silent) showMessage(note);
       return { ok: false, message: note };
     } finally {
       setSyncing(false);
@@ -541,12 +584,12 @@ function App() {
   }
 
   async function restoreCloudToThisDevice() {
-    if (!masterPassword) return setMessage('Unlock the vault first so the app can use your master password to decrypt the cloud snapshot.');
+    if (!masterPassword) return showMessage('Unlock the vault first so the app can use your master password to decrypt the cloud snapshot.');
     try {
       const result = await restoreLatestCloudVault(masterPassword, { showSuccess: true });
-      if (!result.restored) setMessage(result.latest?.message || 'No encrypted cloud snapshot found yet.');
+      if (!result.restored) showMessage(result.latest?.message || 'No encrypted cloud snapshot found yet.');
     } catch (error) {
-      setMessage('Could not decrypt the latest cloud snapshot with this master password. Local vault was not overwritten.');
+      showMessage('Could not decrypt the latest cloud snapshot with this master password. Local vault was not overwritten.');
     }
   }
 
@@ -564,7 +607,7 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Private encrypted PWA foundation</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock your encrypted vault. Ver-0.007 checks the latest encrypted Supabase snapshot on unlock and safely restores it on this device when your password decrypts it.</p>
+          <p className="intro">Unlock your encrypted vault. Ver-0.008 checks the latest encrypted Supabase snapshot on unlock and safely restores it on this device when your password decrypts it.</p>
           <form onSubmit={unlockVault} className="unlock-form">
             <label>{hasLocalVault ? 'Master vault password' : 'Create master vault password'}</label>
             <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Create a strong master password'} autoFocus />
@@ -582,6 +625,7 @@ function App() {
           <div className="security-note"><ShieldCheck size={18} /> Master password stays in the browser. Database sync stores encrypted snapshots only.</div>
           <p className="version">{VERSION}</p>
         </section>
+        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
     );
   }
@@ -606,7 +650,7 @@ function App() {
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.007 cloud-first Supabase sync</p><h2><Cloud size={21} /> Cloud-first encrypted sync and admin status</h2></div>
+          <div><p className="eyebrow">Ver-0.008 cloud-first Supabase sync</p><h2><Cloud size={21} /> Cloud-first encrypted sync and admin status</h2></div>
           <div className="sync-actions">
             <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check Supabase</button>
             <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Snapshot history</button>
@@ -697,7 +741,8 @@ function App() {
         </section>
       </section>
 
-      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud-first sync · safe restore on unlock · automatic encrypted upload</footer>
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud-first sync · tasteful toast notifications · automatic encrypted upload</footer>
     </main>
   );
 }
