@@ -1,18 +1,13 @@
-import { APP_VERSION, getSql, jsonResponse, parseBody, publicId, requirePost } from './_db.js';
+import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, upsertRow } from './_db.js';
 
 const defaultCategories = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
 
+function eq(value) {
+  return `eq.${encodeURIComponent(value)}`;
+}
+
 export async function handler(event) {
   if (!requirePost(event)) return jsonResponse(405, { ok: false, message: 'POST required.' });
-  const sql = await getSql();
-  if (!sql) {
-    return jsonResponse(200, {
-      ok: false,
-      connected: false,
-      version: APP_VERSION,
-      message: 'Database is not configured yet. The app can still run locally, but cloud bootstrap needs NETLIFY_DATABASE_URL or DATABASE_URL.'
-    });
-  }
 
   const body = parseBody(event);
   const email = String(body.email || '').trim().toLowerCase();
@@ -20,52 +15,73 @@ export async function handler(event) {
   const tenantName = String(body.tenantName || '').trim() || 'Brian Private Vault';
 
   if (!email || !email.includes('@')) {
-    return jsonResponse(400, { ok: false, message: 'A valid admin email is required.' });
+    return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A valid admin email is required.' });
   }
 
   try {
     const tenantId = publicId('tenant');
     const userId = publicId('user');
 
-    await sql`insert into tenants (id, name, plan, status)
-      values (${tenantId}, ${tenantName}, 'private_founder', 'active')
-      on conflict (name) do nothing`;
+    await upsertRow('tenants', {
+      id: tenantId,
+      name: tenantName,
+      plan: 'private_founder',
+      status: 'active'
+    }, 'name');
 
-    const tenants = await sql`select id from tenants where name = ${tenantName} order by created_at asc limit 1`;
+    const tenants = await selectRows('tenants', `select=id,name&name=${eq(tenantName)}&order=created_at.asc&limit=1`);
     const finalTenantId = tenants?.[0]?.id || tenantId;
 
-    await sql`insert into users (id, tenant_id, email, display_name, role, status)
-      values (${userId}, ${finalTenantId}, ${email}, ${displayName}, 'administrator', 'active')
-      on conflict (tenant_id, email) do update set display_name = excluded.display_name, role = 'administrator', status = 'active', updated_at = now()`;
+    await upsertRow('users', {
+      id: userId,
+      tenant_id: finalTenantId,
+      email,
+      display_name: displayName,
+      role: 'administrator',
+      status: 'active',
+      updated_at: new Date().toISOString()
+    }, 'tenant_id,email');
 
-    const users = await sql`select id, email, display_name, role from users where tenant_id = ${finalTenantId} and email = ${email} limit 1`;
+    const users = await selectRows('users', `select=id,email,display_name,role&tenant_id=${eq(finalTenantId)}&email=${eq(email)}&limit=1`);
     const finalUserId = users?.[0]?.id || userId;
 
     for (let i = 0; i < defaultCategories.length; i += 1) {
-      await sql`insert into categories (id, tenant_id, name, icon, sort_order)
-        values (${publicId('cat')}, ${finalTenantId}, ${defaultCategories[i]}, 'folder', ${i + 1})
-        on conflict (tenant_id, name) do nothing`;
+      await upsertRow('categories', {
+        id: publicId('cat'),
+        tenant_id: finalTenantId,
+        name: defaultCategories[i],
+        icon: 'folder',
+        sort_order: i + 1
+      }, 'tenant_id,name');
     }
 
-    await sql`insert into audit_log (id, tenant_id, user_id, action, metadata)
-      values (${publicId('audit')}, ${finalTenantId}, ${finalUserId}, 'admin_bootstrap', ${JSON.stringify({ version: APP_VERSION })}::jsonb)`;
+    await insertRow('audit_log', {
+      id: publicId('audit'),
+      tenant_id: finalTenantId,
+      user_id: finalUserId,
+      action: 'admin_bootstrap',
+      metadata: { version: APP_VERSION, provider: 'supabase' }
+    });
 
     return jsonResponse(200, {
       ok: true,
       connected: true,
+      provider: 'supabase',
       version: APP_VERSION,
       tenantId: finalTenantId,
       userId: finalUserId,
       user: users?.[0] || { id: finalUserId, email, display_name: displayName, role: 'administrator' },
-      message: 'Admin tenant bootstrap completed. Save these IDs locally inside the app.'
+      message: 'Admin tenant bootstrap completed in Supabase and IDs saved locally.'
     });
   } catch (error) {
     return jsonResponse(500, {
       ok: false,
       connected: true,
+      provider: 'supabase',
       version: APP_VERSION,
-      message: 'Bootstrap failed. The database connection was reached, but the insert/update step failed.',
-      error: error.message
+      message: 'Bootstrap failed. Supabase was reached, but the insert/update step failed.',
+      error: error.message,
+      details: error.details || null
     });
   }
 }

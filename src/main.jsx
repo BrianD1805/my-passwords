@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Plus, RefreshCw, Search, ShieldCheck, Trash2, Unlock, UserRoundCheck } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.002G';
+const VERSION = 'My Passwords Ver-0.003';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -35,7 +35,7 @@ const starterItems = [
       url: '',
       username: 'Trusted person access',
       password: 'Not enabled yet',
-      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.002G prepares the tenant/user database foundation.'
+      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.003 switches the cloud layer to Supabase while keeping encrypted snapshots browser-generated.'
     },
     updatedAt: new Date().toISOString()
   }
@@ -167,7 +167,7 @@ function App() {
       const existing = await decryptVault(masterPassword);
       if (existing) {
         setItems(existing);
-        setMessage('Vault unlocked. Ver-0.002G can now push encrypted snapshots to the database once configured.');
+        setMessage('Vault unlocked. Ver-0.003 can now push encrypted snapshots to Supabase once configured.');
       } else {
         await encryptVault(starterItems, masterPassword);
         setItems(starterItems);
@@ -208,7 +208,7 @@ function App() {
     ];
     await saveItems(next);
     setForm({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '' });
-    setMessage('Encrypted item saved locally. Use Sync encrypted vault when your database is connected.');
+    setMessage('Encrypted item saved locally. Use Sync encrypted vault when Supabase is connected.');
   }
 
   async function deleteItem(id) {
@@ -226,8 +226,8 @@ function App() {
     setDbStatus({ checked: true, connected: false, message: 'Checking database...' });
     try {
       const result = await fetch('/.netlify/functions/db-health').then((res) => res.json());
-      setDbStatus({ checked: true, connected: !!result.connected, message: result.connected ? 'Database connected.' : result.message || 'Database not connected yet.' });
-      setMessage(result.connected ? 'Database health check passed.' : result.message || 'Database not connected yet.');
+      setDbStatus({ checked: true, connected: !!result.connected, message: result.connected ? 'Supabase connected.' : result.message || 'Supabase not connected yet.' });
+      setMessage(result.connected ? 'Supabase health check passed.' : result.message || 'Supabase not connected yet.');
     } catch (error) {
       setDbStatus({ checked: true, connected: false, message: 'Could not reach db-health function. Use netlify dev locally or test after deploy.' });
       setMessage('Could not reach db-health function. Use Netlify Dev locally or test after deploy.');
@@ -248,7 +248,7 @@ function App() {
       if (result.ok) {
         const next = { ...bootstrap, email, tenantId: result.tenantId, userId: result.userId };
         setBootstrap(next);
-        setMessage('Admin tenant bootstrap completed and IDs saved locally.');
+        setMessage('Admin tenant bootstrap completed in Supabase and IDs saved locally.');
       } else {
         setMessage(`${result.message || 'Bootstrap did not complete.'}${result.error ? ` Error: ${result.error}` : ''}`);
       }
@@ -274,7 +274,7 @@ function App() {
         itemCount: items.length,
         clientUpdatedAt: envelope.updatedAt
       });
-      setMessage(result.message || (result.ok ? 'Encrypted vault synced.' : 'Encrypted vault did not sync.'));
+      setMessage(result.message || (result.ok ? 'Encrypted vault synced to Supabase.' : 'Encrypted vault did not sync.'));
     } catch (error) {
       setMessage('Could not reach sync function. Use Netlify Dev locally or test after deploy.');
     } finally {
@@ -296,7 +296,7 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Private encrypted PWA foundation</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock your local encrypted vault. Ver-0.002G adds database connection checks, admin tenant bootstrap and encrypted snapshot sync.</p>
+          <p className="intro">Unlock your local encrypted vault. Ver-0.003 switches the cloud database layer to Supabase while keeping secrets encrypted in the browser.</p>
           <form onSubmit={unlockVault} className="unlock-form">
             <label>Master vault password</label>
             <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" autoFocus />
@@ -323,16 +323,17 @@ function App() {
 
       <section className="status-grid">
         <article><KeyRound /><strong>{items.length}</strong><span>Encrypted items</span></article>
-        <article><Database /><strong>{dbStatus.connected ? 'Connected' : 'Pending'}</strong><span>Netlify Database</span></article>
+        <article><Database /><strong>{dbStatus.connected ? 'Connected' : 'Pending'}</strong><span>Supabase Database</span></article>
         <article><UserRoundCheck /><strong>{bootstrap.userId ? 'Ready' : 'Setup'}</strong><span>Admin tenant</span></article>
       </section>
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.002G database foundation</p><h2><Cloud size={21} /> Encrypted sync setup</h2></div>
-          <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check DB</button>
+          <div><p className="eyebrow">Ver-0.003 Supabase foundation</p><h2><Cloud size={21} /> Encrypted sync setup</h2></div>
+          <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check Supabase</button>
         </div>
         <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
+        {message && <p className="message sync-message">{message}</p>}
         <form className="bootstrap-grid" onSubmit={bootstrapAdmin}>
           <label>Admin email<input value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
           <label>Display name<input value={bootstrap.displayName} onChange={(e) => setBootstrap({ ...bootstrap, displayName: e.target.value })} /></label>
@@ -349,8 +350,6 @@ function App() {
         <div className="search-box"><Search size={18} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search titles, notes, users or links" /></div>
         <div className="chip-row">{categories.map((cat) => <button key={cat} className={cat === category ? 'chip active' : 'chip'} onClick={() => setCategory(cat)}>{cat}</button>)}</div>
       </section>
-
-      {message && <p className="message in-app">{message}</p>}
 
       <section className="main-grid">
         <form className="item-form" onSubmit={addItem}>
@@ -385,7 +384,7 @@ function App() {
         </section>
       </section>
 
-      <footer>{VERSION} · SaaS-ready encrypted vault foundation</footer>
+      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud layer</footer>
     </main>
   );
 }

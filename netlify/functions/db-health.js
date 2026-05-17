@@ -1,77 +1,51 @@
-import {
-  APP_VERSION,
-  getDatabaseUrl,
-  getEnvironmentFlags,
-  getNetlifyDatabaseDiagnostics,
-  jsonResponse
-} from './_db.js';
-import { neon } from '@neondatabase/serverless';
+import { APP_VERSION, getEnvironmentFlags, getSupabaseStatus, jsonResponse, selectRows } from './_db.js';
 
 export async function handler() {
-  const startedAt = new Date().toISOString();
-  const env = getEnvironmentFlags();
-  const manualDatabaseUrl = getDatabaseUrl();
-  const { diagnostics, sql } = await getNetlifyDatabaseDiagnostics();
+  const supabase = getSupabaseStatus();
 
-  const base = {
-    app: 'My Passwords',
-    version: APP_VERSION,
-    checked_at: startedAt,
-    environment: env,
-    netlify_database: diagnostics
-  };
-
-  if (sql) {
-    try {
-      const rows = await sql`select now() as server_time, current_database() as database_name`;
-      return jsonResponse(200, {
-        ok: true,
-        connected: true,
-        ...base,
-        database_driver: '@netlify/database',
-        server_time: rows?.[0]?.server_time || null,
-        database_name: rows?.[0]?.database_name || null
-      });
-    } catch (error) {
-      return jsonResponse(500, {
-        ok: false,
-        connected: false,
-        ...base,
-        database_driver: '@netlify/database',
-        message: 'The @netlify/database package loaded, but the test query failed.',
-        error: error.message
-      });
-    }
+  if (!supabase.configured) {
+    return jsonResponse(200, {
+      ok: false,
+      connected: false,
+      app: 'My Passwords',
+      version: APP_VERSION,
+      checked_at: new Date().toISOString(),
+      environment: getEnvironmentFlags(),
+      supabase,
+      message: 'Supabase is not configured yet. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Netlify environment variables.'
+    });
   }
 
-  if (manualDatabaseUrl) {
-    try {
-      const manualSql = neon(manualDatabaseUrl);
-      const rows = await manualSql`select now() as server_time, current_database() as database_name`;
-      return jsonResponse(200, {
-        ok: true,
-        connected: true,
-        ...base,
-        database_driver: 'manual-env-url',
-        server_time: rows?.[0]?.server_time || null,
-        database_name: rows?.[0]?.database_name || null
-      });
-    } catch (error) {
-      return jsonResponse(500, {
-        ok: false,
-        connected: false,
-        ...base,
-        database_driver: 'manual-env-url',
-        message: 'A manual database URL was found, but the test query failed.',
-        error: error.message
-      });
-    }
+  try {
+    const rows = await selectRows('tenants', 'select=id&limit=1');
+    return jsonResponse(200, {
+      ok: true,
+      connected: true,
+      schema_ready: true,
+      app: 'My Passwords',
+      version: APP_VERSION,
+      checked_at: new Date().toISOString(),
+      environment: getEnvironmentFlags(),
+      supabase,
+      tenants_sample_count: Array.isArray(rows) ? rows.length : 0,
+      message: 'Supabase connection and schema check passed.'
+    });
+  } catch (error) {
+    const relationMissing = error.details?.code === '42P01' || String(error.message || '').toLowerCase().includes('does not exist');
+    return jsonResponse(200, {
+      ok: false,
+      connected: !relationMissing,
+      schema_ready: false,
+      app: 'My Passwords',
+      version: APP_VERSION,
+      checked_at: new Date().toISOString(),
+      environment: getEnvironmentFlags(),
+      supabase,
+      error: error.message,
+      details: error.details || null,
+      message: relationMissing
+        ? 'Supabase is reachable, but the My Passwords tables do not exist yet. Run db/schema.sql in Supabase SQL Editor.'
+        : 'Supabase connection failed. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
+    });
   }
-
-  return jsonResponse(200, {
-    ok: false,
-    connected: false,
-    ...base,
-    message: 'No usable Netlify Database runtime connection was found. This diagnostic response now shows whether @netlify/database imports, whether getConnectionString is available, and whether any database URL environment variables are present.'
-  });
 }

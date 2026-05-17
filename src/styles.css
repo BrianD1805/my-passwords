@@ -90,3 +90,4 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
   .field-row { grid-template-columns: 1fr; }
   .lock-card { padding: 24px; }
 }
+.sync-message { margin-top: 12px; margin-bottom: 0; }

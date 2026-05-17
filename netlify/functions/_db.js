@@ -1,6 +1,4 @@
-import { neon } from '@neondatabase/serverless';
-
-export const APP_VERSION = 'My Passwords Ver-0.002G';
+export const APP_VERSION = 'My Passwords Ver-0.003';
 
 export function jsonResponse(statusCode, body) {
   return {
@@ -13,112 +11,101 @@ export function jsonResponse(statusCode, body) {
   };
 }
 
-export function getDatabaseUrl() {
-  return (
-    process.env.NETLIFY_DATABASE_URL ||
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.NEON_DATABASE_URL ||
-    ''
-  );
+export function getSupabaseConfig() {
+  return {
+    url: (process.env.SUPABASE_URL || '').replace(/\/$/, ''),
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  };
 }
 
 export function getEnvironmentFlags() {
   return {
+    has_SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
+    has_SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     has_NETLIFY_DATABASE_URL: Boolean(process.env.NETLIFY_DATABASE_URL),
     has_DATABASE_URL: Boolean(process.env.DATABASE_URL),
-    has_POSTGRES_URL: Boolean(process.env.POSTGRES_URL),
-    has_NEON_DATABASE_URL: Boolean(process.env.NEON_DATABASE_URL),
     has_NETLIFY: Boolean(process.env.NETLIFY),
     has_CONTEXT: Boolean(process.env.CONTEXT),
-    has_DEPLOY_PRIME_URL: Boolean(process.env.DEPLOY_PRIME_URL),
     has_URL: Boolean(process.env.URL)
   };
 }
 
-function describeConnectionString(value) {
-  if (!value) return { present: false };
-
-  try {
-    const url = new URL(value);
-    return {
-      present: true,
-      protocol: url.protocol.replace(':', ''),
-      host: url.host,
-      database: url.pathname.replace('/', '') || null,
-      sslmode: url.searchParams.get('sslmode') || null
-    };
-  } catch (error) {
-    return { present: true, parseable: false };
-  }
-}
-
-export async function getNetlifyDatabaseDiagnostics() {
-  const diagnostics = {
-    package_imported: false,
-    exported_keys: [],
-    getDatabase_available: false,
-    getConnectionString_available: false,
-    connection_string: { present: false },
-    database_client_created: false,
-    database_client_keys: [],
-    has_sql_method: false,
-    has_pool_method: false,
-    error: null
+function supabaseHeaders(extra = {}) {
+  const { serviceRoleKey } = getSupabaseConfig();
+  return {
+    apikey: serviceRoleKey,
+    authorization: `Bearer ${serviceRoleKey}`,
+    'content-type': 'application/json',
+    ...extra
   };
-
-  try {
-    const netlifyDatabase = await import('@netlify/database');
-    diagnostics.package_imported = true;
-    diagnostics.exported_keys = Object.keys(netlifyDatabase).sort();
-    diagnostics.getDatabase_available = typeof netlifyDatabase.getDatabase === 'function';
-    diagnostics.getConnectionString_available = typeof netlifyDatabase.getConnectionString === 'function';
-
-    if (diagnostics.getConnectionString_available) {
-      try {
-        const connectionString = netlifyDatabase.getConnectionString();
-        diagnostics.connection_string = describeConnectionString(connectionString);
-      } catch (error) {
-        diagnostics.connection_string = { present: false, error: error.message };
-      }
-    }
-
-    if (diagnostics.getDatabase_available) {
-      try {
-        const db = netlifyDatabase.getDatabase();
-        diagnostics.database_client_created = Boolean(db);
-        diagnostics.database_client_keys = db ? Object.keys(db).sort() : [];
-        diagnostics.has_sql_method = typeof db?.sql === 'function';
-        diagnostics.has_pool_method = Boolean(db?.pool);
-        return { diagnostics, sql: typeof db?.sql === 'function' ? db.sql : null };
-      } catch (error) {
-        diagnostics.error = error.message;
-      }
-    }
-  } catch (error) {
-    diagnostics.error = error.message;
-  }
-
-  return { diagnostics, sql: null };
 }
 
-export async function getSql() {
-  const { sql } = await getNetlifyDatabaseDiagnostics();
-  if (sql) return sql;
+export function getSupabaseStatus() {
+  const { url, serviceRoleKey } = getSupabaseConfig();
+  return {
+    configured: Boolean(url && serviceRoleKey),
+    url_present: Boolean(url),
+    service_role_key_present: Boolean(serviceRoleKey),
+    host: url ? new URL(url).host : null
+  };
+}
 
-  const databaseUrl = getDatabaseUrl();
-  if (databaseUrl) return neon(databaseUrl);
+export async function supabaseRequest(path, options = {}) {
+  const { url, serviceRoleKey } = getSupabaseConfig();
+  if (!url || !serviceRoleKey) {
+    const error = new Error('Supabase is not configured. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Netlify environment variables.');
+    error.code = 'SUPABASE_NOT_CONFIGURED';
+    throw error;
+  }
 
-  return null;
+  const response = await fetch(`${url}/rest/v1/${path}`, {
+    ...options,
+    headers: supabaseHeaders(options.headers || {})
+  });
+
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try { data = JSON.parse(text); }
+    catch { data = text; }
+  }
+
+  if (!response.ok) {
+    const error = new Error(data?.message || data?.hint || `Supabase REST request failed with HTTP ${response.status}.`);
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+
+  return data;
+}
+
+export async function selectRows(table, query = 'select=*') {
+  return supabaseRequest(`${table}?${query}`, { method: 'GET' });
+}
+
+export async function insertRow(table, row) {
+  const result = await supabaseRequest(`${table}?select=*`, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(row)
+  });
+  return Array.isArray(result) ? result[0] : result;
+}
+
+export async function upsertRow(table, row, onConflict) {
+  const result = await supabaseRequest(`${table}?on_conflict=${encodeURIComponent(onConflict)}&select=*`, {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(row)
+  });
+  return Array.isArray(result) ? result[0] : result;
 }
 
 export function parseBody(event) {
   if (!event.body) return {};
-  try {
-    return JSON.parse(event.body);
-  } catch (error) {
-    return {};
-  }
+  try { return JSON.parse(event.body); }
+  catch { return {}; }
 }
 
 export function requirePost(event) {
