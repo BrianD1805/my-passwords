@@ -138,3 +138,27 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
 .notes-block button { justify-self: start; }
 @media (max-width: 1060px) { .status-grid { grid-template-columns: repeat(2, 1fr); } .snapshot-row { grid-template-columns: 1fr; } }
 @media (max-width: 860px) { .status-grid { grid-template-columns: 1fr; } .form-buttons { grid-template-columns: 1fr; } .sync-actions { justify-content: stretch; } .sync-actions button { width: 100%; } }
+
+.create-warning {
+  margin: -0.25rem 0 0.25rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 14px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #7c4a03;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.link-danger {
+  border: 0;
+  background: transparent;
+  color: #b91c1c;
+  font-weight: 800;
+  margin-top: 0.65rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-danger:hover {
+  color: #7f1d1d;
+}

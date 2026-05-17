@@ -1,4 +1,4 @@
-export const APP_VERSION = 'My Passwords Ver-0.005';
+export const APP_VERSION = 'My Passwords Ver-0.006';
 
 export function jsonResponse(statusCode, body) {
   return {
@@ -85,6 +85,16 @@ export async function selectRows(table, query = 'select=*') {
 export async function insertRow(table, row) {
   const result = await supabaseRequest(`${table}?select=*`, {
     method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(row)
+  });
+  return Array.isArray(result) ? result[0] : result;
+}
+
+
+export async function updateRow(table, filterQuery, row) {
+  const result = await supabaseRequest(`${table}?${filterQuery}&select=*`, {
+    method: 'PATCH',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify(row)
   });

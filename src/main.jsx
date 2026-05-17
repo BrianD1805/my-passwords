@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.005';
+const VERSION = 'My Passwords Ver-0.006';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -193,6 +193,9 @@ function shortId(value) {
 function App() {
   const [locked, setLocked] = useState(true);
   const [masterPassword, setMasterPassword] = useState('');
+  const [confirmMasterPassword, setConfirmMasterPassword] = useState('');
+  const [hasLocalVault, setHasLocalVault] = useState(() => Boolean(readStoredVault()));
+  const [createMode, setCreateMode] = useState(() => !Boolean(readStoredVault()));
   const [items, setItems] = useState([]);
   const [message, setMessage] = useState('');
   const [query, setQuery] = useState('');
@@ -233,18 +236,36 @@ function App() {
       return;
     }
     try {
-      const existing = await decryptVault(masterPassword);
-      if (existing) {
+      const localVault = readStoredVault();
+      if (localVault) {
+        const existing = await decryptVault(masterPassword);
+        if (!existing) throw new Error('Vault could not be decrypted.');
         setItems(existing);
-        setMessage('Vault unlocked. Ver-0.005 can save encrypted snapshots to Supabase and show snapshot history.');
-      } else {
-        await encryptVault(starterItems, masterPassword);
-        setItems(starterItems);
-        setMessage('New encrypted local vault created. Delete the demo records when ready.');
+        setMessage('Vault unlocked. Ver-0.006 keeps bootstrap repeat-safe and prevents accidental wrong-password vault creation.');
+        setLocked(false);
+        return;
       }
+
+      if (!createMode) {
+        setCreateMode(true);
+        setMessage('No local vault exists on this device. Confirm your master password to create a new encrypted local vault.');
+        return;
+      }
+
+      if (masterPassword !== confirmMasterPassword) {
+        setMessage('The two master password entries do not match. Nothing has been saved.');
+        return;
+      }
+
+      await encryptVault(starterItems, masterPassword);
+      setHasLocalVault(true);
+      setCreateMode(false);
+      setConfirmMasterPassword('');
+      setItems(starterItems);
+      setMessage('New encrypted local vault created on this device. Delete the demo records when ready.');
       setLocked(false);
     } catch (error) {
-      setMessage('Could not unlock. Check your master password.');
+      setMessage('Could not unlock. Check your master password. Nothing new was saved.');
     }
   }
 
@@ -258,7 +279,24 @@ function App() {
     setItems([]);
     setShowSecrets({});
     setMasterPassword('');
+    setConfirmMasterPassword('');
     setMessage(note);
+  }
+
+
+
+  function resetLocalVaultOnDevice() {
+    const confirmed = window.confirm('This clears only the encrypted local vault saved on this device. It does not delete Supabase snapshots or admin IDs. Continue?');
+    if (!confirmed) return;
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    localStorage.removeItem(SALT_KEY);
+    localStorage.removeItem(LEGACY_SALT_KEY);
+    setHasLocalVault(false);
+    setCreateMode(true);
+    setMasterPassword('');
+    setConfirmMasterPassword('');
+    setMessage('Local encrypted vault cleared on this device. You can now create a fresh local vault with confirmed password entry.');
   }
 
   async function addItem(event) {
@@ -330,7 +368,7 @@ function App() {
       if (result.ok) {
         const next = { ...bootstrap, email, tenantId: result.tenantId, userId: result.userId };
         setBootstrap(next);
-        setMessage('Admin tenant bootstrap completed in Supabase and IDs saved locally.');
+        setMessage(result.message || 'Admin tenant bootstrap completed in Supabase and IDs saved locally.');
       } else {
         setMessage(`${result.message || 'Bootstrap did not complete.'}${result.error ? ` Error: ${result.error}` : ''}`);
       }
@@ -441,12 +479,20 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Private encrypted PWA foundation</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock your local encrypted vault. Ver-0.005 improves item capture, shows encrypted Supabase snapshot history and keeps secrets encrypted in the browser.</p>
+          <p className="intro">Unlock your local encrypted vault. Ver-0.006 prevents accidental wrong-password vault creation and makes admin bootstrap safe to run more than once.</p>
           <form onSubmit={unlockVault} className="unlock-form">
-            <label>Master vault password</label>
-            <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" autoFocus />
-            <button type="submit"><Unlock size={18} /> Unlock / Create Vault</button>
+            <label>{hasLocalVault ? 'Master vault password' : 'Create master vault password'}</label>
+            <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Create a strong master password'} autoFocus />
+            {!hasLocalVault && createMode && (
+              <>
+                <label>Confirm master vault password</label>
+                <input type="password" value={confirmMasterPassword} onChange={(e) => setConfirmMasterPassword(e.target.value)} placeholder="Type the same password again" />
+                <p className="create-warning">No local vault exists on this device. A new encrypted local vault is only created after both password entries match.</p>
+              </>
+            )}
+            <button type="submit"><Unlock size={18} /> {hasLocalVault ? 'Unlock Vault' : 'Create New Local Vault'}</button>
           </form>
+          {hasLocalVault && <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>}
           {message && <p className="message">{message}</p>}
           <div className="security-note"><ShieldCheck size={18} /> Master password stays in the browser. Database sync stores encrypted snapshots only.</div>
           <p className="version">{VERSION}</p>
@@ -475,7 +521,7 @@ function App() {
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.005 Supabase foundation</p><h2><Cloud size={21} /> Encrypted sync and admin status</h2></div>
+          <div><p className="eyebrow">Ver-0.006 Supabase foundation</p><h2><Cloud size={21} /> Encrypted sync and admin status</h2></div>
           <div className="sync-actions">
             <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check Supabase</button>
             <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Snapshot history</button>
@@ -565,7 +611,7 @@ function App() {
         </section>
       </section>
 
-      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud layer · snapshot history visible</footer>
+      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud layer · repeat-safe bootstrap · safer local vault creation</footer>
     </main>
   );
 }

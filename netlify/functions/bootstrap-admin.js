@@ -1,4 +1,4 @@
-import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, upsertRow } from './_db.js';
+import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, updateRow, upsertRow } from './_db.js';
 
 const defaultCategories = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
 
@@ -19,48 +19,75 @@ export async function handler(event) {
   }
 
   try {
-    const tenantId = publicId('tenant');
-    const userId = publicId('user');
+    // Bootstrap must be safely repeatable. Never update an existing tenant's id,
+    // because users/categories/vault rows may already reference it.
+    const existingTenants = await selectRows('tenants', `select=id,name,status,plan&name=${eq(tenantName)}&limit=1`);
+    let finalTenantId = existingTenants?.[0]?.id || '';
 
-    await upsertRow('tenants', {
-      id: tenantId,
-      name: tenantName,
-      plan: 'private_founder',
-      status: 'active'
-    }, 'name');
+    if (!finalTenantId) {
+      finalTenantId = publicId('tenant');
+      await insertRow('tenants', {
+        id: finalTenantId,
+        name: tenantName,
+        plan: 'private_founder',
+        status: 'active'
+      });
+    } else {
+      await updateRow('tenants', `id=${eq(finalTenantId)}`, {
+        name: tenantName,
+        plan: existingTenants?.[0]?.plan || 'private_founder',
+        status: 'active',
+        updated_at: new Date().toISOString()
+      });
+    }
 
-    const tenants = await selectRows('tenants', `select=id,name&name=${eq(tenantName)}&order=created_at.asc&limit=1`);
-    const finalTenantId = tenants?.[0]?.id || tenantId;
+    const existingUsers = await selectRows('users', `select=id,email,display_name,role&tenant_id=${eq(finalTenantId)}&email=${eq(email)}&limit=1`);
+    let finalUserId = existingUsers?.[0]?.id || '';
 
-    await upsertRow('users', {
-      id: userId,
-      tenant_id: finalTenantId,
-      email,
-      display_name: displayName,
-      role: 'administrator',
-      status: 'active',
-      updated_at: new Date().toISOString()
-    }, 'tenant_id,email');
-
-    const users = await selectRows('users', `select=id,email,display_name,role&tenant_id=${eq(finalTenantId)}&email=${eq(email)}&limit=1`);
-    const finalUserId = users?.[0]?.id || userId;
+    if (!finalUserId) {
+      finalUserId = publicId('user');
+      await insertRow('users', {
+        id: finalUserId,
+        tenant_id: finalTenantId,
+        email,
+        display_name: displayName,
+        role: 'administrator',
+        status: 'active'
+      });
+    } else {
+      await updateRow('users', `id=${eq(finalUserId)}`, {
+        email,
+        display_name: displayName,
+        role: 'administrator',
+        status: 'active',
+        updated_at: new Date().toISOString()
+      });
+    }
 
     for (let i = 0; i < defaultCategories.length; i += 1) {
-      await upsertRow('categories', {
-        id: publicId('cat'),
-        tenant_id: finalTenantId,
-        name: defaultCategories[i],
-        icon: 'folder',
-        sort_order: i + 1
-      }, 'tenant_id,name');
+      const existingCategories = await selectRows('categories', `select=id,name&tenant_id=${eq(finalTenantId)}&name=${eq(defaultCategories[i])}&limit=1`);
+      if (!existingCategories?.[0]?.id) {
+        await insertRow('categories', {
+          id: publicId('cat'),
+          tenant_id: finalTenantId,
+          name: defaultCategories[i],
+          icon: 'folder',
+          sort_order: i + 1
+        });
+      } else {
+        await updateRow('categories', `id=${eq(existingCategories[0].id)}`, {
+          icon: 'folder',
+          sort_order: i + 1
+        });
+      }
     }
 
     await insertRow('audit_log', {
       id: publicId('audit'),
       tenant_id: finalTenantId,
       user_id: finalUserId,
-      action: 'admin_bootstrap',
-      metadata: { version: APP_VERSION, provider: 'supabase' }
+      action: existingTenants?.[0]?.id ? 'admin_bootstrap_rechecked' : 'admin_bootstrap',
+      metadata: { version: APP_VERSION, provider: 'supabase', repeat_safe: true }
     });
 
     return jsonResponse(200, {
@@ -70,8 +97,12 @@ export async function handler(event) {
       version: APP_VERSION,
       tenantId: finalTenantId,
       userId: finalUserId,
-      user: users?.[0] || { id: finalUserId, email, display_name: displayName, role: 'administrator' },
-      message: 'Admin tenant bootstrap completed in Supabase and IDs saved locally.'
+      reusedExistingTenant: !!existingTenants?.[0]?.id,
+      reusedExistingUser: !!existingUsers?.[0]?.id,
+      user: existingUsers?.[0] || { id: finalUserId, email, display_name: displayName, role: 'administrator' },
+      message: existingTenants?.[0]?.id
+        ? 'Admin tenant already existed. Existing Supabase tenant/user IDs were rechecked and saved locally.'
+        : 'Admin tenant bootstrap completed in Supabase and IDs saved locally.'
     });
   } catch (error) {
     return jsonResponse(500, {

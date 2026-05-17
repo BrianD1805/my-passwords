@@ -1,4 +1,4 @@
-# My Passwords Ver-0.005 — Improved Vault Forms, Snapshot History and Admin/Sync Layout Polish
+# My Passwords Ver-0.006 — Improved Vault Forms, Snapshot History and Admin/Sync Layout Polish
 
 ## Summary
 
@@ -8,7 +8,7 @@ This patch keeps Netlify hosting, GitHub deploy, Netlify Functions and Supabase 
 
 ## What changed
 
-- Bumped visible app/function version to `My Passwords Ver-0.005`.
+- Bumped visible app/function version to `My Passwords Ver-0.006`.
 - Improved the Add encrypted item form with category-aware placeholders.
 - Added a show/hide button for the new item secret field.
 - Added a favourite checkbox when adding an item.
@@ -37,7 +37,7 @@ npm run dev
 ```bat
 git status
 git add .
-git commit -m "My Passwords Ver-0.005 improve vault forms and snapshot history"
+git commit -m "My Passwords Ver-0.006 improve vault forms and snapshot history"
 git push origin main
 ```
 
