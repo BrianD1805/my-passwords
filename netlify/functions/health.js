@@ -5,6 +5,6 @@ export async function handler() {
     ok: true,
     app: 'My Passwords',
     version: APP_VERSION,
-    mode: 'cloud-first-encrypted-vault-sync'
+    mode: 'auto-pull-on-unlock-with-device-sync-state'
   });
 }

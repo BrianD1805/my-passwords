@@ -226,3 +226,49 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
     box-shadow: 0 14px 34px rgba(29, 53, 87, 0.18);
   }
 }
+
+.device-status-card {
+  margin-top: 12px;
+  border: 1px solid rgba(51, 102, 153, 0.18);
+  background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(240,246,252,0.94));
+  border-radius: 18px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 6px;
+  box-shadow: 0 12px 34px rgba(31, 48, 71, 0.07);
+}
+
+.device-status-card.cloud-restored,
+.device-status-card.checking-cloud {
+  border-color: rgba(34, 139, 96, 0.28);
+  background: linear-gradient(135deg, rgba(247,255,251,0.98), rgba(237,250,244,0.94));
+}
+
+.device-status-card.cloud-decrypt-failed {
+  border-color: rgba(170, 73, 73, 0.3);
+  background: linear-gradient(135deg, rgba(255,248,248,0.98), rgba(252,238,238,0.94));
+}
+
+.device-status-card.local-fallback,
+.device-status-card.local-only,
+.device-status-card.no-cloud-snapshot {
+  border-color: rgba(189, 132, 51, 0.26);
+  background: linear-gradient(135deg, rgba(255,253,247,0.98), rgba(252,244,229,0.94));
+}
+
+.device-status-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #24496e;
+}
+
+.device-status-card span {
+  color: #31445a;
+  line-height: 1.45;
+}
+
+.device-status-card small {
+  color: #66758a;
+  line-height: 1.45;
+}
