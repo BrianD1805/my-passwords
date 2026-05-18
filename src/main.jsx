@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, MonitorSmartphone, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck } from 'lucide-react';
+import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, MonitorSmartphone, Pencil, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.009';
+const VERSION = 'My Passwords Ver-0.010';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -94,7 +94,7 @@ const starterItems = [
       url: '',
       username: 'Trusted person access',
       password: 'Not enabled yet',
-      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.009 adds auto-pull on unlock and clearer desktop/mobile sync state.'
+      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.010 adds a proper edit item flow while preserving auto-pull on unlock and encrypted sync.'
     },
     updatedAt: new Date().toISOString()
   }
@@ -238,6 +238,7 @@ function App() {
   const [showSecrets, setShowSecrets] = useState({});
   const [showFormSecret, setShowFormSecret] = useState(false);
   const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false });
+  const [editingItemId, setEditingItemId] = useState('');
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => {
     try { return JSON.parse(localStorage.getItem(BOOTSTRAP_KEY)) || { email: '', displayName: 'Brian', tenantName: 'Brian Private Vault', tenantId: '', userId: '' }; }
@@ -456,24 +457,74 @@ function App() {
     showMessage('Local encrypted vault cleared on this device. You can now create a fresh local vault with confirmed password entry.');
   }
 
-  async function addItem(event) {
+  function emptyForm(categoryToKeep = form.category) {
+    return { title: '', category: categoryToKeep || 'Passwords', url: '', username: '', password: '', notes: '', favourite: false };
+  }
+
+  async function saveItem(event) {
     event.preventDefault();
-    if (!form.title.trim()) return showMessage('Add a title first.');
+    if (!form.title.trim()) return showMessage(editingItemId ? 'Add a title before updating this item.' : 'Add a title first.');
+
+    const itemPayload = {
+      title: form.title.trim(),
+      category: form.category,
+      favourite: !!form.favourite,
+      payload: { url: form.url.trim(), username: form.username.trim(), password: form.password, notes: form.notes.trim() },
+      updatedAt: new Date().toISOString()
+    };
+
+    if (editingItemId) {
+      const exists = items.some((item) => item.id === editingItemId);
+      if (!exists) {
+        setEditingItemId('');
+        return showMessage('That item is no longer available to edit. Nothing was changed.');
+      }
+      const next = items.map((item) => item.id === editingItemId ? { ...item, ...itemPayload } : item);
+      await saveItems(next, { autoSync: true });
+      const editedCategory = form.category;
+      setEditingItemId('');
+      setForm(emptyForm(editedCategory));
+      setShowFormSecret(false);
+      showMessage(bootstrap.tenantId && bootstrap.userId ? 'Encrypted item updated locally and auto-sync requested.' : 'Encrypted item updated locally. Bootstrap admin to enable automatic cloud sync.');
+      return;
+    }
+
     const next = [
       {
         id: crypto.randomUUID(),
-        title: form.title.trim(),
-        category: form.category,
-        favourite: !!form.favourite,
-        payload: { url: form.url.trim(), username: form.username.trim(), password: form.password, notes: form.notes.trim() },
-        updatedAt: new Date().toISOString()
+        ...itemPayload
       },
       ...items
     ];
     await saveItems(next, { autoSync: true });
-    setForm({ title: '', category: form.category, url: '', username: '', password: '', notes: '', favourite: false });
+    setForm(emptyForm(form.category));
     setShowFormSecret(false);
     showMessage(bootstrap.tenantId && bootstrap.userId ? 'Encrypted item saved locally and auto-sync requested.' : 'Encrypted item saved locally. Bootstrap admin to enable automatic cloud sync.');
+  }
+
+  function startEditItem(item) {
+    setEditingItemId(item.id);
+    setForm({
+      title: item.title || '',
+      category: item.category || 'Passwords',
+      url: item.payload?.url || '',
+      username: item.payload?.username || '',
+      password: item.payload?.password || '',
+      notes: item.payload?.notes || '',
+      favourite: !!item.favourite
+    });
+    setShowFormSecret(false);
+    setCategory(item.category || 'All');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showMessage(`Editing ${item.title || 'selected item'}. Save changes or cancel edit.`);
+  }
+
+  function cancelEdit() {
+    const keepCategory = form.category;
+    setEditingItemId('');
+    setForm(emptyForm(keepCategory));
+    setShowFormSecret(false);
+    showMessage('Edit cancelled. No changes were saved.');
   }
 
   async function deleteItem(id) {
@@ -494,7 +545,8 @@ function App() {
   }
 
   function clearForm() {
-    setForm({ title: '', category: form.category, url: '', username: '', password: '', notes: '', favourite: false });
+    if (editingItemId) return cancelEdit();
+    setForm(emptyForm(form.category));
     setShowFormSecret(false);
     showMessage('Form cleared.');
   }
@@ -662,7 +714,7 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Private encrypted PWA foundation</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock your encrypted vault. Ver-0.009 auto-checks the latest encrypted Supabase snapshot during unlock and restores it safely when your master password decrypts it.</p>
+          <p className="intro">Unlock your encrypted vault. Ver-0.010 keeps the cloud-first sync engine stable and adds a proper edit flow for existing encrypted items.</p>
           <form onSubmit={unlockVault} className="unlock-form">
             <label>{hasLocalVault ? 'Master vault password' : 'Create master vault password'}</label>
             <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Create a strong master password'} autoFocus />
@@ -705,7 +757,7 @@ function App() {
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.009 desktop/mobile sync clarity</p><h2><Cloud size={21} /> Cloud-first encrypted sync and device status</h2></div>
+          <div><p className="eyebrow">Ver-0.010 edit flow with sync preserved</p><h2><Cloud size={21} /> Cloud-first encrypted sync and device status</h2></div>
           <div className="sync-actions">
             <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check Supabase</button>
             <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Snapshot history</button>
@@ -756,9 +808,10 @@ function App() {
       </section>
 
       <section className="main-grid">
-        <form className="item-form" onSubmit={addItem}>
-          <h2><Plus size={20} /> Add encrypted item</h2>
-          <p className="form-helper">Category-aware fields for passwords, bank details, secret keys, notes and checklists. Everything is encrypted locally before cloud sync.</p>
+        <form className={editingItemId ? "item-form edit-mode" : "item-form"} onSubmit={saveItem}>
+          <h2>{editingItemId ? <Pencil size={20} /> : <Plus size={20} />} {editingItemId ? 'Edit encrypted item' : 'Add encrypted item'}</h2>
+          <p className="form-helper">{editingItemId ? 'Update the saved details, then save. The existing encrypted local save and auto-sync path is reused.' : 'Category-aware fields for passwords, bank details, secret keys, notes and checklists. Everything is encrypted locally before cloud sync.'}</p>
+          {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
           <label>Category<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categories.filter((cat) => cat !== 'All').map((cat) => <option key={cat}>{cat}</option>)}</select></label>
           <label>Title<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={activeHint.title} /></label>
           <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>
@@ -772,8 +825,8 @@ function App() {
           <label>Notes / Checklist<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
           <label className="favourite-toggle"><input type="checkbox" checked={form.favourite} onChange={(e) => setForm({ ...form, favourite: e.target.checked })} /> Mark as favourite</label>
           <div className="form-buttons">
-            <button type="submit" className="primary-button"><ShieldCheck size={18} /> Save encrypted item</button>
-            <button type="button" className="secondary-button" onClick={clearForm}>Clear</button>
+            <button type="submit" className="primary-button"><ShieldCheck size={18} /> {editingItemId ? 'Save updated item' : 'Save encrypted item'}</button>
+            <button type="button" className="secondary-button" onClick={clearForm}>{editingItemId ? <><X size={16} /> Cancel edit</> : 'Clear'}</button>
           </div>
         </form>
 
@@ -785,6 +838,7 @@ function App() {
                 <div className="card-title-row">
                   <div><span className="category-pill">{item.category}</span><h3>{item.favourite && <Star size={17} fill="currentColor" />} {item.title}</h3></div>
                   <div className="card-actions">
+                    <button className="icon-button" onClick={() => startEditItem(item)} title="Edit item"><Pencil size={17} /></button>
                     <button className="icon-button" onClick={() => toggleFavourite(item.id)} title="Toggle favourite"><Star size={17} fill={item.favourite ? 'currentColor' : 'none'} /></button>
                     <button className="icon-button danger" onClick={() => deleteItem(item.id)} title="Delete"><Trash2 size={17} /></button>
                   </div>
@@ -802,7 +856,7 @@ function App() {
       </section>
 
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
-      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud-first sync · tasteful toast notifications · auto-pull on unlock · automatic encrypted upload</footer>
+      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud-first sync · auto-pull on unlock · automatic encrypted upload · proper edit item flow</footer>
     </main>
   );
 }

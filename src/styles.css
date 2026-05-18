@@ -272,3 +272,23 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
   color: #66758a;
   line-height: 1.45;
 }
+
+/* Ver-0.010 proper edit item flow */
+.item-form.edit-mode {
+  border-color: rgba(216, 156, 29, 0.45);
+  box-shadow: 0 18px 42px rgba(122, 86, 5, 0.12);
+}
+
+.edit-banner {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 9px;
+  align-items: center;
+  padding: 11px 13px;
+  border-radius: 15px;
+  border: 1px solid #f2d58a;
+  background: #fff8e2;
+  color: #74530b;
+  font-weight: 800;
+  line-height: 1.42;
+}
