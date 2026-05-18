@@ -292,3 +292,84 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
   font-weight: 800;
   line-height: 1.42;
 }
+
+/* Ver-0.010A app-style card field actions */
+.app-field-block {
+  display: grid;
+  gap: 7px;
+  margin: 14px 0;
+}
+
+.app-field-label {
+  color: #607286;
+  font-size: 0.84rem;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+.app-value-field {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d7e2ec;
+  border-radius: 18px;
+  background: #f4f7fa;
+  color: #22374d;
+  padding: 8px 9px 8px 15px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.74);
+}
+
+.app-value-field.secret-field {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.app-value-field.notes-field {
+  align-items: start;
+  padding-top: 13px;
+  padding-bottom: 13px;
+}
+
+.app-value-field.link-field a,
+.app-field-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+  font-size: 0.98rem;
+}
+
+.app-field-value.multiline {
+  white-space: pre-wrap;
+}
+
+.field-action {
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: #607286;
+  transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+  flex: 0 0 auto;
+}
+
+.field-action:hover,
+.field-action:focus-visible {
+  background: #e5edf4;
+  color: #1d3557;
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.field-action:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 860px) {
+  .vault-card { padding: 16px; }
+  .app-field-block { margin: 13px 0; }
+  .app-value-field { min-height: 58px; border-radius: 17px; padding-left: 14px; }
+  .field-action { width: 40px; height: 40px; }
+}

@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, MonitorSmartphone, Pencil, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.010';
+const VERSION = 'My Passwords Ver-0.010A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -94,7 +94,7 @@ const starterItems = [
       url: '',
       username: 'Trusted person access',
       password: 'Not enabled yet',
-      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.010 adds a proper edit item flow while preserving auto-pull on unlock and encrypted sync.'
+      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.010A adds app-style card fields with in-field copy and reveal icons while preserving auto-pull on unlock and encrypted sync.'
     },
     updatedAt: new Date().toISOString()
   }
@@ -714,7 +714,7 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Private encrypted PWA foundation</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock your encrypted vault. Ver-0.010 keeps the cloud-first sync engine stable and adds a proper edit flow for existing encrypted items.</p>
+          <p className="intro">Unlock your encrypted vault. Ver-0.010A keeps the cloud-first sync engine stable and makes vault cards feel more like a proper app, with in-field copy and reveal icons.</p>
           <form onSubmit={unlockVault} className="unlock-form">
             <label>{hasLocalVault ? 'Master vault password' : 'Create master vault password'}</label>
             <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Create a strong master password'} autoFocus />
@@ -757,7 +757,7 @@ function App() {
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.010 edit flow with sync preserved</p><h2><Cloud size={21} /> Cloud-first encrypted sync and device status</h2></div>
+          <div><p className="eyebrow">Ver-0.010A UX polish with sync preserved</p><h2><Cloud size={21} /> Cloud-first encrypted sync and device status</h2></div>
           <div className="sync-actions">
             <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check Supabase</button>
             <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Snapshot history</button>
@@ -843,10 +843,39 @@ function App() {
                     <button className="icon-button danger" onClick={() => deleteItem(item.id)} title="Delete"><Trash2 size={17} /></button>
                   </div>
                 </div>
-                {item.payload.url && <p className="url-line"><a href={item.payload.url} target="_blank" rel="noreferrer">{item.payload.url}</a> <button onClick={() => copyText('URL', item.payload.url)}><Copy size={14} /> Copy URL</button></p>}
-                <div className="field-row"><span>User</span><code>{item.payload.username || '—'}</code><button onClick={() => copyText('Username', item.payload.username)}><Copy size={15} /> Copy</button></div>
-                <div className="field-row"><span>Secret</span><code>{visible ? item.payload.password || '—' : '••••••••••••'}</code><button onClick={() => setShowSecrets({ ...showSecrets, [item.id]: !visible })}>{visible ? <EyeOff size={15} /> : <Eye size={15} />} {visible ? 'Hide' : 'Show'}</button><button onClick={() => copyText('Secret', item.payload.password)}><Copy size={15} /> Copy</button></div>
-                {item.payload.notes && <div className="notes-block"><p className="notes">{item.payload.notes}</p><button onClick={() => copyText('Notes', item.payload.notes)}><Copy size={14} /> Copy notes</button></div>}
+                {item.payload.url && (
+                  <div className="app-field-block">
+                    <span className="app-field-label">Website / Link</span>
+                    <div className="app-value-field link-field">
+                      <a href={item.payload.url} target="_blank" rel="noreferrer">{item.payload.url}</a>
+                      <button type="button" className="field-action" onClick={() => copyText('URL', item.payload.url)} aria-label="Copy URL" title="Copy URL"><Copy size={18} /></button>
+                    </div>
+                  </div>
+                )}
+                <div className="app-field-block">
+                  <span className="app-field-label">Username</span>
+                  <div className="app-value-field">
+                    <span className="app-field-value">{item.payload.username || '—'}</span>
+                    <button type="button" className="field-action" onClick={() => copyText('Username', item.payload.username)} aria-label="Copy username" title="Copy username"><Copy size={18} /></button>
+                  </div>
+                </div>
+                <div className="app-field-block">
+                  <span className="app-field-label">Password</span>
+                  <div className="app-value-field secret-field">
+                    <span className="app-field-value">{visible ? item.payload.password || '—' : '••••••••••••••••'}</span>
+                    <button type="button" className="field-action" onClick={() => setShowSecrets({ ...showSecrets, [item.id]: !visible })} aria-label={visible ? 'Hide password' : 'Show password'} title={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                    <button type="button" className="field-action" onClick={() => copyText('Secret', item.payload.password)} aria-label="Copy password" title="Copy password"><Copy size={18} /></button>
+                  </div>
+                </div>
+                {item.payload.notes && (
+                  <div className="app-field-block">
+                    <span className="app-field-label">Notes</span>
+                    <div className="app-value-field notes-field">
+                      <span className="app-field-value multiline">{item.payload.notes}</span>
+                      <button type="button" className="field-action" onClick={() => copyText('Notes', item.payload.notes)} aria-label="Copy notes" title="Copy notes"><Copy size={18} /></button>
+                    </div>
+                  </div>
+                )}
                 <p className="updated">Updated {new Date(item.updatedAt).toLocaleString()}</p>
               </article>
             );
@@ -856,7 +885,7 @@ function App() {
       </section>
 
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
-      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud-first sync · auto-pull on unlock · automatic encrypted upload · proper edit item flow</footer>
+      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud-first sync · auto-pull on unlock · automatic encrypted upload · proper edit item flow · app-style in-field actions</footer>
     </main>
   );
 }
