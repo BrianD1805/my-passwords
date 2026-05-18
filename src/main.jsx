@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, MonitorSmartphone, Pencil, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.010A';
+const VERSION = 'My Passwords Ver-0.010B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -94,7 +94,7 @@ const starterItems = [
       url: '',
       username: 'Trusted person access',
       password: 'Not enabled yet',
-      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.010A adds app-style card fields with in-field copy and reveal icons while preserving auto-pull on unlock and encrypted sync.'
+      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.010B adds app-style card fields with in-field copy and reveal icons while preserving auto-pull on unlock and encrypted sync.'
     },
     updatedAt: new Date().toISOString()
   }
@@ -714,7 +714,7 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Private encrypted PWA foundation</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock your encrypted vault. Ver-0.010A keeps the cloud-first sync engine stable and makes vault cards feel more like a proper app, with in-field copy and reveal icons.</p>
+          <p className="intro">Unlock your encrypted vault. Ver-0.010B keeps the cloud-first sync engine stable and makes vault cards feel more like a proper app, with in-field copy and reveal icons.</p>
           <form onSubmit={unlockVault} className="unlock-form">
             <label>{hasLocalVault ? 'Master vault password' : 'Create master vault password'}</label>
             <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Create a strong master password'} autoFocus />
@@ -757,7 +757,7 @@ function App() {
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.010A UX polish with sync preserved</p><h2><Cloud size={21} /> Cloud-first encrypted sync and device status</h2></div>
+          <div><p className="eyebrow">Ver-0.010B UX polish with sync preserved</p><h2><Cloud size={21} /> Cloud-first encrypted sync and device status</h2></div>
           <div className="sync-actions">
             <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check Supabase</button>
             <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Snapshot history</button>
