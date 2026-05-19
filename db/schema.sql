@@ -1,4 +1,4 @@
--- My Passwords Ver-0.007 Supabase schema
+-- My Passwords Ver-0.011 Supabase schema
 -- Run this in Supabase SQL Editor for the project used by the Netlify app.
 
 create table if not exists public.tenants (
@@ -13,14 +13,27 @@ create table if not exists public.tenants (
 create table if not exists public.users (
   id text primary key,
   tenant_id text not null references public.tenants(id) on delete cascade,
-  email text not null,
+  email text not null default '',
   display_name text not null,
   role text not null default 'member',
   status text not null default 'active',
+  phone_country_code text,
+  phone_number text,
+  phone_e164 text,
+  phone_verified boolean not null default false,
+  email_verified boolean not null default false,
+  account_login_method text not null default 'local_first',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (tenant_id, email)
 );
+
+create unique index if not exists idx_users_phone_e164_unique
+  on public.users(phone_e164)
+  where phone_e164 is not null and phone_e164 <> '';
+
+create index if not exists idx_users_email on public.users(email);
+
 
 create table if not exists public.categories (
   id text primary key,

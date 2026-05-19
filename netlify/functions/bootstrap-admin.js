@@ -1,4 +1,4 @@
-import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, updateRow, upsertRow } from './_db.js';
+import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, updateRow } from './_db.js';
 
 const defaultCategories = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
 
@@ -6,43 +6,97 @@ function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
 }
 
+function cleanDigits(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normaliseCountryCode(value) {
+  const digits = cleanDigits(value);
+  return digits ? `+${digits}` : '';
+}
+
+function normaliseLocalPhone(value) {
+  return cleanDigits(value).replace(/^0+/, '');
+}
+
+function buildPhoneE164(countryCode, phoneNumber) {
+  const code = normaliseCountryCode(countryCode);
+  const local = normaliseLocalPhone(phoneNumber);
+  return code && local ? `${code}${local}` : '';
+}
+
+async function findExistingUser(email, phoneE164) {
+  if (phoneE164) {
+    const byPhone = await selectRows('users', `select=id,tenant_id,email,display_name,role,phone_e164,phone_country_code,phone_number&phone_e164=${eq(phoneE164)}&limit=1`);
+    if (byPhone?.[0]) return byPhone[0];
+  }
+  if (email) {
+    const byEmail = await selectRows('users', `select=id,tenant_id,email,display_name,role,phone_e164,phone_country_code,phone_number&email=${eq(email)}&limit=1`);
+    if (byEmail?.[0]) return byEmail[0];
+  }
+  return null;
+}
+
 export async function handler(event) {
   if (!requirePost(event)) return jsonResponse(405, { ok: false, message: 'POST required.' });
 
   const body = parseBody(event);
   const email = String(body.email || '').trim().toLowerCase();
-  const displayName = String(body.displayName || '').trim() || 'Brian';
-  const tenantName = String(body.tenantName || '').trim() || 'Brian Private Vault';
+  const phoneCountryCode = normaliseCountryCode(body.phoneCountryCode || body.countryCode || '+254');
+  const phoneNumber = normaliseLocalPhone(body.phoneNumber || body.mobile || '');
+  const phoneE164 = String(body.phoneE164 || buildPhoneE164(phoneCountryCode, phoneNumber)).trim();
+  const displayName = String(body.displayName || '').trim() || 'Vault User';
+  const tenantName = String(body.tenantName || '').trim() || `${phoneE164 || email || 'Private'} Vault`;
 
-  if (!email || !email.includes('@')) {
-    return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A valid admin email is required.' });
+  if (!phoneE164) {
+    return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A mobile number with country code is required for the account login foundation.' });
+  }
+
+  if (email && !email.includes('@')) {
+    return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'The backup email address is not valid.' });
   }
 
   try {
-    // Bootstrap must be safely repeatable. Never update an existing tenant's id,
-    // because users/categories/vault rows may already reference it.
-    const existingTenants = await selectRows('tenants', `select=id,name,status,plan&name=${eq(tenantName)}&limit=1`);
-    let finalTenantId = existingTenants?.[0]?.id || '';
+    const existingUser = await findExistingUser(email, phoneE164);
+    let finalTenantId = existingUser?.tenant_id || '';
+    let finalUserId = existingUser?.id || '';
+    let existingTenant = null;
 
-    if (!finalTenantId) {
-      finalTenantId = publicId('tenant');
-      await insertRow('tenants', {
-        id: finalTenantId,
-        name: tenantName,
-        plan: 'private_founder',
-        status: 'active'
-      });
-    } else {
-      await updateRow('tenants', `id=${eq(finalTenantId)}`, {
-        name: tenantName,
-        plan: existingTenants?.[0]?.plan || 'private_founder',
-        status: 'active',
-        updated_at: new Date().toISOString()
-      });
+    if (finalTenantId) {
+      const existingTenants = await selectRows('tenants', `select=id,name,status,plan&id=${eq(finalTenantId)}&limit=1`);
+      existingTenant = existingTenants?.[0] || null;
+      if (existingTenant) {
+        await updateRow('tenants', `id=${eq(finalTenantId)}`, {
+          name: existingTenant.name || tenantName,
+          plan: existingTenant.plan || 'private_founder',
+          status: 'active',
+          updated_at: new Date().toISOString()
+        });
+      }
     }
 
-    const existingUsers = await selectRows('users', `select=id,email,display_name,role&tenant_id=${eq(finalTenantId)}&email=${eq(email)}&limit=1`);
-    let finalUserId = existingUsers?.[0]?.id || '';
+    if (!finalTenantId) {
+      const existingTenants = await selectRows('tenants', `select=id,name,status,plan&name=${eq(tenantName)}&limit=1`);
+      existingTenant = existingTenants?.[0] || null;
+      finalTenantId = existingTenant?.id || '';
+
+      if (!finalTenantId) {
+        finalTenantId = publicId('tenant');
+        await insertRow('tenants', {
+          id: finalTenantId,
+          name: tenantName,
+          plan: 'private_founder',
+          status: 'active'
+        });
+      } else {
+        await updateRow('tenants', `id=${eq(finalTenantId)}`, {
+          name: tenantName,
+          plan: existingTenant?.plan || 'private_founder',
+          status: 'active',
+          updated_at: new Date().toISOString()
+        });
+      }
+    }
 
     if (!finalUserId) {
       finalUserId = publicId('user');
@@ -52,14 +106,24 @@ export async function handler(event) {
         email,
         display_name: displayName,
         role: 'administrator',
-        status: 'active'
+        status: 'active',
+        phone_country_code: phoneCountryCode,
+        phone_number: phoneNumber,
+        phone_e164: phoneE164,
+        phone_verified: false,
+        email_verified: false,
+        account_login_method: 'phone_otp_ready'
       });
     } else {
       await updateRow('users', `id=${eq(finalUserId)}`, {
-        email,
+        email: email || existingUser.email || '',
         display_name: displayName,
-        role: 'administrator',
+        role: existingUser.role || 'administrator',
         status: 'active',
+        phone_country_code: phoneCountryCode,
+        phone_number: phoneNumber,
+        phone_e164: phoneE164,
+        account_login_method: 'phone_otp_ready',
         updated_at: new Date().toISOString()
       });
     }
@@ -86,8 +150,8 @@ export async function handler(event) {
       id: publicId('audit'),
       tenant_id: finalTenantId,
       user_id: finalUserId,
-      action: existingTenants?.[0]?.id ? 'admin_bootstrap_rechecked' : 'admin_bootstrap',
-      metadata: { version: APP_VERSION, provider: 'supabase', repeat_safe: true }
+      action: existingUser ? 'account_login_foundation_rechecked' : 'account_login_foundation_created',
+      metadata: { version: APP_VERSION, provider: 'supabase', phone_e164: phoneE164, otp_ready: true, email_backup_present: Boolean(email) }
     });
 
     return jsonResponse(200, {
@@ -97,12 +161,18 @@ export async function handler(event) {
       version: APP_VERSION,
       tenantId: finalTenantId,
       userId: finalUserId,
-      reusedExistingTenant: !!existingTenants?.[0]?.id,
-      reusedExistingUser: !!existingUsers?.[0]?.id,
-      user: existingUsers?.[0] || { id: finalUserId, email, display_name: displayName, role: 'administrator' },
-      message: existingTenants?.[0]?.id
-        ? 'Admin tenant already existed. Existing Supabase tenant/user IDs were rechecked and saved locally.'
-        : 'Admin tenant bootstrap completed in Supabase and IDs saved locally.'
+      phoneCountryCode,
+      phoneNumber,
+      phoneE164,
+      email,
+      reusedExistingTenant: !!existingTenant?.id || !!existingUser?.tenant_id,
+      reusedExistingUser: !!existingUser?.id,
+      otpReady: true,
+      otpProviderConnected: false,
+      user: { id: finalUserId, email, display_name: displayName, role: existingUser?.role || 'administrator', phone_e164: phoneE164 },
+      message: existingUser
+        ? 'Account identity already existed. Existing Supabase tenant/user IDs were rechecked and saved locally.'
+        : 'Account login foundation created in Supabase. Phone is stored in international SMS format.'
     });
   } catch (error) {
     return jsonResponse(500, {
@@ -110,7 +180,7 @@ export async function handler(event) {
       connected: true,
       provider: 'supabase',
       version: APP_VERSION,
-      message: 'Bootstrap failed. Supabase was reached, but the insert/update step failed.',
+      message: 'Account login foundation failed. Supabase was reached, but the insert/update step failed.',
       error: error.message,
       details: error.details || null
     });

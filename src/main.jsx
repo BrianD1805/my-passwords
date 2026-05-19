@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, MonitorSmartphone, Pencil, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
+import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.010B';
+const VERSION = 'My Passwords Ver-0.011';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
 const LEGACY_SALT_KEY = 'my-passwords-v0.001-salt';
 const BOOTSTRAP_KEY = 'my-passwords-v0.002-bootstrap-profile';
+const ACCOUNT_KEY = 'my-passwords-v0.011-account-identity';
 
 const categories = ['All', 'Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
 
@@ -94,7 +95,7 @@ const starterItems = [
       url: '',
       username: 'Trusted person access',
       password: 'Not enabled yet',
-      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.010B adds app-style card fields with in-field copy and reveal icons while preserving auto-pull on unlock and encrypted sync.'
+      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.011 adds account login foundation with phone country code storage for later SMS OTP, while preserving local-first encrypted vault unlock.'
     },
     updatedAt: new Date().toISOString()
   }
@@ -210,6 +211,84 @@ function shortId(value) {
   return value.length > 18 ? `${value.slice(0, 10)}...${value.slice(-6)}` : value;
 }
 
+const phoneCountryCodes = [
+  { code: '+254', label: 'Kenya +254' },
+  { code: '+44', label: 'United Kingdom +44' },
+  { code: '+27', label: 'South Africa +27' },
+  { code: '+1', label: 'USA / Canada +1' },
+  { code: '+353', label: 'Ireland +353' },
+  { code: '+61', label: 'Australia +61' },
+  { code: '+64', label: 'New Zealand +64' },
+  { code: '+971', label: 'UAE +971' },
+  { code: '+91', label: 'India +91' }
+];
+
+const defaultAccount = {
+  email: '',
+  phoneCountryCode: '+254',
+  phoneNumber: '',
+  phoneE164: '',
+  displayName: 'Brian',
+  tenantName: 'Brian Private Vault',
+  tenantId: '',
+  userId: '',
+  otpStatus: 'OTP provider not connected yet',
+  accountVerified: false
+};
+
+function cleanDigits(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normaliseCountryCode(value) {
+  const digits = cleanDigits(value);
+  return digits ? `+${digits}` : '';
+}
+
+function normaliseLocalPhone(value) {
+  return cleanDigits(value).replace(/^0+/, '');
+}
+
+function buildPhoneE164(countryCode, phoneNumber) {
+  const code = normaliseCountryCode(countryCode);
+  const local = normaliseLocalPhone(phoneNumber);
+  return code && local ? `${code}${local}` : '';
+}
+
+function readSavedAccount() {
+  const legacy = (() => {
+    try { return JSON.parse(localStorage.getItem(BOOTSTRAP_KEY)) || {}; }
+    catch { return {}; }
+  })();
+  const saved = (() => {
+    try { return JSON.parse(localStorage.getItem(ACCOUNT_KEY)) || {}; }
+    catch { return {}; }
+  })();
+  const merged = { ...defaultAccount, ...legacy, ...saved };
+  const phoneCountryCode = normaliseCountryCode(merged.phoneCountryCode || merged.countryCode || '+254') || '+254';
+  const phoneNumber = String(merged.phoneNumber || merged.mobile || '').trim();
+  return {
+    ...merged,
+    phoneCountryCode,
+    phoneNumber,
+    phoneE164: merged.phoneE164 || buildPhoneE164(phoneCountryCode, phoneNumber)
+  };
+}
+
+function validateAccountIdentity(account) {
+  const email = String(account.email || '').trim().toLowerCase();
+  const phoneCountryCode = normaliseCountryCode(account.phoneCountryCode || '+254');
+  const phoneNumber = normaliseLocalPhone(account.phoneNumber || '');
+  const phoneE164 = buildPhoneE164(phoneCountryCode, phoneNumber);
+  if (!phoneCountryCode || !phoneNumber || !phoneE164) {
+    return { ok: false, message: 'Enter a mobile number with country code so SMS OTP can be added safely.' };
+  }
+  if (email && !email.includes('@')) {
+    return { ok: false, message: 'The backup email address does not look valid.' };
+  }
+  return { ok: true, email, phoneCountryCode, phoneNumber, phoneE164 };
+}
+
 
 function ToastViewport({ toasts, onDismiss }) {
   if (!toasts.length) return null;
@@ -240,10 +319,8 @@ function App() {
   const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false });
   const [editingItemId, setEditingItemId] = useState('');
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
-  const [bootstrap, setBootstrap] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(BOOTSTRAP_KEY)) || { email: '', displayName: 'Brian', tenantName: 'Brian Private Vault', tenantId: '', userId: '' }; }
-    catch { return { email: '', displayName: 'Brian', tenantName: 'Brian Private Vault', tenantId: '', userId: '' }; }
-  });
+  const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
+  const [accountStatus, setAccountStatus] = useState({ state: 'local-first', message: 'Local encrypted vault remains the normal daily unlock. Account identity is used for new device restore and future OTP.' });
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'No encrypted cloud sync has run yet.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
   const [snapshotHistory, setSnapshotHistory] = useState({ loaded: false, loading: false, total: 0, snapshots: [], message: 'Snapshot history has not been loaded yet.' });
@@ -299,15 +376,18 @@ function App() {
   }, [locked, masterPassword, items]);
 
   useEffect(() => {
-    localStorage.setItem(BOOTSTRAP_KEY, JSON.stringify(bootstrap));
+    const phoneE164 = bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber);
+    const account = { ...bootstrap, phoneCountryCode: normaliseCountryCode(bootstrap.phoneCountryCode || '+254') || '+254', phoneNumber: String(bootstrap.phoneNumber || '').trim(), phoneE164 };
+    localStorage.setItem(BOOTSTRAP_KEY, JSON.stringify(account));
+    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account));
   }, [bootstrap]);
 
-  async function fetchLatestCloudSnapshot() {
-    if (!bootstrap.tenantId || !bootstrap.userId) return { ok: false, hasSnapshot: false, message: 'Admin tenant is not bootstrapped on this device yet.' };
-    return fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(bootstrap.tenantId)}&userId=${encodeURIComponent(bootstrap.userId)}`).then((res) => res.json());
+  async function fetchLatestCloudSnapshot(account = bootstrap) {
+    if (!account.tenantId || !account.userId) return { ok: false, hasSnapshot: false, message: 'Account identity is not verified on this device yet.' };
+    return fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(account.tenantId)}&userId=${encodeURIComponent(account.userId)}`).then((res) => res.json());
   }
 
-  async function restoreLatestCloudVault(passwordToUse, { showSuccess = true, reason = 'manual' } = {}) {
+  async function restoreLatestCloudVault(passwordToUse, { showSuccess = true, reason = 'manual', account = bootstrap } = {}) {
     const checkedAt = new Date().toISOString();
     setDeviceStatus((current) => ({
       ...current,
@@ -315,7 +395,7 @@ function App() {
       label: reason === 'unlock' ? 'Checking latest encrypted cloud vault during unlock...' : 'Checking latest encrypted cloud vault...',
       lastCloudCheckAt: checkedAt
     }));
-    const latest = await fetchLatestCloudSnapshot();
+    const latest = await fetchLatestCloudSnapshot(account);
     if (!latest?.ok || !latest?.hasSnapshot || !latest.snapshot) {
       setDeviceStatus((current) => ({
         ...current,
@@ -354,6 +434,56 @@ function App() {
     return { restored: true, items: restoredItems, latest };
   }
 
+  async function ensureAccountIdentity({ silent = false } = {}) {
+    const checked = validateAccountIdentity(bootstrap);
+    if (!checked.ok) {
+      setAccountStatus({ state: 'needs-details', message: checked.message });
+      if (!silent) showMessage(checked.message, 'warning');
+      return { ok: false, message: checked.message };
+    }
+
+    const payload = {
+      ...bootstrap,
+      email: checked.email,
+      phoneCountryCode: checked.phoneCountryCode,
+      phoneNumber: checked.phoneNumber,
+      phoneE164: checked.phoneE164,
+      displayName: String(bootstrap.displayName || '').trim() || 'Vault User',
+      tenantName: String(bootstrap.tenantName || '').trim() || `${checked.phoneE164} Vault`,
+      accountLoginFoundation: true,
+      otpStatus: 'pending_provider'
+    };
+
+    setAccountStatus({ state: 'checking', message: 'Checking account identity for phone/email login foundation...' });
+    try {
+      const result = await postJson('/.netlify/functions/bootstrap-admin', payload);
+      if (!result.ok) {
+        const note = result.message || 'Account identity could not be saved.';
+        setAccountStatus({ state: 'error', message: note });
+        if (!silent) showMessage(note, 'error');
+        return { ok: false, message: note };
+      }
+      const next = {
+        ...bootstrap,
+        ...payload,
+        tenantId: result.tenantId,
+        userId: result.userId,
+        phoneE164: result.phoneE164 || payload.phoneE164,
+        accountVerified: true,
+        otpStatus: 'OTP provider not connected yet — account foundation ready'
+      };
+      setBootstrap(next);
+      setAccountStatus({ state: 'ready', message: `Account identity ready. Phone is stored as ${next.phoneE164} for future SMS OTP delivery.` });
+      if (!silent) showMessage(`Account identity ready. Phone stored as ${next.phoneE164}. OTP provider can be connected next.`);
+      return { ok: true, account: next, result };
+    } catch (error) {
+      const note = `Could not reach account login foundation. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`;
+      setAccountStatus({ state: 'error', message: note });
+      if (!silent) showMessage(note, 'error');
+      return { ok: false, message: note };
+    }
+  }
+
   async function unlockVault(event) {
     event.preventDefault();
     if (masterPassword.length < 8) {
@@ -362,11 +492,19 @@ function App() {
     }
     try {
       const localVault = readStoredVault();
-      const canCheckCloud = Boolean(bootstrap.tenantId && bootstrap.userId);
+      let activeAccount = bootstrap;
+
+      if (!localVault) {
+        const accountCheck = await ensureAccountIdentity({ silent: true });
+        if (!accountCheck.ok) return;
+        activeAccount = accountCheck.account;
+      }
+
+      const canCheckCloud = Boolean(activeAccount.tenantId && activeAccount.userId);
 
       if (canCheckCloud) {
         try {
-          const cloudRestore = await restoreLatestCloudVault(masterPassword, { showSuccess: false, reason: 'unlock' });
+          const cloudRestore = await restoreLatestCloudVault(masterPassword, { showSuccess: false, reason: 'unlock', account: activeAccount });
           if (cloudRestore.restored) {
             setLocked(false);
             showMessage(`Vault unlocked from latest encrypted Supabase snapshot. ${cloudRestore.items.length} item(s) loaded on this device.`);
@@ -403,7 +541,7 @@ function App() {
 
       if (!createMode) {
         setCreateMode(true);
-        showMessage('No local vault or decryptable cloud snapshot exists on this device. Confirm your master password to create a new encrypted local vault.');
+        showMessage('No local vault or decryptable cloud snapshot exists for this account on this device. Confirm your master password to create a new encrypted local vault.');
         return;
       }
 
@@ -417,7 +555,7 @@ function App() {
       setCreateMode(false);
       setConfirmMasterPassword('');
       setItems(starterItems);
-      showMessage('New encrypted local vault created on this device. Future changes will auto-sync after admin bootstrap.');
+      showMessage('New encrypted local vault created on this device and linked to this account identity. Future changes will auto-sync after the first cloud push.');
       setLocked(false);
     } catch (error) {
       showMessage('Could not unlock. Check your master password. Nothing new was saved.');
@@ -454,7 +592,7 @@ function App() {
     setCreateMode(true);
     setMasterPassword('');
     setConfirmMasterPassword('');
-    showMessage('Local encrypted vault cleared on this device. You can now create a fresh local vault with confirmed password entry.');
+    showMessage('Local encrypted vault cleared on this device. Account identity remains saved for new-device restore and future OTP.');
   }
 
   function emptyForm(categoryToKeep = form.category) {
@@ -565,17 +703,18 @@ function App() {
 
   async function bootstrapAdmin(event) {
     event.preventDefault();
-    const email = String(bootstrap.email || '').trim();
-    if (!email || !email.includes('@')) {
-      showMessage('Please enter a valid admin email before bootstrapping.');
+    const checked = validateAccountIdentity(bootstrap);
+    if (!checked.ok) {
+      showMessage(checked.message, 'warning');
       return;
     }
+    const email = checked.email;
     setSyncing(true);
     showMessage('Bootstrapping admin tenant...');
     try {
-      const result = await postJson('/.netlify/functions/bootstrap-admin', { ...bootstrap, email });
+      const result = await postJson('/.netlify/functions/bootstrap-admin', { ...bootstrap, email, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: checked.phoneE164, accountLoginFoundation: true });
       if (result.ok) {
-        const next = { ...bootstrap, email, tenantId: result.tenantId, userId: result.userId };
+        const next = { ...bootstrap, email, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: result.phoneE164 || checked.phoneE164, tenantId: result.tenantId, userId: result.userId, accountVerified: true, otpStatus: 'OTP provider not connected yet — account foundation ready' };
         setBootstrap(next);
         showMessage(result.message || 'Admin tenant bootstrap completed in Supabase and IDs saved locally.');
         if (masterPassword) {
@@ -712,24 +851,39 @@ function App() {
       <main className="lock-screen">
         <section className="lock-card">
           <div className="brand-mark"><Lock size={38} /></div>
-          <p className="eyebrow">Private encrypted PWA foundation</p>
+          <p className="eyebrow">Local-first encrypted vault</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock your encrypted vault. Ver-0.010B keeps the cloud-first sync engine stable and makes vault cards feel more like a proper app, with in-field copy and reveal icons.</p>
+          <p className="intro">Unlock locally with your master password. On a new device, verify the account identity first; phone numbers are stored with country code ready for SMS OTP delivery.</p>
           <form onSubmit={unlockVault} className="unlock-form">
-            <label>{hasLocalVault ? 'Master vault password' : 'Create master vault password'}</label>
-            <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Create a strong master password'} autoFocus />
+            {!hasLocalVault && (
+              <div className="account-restore-panel">
+                <div className="account-panel-title"><Phone size={17} /><strong>Account restore foundation</strong></div>
+                <p>For this foundation build, the account identity finds the correct cloud vault. SMS OTP is not sent yet, but the phone is stored in international format for the next build.</p>
+                <label>Mobile country code</label>
+                <select value={bootstrap.phoneCountryCode || '+254'} onChange={(e) => setBootstrap({ ...bootstrap, phoneCountryCode: e.target.value, phoneE164: buildPhoneE164(e.target.value, bootstrap.phoneNumber) })}>
+                  {phoneCountryCodes.map((country) => <option key={country.code} value={country.code}>{country.label}</option>)}
+                </select>
+                <label>Mobile number</label>
+                <input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" />
+                <label>Backup email</label>
+                <input type="email" value={bootstrap.email || ''} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" />
+                <small>SMS format preview: <strong>{buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber) || 'Enter mobile number'}</strong></small>
+              </div>
+            )}
+            <label>{hasLocalVault ? 'Master vault password' : 'Master vault password'}</label>
+            <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Enter or create your master password'} autoFocus={hasLocalVault} />
             {!hasLocalVault && createMode && (
               <>
                 <label>Confirm master vault password</label>
                 <input type="password" value={confirmMasterPassword} onChange={(e) => setConfirmMasterPassword(e.target.value)} placeholder="Type the same password again" />
-                <p className="create-warning">No local vault exists on this device. A new encrypted local vault is only created after both password entries match.</p>
+                <p className="create-warning">No local vault exists on this device. The app first checks the phone/email account identity for a cloud snapshot, then creates a new encrypted local vault only if no snapshot can be restored and both password entries match.</p>
               </>
             )}
-            <button type="submit"><Unlock size={18} /> {hasLocalVault ? 'Unlock Vault' : 'Create New Local Vault'}</button>
+            <button type="submit"><Unlock size={18} /> {hasLocalVault ? 'Unlock Local Vault' : 'Verify Account & Unlock'}</button>
           </form>
           {hasLocalVault && <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>}
           {message && <p className="message">{message}</p>}
-          <div className="security-note"><ShieldCheck size={18} /> Master password stays in the browser. Database sync stores encrypted snapshots only.</div>
+          <div className="security-note"><ShieldCheck size={18} /> Master password decrypts only your vault. Phone/email identifies the account. Database sync stores encrypted snapshots only.</div>
           <p className="version">{VERSION}</p>
         </section>
         <ToastViewport toasts={toasts} onDismiss={dismissToast} />
@@ -752,12 +906,12 @@ function App() {
         <article><KeyRound /><strong>{items.length}</strong><span>Encrypted items</span></article>
         <article><Database /><strong>{dbStatus.connected ? 'Connected' : 'Pending'}</strong><span>Supabase Database</span></article>
         <article><Cloud /><strong>{snapshotHistory.total || syncStatus.snapshotCount || 0}</strong><span>Cloud snapshots</span></article>
-        <article><UserRoundCheck /><strong>{bootstrap.userId ? 'Ready' : 'Setup'}</strong><span>Admin tenant</span></article>
+        <article><UserRoundCheck /><strong>{bootstrap.userId ? 'Ready' : 'Setup'}</strong><span>Account login</span></article>
       </section>
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.010B UX polish with sync preserved</p><h2><Cloud size={21} /> Cloud-first encrypted sync and device status</h2></div>
+          <div><p className="eyebrow">Ver-0.011 account login foundation</p><h2><Cloud size={21} /> Local-first vault with account restore foundation</h2></div>
           <div className="sync-actions">
             <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check Supabase</button>
             <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Snapshot history</button>
@@ -765,7 +919,12 @@ function App() {
           </div>
         </div>
         <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
-        <div className={`sync-status-card ${syncStatus.state}`}>
+        <div className={`account-status-card ${accountStatus.state}`}>
+          <div className="account-status-heading"><Phone size={18} /><strong>Account login foundation</strong></div>
+          <span>{accountStatus.message}</span>
+          <small>Phone for SMS OTP: {bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber) || 'not set'}{bootstrap.email ? ` · Backup email: ${bootstrap.email}` : ''}</small>
+        </div>
+        <div className={`sync-status-card ${syncStatus.state}`}> 
           <strong>{syncStatus.state === 'success' ? 'Encrypted cloud sync verified' : syncStatus.state === 'syncing' ? 'Sync in progress' : syncStatus.state === 'error' ? 'Sync needs attention' : syncStatus.state === 'warning' ? 'Sync warning' : 'Encrypted cloud sync status'}</strong>
           <span>{syncStatus.message}</span>
           {(syncStatus.lastSyncAt || syncStatus.snapshotCount) && <small>Last sync: {syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : 'Not synced in this session'} · Items: {syncStatus.itemCount} · Cloud snapshots: {syncStatus.snapshotCount || snapshotHistory.total || 0}{syncStatus.lastSnapshotId ? ` · Latest: ${shortId(syncStatus.lastSnapshotId)}` : ''}</small>}
@@ -791,15 +950,17 @@ function App() {
         </div>
         {message && <p className="message sync-message">{message}</p>}
         <form className="bootstrap-grid" onSubmit={bootstrapAdmin}>
-          <label>Admin email<input value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
+          <label>Mobile country code<select value={bootstrap.phoneCountryCode || '+254'} onChange={(e) => setBootstrap({ ...bootstrap, phoneCountryCode: e.target.value, phoneE164: buildPhoneE164(e.target.value, bootstrap.phoneNumber) })}>{phoneCountryCodes.map((country) => <option key={country.code} value={country.code}>{country.label}</option>)}</select></label>
+          <label>Mobile number<input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" /></label>
+          <label>Backup email<input type="email" value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
           <label>Display name<input value={bootstrap.displayName} onChange={(e) => setBootstrap({ ...bootstrap, displayName: e.target.value })} /></label>
           <label>Tenant / vault name<input value={bootstrap.tenantName} onChange={(e) => setBootstrap({ ...bootstrap, tenantName: e.target.value })} /></label>
           <div className="button-stack">
-            <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Bootstrap admin</button>
+            <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Save account foundation</button>
             <button type="button" className="secondary-button" disabled={syncing} onClick={syncEncryptedVault}><Cloud size={18} /> {syncing ? 'Syncing...' : 'Push encrypted vault'}</button>
           </div>
         </form>
-        {(bootstrap.tenantId || bootstrap.userId) && <p className="ids-line">Tenant ID: <code>{bootstrap.tenantId}</code> · User ID: <code>{bootstrap.userId}</code></p>}
+        {(bootstrap.tenantId || bootstrap.userId) && <p className="ids-line">Tenant ID: <code>{bootstrap.tenantId}</code> · User ID: <code>{bootstrap.userId}</code> · SMS phone: <code>{bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)}</code></p>}
       </section>
 
       <section className="controls-panel">
@@ -885,7 +1046,7 @@ function App() {
       </section>
 
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
-      <footer>{VERSION} · SaaS-ready encrypted vault foundation · Supabase cloud-first sync · auto-pull on unlock · automatic encrypted upload · proper edit item flow · app-style in-field actions</footer>
+      <footer>{VERSION} · local-first encrypted vault · account login foundation · phone country code for SMS OTP · Supabase cloud sync · app-style in-field actions</footer>
     </main>
   );
 }
