@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.013B';
+const VERSION = 'My Passwords Ver-0.014';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -95,7 +95,7 @@ const starterItems = [
       url: '',
       username: 'Trusted person access',
       password: 'Not enabled yet',
-      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.013A adds test-mode OTP foundation for new-device restore while preserving local-first encrypted vault unlock.'
+      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.014 adds email OTP test delivery while preserving local-first encrypted vault unlock.'
     },
     updatedAt: new Date().toISOString()
   }
@@ -348,7 +348,7 @@ function App() {
     source: hasLocalVault ? 'local-encrypted-vault-present' : 'no-local-vault'
   });
   const [toasts, setToasts] = useState([]);
-  const [otpTest, setOtpTest] = useState({ status: 'not-requested', challengeId: '', code: '', input: '', message: 'Test-mode OTP has not been requested yet. It does not lock or unlock the vault in this build.', verified: false, expiresAt: '' });
+  const [otpTest, setOtpTest] = useState({ status: 'not-requested', challengeId: '', code: '', input: '', message: 'Email OTP/test OTP has not been requested yet. OTP does not lock or unlock the vault in this build.', verified: false, expiresAt: '' });
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
@@ -506,7 +506,7 @@ function App() {
       showMessage(checked.message, 'warning');
       return;
     }
-    setOtpTest((current) => ({ ...current, status: 'requesting', message: 'Requesting test-mode OTP. No SMS or email will be sent in this build.', verified: false }));
+    setOtpTest((current) => ({ ...current, status: 'requesting', message: 'Creating on-screen test OTP. No SMS or email will be sent.', verified: false }));
     try {
       const accountCheck = await ensureAccountIdentity({ silent: true });
       if (!accountCheck.ok) throw new Error(accountCheck.message || 'Account identity is not ready yet.');
@@ -527,9 +527,49 @@ function App() {
         verified: false,
         expiresAt: result.expiresAt || ''
       });
-      showMessage('Test-mode OTP created. No SMS was sent. Use the displayed code to test the verification step.', 'success');
+      showMessage('On-screen test OTP created. Use the displayed code to test verification safely.', 'success');
     } catch (error) {
       const note = `Could not create test-mode OTP. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`;
+      setOtpTest((current) => ({ ...current, status: 'error', message: note, verified: false }));
+      showMessage(note, 'error');
+    }
+  }
+
+
+  async function requestEmailOtp() {
+    const checked = validateAccountIdentity(bootstrap);
+    if (!checked.ok) {
+      setOtpTest((current) => ({ ...current, status: 'needs-details', message: checked.message, verified: false }));
+      showMessage(checked.message, 'warning');
+      return;
+    }
+    if (!checked.email) {
+      const note = 'Add a backup email before requesting an email OTP.';
+      setOtpTest((current) => ({ ...current, status: 'needs-details', message: note, verified: false }));
+      showMessage(note, 'warning');
+      return;
+    }
+    setOtpTest((current) => ({ ...current, status: 'requesting', code: '', message: 'Requesting email OTP. OTP is still not required for unlock in this build.', verified: false }));
+    try {
+      const accountCheck = await ensureAccountIdentity({ silent: true });
+      if (!accountCheck.ok) throw new Error(accountCheck.message || 'Account identity is not ready yet.');
+      const result = await postJson('/.netlify/functions/request-email-otp-test', {
+        email: checked.email,
+        purpose: 'new_device_restore_email_test'
+      });
+      if (!result.ok) throw new Error(result.message || 'Could not create email OTP.');
+      setOtpTest({
+        status: result.emailSent ? 'sent-email' : 'sent-email-fallback',
+        challengeId: result.challengeId || '',
+        code: result.testOtpCode || '',
+        input: '',
+        message: result.message || 'Email OTP challenge created. Enter the emailed code to verify the flow.',
+        verified: false,
+        expiresAt: result.expiresAt || ''
+      });
+      showMessage(result.emailSent ? 'Email OTP sent. Enter the code from your email to test verification.' : 'Email delivery is not configured yet, so a safe test code is shown on screen.', result.emailSent ? 'success' : 'warning');
+    } catch (error) {
+      const note = `Could not create email OTP. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`;
       setOtpTest((current) => ({ ...current, status: 'error', message: note, verified: false }));
       showMessage(note, 'error');
     }
@@ -544,12 +584,12 @@ function App() {
     }
     const code = String(otpTest.input || '').replace(/\D/g, '');
     if (code.length !== 6) {
-      const note = 'Enter the 6-digit test OTP code shown on screen.';
+      const note = 'Enter the 6-digit OTP code from the screen or email.';
       setOtpTest((current) => ({ ...current, status: 'needs-code', message: note, verified: false }));
       showMessage(note, 'warning');
       return;
     }
-    setOtpTest((current) => ({ ...current, status: 'verifying', message: 'Verifying test-mode OTP...' }));
+    setOtpTest((current) => ({ ...current, status: 'verifying', message: 'Verifying OTP test code...' }));
     try {
       const result = await postJson('/.netlify/functions/verify-otp-test', {
         challengeId: otpTest.challengeId,
@@ -560,12 +600,12 @@ function App() {
         ...current,
         status: 'verified',
         verified: true,
-        message: 'Test-mode OTP verified. In a future build, this can become the gate before new-device cloud restore.'
+        message: 'OTP test verified. In a future build, this can become the gate before new-device cloud restore.'
       }));
-      setAccountStatus({ state: 'ready', message: 'Test-mode OTP verified. Local-first unlock still remains unchanged and there is no lockout risk in this build.' });
-      showMessage('Test-mode OTP verified. No lockout rules have been enabled yet.', 'success');
+      setAccountStatus({ state: 'ready', message: 'OTP test verified. Local-first unlock still remains unchanged and there is no lockout risk in this build.' });
+      showMessage('OTP test verified. No lockout rules have been enabled yet.', 'success');
     } catch (error) {
-      const note = `Test-mode OTP did not verify. ${error.message || ''}`.trim();
+      const note = `OTP test did not verify. ${error.message || ''}`.trim();
       setOtpTest((current) => ({ ...current, status: 'error', verified: false, message: note }));
       showMessage(note, 'error');
     }
@@ -947,7 +987,7 @@ function App() {
             {!hasLocalVault && (
               <div className="account-restore-panel">
                 <div className="account-panel-title"><Phone size={17} /><strong>Account restore foundation</strong></div>
-                <p>No local vault was found on this device. Your phone/email identifies the account, then your master password decrypts the encrypted cloud snapshot. SMS/email OTP is in safe test mode only. No real SMS is sent yet, and OTP is not enforced, so there is no lockout risk.</p>
+                <p>No local vault was found on this device. Your phone/email identifies the account, then your master password decrypts the encrypted cloud snapshot. Email OTP test delivery is now available, with on-screen fallback if the email provider is not configured. OTP is not enforced, so there is no lockout risk.</p>
                 <label>Mobile country code</label>
                 <select value={bootstrap.phoneCountryCode || '+254'} onChange={(e) => setBootstrap({ ...bootstrap, phoneCountryCode: e.target.value, phoneE164: buildPhoneE164(e.target.value, bootstrap.phoneNumber) })}>
                   {phoneCountryCodes.map((country) => <option key={country.code} value={country.code}>{country.label}</option>)}
@@ -959,15 +999,18 @@ function App() {
                 <small>SMS format preview: <strong>{buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber) || 'Enter mobile number'}</strong></small>
                 <div className="restore-safety-note"><ShieldCheck size={16} /><span>Safe restore rule: a cloud snapshot only replaces this device after it decrypts successfully with your master password.</span></div>
                 <div className={`otp-test-panel ${otpTest.status}`}>
-                  <div className="otp-test-title"><ShieldCheck size={16} /><strong>OTP foundation, test mode only</strong></div>
+                  <div className="otp-test-title"><ShieldCheck size={16} /><strong>Email OTP, test delivery only</strong></div>
                   <p>{otpTest.message}</p>
-                  {otpTest.code && <div className="test-code-box"><span>Test OTP</span><code>{otpTest.code}</code></div>}
+                  {otpTest.code && <div className="test-code-box"><span>Fallback test OTP</span><code>{otpTest.code}</code></div>}
                   <div className="otp-input-row">
-                    <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit test OTP" />
-                    <button type="button" className="secondary-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify test OTP</button>
+                    <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
+                    <button type="button" className="secondary-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
                   </div>
-                  <button type="button" className="secondary-button" onClick={requestTestOtp} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Creating test OTP...' : 'Create test OTP'}</button>
-                  <small>Ver-0.013B still does not require OTP before unlock. It only proves the future new-device restore flow safely.</small>
+                  <div className="otp-actions-row">
+                    <button type="button" className="secondary-button" onClick={requestEmailOtp} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Sending...' : 'Send email OTP'}</button>
+                    <button type="button" className="secondary-button quiet-button" onClick={requestTestOtp} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Creating...' : 'Create screen test OTP'}</button>
+                  </div>
+                  <small>Ver-0.014 does not require OTP before unlock. It only tests the future new-device restore verification flow safely.</small>
                 </div>
               </div>
             )}
@@ -1012,7 +1055,7 @@ function App() {
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.013A OTP foundation</p><h2><Cloud size={21} /> Local-first vault with test-mode OTP foundation</h2></div>
+          <div><p className="eyebrow">Ver-0.014 email OTP foundation</p><h2><Cloud size={21} /> Local-first vault with email OTP test delivery</h2></div>
           <div className="sync-actions">
             <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check Supabase</button>
             <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Snapshot history</button>
@@ -1045,15 +1088,18 @@ function App() {
           </div>
         </div>
         <div className={`otp-foundation-card ${otpTest.status}`}>
-          <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>OTP foundation, test mode only</strong></div>
+          <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>Email OTP, test delivery only</strong></div>
           <span>{otpTest.message}</span>
-          {otpTest.code && <div className="test-code-box"><span>Test OTP</span><code>{otpTest.code}</code></div>}
+          {otpTest.code && <div className="test-code-box"><span>Fallback test OTP</span><code>{otpTest.code}</code></div>}
           <div className="otp-input-row">
-            <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit test OTP" />
-            <button type="button" className="secondary-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify test OTP</button>
-            <button type="button" className="secondary-button" onClick={requestTestOtp} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Creating...' : 'Create test OTP'}</button>
+            <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
+            <button type="button" className="secondary-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
           </div>
-          <small>No SMS or email is sent yet. OTP is not enforced in Ver-0.013B, so your live vault remains accessible through the existing local-first unlock.</small>
+          <div className="otp-actions-row">
+            <button type="button" className="secondary-button" onClick={requestEmailOtp} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Sending...' : 'Send email OTP'}</button>
+            <button type="button" className="secondary-button quiet-button" onClick={requestTestOtp} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Creating...' : 'Create screen test OTP'}</button>
+          </div>
+          <small>Email OTP can be sent through Resend when configured. OTP is not enforced in Ver-0.014, so your live vault remains accessible through the existing local-first unlock.</small>
         </div>
         <div className="snapshot-history-card">
           <div className="snapshot-history-title"><strong>Cloud snapshot history</strong><span>{snapshotHistory.loading ? 'Loading...' : snapshotHistory.message}</span></div>

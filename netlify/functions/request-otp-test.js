@@ -98,7 +98,7 @@ export async function handler(event) {
         test_mode: true,
         no_sms_sent: true,
         no_email_sent: true,
-        note: 'Ver-0.013A returns the OTP in the response so the flow can be tested without lockout risk.'
+        note: 'Screen test OTP returns the code in the response so the flow can be tested without lockout risk.'
       }
     });
 

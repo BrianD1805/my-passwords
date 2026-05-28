@@ -53,7 +53,7 @@ export async function handler(event) {
 
     await updateRow('otp_challenges', `id=${eq(challengeId)}`, {
       attempts,
-      status: 'verified_test',
+      status: String(challenge.delivery_channel || '').includes('email') ? 'verified_email_test' : 'verified_test',
       verified_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     });
@@ -65,7 +65,7 @@ export async function handler(event) {
       challengeId,
       tenantId: challenge.tenant_id,
       userId: challenge.user_id,
-      message: 'Test-mode OTP verified. No live lockout or SMS delivery rule has been enabled yet.'
+      message: String(challenge.delivery_channel || '').includes('email') ? 'Email OTP test verified. No live lockout rule has been enabled yet.' : 'Test-mode OTP verified. No live lockout or SMS delivery rule has been enabled yet.'
     });
   } catch (error) {
     return jsonResponse(500, {

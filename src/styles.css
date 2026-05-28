@@ -612,3 +612,21 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
     flex-direction: column;
   }
 }
+
+/* Ver-0.014 email OTP test delivery polish */
+.quiet-button {
+  background: #f5f8fb;
+  color: #536579;
+}
+
+.otp-test-panel.sent-email,
+.otp-foundation-card.sent-email,
+.otp-test-panel.sent-email-fallback,
+.otp-foundation-card.sent-email-fallback {
+  border-color: rgba(34, 139, 96, 0.28);
+  background: linear-gradient(135deg, rgba(247,255,251,0.98), rgba(237,250,244,0.94));
+}
+
+.otp-actions-row .quiet-button {
+  border-color: #d9e5ee;
+}
