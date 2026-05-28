@@ -442,3 +442,56 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
 @media (max-width: 860px) {
   .account-restore-panel { padding: 13px; border-radius: 18px; }
 }
+
+/* Ver-0.012 safe cloud restore and account recovery wording */
+.restore-safety-note,
+.vault-security-info-card {
+  border: 1px solid rgba(34, 139, 96, 0.22);
+  background: linear-gradient(135deg, rgba(247,255,251,0.98), rgba(237,250,244,0.94));
+  border-radius: 16px;
+  padding: 11px 13px;
+  color: #245b34;
+  line-height: 1.45;
+}
+
+.restore-safety-note {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: .9rem;
+}
+
+.vault-security-info-card {
+  margin: 12px 0;
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 12px 34px rgba(31, 48, 71, 0.06);
+}
+
+.vault-security-info-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #245b34;
+}
+
+.security-points {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.security-points span {
+  background: rgba(255,255,255,0.72);
+  border: 1px solid rgba(34, 139, 96, 0.14);
+  border-radius: 13px;
+  padding: 9px 10px;
+  color: #31445a;
+  font-size: .9rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 860px) {
+  .security-points { grid-template-columns: 1fr; }
+}

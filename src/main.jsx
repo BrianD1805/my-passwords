@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.011';
+const VERSION = 'My Passwords Ver-0.013A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -95,7 +95,7 @@ const starterItems = [
       url: '',
       username: 'Trusted person access',
       password: 'Not enabled yet',
-      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.011 adds account login foundation with phone country code storage for later SMS OTP, while preserving local-first encrypted vault unlock.'
+      notes: 'Future emergency access will use waiting periods, roles and audit logs. Ver-0.013A adds test-mode OTP foundation for new-device restore while preserving local-first encrypted vault unlock.'
     },
     updatedAt: new Date().toISOString()
   }
@@ -211,6 +211,20 @@ function shortId(value) {
   return value.length > 18 ? `${value.slice(0, 10)}...${value.slice(-6)}` : value;
 }
 
+function maskEmail(value) {
+  const email = String(value || '').trim();
+  if (!email || !email.includes('@')) return '';
+  const [name, domain] = email.split('@');
+  const safeName = name.length <= 2 ? `${name.slice(0, 1)}***` : `${name.slice(0, 2)}***${name.slice(-1)}`;
+  return `${safeName}@${domain}`;
+}
+
+function maskPhone(value) {
+  const phone = String(value || '').trim();
+  if (!phone) return '';
+  return phone.length <= 6 ? `${phone.slice(0, 2)}***` : `${phone.slice(0, 4)}***${phone.slice(-3)}`;
+}
+
 const phoneCountryCodes = [
   { code: '+254', label: 'Kenya +254' },
   { code: '+44', label: 'United Kingdom +44' },
@@ -232,7 +246,7 @@ const defaultAccount = {
   tenantName: 'Brian Private Vault',
   tenantId: '',
   userId: '',
-  otpStatus: 'OTP provider not connected yet',
+  otpStatus: 'Test-mode OTP foundation ready',
   accountVerified: false
 };
 
@@ -320,13 +334,13 @@ function App() {
   const [editingItemId, setEditingItemId] = useState('');
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
-  const [accountStatus, setAccountStatus] = useState({ state: 'local-first', message: 'Local encrypted vault remains the normal daily unlock. Account identity is used for new device restore and future OTP.' });
+  const [accountStatus, setAccountStatus] = useState({ state: 'local-first', message: 'Local encrypted vault remains the normal daily unlock. Account identity is used only for cloud restore and future OTP.' });
   const [syncing, setSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'No encrypted cloud sync has run yet.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
+  const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'No encrypted cloud sync has run yet. Your live vault is only changed when you save, delete, favourite, edit or push an encrypted snapshot.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
   const [snapshotHistory, setSnapshotHistory] = useState({ loaded: false, loading: false, total: 0, snapshots: [], message: 'Snapshot history has not been loaded yet.' });
   const [deviceStatus, setDeviceStatus] = useState({
     state: 'not-checked',
-    label: 'This device has not checked cloud yet.',
+    label: 'This device has not checked the encrypted cloud snapshot yet.',
     lastCloudCheckAt: '',
     lastRestoreAt: '',
     latestSnapshotId: '',
@@ -334,6 +348,7 @@ function App() {
     source: hasLocalVault ? 'local-encrypted-vault-present' : 'no-local-vault'
   });
   const [toasts, setToasts] = useState([]);
+  const [otpTest, setOtpTest] = useState({ status: 'not-requested', challengeId: '', code: '', input: '', message: 'Test-mode OTP has not been requested yet. It does not lock or unlock the vault in this build.', verified: false, expiresAt: '' });
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
@@ -400,7 +415,7 @@ function App() {
       setDeviceStatus((current) => ({
         ...current,
         state: 'no-cloud-snapshot',
-        label: latest?.message || 'No encrypted cloud snapshot found for this device profile.',
+        label: latest?.message || 'No encrypted cloud snapshot was found for this account. Nothing was created or overwritten.',
         lastCloudCheckAt: checkedAt
       }));
       return { restored: false, latest };
@@ -415,7 +430,7 @@ function App() {
     setSyncStatus((current) => ({
       ...current,
       state: 'success',
-      message: `Latest encrypted cloud vault restored on this device. ${restoredItems.length} item(s) loaded.`,
+      message: `Latest encrypted cloud snapshot restored safely on this device. ${restoredItems.length} item(s) loaded.`,
       lastSyncAt: latest.snapshot.created_at || latest.snapshot.client_updated_at || new Date().toISOString(),
       lastSnapshotId: latest.snapshot.id || current.lastSnapshotId,
       itemCount: Number(latest.snapshot.item_count ?? restoredItems.length),
@@ -423,14 +438,14 @@ function App() {
     }));
     setDeviceStatus({
       state: 'cloud-restored',
-      label: `This device is using the latest encrypted cloud vault. ${restoredItems.length} item(s) loaded.`,
+      label: `This device is now using the latest encrypted cloud snapshot. Local encrypted copy refreshed safely. ${restoredItems.length} item(s) loaded.`,
       lastCloudCheckAt: new Date().toISOString(),
       lastRestoreAt: new Date().toISOString(),
       latestSnapshotId: latest.snapshot.id || '',
       latestCloudItemCount: Number(latest.snapshot.item_count ?? restoredItems.length),
       source: reason === 'unlock' ? 'auto-pulled-on-unlock' : 'manual-pull'
     });
-    if (showSuccess) showMessage(`Latest encrypted cloud vault restored on this device. ${restoredItems.length} item(s) loaded.`);
+    if (showSuccess) showMessage(`Latest encrypted cloud snapshot restored safely on this device. ${restoredItems.length} item(s) loaded.`);
     return { restored: true, items: restoredItems, latest };
   }
 
@@ -473,14 +488,86 @@ function App() {
         otpStatus: 'OTP provider not connected yet — account foundation ready'
       };
       setBootstrap(next);
-      setAccountStatus({ state: 'ready', message: `Account identity ready. Phone is stored as ${next.phoneE164} for future SMS OTP delivery.` });
-      if (!silent) showMessage(`Account identity ready. Phone stored as ${next.phoneE164}. OTP provider can be connected next.`);
+      setAccountStatus({ state: 'ready', message: `Account identity ready. Phone is stored as ${next.phoneE164} for future SMS OTP delivery. Master password still decrypts the vault only locally.` });
+      if (!silent) showMessage(`Account identity ready. Phone stored as ${next.phoneE164}. OTP provider can be connected next; vault encryption remains unchanged.`);
       return { ok: true, account: next, result };
     } catch (error) {
       const note = `Could not reach account login foundation. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`;
       setAccountStatus({ state: 'error', message: note });
       if (!silent) showMessage(note, 'error');
       return { ok: false, message: note };
+    }
+  }
+
+  async function requestTestOtp() {
+    const checked = validateAccountIdentity(bootstrap);
+    if (!checked.ok) {
+      setOtpTest((current) => ({ ...current, status: 'needs-details', message: checked.message, verified: false }));
+      showMessage(checked.message, 'warning');
+      return;
+    }
+    setOtpTest((current) => ({ ...current, status: 'requesting', message: 'Requesting test-mode OTP. No SMS or email will be sent in this build.', verified: false }));
+    try {
+      const accountCheck = await ensureAccountIdentity({ silent: true });
+      if (!accountCheck.ok) throw new Error(accountCheck.message || 'Account identity is not ready yet.');
+      const result = await postJson('/.netlify/functions/request-otp-test', {
+        phoneCountryCode: checked.phoneCountryCode,
+        phoneNumber: checked.phoneNumber,
+        phoneE164: checked.phoneE164,
+        email: checked.email,
+        purpose: 'new_device_restore_test'
+      });
+      if (!result.ok) throw new Error(result.message || 'Could not create test OTP.');
+      setOtpTest({
+        status: 'sent-test',
+        challengeId: result.challengeId || '',
+        code: result.testOtpCode || '',
+        input: '',
+        message: result.message || 'Test-mode OTP created. Use the displayed code to verify the flow.',
+        verified: false,
+        expiresAt: result.expiresAt || ''
+      });
+      showMessage('Test-mode OTP created. No SMS was sent. Use the displayed code to test the verification step.', 'success');
+    } catch (error) {
+      const note = `Could not create test-mode OTP. ${error.message || 'Use Netlify Dev locally or test after deploy.'}`;
+      setOtpTest((current) => ({ ...current, status: 'error', message: note, verified: false }));
+      showMessage(note, 'error');
+    }
+  }
+
+  async function verifyTestOtp() {
+    if (!otpTest.challengeId) {
+      const note = 'Request a test-mode OTP first. Nothing is locked behind OTP in this build.';
+      setOtpTest((current) => ({ ...current, status: 'needs-code', message: note, verified: false }));
+      showMessage(note, 'warning');
+      return;
+    }
+    const code = String(otpTest.input || '').replace(/\D/g, '');
+    if (code.length !== 6) {
+      const note = 'Enter the 6-digit test OTP code shown on screen.';
+      setOtpTest((current) => ({ ...current, status: 'needs-code', message: note, verified: false }));
+      showMessage(note, 'warning');
+      return;
+    }
+    setOtpTest((current) => ({ ...current, status: 'verifying', message: 'Verifying test-mode OTP...' }));
+    try {
+      const result = await postJson('/.netlify/functions/verify-otp-test', {
+        challengeId: otpTest.challengeId,
+        code
+      });
+      if (!result.ok) throw new Error(result.message || 'OTP verification failed.');
+      setOtpTest((current) => ({
+        ...current,
+        status: 'verified',
+        verified: true,
+        message: 'Test-mode OTP verified. In a future build, this can become the gate before new-device cloud restore.'
+      }));
+      setAccountStatus({ state: 'ready', message: 'Test-mode OTP verified. Local-first unlock still remains unchanged and there is no lockout risk in this build.' });
+      showMessage('Test-mode OTP verified. No lockout rules have been enabled yet.', 'success');
+    } catch (error) {
+      const note = `Test-mode OTP did not verify. ${error.message || ''}`.trim();
+      setOtpTest((current) => ({ ...current, status: 'error', verified: false, message: note }));
+      showMessage(note, 'error');
     }
   }
 
@@ -507,18 +594,18 @@ function App() {
           const cloudRestore = await restoreLatestCloudVault(masterPassword, { showSuccess: false, reason: 'unlock', account: activeAccount });
           if (cloudRestore.restored) {
             setLocked(false);
-            showMessage(`Vault unlocked from latest encrypted Supabase snapshot. ${cloudRestore.items.length} item(s) loaded on this device.`);
+            showMessage(`Vault restored from the latest encrypted cloud snapshot. ${cloudRestore.items.length} item(s) loaded on this device.`);
             return;
           }
         } catch (cloudError) {
           setDeviceStatus((current) => ({
             ...current,
             state: 'cloud-decrypt-failed',
-            label: 'Latest cloud snapshot could not be decrypted with that password. Nothing was overwritten on this device.',
+            label: 'Latest cloud snapshot could not be decrypted with that master password. Your local vault was not overwritten and no new vault was created.',
             lastCloudCheckAt: new Date().toISOString()
           }));
           if (!localVault) {
-            showMessage('Could not decrypt the latest cloud vault with that password. Nothing was saved on this device.');
+            showMessage('Could not decrypt the latest cloud snapshot with that master password. Nothing was saved or overwritten on this device.');
             return;
           }
         }
@@ -531,17 +618,17 @@ function App() {
         setDeviceStatus((current) => ({
           ...current,
           state: canCheckCloud ? 'local-fallback' : 'local-only',
-          label: canCheckCloud ? 'This device unlocked from its local encrypted vault. Cloud was checked, but no newer decryptable snapshot was restored.' : 'This device unlocked locally. Bootstrap admin here to enable cloud restore/sync.',
+          label: canCheckCloud ? 'This device unlocked from its local encrypted vault. Cloud was checked, but no newer decryptable snapshot replaced it.' : 'This device unlocked locally. Bootstrap admin here to enable cloud restore/sync.',
           source: 'local-vault'
         }));
-        showMessage(canCheckCloud ? 'Vault unlocked locally. Cloud snapshot was checked, but local copy was used.' : 'Vault unlocked locally. Bootstrap admin on this device to enable cloud-first restore.');
+        showMessage(canCheckCloud ? 'Vault unlocked locally. Cloud snapshot was checked safely, but your existing local vault was used.' : 'Vault unlocked locally. Bootstrap admin on this device to enable cloud-first restore.');
         setLocked(false);
         return;
       }
 
       if (!createMode) {
         setCreateMode(true);
-        showMessage('No local vault or decryptable cloud snapshot exists for this account on this device. Confirm your master password to create a new encrypted local vault.');
+        showMessage('No local vault or decryptable cloud snapshot was found for this account on this device. Re-enter the master password only if you intentionally want to create a fresh encrypted local vault.');
         return;
       }
 
@@ -555,7 +642,7 @@ function App() {
       setCreateMode(false);
       setConfirmMasterPassword('');
       setItems(starterItems);
-      showMessage('New encrypted local vault created on this device and linked to this account identity. Future changes will auto-sync after the first cloud push.');
+      showMessage('Fresh encrypted local vault created on this device and linked to this account identity. No existing cloud snapshot was overwritten.');
       setLocked(false);
     } catch (error) {
       showMessage('Could not unlock. Check your master password. Nothing new was saved.');
@@ -592,7 +679,7 @@ function App() {
     setCreateMode(true);
     setMasterPassword('');
     setConfirmMasterPassword('');
-    showMessage('Local encrypted vault cleared on this device. Account identity remains saved for new-device restore and future OTP.');
+    showMessage('Local encrypted vault cleared on this device only. Account identity remains saved for cloud restore and future OTP. Supabase encrypted snapshots were not deleted.');
   }
 
   function emptyForm(categoryToKeep = form.category) {
@@ -831,9 +918,11 @@ function App() {
 
   async function restoreCloudToThisDevice() {
     if (!masterPassword) return showMessage('Unlock the vault first so the app can use your master password to decrypt the cloud snapshot.');
+    const confirmed = window.confirm('Safe restore check: this will download the latest encrypted cloud snapshot for this account and try to decrypt it with your current master password. If decryption fails, your local vault is left untouched. Continue?');
+    if (!confirmed) return;
     try {
       const result = await restoreLatestCloudVault(masterPassword, { showSuccess: true, reason: 'manual' });
-      if (!result.restored) showMessage(result.latest?.message || 'No encrypted cloud snapshot found yet.');
+      if (!result.restored) showMessage(result.latest?.message || 'No encrypted cloud snapshot found yet. Your local vault was not changed.');
     } catch (error) {
       showMessage('Could not decrypt the latest cloud snapshot with this master password. Local vault was not overwritten.');
     }
@@ -853,12 +942,12 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Local-first encrypted vault</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock locally with your master password. On a new device, verify the account identity first; phone numbers are stored with country code ready for SMS OTP delivery.</p>
+          <p className="intro">Unlock locally with your master password. If this is a new or cleared device, your phone/email identifies the account before any encrypted cloud restore is attempted.</p>
           <form onSubmit={unlockVault} className="unlock-form">
             {!hasLocalVault && (
               <div className="account-restore-panel">
                 <div className="account-panel-title"><Phone size={17} /><strong>Account restore foundation</strong></div>
-                <p>For this foundation build, the account identity finds the correct cloud vault. SMS OTP is not sent yet, but the phone is stored in international format for the next build.</p>
+                <p>No local vault was found on this device. Your phone/email identifies the account, then your master password decrypts the encrypted cloud snapshot. SMS/email OTP is in safe test mode only. No real SMS is sent yet, and OTP is not enforced, so there is no lockout risk.</p>
                 <label>Mobile country code</label>
                 <select value={bootstrap.phoneCountryCode || '+254'} onChange={(e) => setBootstrap({ ...bootstrap, phoneCountryCode: e.target.value, phoneE164: buildPhoneE164(e.target.value, bootstrap.phoneNumber) })}>
                   {phoneCountryCodes.map((country) => <option key={country.code} value={country.code}>{country.label}</option>)}
@@ -868,6 +957,18 @@ function App() {
                 <label>Backup email</label>
                 <input type="email" value={bootstrap.email || ''} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" />
                 <small>SMS format preview: <strong>{buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber) || 'Enter mobile number'}</strong></small>
+                <div className="restore-safety-note"><ShieldCheck size={16} /><span>Safe restore rule: a cloud snapshot only replaces this device after it decrypts successfully with your master password.</span></div>
+                <div className={`otp-test-panel ${otpTest.status}`}>
+                  <div className="otp-test-title"><ShieldCheck size={16} /><strong>OTP foundation, test mode only</strong></div>
+                  <p>{otpTest.message}</p>
+                  {otpTest.code && <div className="test-code-box"><span>Test OTP</span><code>{otpTest.code}</code></div>}
+                  <div className="otp-input-row">
+                    <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit test OTP" />
+                    <button type="button" className="secondary-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify test OTP</button>
+                  </div>
+                  <button type="button" className="secondary-button" onClick={requestTestOtp} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Creating test OTP...' : 'Create test OTP'}</button>
+                  <small>Ver-0.013A does not require OTP before unlock. It only proves the future new-device restore flow safely.</small>
+                </div>
               </div>
             )}
             <label>{hasLocalVault ? 'Master vault password' : 'Master vault password'}</label>
@@ -876,14 +977,14 @@ function App() {
               <>
                 <label>Confirm master vault password</label>
                 <input type="password" value={confirmMasterPassword} onChange={(e) => setConfirmMasterPassword(e.target.value)} placeholder="Type the same password again" />
-                <p className="create-warning">No local vault exists on this device. The app first checks the phone/email account identity for a cloud snapshot, then creates a new encrypted local vault only if no snapshot can be restored and both password entries match.</p>
+                <p className="create-warning">No local encrypted vault exists on this device. The app checks your account for an encrypted cloud snapshot first. A fresh local vault is created only if no decryptable snapshot is found and both master password entries match.</p>
               </>
             )}
             <button type="submit"><Unlock size={18} /> {hasLocalVault ? 'Unlock Local Vault' : 'Verify Account & Unlock'}</button>
           </form>
           {hasLocalVault && <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>}
           {message && <p className="message">{message}</p>}
-          <div className="security-note"><ShieldCheck size={18} /> Master password decrypts only your vault. Phone/email identifies the account. Database sync stores encrypted snapshots only.</div>
+          <div className="security-note"><ShieldCheck size={18} /> Master password decrypts only your vault. Phone/email identifies the account. Local and cloud storage contain encrypted vault data only.</div>
           <p className="version">{VERSION}</p>
         </section>
         <ToastViewport toasts={toasts} onDismiss={dismissToast} />
@@ -911,18 +1012,18 @@ function App() {
 
       <section className="sync-panel">
         <div className="sync-title">
-          <div><p className="eyebrow">Ver-0.011 account login foundation</p><h2><Cloud size={21} /> Local-first vault with account restore foundation</h2></div>
+          <div><p className="eyebrow">Ver-0.013A OTP foundation</p><h2><Cloud size={21} /> Local-first vault with test-mode OTP foundation</h2></div>
           <div className="sync-actions">
             <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check Supabase</button>
             <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Snapshot history</button>
-            <button type="button" className="secondary-button" disabled={syncing} onClick={restoreCloudToThisDevice}><RefreshCw size={16} /> Pull latest cloud vault</button>
+            <button type="button" className="secondary-button" disabled={syncing} onClick={restoreCloudToThisDevice}><RefreshCw size={16} /> Safe restore from cloud</button>
           </div>
         </div>
         <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
         <div className={`account-status-card ${accountStatus.state}`}>
           <div className="account-status-heading"><Phone size={18} /><strong>Account login foundation</strong></div>
           <span>{accountStatus.message}</span>
-          <small>Phone for SMS OTP: {bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber) || 'not set'}{bootstrap.email ? ` · Backup email: ${bootstrap.email}` : ''}</small>
+          <small>Phone for SMS OTP: {maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'not set'}{bootstrap.email ? ` · Backup email: ${maskEmail(bootstrap.email)}` : ''}</small>
         </div>
         <div className={`sync-status-card ${syncStatus.state}`}> 
           <strong>{syncStatus.state === 'success' ? 'Encrypted cloud sync verified' : syncStatus.state === 'syncing' ? 'Sync in progress' : syncStatus.state === 'error' ? 'Sync needs attention' : syncStatus.state === 'warning' ? 'Sync warning' : 'Encrypted cloud sync status'}</strong>
@@ -933,6 +1034,26 @@ function App() {
           <div className="device-status-heading"><MonitorSmartphone size={18} /><strong>This device</strong></div>
           <span>{deviceStatus.label}</span>
           <small>Source: {deviceStatus.source || 'not checked'}{deviceStatus.lastCloudCheckAt ? ` · Cloud check: ${new Date(deviceStatus.lastCloudCheckAt).toLocaleString()}` : ''}{deviceStatus.lastRestoreAt ? ` · Restored: ${new Date(deviceStatus.lastRestoreAt).toLocaleString()}` : ''}{deviceStatus.latestSnapshotId ? ` · Snapshot: ${shortId(deviceStatus.latestSnapshotId)}` : ''}{deviceStatus.latestCloudItemCount ? ` · Cloud items: ${deviceStatus.latestCloudItemCount}` : ''}</small>
+        </div>
+        <div className="vault-security-info-card">
+          <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>Vault security and recovery</strong></div>
+          <div className="security-points">
+            <span>Local vault: encrypted copy saved on this device for fast daily unlock.</span>
+            <span>Cloud vault: encrypted Supabase snapshot for restore and device sync.</span>
+            <span>Account phone/email: finds the correct vault account. It does not decrypt secrets.</span>
+            <span>Master password: decrypts the vault. It is not saved by the app.</span>
+          </div>
+        </div>
+        <div className={`otp-foundation-card ${otpTest.status}`}>
+          <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>OTP foundation, test mode only</strong></div>
+          <span>{otpTest.message}</span>
+          {otpTest.code && <div className="test-code-box"><span>Test OTP</span><code>{otpTest.code}</code></div>}
+          <div className="otp-input-row">
+            <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit test OTP" />
+            <button type="button" className="secondary-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify test OTP</button>
+            <button type="button" className="secondary-button" onClick={requestTestOtp} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Creating...' : 'Create test OTP'}</button>
+          </div>
+          <small>No SMS or email is sent yet. OTP is not enforced in Ver-0.013A, so your live vault remains accessible through the existing local-first unlock.</small>
         </div>
         <div className="snapshot-history-card">
           <div className="snapshot-history-title"><strong>Cloud snapshot history</strong><span>{snapshotHistory.loading ? 'Loading...' : snapshotHistory.message}</span></div>
@@ -1046,7 +1167,7 @@ function App() {
       </section>
 
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
-      <footer>{VERSION} · local-first encrypted vault · account login foundation · phone country code for SMS OTP · Supabase cloud sync · app-style in-field actions</footer>
+      <footer>{VERSION} · local-first encrypted vault · safe cloud restore wording · account recovery foundation · Supabase encrypted sync</footer>
     </main>
   );
 }

@@ -5,6 +5,6 @@ export async function handler() {
     ok: true,
     app: 'My Passwords',
     version: APP_VERSION,
-    mode: 'account-login-foundation-local-first-vault'
+    mode: 'otp-foundation-test-mode-new-device-restore'
   });
 }
