@@ -1,7 +1,7 @@
 {
   "name": "my-passwords",
   "private": true,
-  "version": "0.14.5",
+  "version": "0.14.6",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,6 @@
     "netlify:dev": "netlify dev"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "4.3.4",
     "lucide-react": "1.16.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
