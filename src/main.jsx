@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.014F';
+const VERSION = 'My Passwords Ver-0.014M';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -226,15 +226,169 @@ function maskPhone(value) {
 }
 
 const phoneCountryCodes = [
-  { code: '+254', label: 'Kenya +254' },
-  { code: '+44', label: 'United Kingdom +44' },
-  { code: '+27', label: 'South Africa +27' },
-  { code: '+1', label: 'USA / Canada +1' },
-  { code: '+353', label: 'Ireland +353' },
-  { code: '+61', label: 'Australia +61' },
-  { code: '+64', label: 'New Zealand +64' },
-  { code: '+971', label: 'UAE +971' },
-  { code: '+91', label: 'India +91' }
+  // Popular first
+  { code: '+44', iso: 'gb', name: 'United Kingdom', popular: true },
+  { code: '+1', iso: 'us', name: 'United States', popular: true },
+  { code: '+1', iso: 'ca', name: 'Canada', popular: true },
+  { code: '+254', iso: 'ke', name: 'Kenya', popular: true },
+  { code: '+27', iso: 'za', name: 'South Africa', popular: true },
+  { code: '+61', iso: 'au', name: 'Australia', popular: true },
+  { code: '+64', iso: 'nz', name: 'New Zealand', popular: true },
+  { code: '+353', iso: 'ie', name: 'Ireland', popular: true },
+  { code: '+33', iso: 'fr', name: 'France', popular: true },
+  { code: '+49', iso: 'de', name: 'Germany', popular: true },
+  { code: '+31', iso: 'nl', name: 'Netherlands', popular: true },
+  { code: '+34', iso: 'es', name: 'Spain', popular: true },
+  { code: '+351', iso: 'pt', name: 'Portugal', popular: true },
+  { code: '+39', iso: 'it', name: 'Italy', popular: true },
+  { code: '+32', iso: 'be', name: 'Belgium', popular: true },
+  { code: '+41', iso: 'ch', name: 'Switzerland', popular: true },
+  { code: '+46', iso: 'se', name: 'Sweden', popular: true },
+  { code: '+47', iso: 'no', name: 'Norway', popular: true },
+  { code: '+45', iso: 'dk', name: 'Denmark', popular: true },
+  { code: '+358', iso: 'fi', name: 'Finland', popular: true },
+  { code: '+234', iso: 'ng', name: 'Nigeria', popular: true },
+  { code: '+233', iso: 'gh', name: 'Ghana', popular: true },
+  { code: '+255', iso: 'tz', name: 'Tanzania', popular: true },
+  { code: '+256', iso: 'ug', name: 'Uganda', popular: true },
+  { code: '+250', iso: 'rw', name: 'Rwanda', popular: true },
+  { code: '+260', iso: 'zm', name: 'Zambia', popular: true },
+  { code: '+263', iso: 'zw', name: 'Zimbabwe', popular: true },
+  { code: '+267', iso: 'bw', name: 'Botswana', popular: true },
+  { code: '+264', iso: 'na', name: 'Namibia', popular: true },
+  { code: '+230', iso: 'mu', name: 'Mauritius', popular: true },
+  { code: '+251', iso: 'et', name: 'Ethiopia', popular: true },
+  { code: '+20', iso: 'eg', name: 'Egypt', popular: true },
+  { code: '+212', iso: 'ma', name: 'Morocco', popular: true },
+  // Searchable rest of world
+  { code: '+93', iso: 'af', name: 'Afghanistan' },
+  { code: '+355', iso: 'al', name: 'Albania' },
+  { code: '+213', iso: 'dz', name: 'Algeria' },
+  { code: '+376', iso: 'ad', name: 'Andorra' },
+  { code: '+244', iso: 'ao', name: 'Angola' },
+  { code: '+54', iso: 'ar', name: 'Argentina' },
+  { code: '+374', iso: 'am', name: 'Armenia' },
+  { code: '+43', iso: 'at', name: 'Austria' },
+  { code: '+994', iso: 'az', name: 'Azerbaijan' },
+  { code: '+973', iso: 'bh', name: 'Bahrain' },
+  { code: '+880', iso: 'bd', name: 'Bangladesh' },
+  { code: '+375', iso: 'by', name: 'Belarus' },
+  { code: '+501', iso: 'bz', name: 'Belize' },
+  { code: '+229', iso: 'bj', name: 'Benin' },
+  { code: '+975', iso: 'bt', name: 'Bhutan' },
+  { code: '+591', iso: 'bo', name: 'Bolivia' },
+  { code: '+387', iso: 'ba', name: 'Bosnia and Herzegovina' },
+  { code: '+55', iso: 'br', name: 'Brazil' },
+  { code: '+359', iso: 'bg', name: 'Bulgaria' },
+  { code: '+226', iso: 'bf', name: 'Burkina Faso' },
+  { code: '+257', iso: 'bi', name: 'Burundi' },
+  { code: '+855', iso: 'kh', name: 'Cambodia' },
+  { code: '+237', iso: 'cm', name: 'Cameroon' },
+  { code: '+238', iso: 'cv', name: 'Cape Verde' },
+  { code: '+236', iso: 'cf', name: 'Central African Republic' },
+  { code: '+235', iso: 'td', name: 'Chad' },
+  { code: '+56', iso: 'cl', name: 'Chile' },
+  { code: '+86', iso: 'cn', name: 'China' },
+  { code: '+57', iso: 'co', name: 'Colombia' },
+  { code: '+269', iso: 'km', name: 'Comoros' },
+  { code: '+242', iso: 'cg', name: 'Congo' },
+  { code: '+243', iso: 'cd', name: 'Congo, Democratic Republic' },
+  { code: '+506', iso: 'cr', name: 'Costa Rica' },
+  { code: '+225', iso: 'ci', name: 'Côte d’Ivoire' },
+  { code: '+385', iso: 'hr', name: 'Croatia' },
+  { code: '+357', iso: 'cy', name: 'Cyprus' },
+  { code: '+420', iso: 'cz', name: 'Czech Republic' },
+  { code: '+253', iso: 'dj', name: 'Djibouti' },
+  { code: '+593', iso: 'ec', name: 'Ecuador' },
+  { code: '+503', iso: 'sv', name: 'El Salvador' },
+  { code: '+240', iso: 'gq', name: 'Equatorial Guinea' },
+  { code: '+291', iso: 'er', name: 'Eritrea' },
+  { code: '+372', iso: 'ee', name: 'Estonia' },
+  { code: '+268', iso: 'sz', name: 'Eswatini' },
+  { code: '+679', iso: 'fj', name: 'Fiji' },
+  { code: '+241', iso: 'ga', name: 'Gabon' },
+  { code: '+220', iso: 'gm', name: 'Gambia' },
+  { code: '+995', iso: 'ge', name: 'Georgia' },
+  { code: '+30', iso: 'gr', name: 'Greece' },
+  { code: '+502', iso: 'gt', name: 'Guatemala' },
+  { code: '+224', iso: 'gn', name: 'Guinea' },
+  { code: '+245', iso: 'gw', name: 'Guinea-Bissau' },
+  { code: '+592', iso: 'gy', name: 'Guyana' },
+  { code: '+504', iso: 'hn', name: 'Honduras' },
+  { code: '+852', iso: 'hk', name: 'Hong Kong' },
+  { code: '+36', iso: 'hu', name: 'Hungary' },
+  { code: '+354', iso: 'is', name: 'Iceland' },
+  { code: '+91', iso: 'in', name: 'India' },
+  { code: '+62', iso: 'id', name: 'Indonesia' },
+  { code: '+972', iso: 'il', name: 'Israel' },
+  { code: '+81', iso: 'jp', name: 'Japan' },
+  { code: '+962', iso: 'jo', name: 'Jordan' },
+  { code: '+7', iso: 'kz', name: 'Kazakhstan' },
+  { code: '+965', iso: 'kw', name: 'Kuwait' },
+  { code: '+996', iso: 'kg', name: 'Kyrgyzstan' },
+  { code: '+856', iso: 'la', name: 'Laos' },
+  { code: '+371', iso: 'lv', name: 'Latvia' },
+  { code: '+961', iso: 'lb', name: 'Lebanon' },
+  { code: '+266', iso: 'ls', name: 'Lesotho' },
+  { code: '+231', iso: 'lr', name: 'Liberia' },
+  { code: '+218', iso: 'ly', name: 'Libya' },
+  { code: '+370', iso: 'lt', name: 'Lithuania' },
+  { code: '+352', iso: 'lu', name: 'Luxembourg' },
+  { code: '+853', iso: 'mo', name: 'Macau' },
+  { code: '+261', iso: 'mg', name: 'Madagascar' },
+  { code: '+265', iso: 'mw', name: 'Malawi' },
+  { code: '+60', iso: 'my', name: 'Malaysia' },
+  { code: '+960', iso: 'mv', name: 'Maldives' },
+  { code: '+223', iso: 'ml', name: 'Mali' },
+  { code: '+356', iso: 'mt', name: 'Malta' },
+  { code: '+222', iso: 'mr', name: 'Mauritania' },
+  { code: '+52', iso: 'mx', name: 'Mexico' },
+  { code: '+373', iso: 'md', name: 'Moldova' },
+  { code: '+976', iso: 'mn', name: 'Mongolia' },
+  { code: '+382', iso: 'me', name: 'Montenegro' },
+  { code: '+258', iso: 'mz', name: 'Mozambique' },
+  { code: '+95', iso: 'mm', name: 'Myanmar' },
+  { code: '+977', iso: 'np', name: 'Nepal' },
+  { code: '+505', iso: 'ni', name: 'Nicaragua' },
+  { code: '+227', iso: 'ne', name: 'Niger' },
+  { code: '+389', iso: 'mk', name: 'North Macedonia' },
+  { code: '+968', iso: 'om', name: 'Oman' },
+  { code: '+92', iso: 'pk', name: 'Pakistan' },
+  { code: '+507', iso: 'pa', name: 'Panama' },
+  { code: '+675', iso: 'pg', name: 'Papua New Guinea' },
+  { code: '+595', iso: 'py', name: 'Paraguay' },
+  { code: '+51', iso: 'pe', name: 'Peru' },
+  { code: '+63', iso: 'ph', name: 'Philippines' },
+  { code: '+48', iso: 'pl', name: 'Poland' },
+  { code: '+974', iso: 'qa', name: 'Qatar' },
+  { code: '+40', iso: 'ro', name: 'Romania' },
+  { code: '+966', iso: 'sa', name: 'Saudi Arabia' },
+  { code: '+221', iso: 'sn', name: 'Senegal' },
+  { code: '+381', iso: 'rs', name: 'Serbia' },
+  { code: '+248', iso: 'sc', name: 'Seychelles' },
+  { code: '+232', iso: 'sl', name: 'Sierra Leone' },
+  { code: '+65', iso: 'sg', name: 'Singapore' },
+  { code: '+421', iso: 'sk', name: 'Slovakia' },
+  { code: '+386', iso: 'si', name: 'Slovenia' },
+  { code: '+252', iso: 'so', name: 'Somalia' },
+  { code: '+211', iso: 'ss', name: 'South Sudan' },
+  { code: '+82', iso: 'kr', name: 'South Korea' },
+  { code: '+94', iso: 'lk', name: 'Sri Lanka' },
+  { code: '+249', iso: 'sd', name: 'Sudan' },
+  { code: '+597', iso: 'sr', name: 'Suriname' },
+  { code: '+886', iso: 'tw', name: 'Taiwan' },
+  { code: '+992', iso: 'tj', name: 'Tajikistan' },
+  { code: '+66', iso: 'th', name: 'Thailand' },
+  { code: '+228', iso: 'tg', name: 'Togo' },
+  { code: '+216', iso: 'tn', name: 'Tunisia' },
+  { code: '+90', iso: 'tr', name: 'Turkey' },
+  { code: '+993', iso: 'tm', name: 'Turkmenistan' },
+  { code: '+971', iso: 'ae', name: 'United Arab Emirates' },
+  { code: '+598', iso: 'uy', name: 'Uruguay' },
+  { code: '+998', iso: 'uz', name: 'Uzbekistan' },
+  { code: '+58', iso: 've', name: 'Venezuela' },
+  { code: '+84', iso: 'vn', name: 'Vietnam' },
+  { code: '+967', iso: 'ye', name: 'Yemen' }
 ];
 
 const defaultAccount = {
@@ -242,6 +396,7 @@ const defaultAccount = {
   phoneCountryCode: '+254',
   phoneNumber: '',
   phoneE164: '',
+  phoneCountryIso: 'ke',
   displayName: 'Brian',
   tenantName: 'Brian Private Vault',
   tenantId: '',
@@ -267,6 +422,94 @@ function buildPhoneE164(countryCode, phoneNumber) {
   const code = normaliseCountryCode(countryCode);
   const local = normaliseLocalPhone(phoneNumber);
   return code && local ? `${code}${local}` : '';
+}
+
+function getCountryByCode(countryCode, countryIso = '') {
+  const code = normaliseCountryCode(countryCode || '+254');
+  const iso = String(countryIso || '').toLowerCase();
+  if (iso) {
+    const exact = phoneCountryCodes.find((country) => country.code === code && country.iso === iso);
+    if (exact) return exact;
+  }
+  return phoneCountryCodes.find((country) => country.code === code) || phoneCountryCodes[0];
+}
+
+function countryFlagPath(country) {
+  const iso = String(country?.iso || '').toLowerCase();
+  if (!iso) return '';
+  return `https://flagcdn.com/40x30/${iso}.png`;
+}
+
+function countryFlagPathFromCode(countryCode, countryIso = '') {
+  return countryFlagPath(getCountryByCode(countryCode, countryIso));
+}
+
+function CountryPicker({ countryCode, countryIso, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const selected = getCountryByCode(countryCode, countryIso);
+  const filteredCountries = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return phoneCountryCodes.filter((country) => country.popular);
+    return phoneCountryCodes.filter((country) =>
+      `${country.name} ${country.code} ${country.iso}`.toLowerCase().includes(term)
+    );
+  }, [search]);
+
+  function chooseCountry(country) {
+    onChange(country);
+    setOpen(false);
+    setSearch('');
+  }
+
+  return (
+    <div className="country-picker">
+      <button
+        type="button"
+        className="country-picker-trigger"
+        onClick={() => setOpen(true)}
+        aria-label={`Choose country. Current country: ${selected.name}`}
+      >
+        <img className="phone-flag-img" src={countryFlagPathFromCode(selected.code, selected.iso)} alt="" aria-hidden="true" />
+        <span className="country-picker-chevron" aria-hidden="true">⌄</span>
+      </button>
+      {open && (
+        <div className="country-picker-layer" role="dialog" aria-modal="true" aria-label="Choose mobile country code">
+          <button type="button" className="country-picker-backdrop" aria-label="Close country picker" onClick={() => setOpen(false)} />
+          <div className="country-picker-panel">
+            <div className="country-picker-header">
+              <div>
+                <strong>Choose country</strong>
+                <span>{search.trim() ? 'Search results' : 'Popular countries. Search for more.'}</span>
+              </div>
+              <button type="button" className="country-picker-close" onClick={() => setOpen(false)} aria-label="Close"><X size={18} /></button>
+            </div>
+            <div className="country-search-box">
+              <Search size={17} />
+              <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search country or code" />
+            </div>
+            <div className="country-list" role="listbox">
+              {filteredCountries.map((country) => (
+                <button
+                  key={`${country.iso}-${country.code}`}
+                  type="button"
+                  className={country.code === selected.code ? 'country-option selected' : 'country-option'}
+                  onClick={() => chooseCountry(country)}
+                  role="option"
+                  aria-selected={country.code === selected.code}
+                >
+                  <img className="country-option-flag" src={countryFlagPath(country)} alt="" aria-hidden="true" />
+                  <span>{country.name}</span>
+                  <code>{country.code}</code>
+                </button>
+              ))}
+              {!filteredCountries.length && <div className="country-empty">No country found. Try the dialling code, for example +254.</div>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function readSavedAccount() {
@@ -301,6 +544,48 @@ function validateAccountIdentity(account) {
     return { ok: false, message: 'The backup email address does not look valid.' };
   }
   return { ok: true, email, phoneCountryCode, phoneNumber, phoneE164 };
+}
+
+
+function VerificationOverlay({ state, onClose, onFocusMasterPassword }) {
+  if (!state?.visible) return null;
+  const isWorking = state.status === 'working';
+  const isSuccess = state.status === 'success';
+  const isError = state.status === 'error';
+  return (
+    <div className="verify-overlay" role="status" aria-live="polite">
+      <div className={`verify-modal ${state.status}`}>
+        <div className="verify-motion-ring">
+          {isWorking && <div className="verify-spinner" />}
+          {isSuccess && <div className="verify-result-icon success">✓</div>}
+          {isError && <div className="verify-result-icon error">×</div>}
+        </div>
+        <h3>{state.title}</h3>
+        <p>{state.message}</p>
+        {isWorking ? (
+          <div className="verify-progress-line" aria-hidden="true" />
+        ) : (
+          <div className="verify-modal-actions">
+            {state.focusMasterPassword && (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  onClose();
+                  onFocusMasterPassword();
+                }}
+              >
+                Enter master password
+              </button>
+            )}
+            <button type="button" className="secondary-button" onClick={onClose}>
+              {isSuccess ? 'Done' : 'Try again'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 
@@ -350,6 +635,7 @@ function App() {
   const [toasts, setToasts] = useState([]);
   const [otpTest, setOtpTest] = useState({ status: 'not-requested', challengeId: '', code: '', input: '', message: 'Choose how you would like to receive your one-time code.', verified: false, expiresAt: '' });
   const [otpChannel, setOtpChannel] = useState('email');
+  const [verifyOverlay, setVerifyOverlay] = useState({ visible: false, status: 'idle', title: '', message: '', focusMasterPassword: false });
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
@@ -380,6 +666,24 @@ function App() {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }
 
+  function showVerifyOverlay(status, title, message, options = {}) {
+    setVerifyOverlay({ visible: true, status, title, message, focusMasterPassword: !!options.focusMasterPassword });
+  }
+
+  function hideVerifyOverlay() {
+    setVerifyOverlay((current) => ({ ...current, visible: false }));
+  }
+
+  function focusMasterPassword() {
+    window.setTimeout(() => {
+      const field = document.getElementById('master-password-input');
+      if (field) {
+        field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        field.focus();
+      }
+    }, 80);
+  }
+
   useEffect(() => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   }, []);
@@ -393,7 +697,7 @@ function App() {
 
   useEffect(() => {
     const phoneE164 = bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber);
-    const account = { ...bootstrap, phoneCountryCode: normaliseCountryCode(bootstrap.phoneCountryCode || '+254') || '+254', phoneNumber: String(bootstrap.phoneNumber || '').trim(), phoneE164 };
+    const account = { ...bootstrap, phoneCountryCode: normaliseCountryCode(bootstrap.phoneCountryCode || '+254') || '+254', phoneCountryIso: getCountryByCode(bootstrap.phoneCountryCode || '+254', bootstrap.phoneCountryIso).iso, phoneNumber: String(bootstrap.phoneNumber || '').trim(), phoneE164 };
     localStorage.setItem(BOOTSTRAP_KEY, JSON.stringify(account));
     localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account));
   }, [bootstrap]);
@@ -559,6 +863,7 @@ function App() {
       return;
     }
     setOtpTest((current) => ({ ...current, status: 'requesting', code: '', message: 'Sending your email code...', verified: false }));
+    showVerifyOverlay('working', 'Sending your code', 'We are sending a one-time code to your email address.');
     try {
       const accountCheck = await ensureAccountIdentity({ silent: true });
       if (!accountCheck.ok) throw new Error(accountCheck.message || 'Account identity is not ready yet.');
@@ -576,10 +881,12 @@ function App() {
         verified: false,
         expiresAt: result.expiresAt || ''
       });
+      showVerifyOverlay('success', 'Code sent', result.emailSent ? 'Check your email and enter the six-digit code.' : 'Your code is ready. Enter the code shown on screen.');
       showMessage(result.emailSent ? 'Email code sent. Please check your inbox.' : 'Email code created. Enter the code shown to continue.', result.emailSent ? 'success' : 'warning');
     } catch (error) {
       const note = `Could not send email code. ${error.message || 'Please try again.'}`;
       setOtpTest((current) => ({ ...current, status: 'error', message: note, verified: false }));
+      showVerifyOverlay('error', 'Something went wrong', 'We could not send the code. Please check your details and try again.');
       showMessage(note, 'error');
     }
   }
@@ -599,6 +906,7 @@ function App() {
       return;
     }
     setOtpTest((current) => ({ ...current, status: 'verifying', message: 'Checking your code...' }));
+    showVerifyOverlay('working', 'Verifying your account', 'Please wait while we check your one-time code.');
     try {
       const result = await postJson('/.netlify/functions/verify-otp-test', {
         challengeId: otpTest.challengeId,
@@ -609,13 +917,15 @@ function App() {
         ...current,
         status: 'verified',
         verified: true,
-        message: 'OTP verified. Now enter your master vault password to complete login or restore on this device.'
+        message: 'Account verified. Enter your master password to complete login.'
       }));
-      setAccountStatus({ state: 'ready', message: 'Code verified. Now enter your master password to complete login or restore.' });
-      showMessage('OTP verified. Now enter your master vault password to complete login or restore on this device.', 'success');
+      setAccountStatus({ state: 'ready', message: 'Account verified. Enter your master password to complete login or restore.' });
+      showVerifyOverlay('success', 'Account verified', 'Now enter your master password to complete login or restore your vault.', { focusMasterPassword: true });
+      showMessage('Account verified. Enter your master password to complete login.', 'success');
     } catch (error) {
       const note = `Code did not verify. ${error.message || ''}`.trim();
       setOtpTest((current) => ({ ...current, status: 'error', verified: false, message: note }));
+      showVerifyOverlay('error', 'Something went wrong', 'The code did not verify. Please check the code and try again.');
       showMessage(note, 'error');
     }
   }
@@ -626,6 +936,7 @@ function App() {
       showMessage('Use at least 8 characters for your master password.');
       return;
     }
+    showVerifyOverlay('working', 'Opening your vault', 'Please wait while we verify your account and unlock this device.');
     try {
       const localVault = readStoredVault();
       let activeAccount = bootstrap;
@@ -643,6 +954,7 @@ function App() {
           const cloudRestore = await restoreLatestCloudVault(masterPassword, { showSuccess: false, reason: 'unlock', account: activeAccount });
           if (cloudRestore.restored) {
             setLocked(false);
+            showVerifyOverlay('success', 'Vault restored', 'Your vault has been restored on this device.');
             showMessage(`Vault restored from your latest cloud backup. ${cloudRestore.items.length} item(s) loaded on this device.`);
             return;
           }
@@ -694,6 +1006,7 @@ function App() {
       showMessage('New secure vault created on this device. No existing cloud backup was overwritten.');
       setLocked(false);
     } catch (error) {
+      showVerifyOverlay('error', 'Something went wrong', 'We could not unlock your vault. Please check your master password and try again.');
       showMessage('Could not unlock. Check your master password. Nothing new was saved.');
     }
   }
@@ -997,21 +1310,20 @@ function App() {
               <div className="account-restore-panel">
                 <div className="account-panel-title"><Phone size={17} /><strong>Restore your vault</strong></div>
                 <p>This looks like a new device. Verify your account, then enter your master password to restore your vault.</p>
-                <label>Mobile country code</label>
-                <select value={bootstrap.phoneCountryCode || '+254'} onChange={(e) => setBootstrap({ ...bootstrap, phoneCountryCode: e.target.value, phoneE164: buildPhoneE164(e.target.value, bootstrap.phoneNumber) })}>
-                  {phoneCountryCodes.map((country) => <option key={country.code} value={country.code}>{country.label}</option>)}
-                </select>
                 <label>Mobile number</label>
-                <input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" />
-                <label>Backup email</label>
+                <div className="phone-combo-field">
+                  <CountryPicker countryCode={bootstrap.phoneCountryCode || '+254'} countryIso={bootstrap.phoneCountryIso || 'ke'} onChange={(country) => setBootstrap({ ...bootstrap, phoneCountryCode: country.code, phoneCountryIso: country.iso, phoneE164: buildPhoneE164(country.code, bootstrap.phoneNumber) })} />
+                  <input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" />
+                </div>
+                <label>Email</label>
                 <input type="email" value={bootstrap.email || ''} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" />
                 <div className={`otp-test-panel ${otpTest.status}`}>
                   <div className="otp-test-title"><ShieldCheck size={16} /><strong>Verify your account</strong></div>
+                  <p className="otp-guidance-note">{otpChannel === 'email' ? 'Choose how you would like to receive your one-time code. We will send a one-time code to your email.' : 'Choose how you would like to receive your one-time code. SMS verification is coming soon.'}</p>
                   <div className={`otp-channel-toggle premium-toggle ${otpChannel}`} role="tablist" aria-label="Choose OTP delivery method">
-                    <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => setOtpChannel('email')}><Mail size={15} /> Email OTP</button>
-                    <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => setOtpChannel('sms')}><Phone size={15} /> SMS OTP</button>
+                    <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => setOtpChannel('email')}><Mail size={15} /> Email</button>
+                    <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => setOtpChannel('sms')}><Phone size={15} /> SMS</button>
                   </div>
-                  <p>{otpChannel === 'email' ? 'We will send a one-time code to your backup email.' : 'SMS verification is coming soon. Please use email OTP for now.'}</p>
                   {otpTest.message && <div className={`otp-status-line ${otpTest.verified ? 'verified' : ''}`}>{otpTest.message}</div>}
                   {otpTest.code && <div className="test-code-box"><span>Recovery code</span><code>{otpTest.code}</code></div>}
                   <div className="otp-flow-row">
@@ -1019,13 +1331,13 @@ function App() {
                     <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
                     <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
                   </div>
-                  {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>OTP verified. Now enter your master vault password below to complete login or restore.</span></div>}
+                  {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Enter your master password to complete login.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Enter master password</button></div>}
                   
                 </div>
               </div>
             )}
             <label>{hasLocalVault ? 'Master vault password' : 'Master vault password'}</label>
-            <input type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Enter or create your master password'} autoFocus={hasLocalVault} />
+            <input id="master-password-input" type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Enter or create your master password'} autoFocus={hasLocalVault} />
             {!hasLocalVault && createMode && (
               <>
                 <label>Confirm master vault password</label>
@@ -1040,6 +1352,7 @@ function App() {
           <div className="security-note"><ShieldCheck size={18} /> Your master password opens your vault. Your phone and email help verify your account.</div>
           <p className="version">{VERSION}</p>
         </section>
+        <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={focusMasterPassword} />
         <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
     );
@@ -1099,11 +1412,11 @@ function App() {
         </div>
         <div className={`otp-foundation-card ${otpTest.status}`}>
           <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>OTP recovery method</strong></div>
+          <p className="otp-guidance-note">{otpChannel === 'email' ? 'Choose how you would like to receive your one-time code. We will send a one-time code to your email.' : 'Choose how you would like to receive your one-time code. SMS verification is coming soon.'}</p>
           <div className={`otp-channel-toggle premium-toggle ${otpChannel}`} role="tablist" aria-label="Choose OTP delivery method">
-            <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => setOtpChannel('email')}><Mail size={15} /> Email OTP</button>
-            <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => setOtpChannel('sms')}><Phone size={15} /> SMS OTP</button>
+            <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => setOtpChannel('email')}><Mail size={15} /> Email</button>
+            <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => setOtpChannel('sms')}><Phone size={15} /> SMS</button>
           </div>
-          <span>{otpChannel === 'email' ? 'Send a one-time code to your backup email.' : 'SMS verification is coming soon. Please use email OTP for now.'}</span>
           {otpTest.message && <div className={`otp-status-line ${otpTest.verified ? 'verified' : ''}`}>{otpTest.message}</div>}
           {otpTest.code && <div className="test-code-box"><span>Recovery code</span><code>{otpTest.code}</code></div>}
           <div className="otp-flow-row">
@@ -1111,7 +1424,7 @@ function App() {
             <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
             <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
           </div>
-          {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Code verified. Now enter your master password to complete login or restore.</span></div>}
+          {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Enter your master password to complete login or restore.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Enter master password</button></div>}
         </div>
         <div className="snapshot-history-card">
           <div className="snapshot-history-title"><strong>Backup history</strong><span>{snapshotHistory.loading ? 'Loading...' : snapshotHistory.message}</span></div>
@@ -1128,9 +1441,13 @@ function App() {
         </div>
         {message && <p className="message sync-message">{message}</p>}
         <form className="bootstrap-grid" onSubmit={bootstrapAdmin}>
-          <label>Mobile country code<select value={bootstrap.phoneCountryCode || '+254'} onChange={(e) => setBootstrap({ ...bootstrap, phoneCountryCode: e.target.value, phoneE164: buildPhoneE164(e.target.value, bootstrap.phoneNumber) })}>{phoneCountryCodes.map((country) => <option key={country.code} value={country.code}>{country.label}</option>)}</select></label>
-          <label>Mobile number<input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" /></label>
-          <label>Backup email<input type="email" value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
+          <label className="combined-phone-label">Mobile number
+            <div className="phone-combo-field">
+              <CountryPicker countryCode={bootstrap.phoneCountryCode || '+254'} countryIso={bootstrap.phoneCountryIso || 'ke'} onChange={(country) => setBootstrap({ ...bootstrap, phoneCountryCode: country.code, phoneCountryIso: country.iso, phoneE164: buildPhoneE164(country.code, bootstrap.phoneNumber) })} />
+              <input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" />
+            </div>
+          </label>
+          <label>Email<input type="email" value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
           <label>Display name<input value={bootstrap.displayName} onChange={(e) => setBootstrap({ ...bootstrap, displayName: e.target.value })} /></label>
           <label>Vault name<input value={bootstrap.tenantName} onChange={(e) => setBootstrap({ ...bootstrap, tenantName: e.target.value })} /></label>
           <div className="button-stack">
