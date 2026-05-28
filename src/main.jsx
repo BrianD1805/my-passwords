@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.013A';
+const VERSION = 'My Passwords Ver-0.013B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -967,7 +967,7 @@ function App() {
                     <button type="button" className="secondary-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify test OTP</button>
                   </div>
                   <button type="button" className="secondary-button" onClick={requestTestOtp} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Creating test OTP...' : 'Create test OTP'}</button>
-                  <small>Ver-0.013A does not require OTP before unlock. It only proves the future new-device restore flow safely.</small>
+                  <small>Ver-0.013B still does not require OTP before unlock. It only proves the future new-device restore flow safely.</small>
                 </div>
               </div>
             )}
@@ -1053,7 +1053,7 @@ function App() {
             <button type="button" className="secondary-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify test OTP</button>
             <button type="button" className="secondary-button" onClick={requestTestOtp} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Creating...' : 'Create test OTP'}</button>
           </div>
-          <small>No SMS or email is sent yet. OTP is not enforced in Ver-0.013A, so your live vault remains accessible through the existing local-first unlock.</small>
+          <small>No SMS or email is sent yet. OTP is not enforced in Ver-0.013B, so your live vault remains accessible through the existing local-first unlock.</small>
         </div>
         <div className="snapshot-history-card">
           <div className="snapshot-history-title"><strong>Cloud snapshot history</strong><span>{snapshotHistory.loading ? 'Loading...' : snapshotHistory.message}</span></div>
