@@ -1,4 +1,4 @@
-export const APP_VERSION = 'My Passwords Ver-0.014';
+export const APP_VERSION = 'My Passwords Ver-0.014D';
 
 export function jsonResponse(statusCode, body) {
   return {
@@ -51,7 +51,7 @@ export function getSupabaseStatus() {
 export async function supabaseRequest(path, options = {}) {
   const { url, serviceRoleKey } = getSupabaseConfig();
   if (!url || !serviceRoleKey) {
-    const error = new Error('Supabase is not configured. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Netlify environment variables.');
+    const error = new Error('Cloud backup is not configured yet.');
     error.code = 'SUPABASE_NOT_CONFIGURED';
     throw error;
   }

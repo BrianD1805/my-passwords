@@ -65,13 +65,13 @@ export async function handler(event) {
   const purpose = String(body.purpose || 'new_device_restore_test').trim();
 
   if (!phoneE164 && !email) {
-    return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Enter the account phone number or backup email before requesting a test OTP.' });
+    return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Enter your phone number or backup email before requesting a code.' });
   }
 
   try {
     const user = await findUser(email, phoneE164);
     if (!user?.id || !user?.tenant_id) {
-      return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Account identity was not found yet. Save the account foundation first, then request a test OTP.' });
+      return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Save your account details first, then request a code.' });
     }
 
     const challengeId = publicId('otp');
@@ -98,7 +98,7 @@ export async function handler(event) {
         test_mode: true,
         no_sms_sent: true,
         no_email_sent: true,
-        note: 'Screen test OTP returns the code in the response so the flow can be tested without lockout risk.'
+        note: 'SMS verification is not available yet.'
       }
     });
 
@@ -117,7 +117,7 @@ export async function handler(event) {
     return jsonResponse(500, {
       ok: false,
       version: APP_VERSION,
-      message: 'Could not create test-mode OTP challenge.',
+      message: 'Could not create the code.',
       error: error.message,
       details: error.details || null
     });

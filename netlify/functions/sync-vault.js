@@ -30,9 +30,9 @@ export async function handler(event) {
 
       const rows = await selectRows('vault_sync_snapshots', `select=id,item_count,encrypted_blob,local_salt,local_iv,client_updated_at,created_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&order=created_at.desc&limit=1`);
       if (!rows.length) return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', hasSnapshot: false, version: APP_VERSION, snapshotCount: 0 });
-      return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', hasSnapshot: true, version: APP_VERSION, snapshot: rows[0], snapshotCount: 1, message: 'Latest encrypted Supabase snapshot found.' });
+      return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', hasSnapshot: true, version: APP_VERSION, snapshot: rows[0], snapshotCount: 1, message: 'Latest cloud backup found.' });
     } catch (error) {
-      return jsonResponse(500, { ok: false, connected: true, provider: 'supabase', version: APP_VERSION, message: 'Could not load latest encrypted snapshot.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, connected: true, provider: 'supabase', version: APP_VERSION, message: 'Could not load the latest cloud backup.', error: error.message, details: error.details || null });
     }
   }
 
@@ -70,8 +70,8 @@ export async function handler(event) {
       action: 'encrypted_snapshot_uploaded',
       metadata: { version: APP_VERSION, itemCount, provider: 'supabase' }
     });
-    return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', version: APP_VERSION, snapshotId, itemCount, clientUpdatedAt, message: 'Encrypted vault snapshot saved to Supabase.' });
+    return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', version: APP_VERSION, snapshotId, itemCount, clientUpdatedAt, message: 'Cloud backup saved.' });
   } catch (error) {
-    return jsonResponse(500, { ok: false, connected: true, provider: 'supabase', version: APP_VERSION, message: 'Encrypted sync failed.', error: error.message, details: error.details || null });
+    return jsonResponse(500, { ok: false, connected: true, provider: 'supabase', version: APP_VERSION, message: 'Cloud backup failed.', error: error.message, details: error.details || null });
   }
 }

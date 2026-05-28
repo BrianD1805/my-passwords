@@ -12,7 +12,7 @@ export async function handler() {
       checked_at: new Date().toISOString(),
       environment: getEnvironmentFlags(),
       supabase,
-      message: 'Supabase is not configured yet. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Netlify environment variables.'
+      message: 'Cloud backup is not configured yet.'
     });
   }
 

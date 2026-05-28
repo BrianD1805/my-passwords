@@ -5,6 +5,6 @@ export async function handler() {
     ok: true,
     app: 'My Passwords',
     version: APP_VERSION,
-    mode: 'otp-foundation-test-mode-new-device-restore'
+    mode: 'customer-facing-recovery-wording'
   });
 }

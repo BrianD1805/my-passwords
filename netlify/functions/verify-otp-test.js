@@ -34,7 +34,7 @@ export async function handler(event) {
 
     if (new Date(challenge.expires_at).getTime() < Date.now()) {
       await updateRow('otp_challenges', `id=${eq(challengeId)}`, { status: 'expired', updated_at: new Date().toISOString() });
-      return jsonResponse(410, { ok: false, version: APP_VERSION, message: 'OTP challenge has expired. Request another test OTP.' });
+      return jsonResponse(410, { ok: false, version: APP_VERSION, message: 'This code has expired. Request another code.' });
     }
 
     const attempts = Number(challenge.attempts || 0) + 1;
@@ -48,7 +48,7 @@ export async function handler(event) {
         status: locked ? 'failed_too_many_attempts' : challenge.status,
         updated_at: new Date().toISOString()
       });
-      return jsonResponse(401, { ok: false, version: APP_VERSION, attempts, message: locked ? 'Too many incorrect OTP attempts. Request another test OTP.' : 'OTP code did not match.' });
+      return jsonResponse(401, { ok: false, version: APP_VERSION, attempts, message: locked ? 'Too many incorrect attempts. Request another code.' : 'OTP code did not match.' });
     }
 
     await updateRow('otp_challenges', `id=${eq(challengeId)}`, {
@@ -65,13 +65,13 @@ export async function handler(event) {
       challengeId,
       tenantId: challenge.tenant_id,
       userId: challenge.user_id,
-      message: String(challenge.delivery_channel || '').includes('email') ? 'Email OTP test verified. No live lockout rule has been enabled yet.' : 'Test-mode OTP verified. No live lockout or SMS delivery rule has been enabled yet.'
+      message: String(challenge.delivery_channel || '').includes('email') ? 'Email code verified. Now enter your master password to continue.' : 'Code verified. Now enter your master password to continue.'
     });
   } catch (error) {
     return jsonResponse(500, {
       ok: false,
       version: APP_VERSION,
-      message: 'Could not verify test-mode OTP challenge.',
+      message: 'Could not verify the code.',
       error: error.message,
       details: error.details || null
     });

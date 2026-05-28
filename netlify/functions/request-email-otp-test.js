@@ -31,7 +31,7 @@ function buildEmailHtml(code, maskedEmail) {
     <div style="max-width:520px;margin:0 auto;padding:28px 18px;">
       <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
         <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">My Passwords verification code</h1>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Use this test-mode email OTP to verify the new-device restore flow. This does not unlock your vault by itself.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Use this one-time code to verify your account. You will still need your master password to open your vault.</p>
         <div style="font-size:34px;letter-spacing:8px;font-weight:800;color:#1d3557;background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:18px;text-align:center;">${code}</div>
         <p style="margin:18px 0 0;line-height:1.55;color:#536579;">This code expires in 10 minutes. Sent to ${maskedEmail || 'your backup email'}.</p>
         <p style="margin:14px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">If you did not request this, ignore this email. Your master password is still required to decrypt the vault and is never sent by email.</p>
@@ -143,8 +143,8 @@ export async function handler(event) {
       providerId: delivery.providerId || '',
       testOtpCode: delivery.sent ? '' : code,
       message: delivery.sent
-        ? `Email OTP sent to ${destinationMasked}. Enter the code from your email to verify the test flow.`
-        : `Email OTP delivery is not configured yet, so the test code is shown on screen. ${delivery.reason || ''}`.trim()
+        ? `Email code sent to ${destinationMasked}. Enter the code from your email to continue.`
+        : `Email code could not be sent. Please try again later.`.trim()
     });
   } catch (error) {
     return jsonResponse(500, {
