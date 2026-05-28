@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.014M';
+const VERSION = 'My Passwords Ver-0.014N';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -636,6 +636,7 @@ function App() {
   const [otpTest, setOtpTest] = useState({ status: 'not-requested', challengeId: '', code: '', input: '', message: 'Choose how you would like to receive your one-time code.', verified: false, expiresAt: '' });
   const [otpChannel, setOtpChannel] = useState('email');
   const [verifyOverlay, setVerifyOverlay] = useState({ visible: false, status: 'idle', title: '', message: '', focusMasterPassword: false });
+  const [suppressUnlockAutofocus, setSuppressUnlockAutofocus] = useState(false);
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
@@ -932,6 +933,7 @@ function App() {
 
   async function unlockVault(event) {
     event.preventDefault();
+    setSuppressUnlockAutofocus(false);
     if (masterPassword.length < 8) {
       showMessage('Use at least 8 characters for your master password.');
       return;
@@ -1020,12 +1022,16 @@ function App() {
   }
 
   function lockVault(note = 'Vault locked.') {
+    setSuppressUnlockAutofocus(true);
     setLocked(true);
     setItems([]);
     setShowSecrets({});
     setMasterPassword('');
     setConfirmMasterPassword('');
-    showMessage(note);
+    showMessage(note, 'success');
+    window.setTimeout(() => {
+      showVerifyOverlay('success', 'Vault locked', 'Your passwords are securely encrypted and locked.');
+    }, 80);
   }
 
 
@@ -1337,7 +1343,7 @@ function App() {
               </div>
             )}
             <label>{hasLocalVault ? 'Master vault password' : 'Master vault password'}</label>
-            <input id="master-password-input" type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Enter or create your master password'} autoFocus={hasLocalVault} />
+            <input id="master-password-input" type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Enter or create your master password'} autoFocus={hasLocalVault && !suppressUnlockAutofocus} />
             {!hasLocalVault && createMode && (
               <>
                 <label>Confirm master vault password</label>
