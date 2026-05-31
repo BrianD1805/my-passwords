@@ -2944,3 +2944,29 @@ body.app-popup-open {
     justify-self: stretch;
   }
 }
+
+/* Ver-0.017 save interaction and wider desktop popups */
+@media (min-width: 861px) {
+  .item-popup-card,
+  .item-form.item-popup-card {
+    width: min(670px, calc(100vw - 50px));
+  }
+}
+
+.primary-button.saving-button {
+  opacity: 0.92;
+  cursor: wait;
+}
+
+.button-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(255,255,255,0.45);
+  border-top-color: #fff;
+  animation: button-spinner-spin 760ms linear infinite;
+}
+
+@keyframes button-spinner-spin {
+  to { transform: rotate(360deg); }
+}

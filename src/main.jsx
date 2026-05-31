@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, ExternalLink, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.016';
+const VERSION = 'My Passwords Ver-0.017';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -640,6 +640,7 @@ function App() {
   const [activePage, setActivePage] = useState('home');
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
   const [viewItemId, setViewItemId] = useState('');
+  const [isSavingItem, setIsSavingItem] = useState(false);
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
@@ -1064,52 +1065,61 @@ function App() {
 
   async function saveItem(event) {
     event.preventDefault();
+    if (isSavingItem) return;
     if (!form.title.trim()) return showMessage(editingItemId ? 'Add a title before updating this item.' : 'Add a title first.');
 
-    const notesValue = form.category === 'Checklists' ? normaliseChecklistNotes(form.notes) : form.notes.trim();
-    const itemPayload = {
-      title: form.title.trim(),
-      category: form.category,
-      favourite: !!form.favourite,
-      payload: {
-        url: form.url.trim(),
-        username: ['Notes', 'Checklists'].includes(form.category) ? '' : form.username.trim(),
-        password: ['Notes', 'Checklists'].includes(form.category) ? '' : form.password,
-        notes: notesValue
-      },
-      updatedAt: new Date().toISOString()
-    };
+    setIsSavingItem(true);
+    try {
+      const notesValue = form.category === 'Checklists' ? normaliseChecklistNotes(form.notes) : form.notes.trim();
+      const itemPayload = {
+        title: form.title.trim(),
+        category: form.category,
+        favourite: !!form.favourite,
+        payload: {
+          url: form.url.trim(),
+          username: ['Notes', 'Checklists'].includes(form.category) ? '' : form.username.trim(),
+          password: ['Notes', 'Checklists'].includes(form.category) ? '' : form.password,
+          notes: notesValue
+        },
+        updatedAt: new Date().toISOString()
+      };
 
-    if (editingItemId) {
-      const exists = items.some((item) => item.id === editingItemId);
-      if (!exists) {
+      if (editingItemId) {
+        const itemIdBeingEdited = editingItemId;
+        const exists = items.some((item) => item.id === itemIdBeingEdited);
+        if (!exists) {
+          setEditingItemId('');
+          showMessage('That item is no longer available to edit. Nothing was changed.');
+          return;
+        }
+        const next = items.map((item) => item.id === itemIdBeingEdited ? { ...item, ...itemPayload } : item);
+        await saveItems(next, { autoSync: true, silentAutoSync: true });
+        const editedCategory = form.category;
         setEditingItemId('');
-        return showMessage('That item is no longer available to edit. Nothing was changed.');
+        setForm(emptyForm(editedCategory));
+        setShowFormSecret(false);
+        setIsItemPopupOpen(false);
+        setViewItemId(itemIdBeingEdited);
+        showMessage('Item updated successfully.', 'success');
+        return;
       }
-      const next = items.map((item) => item.id === editingItemId ? { ...item, ...itemPayload } : item);
-      await saveItems(next, { autoSync: true });
-      const editedCategory = form.category;
-      setEditingItemId('');
-      setForm(emptyForm(editedCategory));
-      setShowFormSecret(false);
-      setIsItemPopupOpen(false);
-      setViewItemId(editingItemId);
-      showMessage(bootstrap.tenantId && bootstrap.userId ? 'Item updated and backup requested.' : 'Item updated. Save your account details to enable cloud backup.');
-      return;
-    }
 
-    const next = [
-      {
+      const newItem = {
         id: crypto.randomUUID(),
         ...itemPayload
-      },
-      ...items
-    ];
-    await saveItems(next, { autoSync: true });
-    setForm(emptyForm(form.category));
-    setShowFormSecret(false);
-    setIsItemPopupOpen(false);
-    showMessage(bootstrap.tenantId && bootstrap.userId ? 'Item saved and backup requested.' : 'Item saved. Save your account details to enable cloud backup.');
+      };
+      const next = [newItem, ...items];
+      await saveItems(next, { autoSync: true, silentAutoSync: true });
+      setForm(emptyForm(form.category));
+      setShowFormSecret(false);
+      setIsItemPopupOpen(false);
+      setViewItemId(newItem.id);
+      showMessage('Item saved successfully.', 'success');
+    } catch (error) {
+      showMessage('Item could not be saved. Please try again.', 'error');
+    } finally {
+      setIsSavingItem(false);
+    }
   }
 
   function startEditItem(item) {
@@ -1544,7 +1554,10 @@ function App() {
                 <label className="favourite-toggle"><input type="checkbox" checked={form.favourite} onChange={(e) => setForm({ ...form, favourite: e.target.checked })} /> Mark as favourite</label>
                 </div>
                 <div className="item-popup-footer form-buttons">
-                  <button type="submit" className="primary-button"><ShieldCheck size={18} /> {editingItemId ? 'Save updated item' : 'Save encrypted item'}</button>
+                  <button type="submit" className={isSavingItem ? "primary-button saving-button" : "primary-button"} disabled={isSavingItem} aria-busy={isSavingItem ? 'true' : 'false'}>
+                    {isSavingItem ? <span className="button-spinner" aria-hidden="true" /> : <ShieldCheck size={18} />}
+                    {isSavingItem ? (editingItemId ? 'Saving updates...' : 'Saving item...') : (editingItemId ? 'Save updated item' : 'Save encrypted item')}
+                  </button>
                   <button type="button" className="secondary-button" onClick={closeItemPopup}>{editingItemId ? <><X size={16} /> Cancel edit</> : 'Cancel'}</button>
                 </div>
               </form>
