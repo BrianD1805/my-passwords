@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, ExternalLink, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.018';
+const VERSION = 'My Passwords Ver-0.018A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1381,13 +1381,14 @@ function App() {
     return visibleItems.filter((item) => {
       const text = `${item.title} ${item.category} ${item.payload?.url || ''} ${item.payload?.username || ''} ${item.payload?.notes || ''}`.toLowerCase();
       const matchesSearch = activeSearch ? text.includes(activeSearch) : true;
-      const matchesFolder = !category ? true : category === 'Favourites' ? item.favourite : item.category === category;
+      const matchesFolder = activeSearch ? true : (!category ? true : category === 'All' ? true : category === 'Favourites' ? item.favourite : item.category === category);
       return matchesSearch && matchesFolder;
     }).sort((a, b) => Number(b.favourite) - Number(a.favourite) || new Date(b.updatedAt) - new Date(a.updatedAt));
   }, [visibleItems, query, category]);
 
   const folderChips = useMemo(() => {
     return [
+      { name: 'All', count: visibleItems.length, favourite: false, custom: false },
       { name: 'Favourites', count: visibleItems.filter((item) => item.favourite).length, favourite: true, custom: false },
       ...BUILT_IN_CATEGORIES.map((cat) => ({ name: cat, count: visibleItems.filter((item) => item.category === cat).length, favourite: false, custom: false })),
       ...customFolders.map((cat) => ({ name: cat, count: visibleItems.filter((item) => item.category === cat).length, favourite: false, custom: true }))
@@ -1404,7 +1405,7 @@ function App() {
   }
 
   function openAddItem() {
-    const preferredCategory = category && category !== 'Favourites' ? category : 'Passwords';
+    const preferredCategory = category && !['All', 'Favourites'].includes(category) ? category : 'Passwords';
     setEditingItemId('');
     setForm(emptyForm(preferredCategory));
     setShowFormSecret(false);
@@ -1595,11 +1596,11 @@ function App() {
                   <span className="chip-count">{folder.count}</span>
                 </button>
               ))}
-              <button type="button" className="chip add-folder-chip" onClick={() => setIsFolderPopupOpen(true)}><Plus size={16} /> New folder</button>
             </div>
             <div className="home-quick-summary">
-              <span><strong>{visibleItems.length}</strong> saved item{visibleItems.length === 1 ? '' : 's'}</span>
+              <span><strong>{visibleItems.length}</strong> Item{visibleItems.length === 1 ? '' : 's'}</span>
               <span><strong>{visibleItems.filter((item) => item.favourite).length}</strong> favourite{visibleItems.filter((item) => item.favourite).length === 1 ? '' : 's'}</span>
+              <button type="button" className="summary-action add-folder-chip" onClick={() => setIsFolderPopupOpen(true)}><Plus size={14} /> New folder</button>
             </div>
           </section>
 

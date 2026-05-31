@@ -3009,3 +3009,134 @@ body.app-popup-open {
   color: #245b34;
   line-height: 1.45;
 }
+
+
+/* Ver-0.018A folder/search polish and global tap highlight removal */
+html,
+body,
+button,
+a,
+input,
+textarea,
+select,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+.chip,
+.icon-button,
+.field-action,
+.nav-pill,
+.vault-result-row,
+.floating-add-button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vault-folder-row .chip {
+  font-weight: 650;
+  letter-spacing: 0;
+  background: rgba(255,255,255,0.72);
+  color: #2c4359;
+  border: 1px solid rgba(35, 72, 105, 0.10);
+  box-shadow: 0 8px 20px rgba(31, 48, 71, 0.045);
+}
+
+.vault-folder-row .chip.active {
+  font-weight: 700;
+  background: #233c5c;
+  color: #fff;
+  border-color: rgba(35, 60, 92, 0.28);
+}
+
+.chip-count {
+  font-weight: 600;
+  color: #617186;
+  background: rgba(255,255,255,0.82);
+}
+
+.vault-folder-row .chip.active .chip-count {
+  color: #233c5c;
+  background: rgba(255,255,255,0.92);
+  font-weight: 650;
+}
+
+.home-quick-summary {
+  align-items: center;
+  gap: 9px;
+}
+
+.home-quick-summary span,
+.home-quick-summary .summary-action {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.70);
+  border: 1px solid rgba(35, 72, 105, 0.10);
+  color: #4f6175;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.home-quick-summary span strong {
+  color: #253d58;
+  font-weight: 700;
+}
+
+.home-quick-summary .summary-action {
+  cursor: pointer;
+  font-weight: 650;
+  box-shadow: none;
+}
+
+.home-quick-summary .summary-action:hover,
+.home-quick-summary .summary-action:focus-visible {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(35, 72, 105, 0.18);
+  outline: none;
+}
+
+.floating-add-button {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.94);
+  color: #233c5c;
+  border: 1px solid rgba(35, 72, 105, 0.16);
+  box-shadow: 0 14px 34px rgba(31, 48, 71, 0.16);
+}
+
+.floating-add-button svg {
+  width: 23px;
+  height: 23px;
+  stroke-width: 2.25;
+}
+
+.floating-add-button:hover,
+.floating-add-button:focus-visible {
+  background: #fff;
+  color: #1d3557;
+  box-shadow: 0 18px 38px rgba(31, 48, 71, 0.18);
+}
+
+.add-folder-chip {
+  border-style: solid;
+  background: rgba(255,255,255,0.70);
+  color: #4f6175;
+}
+
+@media (max-width: 860px) {
+  .floating-add-button {
+    width: 54px;
+    height: 54px;
+    border-radius: 17px;
+  }
+
+  .home-quick-summary {
+    flex-wrap: wrap;
+  }
+}
