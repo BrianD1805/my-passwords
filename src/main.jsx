@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
+import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.014N';
+const VERSION = 'My Passwords Ver-0.015';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -637,6 +637,7 @@ function App() {
   const [otpChannel, setOtpChannel] = useState('email');
   const [verifyOverlay, setVerifyOverlay] = useState({ visible: false, status: 'idle', title: '', message: '', focusMasterPassword: false });
   const [suppressUnlockAutofocus, setSuppressUnlockAutofocus] = useState(false);
+  const [activePage, setActivePage] = useState('home');
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
@@ -1303,6 +1304,22 @@ function App() {
     }).sort((a, b) => Number(b.favourite) - Number(a.favourite) || new Date(b.updatedAt) - new Date(a.updatedAt));
   }, [items, query, category]);
 
+  const vaultSections = useMemo(() => {
+    return categories
+      .filter((cat) => cat !== 'All')
+      .map((cat) => ({
+        name: cat,
+        count: items.filter((item) => item.category === cat).length,
+        favourites: items.filter((item) => item.category === cat && item.favourite).length
+      }));
+  }, [items]);
+
+  function openVaultSection(cat) {
+    setCategory(cat);
+    setActivePage('home');
+    window.setTimeout(() => document.getElementById('vault-list-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  }
+
   if (locked) {
     return (
       <main className="lock-screen">
@@ -1366,184 +1383,217 @@ function App() {
 
   return (
     <main className="app-shell">
-      <header className="topbar">
+      <header className="topbar app-home-topbar">
         <div>
           <p className="eyebrow">Secure private vault</p>
           <h1>My Passwords</h1>
-          <p className="subtitle">Passwords, bank details, secret keys, work notes, links and emergency access planning.</p>
+          <p className="subtitle">Your saved passwords, bank details, keys, notes and links.</p>
         </div>
-        <button className="lock-button" onClick={() => lockVault()}><Lock size={18} /> Lock</button>
+        <div className="topbar-actions">
+          <button type="button" className={activePage === 'home' ? 'nav-pill active' : 'nav-pill'} onClick={() => setActivePage('home')}><KeyRound size={17} /> Vault</button>
+          <button type="button" className={activePage === 'settings' ? 'nav-pill active' : 'nav-pill'} onClick={() => setActivePage('settings')}><Settings size={17} /> Settings</button>
+          <button className="lock-button" onClick={() => lockVault()}><Lock size={18} /> Lock</button>
+        </div>
       </header>
 
-      <section className="status-grid">
-        <article><KeyRound /><strong>{items.length}</strong><span>Items</span></article>
-        <article><Database /><strong>{dbStatus.connected ? 'Ready' : 'Checking'}</strong><span>Cloud backup</span></article>
-        <article><Cloud /><strong>{snapshotHistory.total || syncStatus.snapshotCount || 0}</strong><span>Backups</span></article>
-        <article><UserRoundCheck /><strong>{bootstrap.userId ? 'Ready' : 'Setup'}</strong><span>Account</span></article>
-      </section>
+      {activePage === 'home' ? (
+        <>
+          <section className="home-search-panel">
+            <div className="search-box hero-search"><Search size={19} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your vault" /></div>
+            <div className="home-quick-summary">
+              <span><strong>{items.length}</strong> saved item{items.length === 1 ? '' : 's'}</span>
+              <span><strong>{items.filter((item) => item.favourite).length}</strong> favourite{items.filter((item) => item.favourite).length === 1 ? '' : 's'}</span>
+            </div>
+          </section>
 
-      <section className="sync-panel">
-        <div className="sync-title">
-          <div><p className="eyebrow">Account and recovery</p><h2><Cloud size={21} /> Vault backup and restore</h2></div>
-          <div className="sync-actions">
-            <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check connection</button>
-            <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Backup history</button>
-            <button type="button" className="secondary-button" disabled={syncing} onClick={restoreCloudToThisDevice}><RefreshCw size={16} /> Restore backup</button>
-          </div>
-        </div>
-        <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
-        <div className={`account-status-card ${accountStatus.state}`}>
-          <div className="account-status-heading"><Phone size={18} /><strong>Account details</strong></div>
-          <span>{accountStatus.message}</span>
-          <small>Phone: {maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'not set'}{bootstrap.email ? ` · Email: ${maskEmail(bootstrap.email)}` : ''}</small>
-        </div>
-        <div className={`sync-status-card ${syncStatus.state}`}> 
-          <strong>{syncStatus.state === 'success' ? 'Cloud backup saved' : syncStatus.state === 'syncing' ? 'Backup in progress' : syncStatus.state === 'error' ? 'Backup needs attention' : syncStatus.state === 'warning' ? 'Backup warning' : 'Cloud backup status'}</strong>
-          <span>{syncStatus.message}</span>
-          {(syncStatus.lastSyncAt || syncStatus.snapshotCount) && <small>Last backup: {syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : 'Not backed up in this session'} · Items: {syncStatus.itemCount}</small>}
-        </div>
-        <div className={`device-status-card ${deviceStatus.state}`}>
-          <div className="device-status-heading"><MonitorSmartphone size={18} /><strong>This device</strong></div>
-          <span>{deviceStatus.label}</span>
-          <small>{deviceStatus.lastCloudCheckAt ? `Last checked: ${new Date(deviceStatus.lastCloudCheckAt).toLocaleString()}` : 'Not checked yet'}{deviceStatus.lastRestoreAt ? ` · Restored: ${new Date(deviceStatus.lastRestoreAt).toLocaleString()}` : ''}</small>
-        </div>
-        <div className="vault-security-info-card">
-          <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>Vault security and recovery</strong></div>
-          <div className="security-points">
-            <span>Local vault: secure copy saved on this device for fast daily unlock.</span>
-            <span>Cloud backup: secure backup for restore and device sync.</span>
-            <span>Phone/email: verifies your account on a new device.</span>
-            <span>Master password: opens your vault and is not saved by the app.</span>
-          </div>
-        </div>
-        <div className={`otp-foundation-card ${otpTest.status}`}>
-          <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>OTP recovery method</strong></div>
-          <p className="otp-guidance-note">{otpChannel === 'email' ? 'Choose how you would like to receive your one-time code. We will send a one-time code to your email.' : 'Choose how you would like to receive your one-time code. SMS verification is coming soon.'}</p>
-          <div className={`otp-channel-toggle premium-toggle ${otpChannel}`} role="tablist" aria-label="Choose OTP delivery method">
-            <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => setOtpChannel('email')}><Mail size={15} /> Email</button>
-            <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => setOtpChannel('sms')}><Phone size={15} /> SMS</button>
-          </div>
-          {otpTest.message && <div className={`otp-status-line ${otpTest.verified ? 'verified' : ''}`}>{otpTest.message}</div>}
-          {otpTest.code && <div className="test-code-box"><span>Recovery code</span><code>{otpTest.code}</code></div>}
-          <div className="otp-flow-row">
-            <button type="button" className="secondary-button otp-send-button" onClick={requestSelectedOtp} disabled={otpTest.status === 'requesting' || otpChannel === 'sms'}>{otpTest.status === 'requesting' ? 'Sending...' : (otpChannel === 'email' ? 'Send email OTP' : 'SMS coming soon')}</button>
-            <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
-            <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
-          </div>
-          {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Enter your master password to complete login or restore.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Enter master password</button></div>}
-        </div>
-        <div className="snapshot-history-card">
-          <div className="snapshot-history-title"><strong>Backup history</strong><span>{snapshotHistory.loading ? 'Loading...' : snapshotHistory.message}</span></div>
-          {!!snapshotHistory.snapshots.length && (
-            <div className="snapshot-list">
-              {snapshotHistory.snapshots.map((snap) => (
-                <div className="snapshot-row" key={snap.id}>
-                  <span>{snap.item_count} item(s)</span>
-                  <small>{new Date(snap.created_at).toLocaleString()}</small>
+          <section className="vault-section-grid" aria-label="Vault sections">
+            {vaultSections.map((section) => (
+              <button type="button" key={section.name} className={category === section.name ? 'vault-section-card active' : 'vault-section-card'} onClick={() => openVaultSection(section.name)}>
+                <span className="section-card-name">{section.name}</span>
+                <span className="section-card-count">{section.count}</span>
+                {section.favourites > 0 && <span className="section-card-favs"><Star size={13} fill="currentColor" /> {section.favourites}</span>}
+              </button>
+            ))}
+          </section>
+
+          <section className="controls-panel compact-controls" id="vault-list-section">
+            <div className="chip-row">{categories.map((cat) => <button key={cat} className={cat === category ? 'chip active' : 'chip'} onClick={() => setCategory(cat)}>{cat}</button>)}</div>
+          </section>
+
+          <section className="main-grid">
+            <form className={editingItemId ? "item-form edit-mode" : "item-form"} onSubmit={saveItem}>
+              <h2>{editingItemId ? <Pencil size={20} /> : <Plus size={20} />} {editingItemId ? 'Edit item' : 'Add item'}</h2>
+              <p className="form-helper">{editingItemId ? 'Update the saved details, then save your changes.' : 'Save a new secure item in your vault.'}</p>
+              {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
+              <label>Category<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categories.filter((cat) => cat !== 'All').map((cat) => <option key={cat}>{cat}</option>)}</select></label>
+              <label>Title<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={activeHint.title} /></label>
+              <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>
+              <label>Username / Reference<input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder={activeHint.username} /></label>
+              <label>Password / Secret
+                <div className="secret-input-row">
+                  <input type={showFormSecret ? 'text' : 'password'} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={activeHint.secret} />
+                  <button type="button" className="mini-button" onClick={() => setShowFormSecret(!showFormSecret)}>{showFormSecret ? <EyeOff size={15} /> : <Eye size={15} />}</button>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-        {message && <p className="message sync-message">{message}</p>}
-        <form className="bootstrap-grid" onSubmit={bootstrapAdmin}>
-          <label className="combined-phone-label">Mobile number
-            <div className="phone-combo-field">
-              <CountryPicker countryCode={bootstrap.phoneCountryCode || '+254'} countryIso={bootstrap.phoneCountryIso || 'ke'} onChange={(country) => setBootstrap({ ...bootstrap, phoneCountryCode: country.code, phoneCountryIso: country.iso, phoneE164: buildPhoneE164(country.code, bootstrap.phoneNumber) })} />
-              <input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" />
-            </div>
-          </label>
-          <label>Email<input type="email" value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
-          <label>Display name<input value={bootstrap.displayName} onChange={(e) => setBootstrap({ ...bootstrap, displayName: e.target.value })} /></label>
-          <label>Vault name<input value={bootstrap.tenantName} onChange={(e) => setBootstrap({ ...bootstrap, tenantName: e.target.value })} /></label>
-          <div className="button-stack">
-            <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Save account details</button>
-            <button type="button" className="secondary-button" disabled={syncing} onClick={syncEncryptedVault}><Cloud size={18} /> {syncing ? 'Backing up...' : 'Back up vault'}</button>
-          </div>
-        </form>
-      </section>
+              </label>
+              <label>Notes / Checklist<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
+              <label className="favourite-toggle"><input type="checkbox" checked={form.favourite} onChange={(e) => setForm({ ...form, favourite: e.target.checked })} /> Mark as favourite</label>
+              <div className="form-buttons">
+                <button type="submit" className="primary-button"><ShieldCheck size={18} /> {editingItemId ? 'Save updated item' : 'Save encrypted item'}</button>
+                <button type="button" className="secondary-button" onClick={clearForm}>{editingItemId ? <><X size={16} /> Cancel edit</> : 'Clear'}</button>
+              </div>
+            </form>
 
-      <section className="controls-panel">
-        <div className="search-box"><Search size={18} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search titles, notes, users or links" /></div>
-        <div className="chip-row">{categories.map((cat) => <button key={cat} className={cat === category ? 'chip active' : 'chip'} onClick={() => setCategory(cat)}>{cat}</button>)}</div>
-      </section>
-
-      <section className="main-grid">
-        <form className={editingItemId ? "item-form edit-mode" : "item-form"} onSubmit={saveItem}>
-          <h2>{editingItemId ? <Pencil size={20} /> : <Plus size={20} />} {editingItemId ? 'Edit item' : 'Add item'}</h2>
-          <p className="form-helper">{editingItemId ? 'Update the saved details, then save your changes.' : 'Save passwords, bank details, secret keys, notes and checklists in your secure vault.'}</p>
-          {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
-          <label>Category<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categories.filter((cat) => cat !== 'All').map((cat) => <option key={cat}>{cat}</option>)}</select></label>
-          <label>Title<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={activeHint.title} /></label>
-          <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>
-          <label>Username / Reference<input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder={activeHint.username} /></label>
-          <label>Password / Secret
-            <div className="secret-input-row">
-              <input type={showFormSecret ? 'text' : 'password'} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={activeHint.secret} />
-              <button type="button" className="mini-button" onClick={() => setShowFormSecret(!showFormSecret)}>{showFormSecret ? <EyeOff size={15} /> : <Eye size={15} />}</button>
-            </div>
-          </label>
-          <label>Notes / Checklist<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
-          <label className="favourite-toggle"><input type="checkbox" checked={form.favourite} onChange={(e) => setForm({ ...form, favourite: e.target.checked })} /> Mark as favourite</label>
-          <div className="form-buttons">
-            <button type="submit" className="primary-button"><ShieldCheck size={18} /> {editingItemId ? 'Save updated item' : 'Save encrypted item'}</button>
-            <button type="button" className="secondary-button" onClick={clearForm}>{editingItemId ? <><X size={16} /> Cancel edit</> : 'Clear'}</button>
-          </div>
-        </form>
-
-        <section className="vault-list">
-          {filteredItems.map((item) => {
-            const visible = !!showSecrets[item.id];
-            return (
-              <article className={item.favourite ? 'vault-card favourite-card' : 'vault-card'} key={item.id}>
-                <div className="card-title-row">
-                  <div><span className="category-pill">{item.category}</span><h3>{item.favourite && <Star size={17} fill="currentColor" />} {item.title}</h3></div>
-                  <div className="card-actions">
-                    <button className="icon-button" onClick={() => startEditItem(item)} title="Edit item"><Pencil size={17} /></button>
-                    <button className="icon-button" onClick={() => toggleFavourite(item.id)} title="Toggle favourite"><Star size={17} fill={item.favourite ? 'currentColor' : 'none'} /></button>
-                    <button className="icon-button danger" onClick={() => deleteItem(item.id)} title="Delete"><Trash2 size={17} /></button>
-                  </div>
-                </div>
-                {item.payload.url && (
-                  <div className="app-field-block">
-                    <span className="app-field-label">Website / Link</span>
-                    <div className="app-value-field link-field">
-                      <a href={item.payload.url} target="_blank" rel="noreferrer">{item.payload.url}</a>
-                      <button type="button" className="field-action" onClick={() => copyText('URL', item.payload.url)} aria-label="Copy URL" title="Copy URL"><Copy size={18} /></button>
+            <section className="vault-list">
+              {filteredItems.map((item) => {
+                const visible = !!showSecrets[item.id];
+                return (
+                  <article className={item.favourite ? 'vault-card favourite-card' : 'vault-card'} key={item.id}>
+                    <div className="card-title-row">
+                      <div><span className="category-pill">{item.category}</span><h3>{item.favourite && <Star size={17} fill="currentColor" />} {item.title}</h3></div>
+                      <div className="card-actions">
+                        <button className="icon-button" onClick={() => startEditItem(item)} title="Edit item"><Pencil size={17} /></button>
+                        <button className="icon-button" onClick={() => toggleFavourite(item.id)} title="Toggle favourite"><Star size={17} fill={item.favourite ? 'currentColor' : 'none'} /></button>
+                        <button className="icon-button danger" onClick={() => deleteItem(item.id)} title="Delete"><Trash2 size={17} /></button>
+                      </div>
                     </div>
-                  </div>
-                )}
-                <div className="app-field-block">
-                  <span className="app-field-label">Username</span>
-                  <div className="app-value-field">
-                    <span className="app-field-value">{item.payload.username || '—'}</span>
-                    <button type="button" className="field-action" onClick={() => copyText('Username', item.payload.username)} aria-label="Copy username" title="Copy username"><Copy size={18} /></button>
-                  </div>
-                </div>
-                <div className="app-field-block">
-                  <span className="app-field-label">Password</span>
-                  <div className="app-value-field secret-field">
-                    <span className="app-field-value">{visible ? item.payload.password || '—' : '••••••••••••••••'}</span>
-                    <button type="button" className="field-action" onClick={() => setShowSecrets({ ...showSecrets, [item.id]: !visible })} aria-label={visible ? 'Hide password' : 'Show password'} title={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-                    <button type="button" className="field-action" onClick={() => copyText('Secret', item.payload.password)} aria-label="Copy password" title="Copy password"><Copy size={18} /></button>
-                  </div>
-                </div>
-                {item.payload.notes && (
-                  <div className="app-field-block">
-                    <span className="app-field-label">Notes</span>
-                    <div className="app-value-field notes-field">
-                      <span className="app-field-value multiline">{item.payload.notes}</span>
-                      <button type="button" className="field-action" onClick={() => copyText('Notes', item.payload.notes)} aria-label="Copy notes" title="Copy notes"><Copy size={18} /></button>
+                    {item.payload.url && (
+                      <div className="app-field-block">
+                        <span className="app-field-label">Website / Link</span>
+                        <div className="app-value-field link-field">
+                          <a href={item.payload.url} target="_blank" rel="noreferrer">{item.payload.url}</a>
+                          <button type="button" className="field-action" onClick={() => copyText('URL', item.payload.url)} aria-label="Copy URL" title="Copy URL"><Copy size={18} /></button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="app-field-block">
+                      <span className="app-field-label">Username</span>
+                      <div className="app-value-field">
+                        <span className="app-field-value">{item.payload.username || '—'}</span>
+                        <button type="button" className="field-action" onClick={() => copyText('Username', item.payload.username)} aria-label="Copy username" title="Copy username"><Copy size={18} /></button>
+                      </div>
                     </div>
-                  </div>
-                )}
-                <p className="updated">Updated {new Date(item.updatedAt).toLocaleString()}</p>
-              </article>
-            );
-          })}
-          {!filteredItems.length && <div className="empty-state">No vault items match that search.</div>}
+                    <div className="app-field-block">
+                      <span className="app-field-label">Password</span>
+                      <div className="app-value-field secret-field">
+                        <span className="app-field-value">{visible ? item.payload.password || '—' : '••••••••••••••••'}</span>
+                        <button type="button" className="field-action" onClick={() => setShowSecrets({ ...showSecrets, [item.id]: !visible })} aria-label={visible ? 'Hide password' : 'Show password'} title={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                        <button type="button" className="field-action" onClick={() => copyText('Secret', item.payload.password)} aria-label="Copy password" title="Copy password"><Copy size={18} /></button>
+                      </div>
+                    </div>
+                    {item.payload.notes && (
+                      <div className="app-field-block">
+                        <span className="app-field-label">Notes</span>
+                        <div className="app-value-field notes-field">
+                          <span className="app-field-value multiline">{item.payload.notes}</span>
+                          <button type="button" className="field-action" onClick={() => copyText('Notes', item.payload.notes)} aria-label="Copy notes" title="Copy notes"><Copy size={18} /></button>
+                        </div>
+                      </div>
+                    )}
+                    <p className="updated">Updated {new Date(item.updatedAt).toLocaleString()}</p>
+                  </article>
+                );
+              })}
+              {!filteredItems.length && <div className="empty-state">No vault items match that search.</div>}
+            </section>
+          </section>
+        </>
+      ) : (
+        <section className="settings-page">
+          <div className="settings-header-card">
+            <p className="eyebrow">Settings</p>
+            <h2><Settings size={22} /> Vault Info & Account</h2>
+            <p>Backup, restore, account recovery and technical details live here so the vault home stays clean.</p>
+          </div>
+
+          <section className="status-grid settings-status-grid">
+            <article><KeyRound /><strong>{items.length}</strong><span>Items</span></article>
+            <article><Database /><strong>{dbStatus.connected ? 'Ready' : 'Checking'}</strong><span>Cloud backup</span></article>
+            <article><Cloud /><strong>{snapshotHistory.total || syncStatus.snapshotCount || 0}</strong><span>Backups</span></article>
+            <article><UserRoundCheck /><strong>{bootstrap.userId ? 'Ready' : 'Setup'}</strong><span>Account</span></article>
+          </section>
+
+          <section className="sync-panel">
+            <div className="sync-title">
+              <div><p className="eyebrow">Account and recovery</p><h2><Cloud size={21} /> Vault backup and restore</h2></div>
+              <div className="sync-actions">
+                <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check connection</button>
+                <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Backup history</button>
+                <button type="button" className="secondary-button" disabled={syncing} onClick={restoreCloudToThisDevice}><RefreshCw size={16} /> Restore backup</button>
+              </div>
+            </div>
+            <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
+            <div className={`account-status-card ${accountStatus.state}`}>
+              <div className="account-status-heading"><Phone size={18} /><strong>Account details</strong></div>
+              <span>{accountStatus.message}</span>
+              <small>Phone: {maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'not set'}{bootstrap.email ? ` · Email: ${maskEmail(bootstrap.email)}` : ''}</small>
+            </div>
+            <div className={`sync-status-card ${syncStatus.state}`}> 
+              <strong>{syncStatus.state === 'success' ? 'Cloud backup saved' : syncStatus.state === 'syncing' ? 'Backup in progress' : syncStatus.state === 'error' ? 'Backup needs attention' : syncStatus.state === 'warning' ? 'Backup warning' : 'Cloud backup status'}</strong>
+              <span>{syncStatus.message}</span>
+              {(syncStatus.lastSyncAt || syncStatus.snapshotCount) && <small>Last backup: {syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : 'Not backed up in this session'} · Items: {syncStatus.itemCount}</small>}
+            </div>
+            <div className={`device-status-card ${deviceStatus.state}`}>
+              <div className="device-status-heading"><MonitorSmartphone size={18} /><strong>This device</strong></div>
+              <span>{deviceStatus.label}</span>
+              <small>{deviceStatus.lastCloudCheckAt ? `Last checked: ${new Date(deviceStatus.lastCloudCheckAt).toLocaleString()}` : 'Not checked yet'}{deviceStatus.lastRestoreAt ? ` · Restored: ${new Date(deviceStatus.lastRestoreAt).toLocaleString()}` : ''}</small>
+            </div>
+            <div className="vault-security-info-card">
+              <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>Vault security and recovery</strong></div>
+              <div className="security-points">
+                <span>Local vault: secure copy saved on this device for fast daily unlock.</span>
+                <span>Cloud backup: secure backup for restore and device sync.</span>
+                <span>Phone/email: verifies your account on a new device.</span>
+                <span>Master password: opens your vault and is not saved by the app.</span>
+              </div>
+            </div>
+            <div className={`otp-foundation-card ${otpTest.status}`}>
+              <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>OTP recovery method</strong></div>
+              <p className="otp-guidance-note">{otpChannel === 'email' ? 'Choose how you would like to receive your one-time code. We will send a one-time code to your email.' : 'Choose how you would like to receive your one-time code. SMS verification is coming soon.'}</p>
+              <div className={`otp-channel-toggle premium-toggle ${otpChannel}`} role="tablist" aria-label="Choose OTP delivery method">
+                <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => setOtpChannel('email')}><Mail size={15} /> Email</button>
+                <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => setOtpChannel('sms')}><Phone size={15} /> SMS</button>
+              </div>
+              {otpTest.message && <div className={`otp-status-line ${otpTest.verified ? 'verified' : ''}`}>{otpTest.message}</div>}
+              {otpTest.code && <div className="test-code-box"><span>Recovery code</span><code>{otpTest.code}</code></div>}
+              <div className="otp-flow-row">
+                <button type="button" className="secondary-button otp-send-button" onClick={requestSelectedOtp} disabled={otpTest.status === 'requesting' || otpChannel === 'sms'}>{otpTest.status === 'requesting' ? 'Sending...' : (otpChannel === 'email' ? 'Send email OTP' : 'SMS coming soon')}</button>
+                <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
+                <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
+              </div>
+              {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Enter your master password to complete login or restore.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Enter master password</button></div>}
+            </div>
+            <div className="snapshot-history-card">
+              <div className="snapshot-history-title"><strong>Backup history</strong><span>{snapshotHistory.loading ? 'Loading...' : snapshotHistory.message}</span></div>
+              {!!snapshotHistory.snapshots.length && (
+                <div className="snapshot-list">
+                  {snapshotHistory.snapshots.map((snap) => (
+                    <div className="snapshot-row" key={snap.id}>
+                      <span>{snap.item_count} item(s)</span>
+                      <small>{new Date(snap.created_at).toLocaleString()}</small>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {message && <p className="message sync-message">{message}</p>}
+            <form className="bootstrap-grid" onSubmit={bootstrapAdmin}>
+              <label className="combined-phone-label">Mobile number
+                <div className="phone-combo-field">
+                  <CountryPicker countryCode={bootstrap.phoneCountryCode || '+254'} countryIso={bootstrap.phoneCountryIso || 'ke'} onChange={(country) => setBootstrap({ ...bootstrap, phoneCountryCode: country.code, phoneCountryIso: country.iso, phoneE164: buildPhoneE164(country.code, bootstrap.phoneNumber) })} />
+                  <input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" />
+                </div>
+              </label>
+              <label>Email<input type="email" value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
+              <label>Display name<input value={bootstrap.displayName} onChange={(e) => setBootstrap({ ...bootstrap, displayName: e.target.value })} /></label>
+              <label>Vault name<input value={bootstrap.tenantName} onChange={(e) => setBootstrap({ ...bootstrap, tenantName: e.target.value })} /></label>
+              <div className="button-stack">
+                <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Save account details</button>
+                <button type="button" className="secondary-button" disabled={syncing} onClick={syncEncryptedVault}><Cloud size={18} /> {syncing ? 'Backing up...' : 'Back up vault'}</button>
+              </div>
+            </form>
+          </section>
         </section>
-      </section>
+      )}
 
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <footer>{VERSION} · secure private vault</footer>
