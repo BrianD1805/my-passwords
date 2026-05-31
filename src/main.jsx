@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.015';
+const VERSION = 'My Passwords Ver-0.015A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -612,7 +612,7 @@ function App() {
   const [items, setItems] = useState([]);
   const [message, setMessage] = useState('');
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('All');
+  const [category, setCategory] = useState('');
   const [showSecrets, setShowSecrets] = useState({});
   const [showFormSecret, setShowFormSecret] = useState(false);
   const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false });
@@ -638,6 +638,7 @@ function App() {
   const [verifyOverlay, setVerifyOverlay] = useState({ visible: false, status: 'idle', title: '', message: '', focusMasterPassword: false });
   const [suppressUnlockAutofocus, setSuppressUnlockAutofocus] = useState(false);
   const [activePage, setActivePage] = useState('home');
+  const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
@@ -1059,11 +1060,17 @@ function App() {
     event.preventDefault();
     if (!form.title.trim()) return showMessage(editingItemId ? 'Add a title before updating this item.' : 'Add a title first.');
 
+    const notesValue = form.category === 'Checklists' ? normaliseChecklistNotes(form.notes) : form.notes.trim();
     const itemPayload = {
       title: form.title.trim(),
       category: form.category,
       favourite: !!form.favourite,
-      payload: { url: form.url.trim(), username: form.username.trim(), password: form.password, notes: form.notes.trim() },
+      payload: {
+        url: form.url.trim(),
+        username: ['Notes', 'Checklists'].includes(form.category) ? '' : form.username.trim(),
+        password: ['Notes', 'Checklists'].includes(form.category) ? '' : form.password,
+        notes: notesValue
+      },
       updatedAt: new Date().toISOString()
     };
 
@@ -1108,8 +1115,8 @@ function App() {
       favourite: !!item.favourite
     });
     setShowFormSecret(false);
-    setCategory(item.category || 'All');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setCategory(item.category || '');
+    setIsItemPopupOpen(true);
     showMessage(`Editing ${item.title || 'selected item'}. Save changes or cancel edit.`);
   }
 
@@ -1118,6 +1125,7 @@ function App() {
     setEditingItemId('');
     setForm(emptyForm(keepCategory));
     setShowFormSecret(false);
+    setIsItemPopupOpen(false);
     showMessage('Edit cancelled. No changes were saved.');
   }
 
@@ -1298,26 +1306,91 @@ function App() {
   }
 
   const filteredItems = useMemo(() => {
+    const activeSearch = query.trim().toLowerCase();
+    const hasFolder = Boolean(category);
+    if (!activeSearch && !hasFolder) return [];
     return items.filter((item) => {
-      const text = `${item.title} ${item.category} ${item.payload.url} ${item.payload.username} ${item.payload.notes}`.toLowerCase();
-      return text.includes(query.toLowerCase()) && (category === 'All' || item.category === category);
+      const text = `${item.title} ${item.category} ${item.payload?.url || ''} ${item.payload?.username || ''} ${item.payload?.notes || ''}`.toLowerCase();
+      const matchesSearch = activeSearch ? text.includes(activeSearch) : true;
+      const matchesFolder = !category ? true : category === 'Favourites' ? item.favourite : item.category === category;
+      return matchesSearch && matchesFolder;
     }).sort((a, b) => Number(b.favourite) - Number(a.favourite) || new Date(b.updatedAt) - new Date(a.updatedAt));
   }, [items, query, category]);
 
-  const vaultSections = useMemo(() => {
-    return categories
-      .filter((cat) => cat !== 'All')
-      .map((cat) => ({
-        name: cat,
-        count: items.filter((item) => item.category === cat).length,
-        favourites: items.filter((item) => item.category === cat && item.favourite).length
-      }));
+  const folderChips = useMemo(() => {
+    const normalCategories = categories.filter((cat) => cat !== 'All');
+    return [
+      { name: 'Favourites', count: items.filter((item) => item.favourite).length, favourite: true },
+      ...normalCategories.map((cat) => ({ name: cat, count: items.filter((item) => item.category === cat).length, favourite: false }))
+    ];
   }, [items]);
+
+  const hasActiveVaultFilter = Boolean(query.trim() || category);
 
   function openVaultSection(cat) {
     setCategory(cat);
     setActivePage('home');
     window.setTimeout(() => document.getElementById('vault-list-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  }
+
+  function openAddItem() {
+    const preferredCategory = category && category !== 'Favourites' ? category : 'Passwords';
+    setEditingItemId('');
+    setForm(emptyForm(preferredCategory));
+    setShowFormSecret(false);
+    setIsItemPopupOpen(true);
+  }
+
+  function closeItemPopup() {
+    if (editingItemId) cancelEdit();
+    else {
+      setForm(emptyForm(form.category));
+      setShowFormSecret(false);
+      setIsItemPopupOpen(false);
+    }
+  }
+
+  function normaliseChecklistNotes(notes) {
+    return String(notes || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => /^\[(x|X| )\]\s*/.test(line) ? line.replace(/^\[X\]/, '[x]') : `[ ] ${line}`)
+      .join('\n');
+  }
+
+  function parseChecklistNotes(notes) {
+    return String(notes || '')
+      .split(/\r?\n/)
+      .map((line, index) => {
+        const trimmed = line.trim();
+        const match = trimmed.match(/^\[(x|X| )\]\s*(.*)$/);
+        return { index, done: match ? match[1].toLowerCase() === 'x' : false, text: match ? match[2] : trimmed };
+      })
+      .filter((item) => item.text.trim())
+      .sort((a, b) => Number(a.done) - Number(b.done));
+  }
+
+  async function toggleChecklistLine(item, originalIndex) {
+    const lines = String(item.payload?.notes || '').split(/\r?\n/);
+    const current = lines[originalIndex] || '';
+    const match = current.trim().match(/^\[(x|X| )\]\s*(.*)$/);
+    const text = match ? match[2] : current.trim();
+    const isDone = match ? match[1].toLowerCase() === 'x' : false;
+    lines[originalIndex] = `${isDone ? '[ ]' : '[x]'} ${text}`;
+    const sorted = lines
+      .map((line) => {
+        const trimmed = line.trim();
+        const m = trimmed.match(/^\[(x|X| )\]\s*(.*)$/);
+        return { done: m ? m[1].toLowerCase() === 'x' : false, text: m ? m[2] : trimmed };
+      })
+      .filter((row) => row.text)
+      .sort((a, b) => Number(a.done) - Number(b.done))
+      .map((row) => `${row.done ? '[x]' : '[ ]'} ${row.text}`)
+      .join('\n');
+    const next = items.map((vaultItem) => vaultItem.id === item.id ? { ...vaultItem, payload: { ...vaultItem.payload, notes: sorted }, updatedAt: new Date().toISOString() } : vaultItem);
+    await saveItems(next, { autoSync: true, silentAutoSync: true });
+    showMessage('Checklist updated.');
   }
 
   if (locked) {
@@ -1400,101 +1473,127 @@ function App() {
         <>
           <section className="home-search-panel">
             <div className="search-box hero-search"><Search size={19} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your vault" /></div>
+            <div className="chip-row vault-folder-row" id="vault-list-section">
+              {folderChips.map((folder) => (
+                <button key={folder.name} className={folder.name === category ? 'chip active' : 'chip'} onClick={() => openVaultSection(folder.name)}>
+                  {folder.favourite && <Star size={15} fill="currentColor" />} {folder.name}
+                  <span className="chip-count">{folder.count}</span>
+                </button>
+              ))}
+            </div>
             <div className="home-quick-summary">
               <span><strong>{items.length}</strong> saved item{items.length === 1 ? '' : 's'}</span>
               <span><strong>{items.filter((item) => item.favourite).length}</strong> favourite{items.filter((item) => item.favourite).length === 1 ? '' : 's'}</span>
             </div>
           </section>
 
-          <section className="vault-section-grid" aria-label="Vault sections">
-            {vaultSections.map((section) => (
-              <button type="button" key={section.name} className={category === section.name ? 'vault-section-card active' : 'vault-section-card'} onClick={() => openVaultSection(section.name)}>
-                <span className="section-card-name">{section.name}</span>
-                <span className="section-card-count">{section.count}</span>
-                {section.favourites > 0 && <span className="section-card-favs"><Star size={13} fill="currentColor" /> {section.favourites}</span>}
-              </button>
-            ))}
-          </section>
+          <button type="button" className="floating-add-button" onClick={openAddItem} aria-label="Add item" title="Add item"><Plus size={28} /></button>
 
-          <section className="controls-panel compact-controls" id="vault-list-section">
-            <div className="chip-row">{categories.map((cat) => <button key={cat} className={cat === category ? 'chip active' : 'chip'} onClick={() => setCategory(cat)}>{cat}</button>)}</div>
-          </section>
-
-          <section className="main-grid">
-            <form className={editingItemId ? "item-form edit-mode" : "item-form"} onSubmit={saveItem}>
-              <h2>{editingItemId ? <Pencil size={20} /> : <Plus size={20} />} {editingItemId ? 'Edit item' : 'Add item'}</h2>
-              <p className="form-helper">{editingItemId ? 'Update the saved details, then save your changes.' : 'Save a new secure item in your vault.'}</p>
-              {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
-              <label>Category<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categories.filter((cat) => cat !== 'All').map((cat) => <option key={cat}>{cat}</option>)}</select></label>
-              <label>Title<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={activeHint.title} /></label>
-              <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>
-              <label>Username / Reference<input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder={activeHint.username} /></label>
-              <label>Password / Secret
-                <div className="secret-input-row">
-                  <input type={showFormSecret ? 'text' : 'password'} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={activeHint.secret} />
-                  <button type="button" className="mini-button" onClick={() => setShowFormSecret(!showFormSecret)}>{showFormSecret ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+          {isItemPopupOpen && (
+            <div className="item-popup-layer" role="dialog" aria-modal="true" aria-label={editingItemId ? 'Edit item' : 'Add item'}>
+              <button type="button" className="item-popup-backdrop" onClick={closeItemPopup} aria-label="Close add item popup" />
+              <form className={editingItemId ? "item-form item-popup-card edit-mode" : "item-form item-popup-card"} onSubmit={saveItem}>
+                <div className="item-popup-header">
+                  <h2>{editingItemId ? <Pencil size={20} /> : <Plus size={20} />} {editingItemId ? 'Edit item' : 'Add item'}</h2>
+                  <button type="button" className="icon-button" onClick={closeItemPopup} aria-label="Close"><X size={18} /></button>
                 </div>
-              </label>
-              <label>Notes / Checklist<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
-              <label className="favourite-toggle"><input type="checkbox" checked={form.favourite} onChange={(e) => setForm({ ...form, favourite: e.target.checked })} /> Mark as favourite</label>
-              <div className="form-buttons">
-                <button type="submit" className="primary-button"><ShieldCheck size={18} /> {editingItemId ? 'Save updated item' : 'Save encrypted item'}</button>
-                <button type="button" className="secondary-button" onClick={clearForm}>{editingItemId ? <><X size={16} /> Cancel edit</> : 'Clear'}</button>
-              </div>
-            </form>
+                <p className="form-helper">{editingItemId ? 'Update the saved details, then save your changes.' : 'Save a new secure item in your vault.'}</p>
+                {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
+                <label>Category<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, username: ['Notes', 'Checklists'].includes(e.target.value) ? '' : form.username, password: ['Notes', 'Checklists'].includes(e.target.value) ? '' : form.password })}>{categories.filter((cat) => cat !== 'All').map((cat) => <option key={cat}>{cat}</option>)}</select></label>
+                <label>Title<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={activeHint.title} /></label>
+                {form.category !== 'Checklists' && <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>}
+                {!['Notes', 'Checklists'].includes(form.category) && (
+                  <>
+                    <label>Username / Reference<input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder={activeHint.username} /></label>
+                    <label>Password / Secret
+                      <div className="secret-input-row">
+                        <input type={showFormSecret ? 'text' : 'password'} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={activeHint.secret} />
+                        <button type="button" className="mini-button" onClick={() => setShowFormSecret(!showFormSecret)}>{showFormSecret ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+                      </div>
+                    </label>
+                  </>
+                )}
+                <label>{form.category === 'Checklists' ? 'Checklist items' : 'Notes'}<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
+                <label className="favourite-toggle"><input type="checkbox" checked={form.favourite} onChange={(e) => setForm({ ...form, favourite: e.target.checked })} /> Mark as favourite</label>
+                <div className="form-buttons">
+                  <button type="submit" className="primary-button"><ShieldCheck size={18} /> {editingItemId ? 'Save updated item' : 'Save encrypted item'}</button>
+                  <button type="button" className="secondary-button" onClick={closeItemPopup}>{editingItemId ? <><X size={16} /> Cancel edit</> : 'Cancel'}</button>
+                </div>
+              </form>
+            </div>
+          )}
 
-            <section className="vault-list">
-              {filteredItems.map((item) => {
-                const visible = !!showSecrets[item.id];
-                return (
-                  <article className={item.favourite ? 'vault-card favourite-card' : 'vault-card'} key={item.id}>
-                    <div className="card-title-row">
-                      <div><span className="category-pill">{item.category}</span><h3>{item.favourite && <Star size={17} fill="currentColor" />} {item.title}</h3></div>
-                      <div className="card-actions">
-                        <button className="icon-button" onClick={() => startEditItem(item)} title="Edit item"><Pencil size={17} /></button>
-                        <button className="icon-button" onClick={() => toggleFavourite(item.id)} title="Toggle favourite"><Star size={17} fill={item.favourite ? 'currentColor' : 'none'} /></button>
-                        <button className="icon-button danger" onClick={() => deleteItem(item.id)} title="Delete"><Trash2 size={17} /></button>
+          <section className="vault-list full-vault-list">
+            {!hasActiveVaultFilter && <div className="empty-state">Search your vault or choose a folder to view saved items.</div>}
+            {hasActiveVaultFilter && filteredItems.map((item) => {
+              const visible = !!showSecrets[item.id];
+              const isNote = item.category === 'Notes';
+              const isChecklist = item.category === 'Checklists';
+              const checklistRows = isChecklist ? parseChecklistNotes(item.payload.notes) : [];
+              return (
+                <article className={item.favourite ? 'vault-card favourite-card' : 'vault-card'} key={item.id}>
+                  <div className="card-title-row">
+                    <div><span className="category-pill">{item.category}</span><h3>{item.favourite && <Star size={17} fill="currentColor" />} {item.title}</h3></div>
+                    <div className="card-actions">
+                      <button className="icon-button" onClick={() => startEditItem(item)} title="Edit item"><Pencil size={17} /></button>
+                      <button className="icon-button" onClick={() => toggleFavourite(item.id)} title="Toggle favourite"><Star size={17} fill={item.favourite ? 'currentColor' : 'none'} /></button>
+                      <button className="icon-button danger" onClick={() => deleteItem(item.id)} title="Delete"><Trash2 size={17} /></button>
+                    </div>
+                  </div>
+                  {item.payload.url && !isChecklist && (
+                    <div className="app-field-block">
+                      <span className="app-field-label">Website / Link</span>
+                      <div className="app-value-field link-field">
+                        <a href={item.payload.url} target="_blank" rel="noreferrer">{item.payload.url}</a>
+                        <button type="button" className="field-action" onClick={() => copyText('URL', item.payload.url)} aria-label="Copy URL" title="Copy URL"><Copy size={18} /></button>
                       </div>
                     </div>
-                    {item.payload.url && (
+                  )}
+                  {!isNote && !isChecklist && (
+                    <>
                       <div className="app-field-block">
-                        <span className="app-field-label">Website / Link</span>
-                        <div className="app-value-field link-field">
-                          <a href={item.payload.url} target="_blank" rel="noreferrer">{item.payload.url}</a>
-                          <button type="button" className="field-action" onClick={() => copyText('URL', item.payload.url)} aria-label="Copy URL" title="Copy URL"><Copy size={18} /></button>
+                        <span className="app-field-label">Username</span>
+                        <div className="app-value-field">
+                          <span className="app-field-value">{item.payload.username || '—'}</span>
+                          <button type="button" className="field-action" onClick={() => copyText('Username', item.payload.username)} aria-label="Copy username" title="Copy username"><Copy size={18} /></button>
                         </div>
                       </div>
-                    )}
-                    <div className="app-field-block">
-                      <span className="app-field-label">Username</span>
-                      <div className="app-value-field">
-                        <span className="app-field-value">{item.payload.username || '—'}</span>
-                        <button type="button" className="field-action" onClick={() => copyText('Username', item.payload.username)} aria-label="Copy username" title="Copy username"><Copy size={18} /></button>
-                      </div>
-                    </div>
-                    <div className="app-field-block">
-                      <span className="app-field-label">Password</span>
-                      <div className="app-value-field secret-field">
-                        <span className="app-field-value">{visible ? item.payload.password || '—' : '••••••••••••••••'}</span>
-                        <button type="button" className="field-action" onClick={() => setShowSecrets({ ...showSecrets, [item.id]: !visible })} aria-label={visible ? 'Hide password' : 'Show password'} title={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-                        <button type="button" className="field-action" onClick={() => copyText('Secret', item.payload.password)} aria-label="Copy password" title="Copy password"><Copy size={18} /></button>
-                      </div>
-                    </div>
-                    {item.payload.notes && (
                       <div className="app-field-block">
-                        <span className="app-field-label">Notes</span>
-                        <div className="app-value-field notes-field">
-                          <span className="app-field-value multiline">{item.payload.notes}</span>
-                          <button type="button" className="field-action" onClick={() => copyText('Notes', item.payload.notes)} aria-label="Copy notes" title="Copy notes"><Copy size={18} /></button>
+                        <span className="app-field-label">Password</span>
+                        <div className="app-value-field secret-field">
+                          <span className="app-field-value">{visible ? item.payload.password || '—' : '••••••••••••••••'}</span>
+                          <button type="button" className="field-action" onClick={() => setShowSecrets({ ...showSecrets, [item.id]: !visible })} aria-label={visible ? 'Hide password' : 'Show password'} title={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                          <button type="button" className="field-action" onClick={() => copyText('Secret', item.payload.password)} aria-label="Copy password" title="Copy password"><Copy size={18} /></button>
                         </div>
                       </div>
-                    )}
-                    <p className="updated">Updated {new Date(item.updatedAt).toLocaleString()}</p>
-                  </article>
-                );
-              })}
-              {!filteredItems.length && <div className="empty-state">No vault items match that search.</div>}
-            </section>
+                    </>
+                  )}
+                  {isChecklist ? (
+                    <div className="app-field-block">
+                      <span className="app-field-label">Checklist</span>
+                      <div className="checklist-display">
+                        {checklistRows.length ? checklistRows.map((row) => (
+                          <button type="button" key={`${item.id}-${row.index}-${row.text}`} className={row.done ? 'checklist-line done' : 'checklist-line'} onClick={() => toggleChecklistLine(item, row.index)}>
+                            <span className="check-box">{row.done ? '✓' : ''}</span>
+                            <span>{row.text}</span>
+                          </button>
+                        )) : <span className="app-field-value">No checklist items yet.</span>}
+                      </div>
+                    </div>
+                  ) : item.payload.notes && (
+                    <div className="app-field-block">
+                      <span className="app-field-label">Notes</span>
+                      <div className="app-value-field notes-field">
+                        <span className="app-field-value multiline">{item.payload.notes}</span>
+                        <button type="button" className="field-action" onClick={() => copyText('Notes', item.payload.notes)} aria-label="Copy notes" title="Copy notes"><Copy size={18} /></button>
+                      </div>
+                    </div>
+                  )}
+                  <p className="updated">Updated {new Date(item.updatedAt).toLocaleString()}</p>
+                </article>
+              );
+            })}
+            {hasActiveVaultFilter && !filteredItems.length && <div className="empty-state">No vault items match that search or folder.</div>}
           </section>
         </>
       ) : (
