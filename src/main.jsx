@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.015A';
+const VERSION = 'My Passwords Ver-0.015B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -704,6 +704,11 @@ function App() {
     localStorage.setItem(BOOTSTRAP_KEY, JSON.stringify(account));
     localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account));
   }, [bootstrap]);
+
+  useEffect(() => {
+    document.body.classList.toggle('app-popup-open', isItemPopupOpen);
+    return () => document.body.classList.remove('app-popup-open');
+  }, [isItemPopupOpen]);
 
   async function fetchLatestCloudSnapshot(account = bootstrap) {
     if (!account.tenantId || !account.userId) return { ok: false, hasSnapshot: false, message: 'Account identity is not verified on this device yet.' };
@@ -1497,8 +1502,9 @@ function App() {
                   <h2>{editingItemId ? <Pencil size={20} /> : <Plus size={20} />} {editingItemId ? 'Edit item' : 'Add item'}</h2>
                   <button type="button" className="icon-button" onClick={closeItemPopup} aria-label="Close"><X size={18} /></button>
                 </div>
-                <p className="form-helper">{editingItemId ? 'Update the saved details, then save your changes.' : 'Save a new secure item in your vault.'}</p>
-                {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
+                <div className="item-popup-body">
+                  <p className="form-helper">{editingItemId ? 'Update the saved details, then save your changes.' : 'Save a new secure item in your vault.'}</p>
+                  {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
                 <label>Category<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, username: ['Notes', 'Checklists'].includes(e.target.value) ? '' : form.username, password: ['Notes', 'Checklists'].includes(e.target.value) ? '' : form.password })}>{categories.filter((cat) => cat !== 'All').map((cat) => <option key={cat}>{cat}</option>)}</select></label>
                 <label>Title<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={activeHint.title} /></label>
                 {form.category !== 'Checklists' && <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>}
@@ -1515,7 +1521,8 @@ function App() {
                 )}
                 <label>{form.category === 'Checklists' ? 'Checklist items' : 'Notes'}<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
                 <label className="favourite-toggle"><input type="checkbox" checked={form.favourite} onChange={(e) => setForm({ ...form, favourite: e.target.checked })} /> Mark as favourite</label>
-                <div className="form-buttons">
+                </div>
+                <div className="item-popup-footer form-buttons">
                   <button type="submit" className="primary-button"><ShieldCheck size={18} /> {editingItemId ? 'Save updated item' : 'Save encrypted item'}</button>
                   <button type="button" className="secondary-button" onClick={closeItemPopup}>{editingItemId ? <><X size={16} /> Cancel edit</> : 'Cancel'}</button>
                 </div>
