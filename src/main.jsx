@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, Upload, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.020';
+const VERSION = 'My Passwords Ver-0.020A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -125,11 +125,27 @@ const starterItems = [
 ];
 
 function arrayBufferToBase64(buffer) {
-  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
 }
 
 function base64ToArrayBuffer(base64) {
-  return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0)).buffer;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  const chunkSize = 0x8000;
+  for (let index = 0; index < binary.length; index += chunkSize) {
+    const end = Math.min(index + chunkSize, binary.length);
+    for (let offset = index; offset < end; offset += 1) {
+      bytes[offset] = binary.charCodeAt(offset);
+    }
+  }
+  return bytes.buffer;
 }
 
 async function deriveKey(masterPassword, saltBase64) {
