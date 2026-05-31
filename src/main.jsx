@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Cloud, Copy, Database, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
+import { Cloud, Copy, Database, ExternalLink, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.015B';
+const VERSION = 'My Passwords Ver-0.016';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -639,6 +639,7 @@ function App() {
   const [suppressUnlockAutofocus, setSuppressUnlockAutofocus] = useState(false);
   const [activePage, setActivePage] = useState('home');
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
+  const [viewItemId, setViewItemId] = useState('');
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
@@ -706,9 +707,9 @@ function App() {
   }, [bootstrap]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-popup-open', isItemPopupOpen);
+    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId));
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen]);
+  }, [isItemPopupOpen, viewItemId]);
 
   async function fetchLatestCloudSnapshot(account = bootstrap) {
     if (!account.tenantId || !account.userId) return { ok: false, hasSnapshot: false, message: 'Account identity is not verified on this device yet.' };
@@ -1091,6 +1092,8 @@ function App() {
       setEditingItemId('');
       setForm(emptyForm(editedCategory));
       setShowFormSecret(false);
+      setIsItemPopupOpen(false);
+      setViewItemId(editingItemId);
       showMessage(bootstrap.tenantId && bootstrap.userId ? 'Item updated and backup requested.' : 'Item updated. Save your account details to enable cloud backup.');
       return;
     }
@@ -1105,6 +1108,7 @@ function App() {
     await saveItems(next, { autoSync: true });
     setForm(emptyForm(form.category));
     setShowFormSecret(false);
+    setIsItemPopupOpen(false);
     showMessage(bootstrap.tenantId && bootstrap.userId ? 'Item saved and backup requested.' : 'Item saved. Save your account details to enable cloud backup.');
   }
 
@@ -1121,6 +1125,7 @@ function App() {
     });
     setShowFormSecret(false);
     setCategory(item.category || '');
+    setViewItemId('');
     setIsItemPopupOpen(true);
     showMessage(`Editing ${item.title || 'selected item'}. Save changes or cancel edit.`);
   }
@@ -1135,6 +1140,7 @@ function App() {
   }
 
   async function deleteItem(id) {
+    if (viewItemId === id) setViewItemId('');
     await saveItems(items.filter((item) => item.id !== id), { autoSync: true });
     showMessage(bootstrap.tenantId && bootstrap.userId ? 'Item deleted and backup requested.' : 'Item deleted. Save your account details to enable cloud backup.');
   }
@@ -1331,6 +1337,7 @@ function App() {
   }, [items]);
 
   const hasActiveVaultFilter = Boolean(query.trim() || category);
+  const viewedItem = viewItemId ? items.find((item) => item.id === viewItemId) : null;
 
   function openVaultSection(cat) {
     setCategory(cat);
@@ -1353,6 +1360,20 @@ function App() {
       setShowFormSecret(false);
       setIsItemPopupOpen(false);
     }
+  }
+
+  function openViewItem(item) {
+    setViewItemId(item.id);
+    setShowSecrets((current) => ({ ...current, [item.id]: false }));
+  }
+
+  function closeViewItem() {
+    setViewItemId('');
+  }
+
+  function editViewedItem(item) {
+    closeViewItem();
+    startEditItem(item);
   }
 
   function normaliseChecklistNotes(notes) {
@@ -1530,76 +1551,18 @@ function App() {
             </div>
           )}
 
-          <section className="vault-list full-vault-list">
+          <section className="vault-results-panel full-vault-list">
             {!hasActiveVaultFilter && <div className="empty-state">Search your vault or choose a folder to view saved items.</div>}
-            {hasActiveVaultFilter && filteredItems.map((item) => {
-              const visible = !!showSecrets[item.id];
-              const isNote = item.category === 'Notes';
-              const isChecklist = item.category === 'Checklists';
-              const checklistRows = isChecklist ? parseChecklistNotes(item.payload.notes) : [];
-              return (
-                <article className={item.favourite ? 'vault-card favourite-card' : 'vault-card'} key={item.id}>
-                  <div className="card-title-row">
-                    <div><span className="category-pill">{item.category}</span><h3>{item.favourite && <Star size={17} fill="currentColor" />} {item.title}</h3></div>
-                    <div className="card-actions">
-                      <button className="icon-button" onClick={() => startEditItem(item)} title="Edit item"><Pencil size={17} /></button>
-                      <button className="icon-button" onClick={() => toggleFavourite(item.id)} title="Toggle favourite"><Star size={17} fill={item.favourite ? 'currentColor' : 'none'} /></button>
-                      <button className="icon-button danger" onClick={() => deleteItem(item.id)} title="Delete"><Trash2 size={17} /></button>
-                    </div>
-                  </div>
-                  {item.payload.url && !isChecklist && (
-                    <div className="app-field-block">
-                      <span className="app-field-label">Website / Link</span>
-                      <div className="app-value-field link-field">
-                        <a href={item.payload.url} target="_blank" rel="noreferrer">{item.payload.url}</a>
-                        <button type="button" className="field-action" onClick={() => copyText('URL', item.payload.url)} aria-label="Copy URL" title="Copy URL"><Copy size={18} /></button>
-                      </div>
-                    </div>
-                  )}
-                  {!isNote && !isChecklist && (
-                    <>
-                      <div className="app-field-block">
-                        <span className="app-field-label">Username</span>
-                        <div className="app-value-field">
-                          <span className="app-field-value">{item.payload.username || '—'}</span>
-                          <button type="button" className="field-action" onClick={() => copyText('Username', item.payload.username)} aria-label="Copy username" title="Copy username"><Copy size={18} /></button>
-                        </div>
-                      </div>
-                      <div className="app-field-block">
-                        <span className="app-field-label">Password</span>
-                        <div className="app-value-field secret-field">
-                          <span className="app-field-value">{visible ? item.payload.password || '—' : '••••••••••••••••'}</span>
-                          <button type="button" className="field-action" onClick={() => setShowSecrets({ ...showSecrets, [item.id]: !visible })} aria-label={visible ? 'Hide password' : 'Show password'} title={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-                          <button type="button" className="field-action" onClick={() => copyText('Secret', item.payload.password)} aria-label="Copy password" title="Copy password"><Copy size={18} /></button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                  {isChecklist ? (
-                    <div className="app-field-block">
-                      <span className="app-field-label">Checklist</span>
-                      <div className="checklist-display">
-                        {checklistRows.length ? checklistRows.map((row) => (
-                          <button type="button" key={`${item.id}-${row.index}-${row.text}`} className={row.done ? 'checklist-line done' : 'checklist-line'} onClick={() => toggleChecklistLine(item, row.index)}>
-                            <span className="check-box">{row.done ? '✓' : ''}</span>
-                            <span>{row.text}</span>
-                          </button>
-                        )) : <span className="app-field-value">No checklist items yet.</span>}
-                      </div>
-                    </div>
-                  ) : item.payload.notes && (
-                    <div className="app-field-block">
-                      <span className="app-field-label">Notes</span>
-                      <div className="app-value-field notes-field">
-                        <span className="app-field-value multiline">{item.payload.notes}</span>
-                        <button type="button" className="field-action" onClick={() => copyText('Notes', item.payload.notes)} aria-label="Copy notes" title="Copy notes"><Copy size={18} /></button>
-                      </div>
-                    </div>
-                  )}
-                  <p className="updated">Updated {new Date(item.updatedAt).toLocaleString()}</p>
-                </article>
-              );
-            })}
+            {hasActiveVaultFilter && !!filteredItems.length && (
+              <div className="vault-result-list" aria-label="Vault results">
+                {filteredItems.map((item) => (
+                  <button type="button" className="vault-result-row" key={item.id} onClick={() => openViewItem(item)} title={`Open ${item.title}`}>
+                    <span className="vault-result-name">{item.title}</span>
+                    <span className="vault-result-open" aria-hidden="true"><ExternalLink size={17} /></span>
+                  </button>
+                ))}
+              </div>
+            )}
             {hasActiveVaultFilter && !filteredItems.length && <div className="empty-state">No vault items match that search or folder.</div>}
           </section>
         </>
@@ -1699,6 +1662,91 @@ function App() {
             </form>
           </section>
         </section>
+      )}
+
+
+      {viewedItem && (
+        <div className="item-popup-layer" role="dialog" aria-modal="true" aria-label="View vault item">
+          <button type="button" className="item-popup-backdrop" onClick={closeViewItem} aria-label="Close item popup" />
+          <article className="item-popup-card view-item-popup-card">
+            <div className="item-popup-header">
+              <h2><ShieldCheck size={20} /> {viewedItem.title}</h2>
+              <button type="button" className="icon-button" onClick={closeViewItem} aria-label="Close"><X size={18} /></button>
+            </div>
+            <div className="item-popup-body">
+              <div className="view-item-meta">
+                <span className="category-pill">{viewedItem.category}</span>
+                {viewedItem.favourite && <span className="category-pill favourite-mini"><Star size={14} fill="currentColor" /> Favourite</span>}
+              </div>
+              {(() => {
+                const visible = !!showSecrets[viewedItem.id];
+                const isNote = viewedItem.category === 'Notes';
+                const isChecklist = viewedItem.category === 'Checklists';
+                const checklistRows = isChecklist ? parseChecklistNotes(viewedItem.payload?.notes) : [];
+                return (
+                  <>
+                    {viewedItem.payload?.url && !isChecklist && (
+                      <div className="app-field-block">
+                        <span className="app-field-label">Website / Link</span>
+                        <div className="app-value-field link-field">
+                          <a href={viewedItem.payload.url} target="_blank" rel="noreferrer">{viewedItem.payload.url}</a>
+                          <button type="button" className="field-action" onClick={() => copyText('URL', viewedItem.payload.url)} aria-label="Copy URL" title="Copy URL"><Copy size={18} /></button>
+                        </div>
+                      </div>
+                    )}
+                    {!isNote && !isChecklist && (
+                      <>
+                        <div className="app-field-block">
+                          <span className="app-field-label">Username</span>
+                          <div className="app-value-field">
+                            <span className="app-field-value">{viewedItem.payload?.username || '—'}</span>
+                            <button type="button" className="field-action" onClick={() => copyText('Username', viewedItem.payload?.username)} aria-label="Copy username" title="Copy username"><Copy size={18} /></button>
+                          </div>
+                        </div>
+                        <div className="app-field-block">
+                          <span className="app-field-label">Password</span>
+                          <div className="app-value-field secret-field">
+                            <span className="app-field-value">{visible ? viewedItem.payload?.password || '—' : '••••••••••••••••'}</span>
+                            <button type="button" className="field-action" onClick={() => setShowSecrets({ ...showSecrets, [viewedItem.id]: !visible })} aria-label={visible ? 'Hide password' : 'Show password'} title={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                            <button type="button" className="field-action" onClick={() => copyText('Secret', viewedItem.payload?.password)} aria-label="Copy password" title="Copy password"><Copy size={18} /></button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {isChecklist ? (
+                      <div className="app-field-block">
+                        <span className="app-field-label">Checklist</span>
+                        <div className="checklist-display">
+                          {checklistRows.length ? checklistRows.map((row) => (
+                            <button type="button" key={`${viewedItem.id}-${row.index}-${row.text}`} className={row.done ? 'checklist-line done' : 'checklist-line'} onClick={() => toggleChecklistLine(viewedItem, row.index)}>
+                              <span className="check-box">{row.done ? '✓' : ''}</span>
+                              <span>{row.text}</span>
+                            </button>
+                          )) : <span className="app-field-value">No checklist items yet.</span>}
+                        </div>
+                      </div>
+                    ) : viewedItem.payload?.notes && (
+                      <div className="app-field-block">
+                        <span className="app-field-label">Notes</span>
+                        <div className="app-value-field notes-field">
+                          <span className="app-field-value multiline">{viewedItem.payload.notes}</span>
+                          <button type="button" className="field-action" onClick={() => copyText('Notes', viewedItem.payload.notes)} aria-label="Copy notes" title="Copy notes"><Copy size={18} /></button>
+                        </div>
+                      </div>
+                    )}
+                    <p className="updated">Updated {new Date(viewedItem.updatedAt).toLocaleString()}</p>
+                  </>
+                );
+              })()}
+            </div>
+            <div className="item-popup-footer view-item-footer">
+              <button type="button" className="secondary-button" onClick={() => editViewedItem(viewedItem)}><Pencil size={16} /> Edit</button>
+              <button type="button" className="secondary-button" onClick={() => toggleFavourite(viewedItem.id)}><Star size={16} fill={viewedItem.favourite ? 'currentColor' : 'none'} /> {viewedItem.favourite ? 'Unfavourite' : 'Favourite'}</button>
+              <button type="button" className="secondary-button danger-soft" onClick={() => deleteItem(viewedItem.id)}><Trash2 size={16} /> Delete</button>
+              <button type="button" className="primary-button" onClick={closeViewItem}>Done</button>
+            </div>
+          </article>
+        </div>
       )}
 
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />

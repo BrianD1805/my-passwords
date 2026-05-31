@@ -2824,3 +2824,123 @@ body.app-popup-open {
     grid-template-columns: 1fr;
   }
 }
+
+/* Ver-0.016 generated result list and item view popup */
+.vault-results-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.vault-result-list {
+  display: grid;
+  gap: 10px;
+}
+
+.vault-result-row {
+  width: 100%;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  border-radius: 20px;
+  padding: 12px 14px 12px 18px;
+  background: rgba(255,255,255,0.94);
+  border: 1px solid rgba(29,53,87,0.10);
+  color: #17283d;
+  box-shadow: 0 12px 32px rgba(29,53,87,0.07);
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.vault-result-row:hover,
+.vault-result-row:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(29,95,144,0.26);
+  box-shadow: 0 16px 38px rgba(29,53,87,0.11);
+  outline: none;
+}
+
+.vault-result-name {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.3;
+  font-size: 1.02rem;
+  font-weight: 760;
+}
+
+.vault-result-open {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #f1f6fa;
+  color: #315d7e;
+  border: 1px solid rgba(49,93,126,0.12);
+}
+
+.view-item-popup-card {
+  width: min(640px, 100%);
+}
+
+.view-item-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.favourite-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #fff6db;
+  color: #74530b;
+}
+
+.view-item-footer {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.view-item-footer .primary-button {
+  justify-self: end;
+}
+
+.danger-soft {
+  color: #9a342f;
+  background: #fff4f2;
+  border-color: #f0c1bd;
+}
+
+@media (max-width: 860px) {
+  .vault-result-row {
+    min-height: 60px;
+    border-radius: 18px;
+    padding: 11px 12px 11px 15px;
+  }
+
+  .vault-result-name {
+    font-size: .98rem;
+  }
+
+  .vault-result-open {
+    width: 38px;
+    height: 38px;
+    border-radius: 13px;
+  }
+
+  .view-item-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .view-item-footer .primary-button {
+    justify-self: stretch;
+  }
+}
