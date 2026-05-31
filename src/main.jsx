@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Cloud, Copy, Database, ExternalLink, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
+import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, Upload, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.018B';
+const VERSION = 'My Passwords Ver-0.019';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -11,10 +11,23 @@ const LEGACY_SALT_KEY = 'my-passwords-v0.001-salt';
 const BOOTSTRAP_KEY = 'my-passwords-v0.002-bootstrap-profile';
 const ACCOUNT_KEY = 'my-passwords-v0.011-account-identity';
 
-const BUILT_IN_CATEGORIES = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
+const BUILT_IN_CATEGORIES = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Documents', 'Emergency Info'];
 const categories = ['All', ...BUILT_IN_CATEGORIES];
 const FOLDER_META_CATEGORY = '__my_passwords_folder_meta';
 const FOLDER_META_ID = '__my_passwords_custom_folders';
+const DOCUMENTS_CATEGORY = 'Documents';
+const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024;
+const ALLOWED_DOCUMENT_EXTENSIONS = ['txt', 'md', 'csv', 'xls', 'xlsx', 'doc', 'docx', 'pdf'];
+const ALLOWED_DOCUMENT_MIME_TYPES = [
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+];
 
 const categoryHints = {
   Passwords: {
@@ -605,6 +618,46 @@ function folderExists(folder, folders) {
   return folders.some((entry) => entry.toLowerCase() === target);
 }
 
+function getFileExtension(fileName) {
+  const clean = String(fileName || '').toLowerCase();
+  const parts = clean.split('.');
+  return parts.length > 1 ? parts.pop() : '';
+}
+
+function isAllowedDocumentFile(file) {
+  if (!file) return false;
+  const extension = getFileExtension(file.name);
+  return ALLOWED_DOCUMENT_EXTENSIONS.includes(extension) || ALLOWED_DOCUMENT_MIME_TYPES.includes(file.type);
+}
+
+function formatFileSize(bytes) {
+  const size = Number(bytes || 0);
+  if (!size) return '0 KB';
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('The file could not be read.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function downloadStoredDocument(item) {
+  const file = item?.payload?.file;
+  if (!file?.dataUrl) return;
+  const link = document.createElement('a');
+  link.href = file.dataUrl;
+  link.download = file.name || `${item.title || 'document'}.${file.extension || 'txt'}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+
 function VerificationOverlay({ state, onClose, onFocusMasterPassword }) {
   if (!state?.visible) return null;
   const isWorking = state.status === 'working';
@@ -673,7 +726,7 @@ function App() {
   const [category, setCategory] = useState('');
   const [showSecrets, setShowSecrets] = useState({});
   const [showFormSecret, setShowFormSecret] = useState(false);
-  const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false });
+  const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null });
   const [editingItemId, setEditingItemId] = useState('');
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
@@ -1125,7 +1178,7 @@ function App() {
   }
 
   function emptyForm(categoryToKeep = form.category) {
-    return { title: '', category: categoryToKeep || 'Passwords', url: '', username: '', password: '', notes: '', favourite: false };
+    return { title: '', category: categoryToKeep || 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null };
   }
 
   async function saveItem(event) {
@@ -1135,16 +1188,22 @@ function App() {
 
     setIsSavingItem(true);
     try {
+      const isDocument = form.category === DOCUMENTS_CATEGORY;
+      if (isDocument && !editingItemId && !form.file?.dataUrl) {
+        showMessage('Choose a document to store first.', 'warning');
+        return;
+      }
       const notesValue = form.category === 'Checklists' ? normaliseChecklistNotes(form.notes) : form.notes.trim();
       const itemPayload = {
         title: form.title.trim(),
         category: form.category,
         favourite: !!form.favourite,
         payload: {
-          url: form.url.trim(),
-          username: ['Notes', 'Checklists'].includes(form.category) ? '' : form.username.trim(),
-          password: ['Notes', 'Checklists'].includes(form.category) ? '' : form.password,
-          notes: notesValue
+          url: form.category === 'Checklists' ? '' : form.url.trim(),
+          username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY].includes(form.category) ? '' : form.username.trim(),
+          password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY].includes(form.category) ? '' : form.password,
+          notes: notesValue,
+          file: isDocument ? form.file : null
         },
         updatedAt: new Date().toISOString()
       };
@@ -1196,7 +1255,8 @@ function App() {
       username: item.payload?.username || '',
       password: item.payload?.password || '',
       notes: item.payload?.notes || '',
-      favourite: !!item.favourite
+      favourite: !!item.favourite,
+      file: item.payload?.file || null
     });
     setShowFormSecret(false);
     setCategory(item.category || '');
@@ -1521,6 +1581,44 @@ function App() {
     if (wasActive && source && target && source !== target) await reorderFolder(source, target);
   }
 
+
+  async function handleDocumentFileChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!isAllowedDocumentFile(file)) {
+      showMessage('Supported files: TXT, MD, CSV, Excel, Word and PDF.', 'warning');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > MAX_DOCUMENT_BYTES) {
+      showMessage(`This document is ${formatFileSize(file.size)}. The current secure document store supports files up to ${formatFileSize(MAX_DOCUMENT_BYTES)}.`, 'warning');
+      event.target.value = '';
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const extension = getFileExtension(file.name);
+      setForm((current) => ({
+        ...current,
+        title: current.title || file.name.replace(/\.[^/.]+$/, ''),
+        category: DOCUMENTS_CATEGORY,
+        file: {
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          size: file.size,
+          extension,
+          dataUrl,
+          storedAt: new Date().toISOString()
+        }
+      }));
+      showMessage('Document ready to save securely.', 'success');
+    } catch (error) {
+      showMessage('Document could not be read. Please try again.', 'error');
+    } finally {
+      event.target.value = '';
+    }
+  }
+
   function closeItemPopup() {
     if (editingItemId) cancelEdit();
     else {
@@ -1715,10 +1813,10 @@ function App() {
                 <div className="item-popup-body">
                   <p className="form-helper">{editingItemId ? 'Update the saved details, then save your changes.' : 'Save a new secure item in your vault.'}</p>
                   {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
-                <label>Folder<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, username: ['Notes', 'Checklists'].includes(e.target.value) ? '' : form.username, password: ['Notes', 'Checklists'].includes(e.target.value) ? '' : form.password })}>{selectableFolders.map((cat) => <option key={cat}>{cat}</option>)}</select></label>
+                <label>Folder<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY].includes(e.target.value) ? '' : form.username, password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY].includes(e.target.value) ? '' : form.password })}>{selectableFolders.map((cat) => <option key={cat}>{cat}</option>)}</select></label>
                 <label>Title<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={activeHint.title} /></label>
-                {form.category !== 'Checklists' && <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>}
-                {!['Notes', 'Checklists'].includes(form.category) && (
+                {!['Checklists', DOCUMENTS_CATEGORY].includes(form.category) && <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>}
+                {!['Notes', 'Checklists', DOCUMENTS_CATEGORY].includes(form.category) && (
                   <>
                     <label>Username / Reference<input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder={activeHint.username} /></label>
                     <label>Password / Secret
@@ -1729,7 +1827,16 @@ function App() {
                     </label>
                   </>
                 )}
-                <label>{form.category === 'Checklists' ? 'Checklist items' : 'Notes'}<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
+                {form.category === DOCUMENTS_CATEGORY && (
+                  <div className="document-upload-box">
+                    <label className="document-upload-button"><Upload size={18} /> Choose document
+                      <input type="file" accept=".txt,.md,.csv,.xls,.xlsx,.doc,.docx,.pdf,text/plain,text/markdown,text/csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={handleDocumentFileChange} />
+                    </label>
+                    <p>Supported files: TXT, MD, CSV, Excel, Word and PDF. Stored securely inside your encrypted vault.</p>
+                    {form.file && <div className="document-selected"><FileText size={18} /><span>{form.file.name}</span><small>{formatFileSize(form.file.size)}</small></div>}
+                  </div>
+                )}
+                <label>{form.category === 'Checklists' ? 'Checklist items' : form.category === DOCUMENTS_CATEGORY ? 'Document notes' : 'Notes'}<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
                 <label className="favourite-toggle"><input type="checkbox" checked={form.favourite} onChange={(e) => setForm({ ...form, favourite: e.target.checked })} /> Mark as favourite</label>
                 </div>
                 <div className="item-popup-footer form-buttons">
@@ -1898,10 +2005,12 @@ function App() {
                 const visible = !!showSecrets[viewedItem.id];
                 const isNote = viewedItem.category === 'Notes';
                 const isChecklist = viewedItem.category === 'Checklists';
+                const isDocument = viewedItem.category === DOCUMENTS_CATEGORY;
+                const storedDocument = viewedItem.payload?.file;
                 const checklistRows = isChecklist ? parseChecklistNotes(viewedItem.payload?.notes) : [];
                 return (
                   <>
-                    {viewedItem.payload?.url && !isChecklist && (
+                    {viewedItem.payload?.url && !isChecklist && !isDocument && (
                       <div className="app-field-block">
                         <span className="app-field-label">Website / Link</span>
                         <div className="app-value-field link-field">
@@ -1910,7 +2019,7 @@ function App() {
                         </div>
                       </div>
                     )}
-                    {!isNote && !isChecklist && (
+                    {!isNote && !isChecklist && !isDocument && (
                       <>
                         <div className="app-field-block">
                           <span className="app-field-label">Username</span>
@@ -1928,6 +2037,19 @@ function App() {
                           </div>
                         </div>
                       </>
+                    )}
+                    {isDocument && (
+                      <div className="app-field-block">
+                        <span className="app-field-label">Stored document</span>
+                        <div className="document-download-card">
+                          <FileText size={24} />
+                          <div>
+                            <strong>{storedDocument?.name || viewedItem.title}</strong>
+                            <small>{storedDocument?.extension?.toUpperCase() || 'FILE'} · {formatFileSize(storedDocument?.size)}</small>
+                          </div>
+                          <button type="button" className="secondary-button document-download-button" onClick={() => downloadStoredDocument(viewedItem)} disabled={!storedDocument?.dataUrl}><Download size={16} /> Download</button>
+                        </div>
+                      </div>
                     )}
                     {isChecklist ? (
                       <div className="app-field-block">
