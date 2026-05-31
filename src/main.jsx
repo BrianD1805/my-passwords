@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, Upload, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.020A';
+const VERSION = 'My Passwords Ver-0.020B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -16,7 +16,7 @@ const categories = ['All', ...BUILT_IN_CATEGORIES];
 const FOLDER_META_CATEGORY = '__my_passwords_folder_meta';
 const FOLDER_META_ID = '__my_passwords_custom_folders';
 const DOCUMENTS_CATEGORY = 'Documents';
-const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 const ALLOWED_DOCUMENT_EXTENSIONS = ['txt', 'md', 'csv', 'xls', 'xlsx', 'doc', 'docx', 'pdf'];
 const ALLOWED_DOCUMENT_MIME_TYPES = [
   'text/plain',
@@ -1715,7 +1715,7 @@ function App() {
       return;
     }
     if (file.size > MAX_DOCUMENT_BYTES) {
-      showMessage(`This document is ${formatFileSize(file.size)}. The current secure document store supports files up to ${formatFileSize(MAX_DOCUMENT_BYTES)}.`, 'warning');
+      showMessage(`This document is ${formatFileSize(file.size)}. The secure document store currently supports files up to ${formatFileSize(MAX_DOCUMENT_BYTES)}.`, 'warning');
       event.target.value = '';
       return;
     }
@@ -1736,7 +1736,7 @@ function App() {
           storedAt: new Date().toISOString()
         }
       }));
-      showMessage('Document ready. It will be encrypted and stored separately when you save.', 'success');
+      showMessage('Document ready. Larger files may take a little longer to encrypt, upload and download.', 'success');
     } catch (error) {
       showMessage('Document could not be read. Please try again.', 'error');
     } finally {
@@ -1958,6 +1958,7 @@ function App() {
                       <input type="file" accept=".txt,.md,.csv,.xls,.xlsx,.doc,.docx,.pdf,text/plain,text/markdown,text/csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={handleDocumentFileChange} />
                     </label>
                     <p>Supported files: TXT, MD, CSV, Excel, Word and PDF. File contents are encrypted and stored separately to keep your vault fast.</p>
+                    <p className="document-upload-note">Files up to {formatFileSize(MAX_DOCUMENT_BYTES)} are supported. Larger documents may take a little longer to encrypt, upload and download.</p>
                     {form.file && <div className="document-selected"><FileText size={18} /><span>{form.file.name}</span><small>{formatFileSize(form.file.size)}</small></div>}
                   </div>
                 )}
