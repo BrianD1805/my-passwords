@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, ExternalLink, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.017';
+const VERSION = 'My Passwords Ver-0.018';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -11,7 +11,10 @@ const LEGACY_SALT_KEY = 'my-passwords-v0.001-salt';
 const BOOTSTRAP_KEY = 'my-passwords-v0.002-bootstrap-profile';
 const ACCOUNT_KEY = 'my-passwords-v0.011-account-identity';
 
-const categories = ['All', 'Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
+const BUILT_IN_CATEGORIES = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
+const categories = ['All', ...BUILT_IN_CATEGORIES];
+const FOLDER_META_CATEGORY = '__my_passwords_folder_meta';
+const FOLDER_META_ID = '__my_passwords_custom_folders';
 
 const categoryHints = {
   Passwords: {
@@ -547,6 +550,44 @@ function validateAccountIdentity(account) {
 }
 
 
+
+function isFolderMetaItem(item) {
+  return item?.category === FOLDER_META_CATEGORY || item?.id === FOLDER_META_ID;
+}
+
+function getVisibleVaultItems(vaultItems) {
+  return Array.isArray(vaultItems) ? vaultItems.filter((item) => !isFolderMetaItem(item)) : [];
+}
+
+function normaliseFolderName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function getCustomFolders(vaultItems) {
+  const meta = Array.isArray(vaultItems) ? vaultItems.find(isFolderMetaItem) : null;
+  const folders = Array.isArray(meta?.payload?.folders) ? meta.payload.folders : [];
+  return folders.map(normaliseFolderName).filter(Boolean).filter((folder, index, arr) => arr.findIndex((entry) => entry.toLowerCase() === folder.toLowerCase()) === index);
+}
+
+function upsertFolderMetaItem(vaultItems, folders) {
+  const cleanFolders = folders.map(normaliseFolderName).filter(Boolean).filter((folder, index, arr) => arr.findIndex((entry) => entry.toLowerCase() === folder.toLowerCase()) === index);
+  const metaItem = {
+    id: FOLDER_META_ID,
+    title: 'Vault folders',
+    category: FOLDER_META_CATEGORY,
+    favourite: false,
+    payload: { folders: cleanFolders },
+    updatedAt: new Date().toISOString()
+  };
+  const withoutMeta = getVisibleVaultItems(vaultItems);
+  return cleanFolders.length ? [metaItem, ...withoutMeta] : withoutMeta;
+}
+
+function folderExists(folder, folders) {
+  const target = normaliseFolderName(folder).toLowerCase();
+  return folders.some((entry) => entry.toLowerCase() === target);
+}
+
 function VerificationOverlay({ state, onClose, onFocusMasterPassword }) {
   if (!state?.visible) return null;
   const isWorking = state.status === 'working';
@@ -641,6 +682,9 @@ function App() {
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
   const [viewItemId, setViewItemId] = useState('');
   const [isSavingItem, setIsSavingItem] = useState(false);
+  const [isFolderPopupOpen, setIsFolderPopupOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [isSavingFolder, setIsSavingFolder] = useState(false);
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
@@ -708,9 +752,9 @@ function App() {
   }, [bootstrap]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId));
+    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || isFolderPopupOpen);
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId]);
+  }, [isItemPopupOpen, viewItemId, isFolderPopupOpen]);
 
   async function fetchLatestCloudSnapshot(account = bootstrap) {
     if (!account.tenantId || !account.userId) return { ok: false, hasSnapshot: false, message: 'Account identity is not verified on this device yet.' };
@@ -748,7 +792,7 @@ function App() {
       message: `Your cloud backup has been restored on this device. ${restoredItems.length} item(s) loaded.`,
       lastSyncAt: latest.snapshot.created_at || latest.snapshot.client_updated_at || new Date().toISOString(),
       lastSnapshotId: latest.snapshot.id || current.lastSnapshotId,
-      itemCount: Number(latest.snapshot.item_count ?? restoredItems.length),
+      itemCount: Number(latest.snapshot.item_count ?? getVisibleVaultItems(restoredItems).length),
       snapshotCount
     }));
     setDeviceStatus({
@@ -757,7 +801,7 @@ function App() {
       lastCloudCheckAt: new Date().toISOString(),
       lastRestoreAt: new Date().toISOString(),
       latestSnapshotId: latest.snapshot.id || '',
-      latestCloudItemCount: Number(latest.snapshot.item_count ?? restoredItems.length),
+      latestCloudItemCount: Number(latest.snapshot.item_count ?? getVisibleVaultItems(restoredItems).length),
       source: reason === 'unlock' ? 'auto-pulled-on-unlock' : 'manual-pull'
     });
     if (showSuccess) showMessage(`Your cloud backup has been restored on this device. ${restoredItems.length} item(s) loaded.`);
@@ -1258,18 +1302,18 @@ function App() {
     const silent = Boolean(options.silent);
     if (!envelope) {
       const note = 'No local encrypted vault envelope found yet.';
-      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
+      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
       if (!silent) showMessage(note);
       return { ok: false, message: note };
     }
     if (!bootstrap.tenantId || !bootstrap.userId) {
       const note = 'Save your account details first so cloud backup can run.';
-      setSyncStatus({ state: 'warning', message: note, lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
+      setSyncStatus({ state: 'warning', message: note, lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
       if (!silent) showMessage(note);
       return { ok: false, message: note };
     }
     setSyncing(true);
-    setSyncStatus({ state: 'syncing', message: silent ? 'Saving your cloud backup...' : 'Saving your cloud backup...', lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
+    setSyncStatus({ state: 'syncing', message: silent ? 'Saving your cloud backup...' : 'Saving your cloud backup...', lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
     try {
       const result = await postJson('/.netlify/functions/sync-vault', {
         tenantId: bootstrap.tenantId,
@@ -1277,12 +1321,12 @@ function App() {
         encryptedBlob: envelope.encrypted,
         localSalt: envelope.salt,
         localIv: envelope.iv,
-        itemCount: effectiveItems.length,
+        itemCount: getVisibleVaultItems(effectiveItems).length,
         clientUpdatedAt: envelope.updatedAt
       });
       if (!result.ok) {
         const note = `${result.message || 'Encrypted vault did not sync.'}${result.error ? ` Error: ${result.error}` : ''}`;
-        setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
+        setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
         if (!silent) showMessage(note);
         return result;
       }
@@ -1292,21 +1336,21 @@ function App() {
       const lastSyncAt = new Date().toISOString();
       const snapshotCount = history?.total || snapshotHistory.total || (verified?.hasSnapshot ? 1 : 0);
       const note = verified?.hasSnapshot
-        ? `${silent ? 'Backup complete.' : 'Vault backup saved.'} ${snapshotCount} backup(s) saved. Latest backup contains ${verifiedSnapshot?.item_count ?? effectiveItems.length} item(s).`
+        ? `${silent ? 'Backup complete.' : 'Vault backup saved.'} ${snapshotCount} backup(s) saved. Latest backup contains ${verifiedSnapshot?.item_count ?? getVisibleVaultItems(effectiveItems).length} item(s).`
         : 'Vault backup was saved. Latest backup details are still updating.';
       setSyncStatus({
         state: verified?.hasSnapshot ? 'success' : 'warning',
         message: note,
         lastSyncAt,
         lastSnapshotId: verifiedSnapshot?.id || result.snapshotId || '',
-        itemCount: Number(verifiedSnapshot?.item_count ?? effectiveItems.length),
+        itemCount: Number(verifiedSnapshot?.item_count ?? getVisibleVaultItems(effectiveItems).length),
         snapshotCount
       });
       if (!silent) showMessage(note);
       return { ...result, verified };
     } catch (error) {
       const note = `Could not complete cloud backup. ${error.message || 'Please try again.'}`;
-      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: effectiveItems.length, snapshotCount: snapshotHistory.total });
+      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
       if (!silent) showMessage(note);
       return { ok: false, message: note };
     } finally {
@@ -1326,28 +1370,32 @@ function App() {
     }
   }
 
+  const visibleItems = useMemo(() => getVisibleVaultItems(items), [items]);
+  const customFolders = useMemo(() => getCustomFolders(items), [items]);
+  const selectableFolders = useMemo(() => [...BUILT_IN_CATEGORIES, ...customFolders], [customFolders]);
+
   const filteredItems = useMemo(() => {
     const activeSearch = query.trim().toLowerCase();
     const hasFolder = Boolean(category);
     if (!activeSearch && !hasFolder) return [];
-    return items.filter((item) => {
+    return visibleItems.filter((item) => {
       const text = `${item.title} ${item.category} ${item.payload?.url || ''} ${item.payload?.username || ''} ${item.payload?.notes || ''}`.toLowerCase();
       const matchesSearch = activeSearch ? text.includes(activeSearch) : true;
       const matchesFolder = !category ? true : category === 'Favourites' ? item.favourite : item.category === category;
       return matchesSearch && matchesFolder;
     }).sort((a, b) => Number(b.favourite) - Number(a.favourite) || new Date(b.updatedAt) - new Date(a.updatedAt));
-  }, [items, query, category]);
+  }, [visibleItems, query, category]);
 
   const folderChips = useMemo(() => {
-    const normalCategories = categories.filter((cat) => cat !== 'All');
     return [
-      { name: 'Favourites', count: items.filter((item) => item.favourite).length, favourite: true },
-      ...normalCategories.map((cat) => ({ name: cat, count: items.filter((item) => item.category === cat).length, favourite: false }))
+      { name: 'Favourites', count: visibleItems.filter((item) => item.favourite).length, favourite: true, custom: false },
+      ...BUILT_IN_CATEGORIES.map((cat) => ({ name: cat, count: visibleItems.filter((item) => item.category === cat).length, favourite: false, custom: false })),
+      ...customFolders.map((cat) => ({ name: cat, count: visibleItems.filter((item) => item.category === cat).length, favourite: false, custom: true }))
     ];
-  }, [items]);
+  }, [visibleItems, customFolders]);
 
   const hasActiveVaultFilter = Boolean(query.trim() || category);
-  const viewedItem = viewItemId ? items.find((item) => item.id === viewItemId) : null;
+  const viewedItem = viewItemId ? visibleItems.find((item) => item.id === viewItemId) : null;
 
   function openVaultSection(cat) {
     setCategory(cat);
@@ -1361,6 +1409,36 @@ function App() {
     setForm(emptyForm(preferredCategory));
     setShowFormSecret(false);
     setIsItemPopupOpen(true);
+  }
+
+  function closeFolderPopup() {
+    setIsFolderPopupOpen(false);
+    setNewFolderName('');
+    setIsSavingFolder(false);
+  }
+
+  async function createCustomFolder(event) {
+    event.preventDefault();
+    if (isSavingFolder) return;
+    const folderName = normaliseFolderName(newFolderName);
+    if (!folderName) return showMessage('Enter a folder name first.', 'warning');
+    const allFolders = [...BUILT_IN_CATEGORIES, ...customFolders];
+    if (folderExists(folderName, allFolders)) {
+      showMessage('That folder already exists.', 'warning');
+      return;
+    }
+    setIsSavingFolder(true);
+    try {
+      const next = upsertFolderMetaItem(items, [...customFolders, folderName]);
+      await saveItems(next, { autoSync: true, silentAutoSync: true });
+      setCategory(folderName);
+      closeFolderPopup();
+      showMessage('Folder created successfully.', 'success');
+    } catch (error) {
+      showMessage('Folder could not be created. Please try again.', 'error');
+    } finally {
+      setIsSavingFolder(false);
+    }
   }
 
   function closeItemPopup() {
@@ -1513,13 +1591,15 @@ function App() {
               {folderChips.map((folder) => (
                 <button key={folder.name} className={folder.name === category ? 'chip active' : 'chip'} onClick={() => openVaultSection(folder.name)}>
                   {folder.favourite && <Star size={15} fill="currentColor" />} {folder.name}
+                  {folder.custom && <span className="custom-folder-dot" title="Custom folder" aria-hidden="true" />}
                   <span className="chip-count">{folder.count}</span>
                 </button>
               ))}
+              <button type="button" className="chip add-folder-chip" onClick={() => setIsFolderPopupOpen(true)}><Plus size={16} /> New folder</button>
             </div>
             <div className="home-quick-summary">
-              <span><strong>{items.length}</strong> saved item{items.length === 1 ? '' : 's'}</span>
-              <span><strong>{items.filter((item) => item.favourite).length}</strong> favourite{items.filter((item) => item.favourite).length === 1 ? '' : 's'}</span>
+              <span><strong>{visibleItems.length}</strong> saved item{visibleItems.length === 1 ? '' : 's'}</span>
+              <span><strong>{visibleItems.filter((item) => item.favourite).length}</strong> favourite{visibleItems.filter((item) => item.favourite).length === 1 ? '' : 's'}</span>
             </div>
           </section>
 
@@ -1536,7 +1616,7 @@ function App() {
                 <div className="item-popup-body">
                   <p className="form-helper">{editingItemId ? 'Update the saved details, then save your changes.' : 'Save a new secure item in your vault.'}</p>
                   {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
-                <label>Category<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, username: ['Notes', 'Checklists'].includes(e.target.value) ? '' : form.username, password: ['Notes', 'Checklists'].includes(e.target.value) ? '' : form.password })}>{categories.filter((cat) => cat !== 'All').map((cat) => <option key={cat}>{cat}</option>)}</select></label>
+                <label>Folder<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, username: ['Notes', 'Checklists'].includes(e.target.value) ? '' : form.username, password: ['Notes', 'Checklists'].includes(e.target.value) ? '' : form.password })}>{selectableFolders.map((cat) => <option key={cat}>{cat}</option>)}</select></label>
                 <label>Title<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={activeHint.title} /></label>
                 {form.category !== 'Checklists' && <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>}
                 {!['Notes', 'Checklists'].includes(form.category) && (
@@ -1559,6 +1639,30 @@ function App() {
                     {isSavingItem ? (editingItemId ? 'Saving updates...' : 'Saving item...') : (editingItemId ? 'Save updated item' : 'Save encrypted item')}
                   </button>
                   <button type="button" className="secondary-button" onClick={closeItemPopup}>{editingItemId ? <><X size={16} /> Cancel edit</> : 'Cancel'}</button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {isFolderPopupOpen && (
+            <div className="item-popup-layer" role="dialog" aria-modal="true" aria-label="Create folder">
+              <button type="button" className="item-popup-backdrop" onClick={closeFolderPopup} aria-label="Close folder popup" />
+              <form className="item-popup-card folder-popup-card" onSubmit={createCustomFolder}>
+                <div className="item-popup-header">
+                  <h2><Plus size={20} /> New folder</h2>
+                  <button type="button" className="icon-button" onClick={closeFolderPopup} aria-label="Close"><X size={18} /></button>
+                </div>
+                <div className="item-popup-body">
+                  <p className="form-helper">Create your own folder and it will appear in the folder row above.</p>
+                  <label>Folder name<input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="e.g. Family, Travel, Clients" autoFocus /></label>
+                  <div className="folder-popup-note"><ShieldCheck size={16} /><span>Folder names are saved inside your encrypted vault backup.</span></div>
+                </div>
+                <div className="item-popup-footer form-buttons">
+                  <button type="submit" className={isSavingFolder ? "primary-button saving-button" : "primary-button"} disabled={isSavingFolder} aria-busy={isSavingFolder ? 'true' : 'false'}>
+                    {isSavingFolder ? <span className="button-spinner" aria-hidden="true" /> : <Plus size={18} />}
+                    {isSavingFolder ? 'Creating folder...' : 'Create folder'}
+                  </button>
+                  <button type="button" className="secondary-button" onClick={closeFolderPopup}>Cancel</button>
                 </div>
               </form>
             </div>
@@ -1588,7 +1692,7 @@ function App() {
           </div>
 
           <section className="status-grid settings-status-grid">
-            <article><KeyRound /><strong>{items.length}</strong><span>Items</span></article>
+            <article><KeyRound /><strong>{visibleItems.length}</strong><span>Items</span></article>
             <article><Database /><strong>{dbStatus.connected ? 'Ready' : 'Checking'}</strong><span>Cloud backup</span></article>
             <article><Cloud /><strong>{snapshotHistory.total || syncStatus.snapshotCount || 0}</strong><span>Backups</span></article>
             <article><UserRoundCheck /><strong>{bootstrap.userId ? 'Ready' : 'Setup'}</strong><span>Account</span></article>

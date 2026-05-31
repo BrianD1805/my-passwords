@@ -2970,3 +2970,42 @@ body.app-popup-open {
 @keyframes button-spinner-spin {
   to { transform: rotate(360deg); }
 }
+
+/* Ver-0.018 custom folders */
+.add-folder-chip {
+  border: 1px dashed rgba(29, 95, 144, 0.34);
+  background: rgba(255,255,255,0.72);
+  color: #24496e;
+}
+
+.add-folder-chip:hover,
+.add-folder-chip:focus-visible {
+  background: #f7fbff;
+  border-color: rgba(29, 95, 144, 0.48);
+  outline: none;
+}
+
+.custom-folder-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: .52;
+}
+
+.folder-popup-card {
+  width: min(670px, calc(100vw - 50px));
+}
+
+.folder-popup-note {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: start;
+  border: 1px solid rgba(34, 139, 96, 0.22);
+  background: linear-gradient(135deg, rgba(247,255,251,0.98), rgba(237,250,244,0.94));
+  border-radius: 16px;
+  padding: 11px 13px;
+  color: #245b34;
+  line-height: 1.45;
+}
