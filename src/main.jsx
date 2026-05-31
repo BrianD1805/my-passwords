@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, ExternalLink, Eye, EyeOff, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.018A';
+const VERSION = 'My Passwords Ver-0.018B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -563,24 +563,41 @@ function normaliseFolderName(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function getCustomFolders(vaultItems) {
-  const meta = Array.isArray(vaultItems) ? vaultItems.find(isFolderMetaItem) : null;
-  const folders = Array.isArray(meta?.payload?.folders) ? meta.payload.folders : [];
-  return folders.map(normaliseFolderName).filter(Boolean).filter((folder, index, arr) => arr.findIndex((entry) => entry.toLowerCase() === folder.toLowerCase()) === index);
+function uniqueFolderList(values) {
+  return (Array.isArray(values) ? values : [])
+    .map(normaliseFolderName)
+    .filter(Boolean)
+    .filter((folder, index, arr) => arr.findIndex((entry) => entry.toLowerCase() === folder.toLowerCase()) === index);
 }
 
-function upsertFolderMetaItem(vaultItems, folders) {
-  const cleanFolders = folders.map(normaliseFolderName).filter(Boolean).filter((folder, index, arr) => arr.findIndex((entry) => entry.toLowerCase() === folder.toLowerCase()) === index);
+function getFolderMeta(vaultItems) {
+  return Array.isArray(vaultItems) ? vaultItems.find(isFolderMetaItem) : null;
+}
+
+function getCustomFolders(vaultItems) {
+  const meta = getFolderMeta(vaultItems);
+  return uniqueFolderList(meta?.payload?.folders || []);
+}
+
+function getFolderOrder(vaultItems) {
+  const meta = getFolderMeta(vaultItems);
+  return uniqueFolderList(meta?.payload?.folderOrder || []);
+}
+
+function upsertFolderMetaItem(vaultItems, folders, folderOrder) {
+  const currentMeta = getFolderMeta(vaultItems);
+  const cleanFolders = uniqueFolderList(folders);
+  const cleanOrder = uniqueFolderList(folderOrder || currentMeta?.payload?.folderOrder || []);
   const metaItem = {
     id: FOLDER_META_ID,
     title: 'Vault folders',
     category: FOLDER_META_CATEGORY,
     favourite: false,
-    payload: { folders: cleanFolders },
+    payload: { folders: cleanFolders, folderOrder: cleanOrder },
     updatedAt: new Date().toISOString()
   };
   const withoutMeta = getVisibleVaultItems(vaultItems);
-  return cleanFolders.length ? [metaItem, ...withoutMeta] : withoutMeta;
+  return (cleanFolders.length || cleanOrder.length) ? [metaItem, ...withoutMeta] : withoutMeta;
 }
 
 function folderExists(folder, folders) {
@@ -685,6 +702,10 @@ function App() {
   const [isFolderPopupOpen, setIsFolderPopupOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isSavingFolder, setIsSavingFolder] = useState(false);
+  const [draggedFolderName, setDraggedFolderName] = useState('');
+  const [touchReorderFolder, setTouchReorderFolder] = useState('');
+  const [touchDropTargetFolder, setTouchDropTargetFolder] = useState('');
+  const touchReorderRef = useRef({ timer: null, source: '', active: false });
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
@@ -1190,7 +1211,6 @@ function App() {
     setForm(emptyForm(keepCategory));
     setShowFormSecret(false);
     setIsItemPopupOpen(false);
-    showMessage('Edit cancelled. No changes were saved.');
   }
 
   async function deleteItem(id) {
@@ -1201,8 +1221,7 @@ function App() {
 
   async function toggleFavourite(id) {
     const next = items.map((item) => item.id === id ? { ...item, favourite: !item.favourite, updatedAt: new Date().toISOString() } : item);
-    await saveItems(next, { autoSync: true });
-    showMessage(bootstrap.tenantId && bootstrap.userId ? 'Favourite status updated and backup requested.' : 'Favourite status updated. Save your account details to enable cloud backup.');
+    await saveItems(next, { autoSync: true, silentAutoSync: true });
   }
 
   async function copyText(label, value) {
@@ -1372,6 +1391,7 @@ function App() {
 
   const visibleItems = useMemo(() => getVisibleVaultItems(items), [items]);
   const customFolders = useMemo(() => getCustomFolders(items), [items]);
+  const savedFolderOrder = useMemo(() => getFolderOrder(items), [items]);
   const selectableFolders = useMemo(() => [...BUILT_IN_CATEGORIES, ...customFolders], [customFolders]);
 
   const filteredItems = useMemo(() => {
@@ -1387,13 +1407,21 @@ function App() {
   }, [visibleItems, query, category]);
 
   const folderChips = useMemo(() => {
-    return [
-      { name: 'All', count: visibleItems.length, favourite: false, custom: false },
-      { name: 'Favourites', count: visibleItems.filter((item) => item.favourite).length, favourite: true, custom: false },
-      ...BUILT_IN_CATEGORIES.map((cat) => ({ name: cat, count: visibleItems.filter((item) => item.category === cat).length, favourite: false, custom: false })),
-      ...customFolders.map((cat) => ({ name: cat, count: visibleItems.filter((item) => item.category === cat).length, favourite: false, custom: true }))
+    const baseFolders = [
+      { name: 'All', count: visibleItems.length, favourite: false, custom: false, fixed: true },
+      { name: 'Favourites', count: visibleItems.filter((item) => item.favourite).length, favourite: true, custom: false, fixed: false },
+      ...BUILT_IN_CATEGORIES.map((cat) => ({ name: cat, count: visibleItems.filter((item) => item.category === cat).length, favourite: false, custom: false, fixed: false })),
+      ...customFolders.map((cat) => ({ name: cat, count: visibleItems.filter((item) => item.category === cat).length, favourite: false, custom: true, fixed: false }))
     ];
-  }, [visibleItems, customFolders]);
+    const first = baseFolders.find((folder) => folder.name === 'All');
+    const rest = baseFolders.filter((folder) => folder.name !== 'All');
+    const order = savedFolderOrder.filter((name) => rest.some((folder) => folder.name === name));
+    const orderedRest = [
+      ...order.map((name) => rest.find((folder) => folder.name === name)).filter(Boolean),
+      ...rest.filter((folder) => !order.includes(folder.name))
+    ];
+    return [first, ...orderedRest].filter(Boolean);
+  }, [visibleItems, customFolders, savedFolderOrder]);
 
   const hasActiveVaultFilter = Boolean(query.trim() || category);
   const viewedItem = viewItemId ? visibleItems.find((item) => item.id === viewItemId) : null;
@@ -1401,7 +1429,6 @@ function App() {
   function openVaultSection(cat) {
     setCategory(cat);
     setActivePage('home');
-    window.setTimeout(() => document.getElementById('vault-list-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
 
   function openAddItem() {
@@ -1430,7 +1457,9 @@ function App() {
     }
     setIsSavingFolder(true);
     try {
-      const next = upsertFolderMetaItem(items, [...customFolders, folderName]);
+      const currentOrder = folderChips.map((folder) => folder.name).filter((name) => name !== 'All');
+      const nextOrder = currentOrder.includes(folderName) ? currentOrder : [...currentOrder, folderName];
+      const next = upsertFolderMetaItem(items, [...customFolders, folderName], nextOrder);
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       setCategory(folderName);
       closeFolderPopup();
@@ -1440,6 +1469,56 @@ function App() {
     } finally {
       setIsSavingFolder(false);
     }
+  }
+
+  async function persistFolderOrder(nextOrder) {
+    const cleanOrder = uniqueFolderList(nextOrder).filter((name) => name !== 'All');
+    const next = upsertFolderMetaItem(items, customFolders, cleanOrder);
+    await saveItems(next, { autoSync: true, silentAutoSync: true });
+  }
+
+  async function reorderFolder(sourceName, targetName) {
+    if (!sourceName || !targetName || sourceName === targetName || sourceName === 'All' || targetName === 'All') return;
+    const currentOrder = folderChips.map((folder) => folder.name).filter((name) => name !== 'All');
+    const withoutSource = currentOrder.filter((name) => name !== sourceName);
+    const targetIndex = withoutSource.indexOf(targetName);
+    if (targetIndex < 0) return;
+    const nextOrder = [...withoutSource.slice(0, targetIndex), sourceName, ...withoutSource.slice(targetIndex)];
+    await persistFolderOrder(nextOrder);
+  }
+
+  function startTouchFolderReorder(folderName) {
+    if (!folderName || folderName === 'All') return;
+    window.clearTimeout(touchReorderRef.current.timer);
+    touchReorderRef.current = {
+      timer: window.setTimeout(() => {
+        touchReorderRef.current.active = true;
+        setTouchReorderFolder(folderName);
+        setTouchDropTargetFolder(folderName);
+      }, 520),
+      source: folderName,
+      active: false
+    };
+  }
+
+  function moveTouchFolderReorder(event) {
+    if (!touchReorderRef.current.active) return;
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest?.('[data-folder-name]');
+    const targetName = target?.getAttribute('data-folder-name') || '';
+    if (targetName && targetName !== 'All') setTouchDropTargetFolder(targetName);
+  }
+
+  async function endTouchFolderReorder() {
+    window.clearTimeout(touchReorderRef.current.timer);
+    const source = touchReorderRef.current.source;
+    const target = touchDropTargetFolder;
+    const wasActive = touchReorderRef.current.active;
+    touchReorderRef.current = { timer: null, source: '', active: false };
+    setTouchReorderFolder('');
+    setTouchDropTargetFolder('');
+    if (wasActive && source && target && source !== target) await reorderFolder(source, target);
   }
 
   function closeItemPopup() {
@@ -1572,15 +1651,15 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar app-home-topbar">
-        <div>
+        <div className="topbar-title-block">
           <p className="eyebrow">Secure private vault</p>
           <h1>My Passwords</h1>
-          <p className="subtitle">Your saved passwords, bank details, keys, notes and links.</p>
         </div>
+        <button className="lock-button mobile-top-lock" onClick={() => lockVault()} aria-label="Lock vault"><Lock size={18} /> <span>Lock</span></button>
         <div className="topbar-actions">
           <button type="button" className={activePage === 'home' ? 'nav-pill active' : 'nav-pill'} onClick={() => setActivePage('home')}><KeyRound size={17} /> Vault</button>
           <button type="button" className={activePage === 'settings' ? 'nav-pill active' : 'nav-pill'} onClick={() => setActivePage('settings')}><Settings size={17} /> Settings</button>
-          <button className="lock-button" onClick={() => lockVault()}><Lock size={18} /> Lock</button>
+          <button className="lock-button desktop-lock-button" onClick={() => lockVault()}><Lock size={18} /> Lock</button>
         </div>
       </header>
 
@@ -1589,13 +1668,32 @@ function App() {
           <section className="home-search-panel">
             <div className="search-box hero-search"><Search size={19} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your vault" /></div>
             <div className="chip-row vault-folder-row" id="vault-list-section">
-              {folderChips.map((folder) => (
-                <button key={folder.name} className={folder.name === category ? 'chip active' : 'chip'} onClick={() => openVaultSection(folder.name)}>
-                  {folder.favourite && <Star size={15} fill="currentColor" />} {folder.name}
-                  {folder.custom && <span className="custom-folder-dot" title="Custom folder" aria-hidden="true" />}
-                  <span className="chip-count">{folder.count}</span>
-                </button>
-              ))}
+              {folderChips.map((folder) => {
+                const isDragging = draggedFolderName === folder.name || touchReorderFolder === folder.name;
+                const isDropTarget = touchDropTargetFolder === folder.name && touchReorderFolder && touchReorderFolder !== folder.name;
+                return (
+                  <button
+                    key={folder.name}
+                    type="button"
+                    data-folder-name={folder.name}
+                    draggable={!folder.fixed}
+                    className={`${folder.name === category ? 'chip active' : 'chip'}${folder.fixed ? ' fixed-folder-chip' : ''}${isDragging ? ' folder-dragging' : ''}${isDropTarget ? ' folder-drop-target' : ''}`}
+                    onClick={() => !touchReorderFolder && openVaultSection(folder.name)}
+                    onDragStart={(event) => { if (folder.fixed) return; setDraggedFolderName(folder.name); event.dataTransfer.effectAllowed = 'move'; }}
+                    onDragOver={(event) => { if (draggedFolderName && !folder.fixed) event.preventDefault(); }}
+                    onDrop={async (event) => { event.preventDefault(); const source = draggedFolderName; setDraggedFolderName(''); await reorderFolder(source, folder.name); }}
+                    onDragEnd={() => setDraggedFolderName('')}
+                    onTouchStart={() => startTouchFolderReorder(folder.name)}
+                    onTouchMove={moveTouchFolderReorder}
+                    onTouchEnd={endTouchFolderReorder}
+                    onTouchCancel={endTouchFolderReorder}
+                  >
+                    {folder.favourite && <Star size={15} fill="currentColor" />} {folder.name}
+                    {folder.custom && <span className="custom-folder-dot" title="Custom folder" aria-hidden="true" />}
+                    <span className="chip-count">{folder.count}</span>
+                  </button>
+                );
+              })}
             </div>
             <div className="home-quick-summary">
               <span><strong>{visibleItems.length}</strong> Item{visibleItems.length === 1 ? '' : 's'}</span>
@@ -1858,10 +1956,12 @@ function App() {
               })()}
             </div>
             <div className="item-popup-footer view-item-footer">
-              <button type="button" className="secondary-button" onClick={() => editViewedItem(viewedItem)}><Pencil size={16} /> Edit</button>
-              <button type="button" className="secondary-button" onClick={() => toggleFavourite(viewedItem.id)}><Star size={16} fill={viewedItem.favourite ? 'currentColor' : 'none'} /> {viewedItem.favourite ? 'Unfavourite' : 'Favourite'}</button>
-              <button type="button" className="secondary-button danger-soft" onClick={() => deleteItem(viewedItem.id)}><Trash2 size={16} /> Delete</button>
-              <button type="button" className="primary-button" onClick={closeViewItem}>Done</button>
+              <div className="view-action-row">
+                <button type="button" className="secondary-button view-action-button" onClick={() => editViewedItem(viewedItem)} aria-label="Edit item"><Pencil size={16} /> <span>Edit</span></button>
+                <button type="button" className="secondary-button view-action-button" onClick={() => toggleFavourite(viewedItem.id)} aria-label={viewedItem.favourite ? 'Unfavourite item' : 'Favourite item'}><Star size={16} fill={viewedItem.favourite ? 'currentColor' : 'none'} /> <span>{viewedItem.favourite ? 'Unfavourite' : 'Favourite'}</span></button>
+                <button type="button" className="secondary-button danger-soft view-action-button" onClick={() => deleteItem(viewedItem.id)} aria-label="Delete item"><Trash2 size={16} /> <span>Delete</span></button>
+              </div>
+              <button type="button" className="primary-button view-done-button" onClick={closeViewItem}>Done</button>
             </div>
           </article>
         </div>
