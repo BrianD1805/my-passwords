@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, Upload, UserRoundCheck, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.019';
+const VERSION = 'My Passwords Ver-0.020';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -78,6 +78,13 @@ const categoryHints = {
     username: 'Owner / context',
     secret: 'Optional protected detail',
     notes: 'Use one line per checklist item. Example:\n[ ] Renew card\n[ ] Rotate API key\n[x] Backup codes saved'
+  },
+  Documents: {
+    title: 'e.g. Passport scan, insurance PDF, policy document',
+    url: '',
+    username: '',
+    secret: '',
+    notes: 'Optional notes about this stored document...'
   },
   'Emergency Info': {
     title: 'e.g. Emergency access instruction',
@@ -646,12 +653,39 @@ function readFileAsDataUrl(file) {
   });
 }
 
-function downloadStoredDocument(item) {
+
+async function encryptDocumentData(dataUrl, masterPassword) {
+  let salt = localStorage.getItem(SALT_KEY) || localStorage.getItem(LEGACY_SALT_KEY);
+  if (!salt) {
+    salt = arrayBufferToBase64(crypto.getRandomValues(new Uint8Array(16)));
+    localStorage.setItem(SALT_KEY, salt);
+  }
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(masterPassword, salt);
+  const encoded = new TextEncoder().encode(String(dataUrl || ''));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+  return {
+    encryptedBlob: arrayBufferToBase64(encrypted),
+    localSalt: salt,
+    localIv: arrayBufferToBase64(iv)
+  };
+}
+
+async function decryptDocumentData(documentRecord, masterPassword) {
+  const encrypted = documentRecord?.encrypted_blob || documentRecord?.encryptedBlob;
+  const salt = documentRecord?.local_salt || documentRecord?.localSalt;
+  const iv = documentRecord?.local_iv || documentRecord?.localIv;
+  if (!encrypted || !salt || !iv) throw new Error('Encrypted document file is incomplete.');
+  const key = await deriveKey(masterPassword, salt);
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToArrayBuffer(iv) }, key, base64ToArrayBuffer(encrypted));
+  return new TextDecoder().decode(decrypted);
+}
+
+function triggerDocumentDownload(item, dataUrl) {
   const file = item?.payload?.file;
-  if (!file?.dataUrl) return;
   const link = document.createElement('a');
-  link.href = file.dataUrl;
-  link.download = file.name || `${item.title || 'document'}.${file.extension || 'txt'}`;
+  link.href = dataUrl;
+  link.download = file?.name || `${item?.title || 'document'}.${file?.extension || 'txt'}`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -752,6 +786,7 @@ function App() {
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
   const [viewItemId, setViewItemId] = useState('');
   const [isSavingItem, setIsSavingItem] = useState(false);
+  const [downloadingDocId, setDownloadingDocId] = useState('');
   const [isFolderPopupOpen, setIsFolderPopupOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isSavingFolder, setIsSavingFolder] = useState(false);
@@ -1181,6 +1216,73 @@ function App() {
     return { title: '', category: categoryToKeep || 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null };
   }
 
+  async function uploadEncryptedDocumentBlob(fileInfo, documentId) {
+    if (!fileInfo?.dataUrl) return fileInfo;
+    if (!bootstrap.tenantId || !bootstrap.userId) {
+      throw new Error('Save your account details before storing documents.');
+    }
+    const encryptedFile = await encryptDocumentData(fileInfo.dataUrl, masterPassword);
+    const result = await postJson('/.netlify/functions/document-blob', {
+      tenantId: bootstrap.tenantId,
+      userId: bootstrap.userId,
+      documentId,
+      fileName: fileInfo.name,
+      fileType: fileInfo.type || 'application/octet-stream',
+      fileExtension: fileInfo.extension || getFileExtension(fileInfo.name),
+      fileSize: fileInfo.size || 0,
+      encryptedBlob: encryptedFile.encryptedBlob,
+      localSalt: encryptedFile.localSalt,
+      localIv: encryptedFile.localIv,
+      clientUpdatedAt: new Date().toISOString()
+    });
+    if (!result.ok) {
+      throw new Error(result.message || 'Document file could not be stored separately.');
+    }
+    return {
+      name: fileInfo.name,
+      type: fileInfo.type || 'application/octet-stream',
+      size: fileInfo.size || 0,
+      extension: fileInfo.extension || getFileExtension(fileInfo.name),
+      storageMode: 'external_encrypted_blob',
+      externalDocumentId: documentId,
+      storedExternally: true,
+      storedAt: new Date().toISOString()
+    };
+  }
+
+  async function downloadStoredDocument(item) {
+    const file = item?.payload?.file;
+    if (!file) return showMessage('No document file is attached to this item.', 'warning');
+    if (file.dataUrl) {
+      triggerDocumentDownload(item, file.dataUrl);
+      return;
+    }
+    const documentId = file.externalDocumentId || item.id;
+    if (!file.storedExternally || !documentId) {
+      showMessage('This document file is not available for download.', 'warning');
+      return;
+    }
+    if (!bootstrap.tenantId || !bootstrap.userId) {
+      showMessage('Save your account details before downloading stored documents.', 'warning');
+      return;
+    }
+    setDownloadingDocId(item.id);
+    try {
+      const response = await fetch(`/.netlify/functions/document-blob?tenantId=${encodeURIComponent(bootstrap.tenantId)}&userId=${encodeURIComponent(bootstrap.userId)}&documentId=${encodeURIComponent(documentId)}`);
+      const result = await response.json();
+      if (!response.ok || !result.ok || !result.document) {
+        throw new Error(result.message || 'Document could not be loaded.');
+      }
+      const dataUrl = await decryptDocumentData(result.document, masterPassword);
+      triggerDocumentDownload(item, dataUrl);
+      showMessage('Document downloaded securely.', 'success');
+    } catch (error) {
+      showMessage(error.message || 'Document could not be downloaded. Please try again.', 'error');
+    } finally {
+      setDownloadingDocId('');
+    }
+  }
+
   async function saveItem(event) {
     event.preventDefault();
     if (isSavingItem) return;
@@ -1193,6 +1295,12 @@ function App() {
         showMessage('Choose a document to store first.', 'warning');
         return;
       }
+      if (isDocument && !form.file) {
+        showMessage('Choose a document to store first.', 'warning');
+        return;
+      }
+      const itemIdForSave = editingItemId || crypto.randomUUID();
+      const storedDocumentFile = isDocument ? await uploadEncryptedDocumentBlob(form.file, itemIdForSave) : null;
       const notesValue = form.category === 'Checklists' ? normaliseChecklistNotes(form.notes) : form.notes.trim();
       const itemPayload = {
         title: form.title.trim(),
@@ -1203,7 +1311,7 @@ function App() {
           username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY].includes(form.category) ? '' : form.username.trim(),
           password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY].includes(form.category) ? '' : form.password,
           notes: notesValue,
-          file: isDocument ? form.file : null
+          file: storedDocumentFile
         },
         updatedAt: new Date().toISOString()
       };
@@ -1229,7 +1337,7 @@ function App() {
       }
 
       const newItem = {
-        id: crypto.randomUUID(),
+        id: itemIdForSave,
         ...itemPayload
       };
       const next = [newItem, ...items];
@@ -1240,7 +1348,7 @@ function App() {
       setViewItemId(newItem.id);
       showMessage('Item saved successfully.', 'success');
     } catch (error) {
-      showMessage('Item could not be saved. Please try again.', 'error');
+      showMessage(error.message || 'Item could not be saved. Please try again.', 'error');
     } finally {
       setIsSavingItem(false);
     }
@@ -1608,10 +1716,11 @@ function App() {
           size: file.size,
           extension,
           dataUrl,
+          storageMode: 'pending_external_encrypted_blob',
           storedAt: new Date().toISOString()
         }
       }));
-      showMessage('Document ready to save securely.', 'success');
+      showMessage('Document ready. It will be encrypted and stored separately when you save.', 'success');
     } catch (error) {
       showMessage('Document could not be read. Please try again.', 'error');
     } finally {
@@ -1832,7 +1941,7 @@ function App() {
                     <label className="document-upload-button"><Upload size={18} /> Choose document
                       <input type="file" accept=".txt,.md,.csv,.xls,.xlsx,.doc,.docx,.pdf,text/plain,text/markdown,text/csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={handleDocumentFileChange} />
                     </label>
-                    <p>Supported files: TXT, MD, CSV, Excel, Word and PDF. Stored securely inside your encrypted vault.</p>
+                    <p>Supported files: TXT, MD, CSV, Excel, Word and PDF. File contents are encrypted and stored separately to keep your vault fast.</p>
                     {form.file && <div className="document-selected"><FileText size={18} /><span>{form.file.name}</span><small>{formatFileSize(form.file.size)}</small></div>}
                   </div>
                 )}
@@ -2045,9 +2154,9 @@ function App() {
                           <FileText size={24} />
                           <div>
                             <strong>{storedDocument?.name || viewedItem.title}</strong>
-                            <small>{storedDocument?.extension?.toUpperCase() || 'FILE'} · {formatFileSize(storedDocument?.size)}</small>
+                            <small>{storedDocument?.extension?.toUpperCase() || 'FILE'} · {formatFileSize(storedDocument?.size)} · {storedDocument?.storedExternally ? 'Encrypted file storage' : 'Vault storage'}</small>
                           </div>
-                          <button type="button" className="secondary-button document-download-button" onClick={() => downloadStoredDocument(viewedItem)} disabled={!storedDocument?.dataUrl}><Download size={16} /> Download</button>
+                          <button type="button" className="secondary-button document-download-button" onClick={() => downloadStoredDocument(viewedItem)} disabled={downloadingDocId === viewedItem.id || (!storedDocument?.dataUrl && !storedDocument?.externalDocumentId)}><Download size={16} /> {downloadingDocId === viewedItem.id ? 'Preparing...' : 'Download'}</button>
                         </div>
                       </div>
                     )}
