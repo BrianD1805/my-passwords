@@ -1,4 +1,4 @@
-# My Passwords Ver-0.021A — Separate SaaS Landing Page and PWA Vault Login
+# My Passwords Ver-0.022 — Separate SaaS Landing Page and PWA Vault Login
 
 This patch corrects the Ver-0.021 layout so the SaaS marketing/onboarding foundation is on a separate public landing page, while the installed PWA opens directly to the standalone private vault login/unlock page.
 

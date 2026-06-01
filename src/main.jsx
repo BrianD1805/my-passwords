@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.021A';
+const VERSION = 'My Passwords Ver-0.022';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -815,6 +815,21 @@ function App() {
   const [touchReorderFolder, setTouchReorderFolder] = useState('');
   const [touchDropTargetFolder, setTouchDropTargetFolder] = useState('');
   const [showOnboardingDetails, setShowOnboardingDetails] = useState(() => !Boolean(readStoredVault()));
+  const [isCreateAccountPopupOpen, setIsCreateAccountPopupOpen] = useState(false);
+  const [landingOnboardingStep, setLandingOnboardingStep] = useState(1);
+  const [landingAccountDraft, setLandingAccountDraft] = useState(() => {
+    const saved = readSavedAccount();
+    return {
+      displayName: saved.displayName || '',
+      email: saved.email || '',
+      phoneCountryCode: saved.phoneCountryCode || '+254',
+      phoneCountryIso: saved.phoneCountryIso || 'ke',
+      phoneNumber: saved.phoneNumber || '',
+      phoneE164: saved.phoneE164 || '',
+      accountName: saved.accountName || saved.tenantName || 'My Private Vault',
+      planCode: saved.planCode || 'personal_free'
+    };
+  });
   const touchReorderRef = useRef({ timer: null, source: '', active: false });
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
@@ -883,9 +898,9 @@ function App() {
   }, [bootstrap]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || isFolderPopupOpen);
+    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || isFolderPopupOpen || isCreateAccountPopupOpen);
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, isFolderPopupOpen]);
+  }, [isItemPopupOpen, viewItemId, isFolderPopupOpen, isCreateAccountPopupOpen]);
 
   async function fetchLatestCloudSnapshot(account = bootstrap) {
     if (!account.tenantId || !account.userId) return { ok: false, hasSnapshot: false, message: 'Account identity is not verified on this device yet.' };
@@ -1634,6 +1649,76 @@ function App() {
     window.location.assign('/vault');
   }
 
+  function openCreateAccountPopup() {
+    setLandingOnboardingStep(1);
+    setLandingAccountDraft((current) => ({
+      ...current,
+      displayName: current.displayName || bootstrap.displayName || '',
+      email: current.email || bootstrap.email || '',
+      phoneCountryCode: current.phoneCountryCode || bootstrap.phoneCountryCode || '+254',
+      phoneCountryIso: current.phoneCountryIso || bootstrap.phoneCountryIso || 'ke',
+      phoneNumber: current.phoneNumber || bootstrap.phoneNumber || '',
+      phoneE164: current.phoneE164 || bootstrap.phoneE164 || '',
+      accountName: current.accountName || bootstrap.accountName || bootstrap.tenantName || 'My Private Vault',
+      planCode: current.planCode || bootstrap.planCode || 'personal_free'
+    }));
+    setIsCreateAccountPopupOpen(true);
+  }
+
+  function closeCreateAccountPopup() {
+    setIsCreateAccountPopupOpen(false);
+    setLandingOnboardingStep(1);
+  }
+
+  function updateLandingDraft(patch) {
+    setLandingAccountDraft((current) => {
+      const next = { ...current, ...patch };
+      next.phoneE164 = buildPhoneE164(next.phoneCountryCode || '+254', next.phoneNumber || '');
+      return next;
+    });
+  }
+
+  function continueLandingOnboarding() {
+    const draft = {
+      ...landingAccountDraft,
+      phoneCountryCode: normaliseCountryCode(landingAccountDraft.phoneCountryCode || '+254') || '+254',
+      phoneNumber: String(landingAccountDraft.phoneNumber || '').trim(),
+      phoneE164: buildPhoneE164(landingAccountDraft.phoneCountryCode || '+254', landingAccountDraft.phoneNumber || ''),
+      email: String(landingAccountDraft.email || '').trim().toLowerCase(),
+      displayName: String(landingAccountDraft.displayName || '').trim(),
+      accountName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
+      tenantName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
+      planCode: landingAccountDraft.planCode || 'personal_free',
+      planStatus: landingAccountDraft.planCode === 'founder_private' ? 'founder_active' : 'trial_pending',
+      accountStatus: 'active',
+      tenantRole: 'primary_owner',
+      onboardingStatus: 'landing_onboarding_started'
+    };
+
+    if (!draft.phoneE164) {
+      setLandingOnboardingStep(1);
+      showMessage('Please enter a mobile number so the secure setup can continue.', 'warning');
+      return;
+    }
+    if (!draft.email || !draft.email.includes('@')) {
+      setLandingOnboardingStep(1);
+      showMessage('Please enter a valid email address for OTP recovery.', 'warning');
+      return;
+    }
+    if (!draft.accountName) {
+      setLandingOnboardingStep(1);
+      showMessage('Please enter an account or vault name.', 'warning');
+      return;
+    }
+
+    const nextAccount = { ...bootstrap, ...draft };
+    localStorage.setItem(BOOTSTRAP_KEY, JSON.stringify(nextAccount));
+    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(nextAccount));
+    setBootstrap(nextAccount);
+    window.location.assign('/vault');
+  }
+
+
   function openVaultSection(cat) {
     setCategory(cat);
     setActivePage('home');
@@ -1844,36 +1929,114 @@ function App() {
 
         <section className="saas-landing-panel public-hero-panel" aria-label="My Passwords SaaS introduction">
           <div className="saas-hero-copy">
-            <div className="saas-badge"><Sparkles size={16} /> SaaS foundation</div>
+            <div className="saas-badge"><Sparkles size={16} /> Secure SaaS-ready vault</div>
             <p className="eyebrow">Encrypted password and document vault</p>
-            <h1>Private by design. Ready to grow.</h1>
-            <p className="intro">A secure PWA vault for passwords, private notes, checklists and encrypted documents — built first as a live private vault, now prepared for future clients and paid accounts.</p>
+            <h1>Your private vault, ready for everyday life and future teams.</h1>
+            <p className="intro">Store passwords, private notes, checklists and important documents in a clean PWA vault. Your sensitive data is encrypted in the browser before it is saved or synced.</p>
             <div className="saas-hero-actions">
-              <button type="button" className="primary-button" onClick={openVaultApp}><Unlock size={18} /> Open My Vault</button>
-              <button type="button" className="secondary-button" onClick={() => setShowOnboardingDetails((value) => !value)}><UserRoundCheck size={18} /> {showOnboardingDetails ? 'Hide setup guide' : 'First-time setup'}</button>
+              <button type="button" className="primary-button" onClick={openCreateAccountPopup}><UserRoundCheck size={18} /> Create Account</button>
+              <button type="button" className="secondary-button" onClick={openVaultApp}><Unlock size={18} /> Open My Vault</button>
+            </div>
+            <div className="public-trust-row" aria-label="Security highlights">
+              <span><ShieldCheck size={15} /> Browser-side encryption</span>
+              <span><FileText size={15} /> Secure document storage</span>
+              <span><MonitorSmartphone size={15} /> PWA access</span>
             </div>
           </div>
-          <div className="saas-proof-grid">
-            <article><ShieldCheck size={22} /><strong>Browser-side encryption</strong><span>Your vault is encrypted before storage or upload.</span></article>
-            <article><FileText size={22} /><strong>Secure documents</strong><span>PDF, Word, Excel and text files up to 10MB.</span></article>
-            <article><UsersRound size={22} /><strong>SaaS-ready accounts</strong><span>Tenant, owner and plan fields are prepared for future onboarding.</span></article>
+          <div className="saas-proof-grid polished-proof-grid">
+            <article><ShieldCheck size={22} /><strong>Private by design</strong><span>Your vault is encrypted before local storage, cloud backup or document upload.</span></article>
+            <article><FileText size={22} /><strong>Passwords and documents</strong><span>Save logins, notes, checklists, PDFs, Word, Excel and text documents up to 10MB.</span></article>
+            <article><UsersRound size={22} /><strong>Built for SaaS</strong><span>Tenant, account and plan foundations are ready for future paid onboarding.</span></article>
           </div>
-          {showOnboardingDetails && (
-            <div className="saas-onboarding-strip">
-              <strong>First-time account flow</strong>
-              <span>1. Add account details</span>
-              <span>2. Verify by email OTP</span>
-              <span>3. Create a master vault password</span>
-              <span>4. Save the first encrypted vault</span>
-            </div>
-          )}
+          <div className="landing-steps-panel">
+            <strong>How first-time setup works</strong>
+            <span>1. Create your account profile</span>
+            <span>2. Verify by email OTP</span>
+            <span>3. Create your master vault password</span>
+            <span>4. Save your first encrypted vault</span>
+          </div>
         </section>
 
         <section className="public-landing-note">
           <ShieldCheck size={18} />
-          <span>The installed PWA opens directly to the private vault login at <strong>/vault</strong>. This public landing page remains separate.</span>
+          <span>The installed PWA opens directly to the private vault login at <strong>/vault</strong>. New-account onboarding starts from this public landing page only.</span>
         </section>
         <p className="version public-version">{VERSION}</p>
+
+        {isCreateAccountPopupOpen && (
+          <div className="item-popup-layer create-account-popup-layer" role="dialog" aria-modal="true" aria-label="Create My Passwords account">
+            <div className="item-popup-backdrop" onClick={closeCreateAccountPopup} />
+            <section className="item-popup-card create-account-popup-card">
+              <header className="item-popup-header">
+                <div>
+                  <p className="eyebrow">Create Account</p>
+                  <h2><UserRoundCheck size={20} /> Set up your secure vault</h2>
+                </div>
+                <button type="button" className="icon-button" onClick={closeCreateAccountPopup} aria-label="Close create account popup"><X size={18} /></button>
+              </header>
+              <div className="item-popup-body create-account-popup-body">
+                <div className="onboarding-progress" aria-label="Onboarding progress">
+                  {[1, 2, 3].map((step) => <span key={step} className={landingOnboardingStep === step ? 'active' : landingOnboardingStep > step ? 'complete' : ''}>{step}</span>)}
+                </div>
+
+                {landingOnboardingStep === 1 && (
+                  <div className="create-account-step">
+                    <h3>Your account details</h3>
+                    <p>These details prepare your SaaS account record and help you recover your vault on a new device. They do not replace your master vault password.</p>
+                    <label>Display name<input value={landingAccountDraft.displayName} onChange={(e) => updateLandingDraft({ displayName: e.target.value })} placeholder="Your name" /></label>
+                    <label>Email for OTP recovery<input type="email" value={landingAccountDraft.email} onChange={(e) => updateLandingDraft({ email: e.target.value })} placeholder="you@example.com" /></label>
+                    <label>Mobile number</label>
+                    <div className="phone-combo-field">
+                      <CountryPicker countryCode={landingAccountDraft.phoneCountryCode || '+254'} countryIso={landingAccountDraft.phoneCountryIso || 'ke'} onChange={(country) => updateLandingDraft({ phoneCountryCode: country.code, phoneCountryIso: country.iso })} />
+                      <input inputMode="tel" value={landingAccountDraft.phoneNumber || ''} onChange={(e) => updateLandingDraft({ phoneNumber: e.target.value })} placeholder="712345678" />
+                    </div>
+                    <label>Account / vault name<input value={landingAccountDraft.accountName} onChange={(e) => updateLandingDraft({ accountName: e.target.value })} placeholder="My Private Vault" /></label>
+                  </div>
+                )}
+
+                {landingOnboardingStep === 2 && (
+                  <div className="create-account-step">
+                    <h3>Choose your starting plan</h3>
+                    <p>This is a foundation only. It prepares the account fields for future SaaS billing without enforcing payment yet.</p>
+                    <div className="plan-choice-grid">
+                      <button type="button" className={landingAccountDraft.planCode === 'personal_free' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'personal_free' })}><strong>Personal</strong><span>Single private vault foundation.</span></button>
+                      <button type="button" className={landingAccountDraft.planCode === 'family_foundation' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'family_foundation' })}><strong>Family</strong><span>Prepared for shared household vaults later.</span></button>
+                      <button type="button" className={landingAccountDraft.planCode === 'business_foundation' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'business_foundation' })}><strong>Business</strong><span>Prepared for teams and client accounts later.</span></button>
+                    </div>
+                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>Your live founder vault remains protected. This step does not change encryption, cloud backups or document blobs.</span></div>
+                  </div>
+                )}
+
+                {landingOnboardingStep === 3 && (
+                  <div className="create-account-step">
+                    <h3>Security confirmation</h3>
+                    <p>Next you will continue to the private vault setup page, where email OTP and the master vault password are handled securely.</p>
+                    <div className="security-check-list">
+                      <span><ShieldCheck size={17} /> Your master vault password is never stored by the app.</span>
+                      <span><ShieldCheck size={17} /> If the master password is forgotten, the encrypted vault cannot be recovered.</span>
+                      <span><ShieldCheck size={17} /> Existing vault data is not overwritten by this landing-page flow.</span>
+                    </div>
+                    <div className="account-summary-card">
+                      <span><strong>Account</strong>{landingAccountDraft.accountName || 'My Private Vault'}</span>
+                      <span><strong>Email</strong>{landingAccountDraft.email || 'not set'}</span>
+                      <span><strong>Phone</strong>{landingAccountDraft.phoneE164 || buildPhoneE164(landingAccountDraft.phoneCountryCode, landingAccountDraft.phoneNumber) || 'not set'}</span>
+                      <span><strong>Plan</strong>{landingAccountDraft.planCode || 'personal_free'}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <footer className="item-popup-footer create-account-popup-footer">
+                <button type="button" className="secondary-button" onClick={landingOnboardingStep === 1 ? closeCreateAccountPopup : () => setLandingOnboardingStep((step) => Math.max(1, step - 1))}>{landingOnboardingStep === 1 ? 'Cancel' : 'Back'}</button>
+                {landingOnboardingStep < 3 ? (
+                  <button type="button" className="primary-button" onClick={() => setLandingOnboardingStep((step) => Math.min(3, step + 1))}>Continue</button>
+                ) : (
+                  <button type="button" className="primary-button" onClick={continueLandingOnboarding}><Unlock size={18} /> Continue to secure setup</button>
+                )}
+              </footer>
+            </section>
+          </div>
+        )}
+        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
     );
   }
