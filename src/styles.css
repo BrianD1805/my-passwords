@@ -3411,3 +3411,218 @@ a,
   font-size: 0.88rem;
   line-height: 1.42;
 }
+
+/* Ver-0.021 SaaS landing and onboarding foundation */
+.saas-lock-screen {
+  grid-template-columns: minmax(0, 1.05fr) minmax(420px, 540px);
+  gap: 24px;
+  align-items: center;
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.saas-lock-screen .lock-card {
+  width: 100%;
+}
+
+.saas-landing-panel {
+  width: 100%;
+  background: rgba(255,255,255,.78);
+  border: 1px solid rgba(29,53,87,.11);
+  border-radius: 34px;
+  box-shadow: 0 24px 80px rgba(29,53,87,.13);
+  padding: clamp(22px, 4vw, 38px);
+  display: grid;
+  gap: 20px;
+  backdrop-filter: blur(16px);
+}
+
+.saas-hero-copy h1 {
+  font-size: clamp(2.3rem, 5.6vw, 4.9rem);
+  line-height: .96;
+  letter-spacing: -0.06em;
+  max-width: 760px;
+}
+
+.saas-badge {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  margin-bottom: 14px;
+  border-radius: 999px;
+  background: #eef7f1;
+  color: #245b34;
+  border: 1px solid #cbe9d4;
+  font-weight: 900;
+  font-size: .84rem;
+}
+
+.saas-hero-actions {
+  display: flex;
+  gap: 11px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.saas-proof-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.saas-proof-grid article {
+  min-height: 142px;
+  background: rgba(248,251,254,.92);
+  border: 1px solid #d9e5ee;
+  border-radius: 22px;
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.saas-proof-grid svg,
+.saas-account-card svg,
+.saas-inline-note svg {
+  color: #1d5f90;
+}
+
+.saas-proof-grid strong {
+  color: #14263b;
+  line-height: 1.2;
+}
+
+.saas-proof-grid span {
+  color: #637489;
+  line-height: 1.45;
+  font-size: .92rem;
+}
+
+.saas-onboarding-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 18px;
+  background: #f8fbfe;
+  border: 1px solid #d9e5ee;
+  color: #314b63;
+}
+
+.saas-onboarding-strip strong {
+  color: #14263b;
+  margin-right: 4px;
+}
+
+.saas-onboarding-strip span {
+  background: #eef3f8;
+  border: 1px solid #d9e5ee;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: .88rem;
+  font-weight: 800;
+}
+
+.saas-inline-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 11px 12px;
+  border-radius: 15px;
+  background: #eef7f1;
+  border: 1px solid #cbe9d4;
+  color: #245b34;
+  line-height: 1.45;
+  font-size: .9rem;
+}
+
+.saas-account-card {
+  background: rgba(255,255,255,.88);
+  border: 1px solid rgba(29,53,87,.1);
+  border-radius: 24px;
+  padding: 17px;
+  margin: 0 0 18px;
+  box-shadow: 0 14px 36px rgba(29,53,87,.07);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, .9fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.saas-account-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: #14263b;
+}
+
+.saas-account-card p:not(.eyebrow) {
+  color: #637489;
+  line-height: 1.5;
+  margin: 8px 0 0;
+}
+
+.saas-account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.saas-account-grid span {
+  background: #f8fbfe;
+  border: 1px solid #d9e5ee;
+  border-radius: 16px;
+  padding: 11px 12px;
+  color: #314b63;
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.saas-account-grid strong {
+  color: #64778a;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .11em;
+}
+
+@media (max-width: 1040px) {
+  .saas-lock-screen {
+    grid-template-columns: 1fr;
+    padding-top: 24px;
+    padding-bottom: 24px;
+  }
+  .saas-proof-grid,
+  .saas-account-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .saas-lock-screen {
+    width: min(100% - 22px, 620px);
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .saas-landing-panel {
+    border-radius: 26px;
+    padding: 20px;
+  }
+  .saas-hero-actions,
+  .saas-hero-actions button {
+    width: 100%;
+  }
+  .saas-proof-grid {
+    gap: 9px;
+  }
+  .saas-proof-grid article {
+    min-height: auto;
+  }
+  .saas-account-grid {
+    grid-template-columns: 1fr;
+  }
+}

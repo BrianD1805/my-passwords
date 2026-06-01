@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Star, Trash2, Unlock, Upload, UserRoundCheck, X } from 'lucide-react';
+import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.020B';
+const VERSION = 'My Passwords Ver-0.021';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -441,7 +441,12 @@ const defaultAccount = {
   tenantId: '',
   userId: '',
   otpStatus: 'Recovery verification ready',
-  accountVerified: false
+  accountVerified: false,
+  accountName: 'Brian Private Vault',
+  planCode: 'founder_private',
+  planStatus: 'founder_active',
+  accountStatus: 'active',
+  tenantRole: 'founder_first_tenant'
 };
 
 function cleanDigits(value) {
@@ -809,6 +814,7 @@ function App() {
   const [draggedFolderName, setDraggedFolderName] = useState('');
   const [touchReorderFolder, setTouchReorderFolder] = useState('');
   const [touchDropTargetFolder, setTouchDropTargetFolder] = useState('');
+  const [showOnboardingDetails, setShowOnboardingDetails] = useState(() => !Boolean(readStoredVault()));
   const touchReorderRef = useRef({ timer: null, source: '', active: false });
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
@@ -950,6 +956,12 @@ function App() {
       displayName: String(bootstrap.displayName || '').trim() || 'Vault User',
       tenantName: String(bootstrap.tenantName || '').trim() || `${checked.phoneE164} Vault`,
       accountLoginFoundation: true,
+      saasAccountFoundation: true,
+      accountName: bootstrap.accountName || bootstrap.tenantName || 'Private Vault',
+      planCode: bootstrap.planCode || 'personal_free',
+      planStatus: bootstrap.planStatus || 'trial_pending',
+      accountStatus: bootstrap.accountStatus || 'active',
+      tenantRole: bootstrap.tenantRole || 'primary_owner',
       otpStatus: 'pending'
     };
 
@@ -969,7 +981,12 @@ function App() {
         userId: result.userId,
         phoneE164: result.phoneE164 || payload.phoneE164,
         accountVerified: true,
-        otpStatus: 'Recovery verification ready'
+        otpStatus: 'Recovery verification ready',
+        accountName: result.accountName || payload.accountName || payload.tenantName,
+        planCode: result.planCode || payload.planCode || 'personal_free',
+        planStatus: result.planStatus || payload.planStatus || 'trial_pending',
+        accountStatus: result.accountStatus || payload.accountStatus || 'active',
+        tenantRole: result.tenantRole || payload.tenantRole || 'primary_owner'
       };
       setBootstrap(next);
       setAccountStatus({ state: 'ready', message: `Account details saved. Your master password is still required to open the vault.` });
@@ -1444,9 +1461,9 @@ function App() {
     setSyncing(true);
     showMessage('Saving account details...');
     try {
-      const result = await postJson('/.netlify/functions/bootstrap-admin', { ...bootstrap, email, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: checked.phoneE164, accountLoginFoundation: true });
+      const result = await postJson('/.netlify/functions/bootstrap-admin', { ...bootstrap, email, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: checked.phoneE164, accountLoginFoundation: true, saasAccountFoundation: true, accountName: bootstrap.accountName || bootstrap.tenantName || 'Private Vault', planCode: bootstrap.planCode || 'personal_free', planStatus: bootstrap.planStatus || 'trial_pending', accountStatus: bootstrap.accountStatus || 'active', tenantRole: bootstrap.tenantRole || 'primary_owner' });
       if (result.ok) {
-        const next = { ...bootstrap, email, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: result.phoneE164 || checked.phoneE164, tenantId: result.tenantId, userId: result.userId, accountVerified: true, otpStatus: 'Recovery verification ready' };
+        const next = { ...bootstrap, email, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: result.phoneE164 || checked.phoneE164, tenantId: result.tenantId, userId: result.userId, accountVerified: true, otpStatus: 'Recovery verification ready', accountName: result.accountName || bootstrap.accountName || bootstrap.tenantName, planCode: result.planCode || bootstrap.planCode || 'personal_free', planStatus: result.planStatus || bootstrap.planStatus || 'trial_pending', accountStatus: result.accountStatus || bootstrap.accountStatus || 'active', tenantRole: result.tenantRole || bootstrap.tenantRole || 'primary_owner' };
         setBootstrap(next);
         showMessage(result.message || 'Account details saved.');
         if (masterPassword) {
@@ -1812,8 +1829,35 @@ function App() {
 
   if (locked) {
     return (
-      <main className="lock-screen">
-        <section className="lock-card">
+      <main className="lock-screen saas-lock-screen">
+        <section className="saas-landing-panel" aria-label="My Passwords SaaS introduction">
+          <div className="saas-hero-copy">
+            <div className="saas-badge"><Sparkles size={16} /> SaaS foundation</div>
+            <p className="eyebrow">Encrypted password and document vault</p>
+            <h1>Private by design. Ready to grow.</h1>
+            <p className="intro">A secure PWA vault for passwords, private notes, checklists and encrypted documents — built first for your live vault, now prepared for future clients and paid accounts.</p>
+            <div className="saas-hero-actions">
+              <button type="button" className="primary-button" onClick={focusMasterPassword}><Unlock size={18} /> {hasLocalVault ? 'Open My Vault' : 'Create My Vault'}</button>
+              <button type="button" className="secondary-button" onClick={() => setShowOnboardingDetails((value) => !value)}><UserRoundCheck size={18} /> {showOnboardingDetails ? 'Hide setup guide' : 'First-time setup'}</button>
+            </div>
+          </div>
+          <div className="saas-proof-grid">
+            <article><ShieldCheck size={22} /><strong>Browser-side encryption</strong><span>Your vault is encrypted before storage or upload.</span></article>
+            <article><FileText size={22} /><strong>Secure documents</strong><span>PDF, Word, Excel and text files up to 10MB.</span></article>
+            <article><UsersRound size={22} /><strong>SaaS-ready accounts</strong><span>Tenant, owner and plan fields are now prepared.</span></article>
+          </div>
+          {showOnboardingDetails && (
+            <div className="saas-onboarding-strip">
+              <strong>First-time account flow</strong>
+              <span>1. Add account details</span>
+              <span>2. Verify by email OTP</span>
+              <span>3. Create a master vault password</span>
+              <span>4. Save the first encrypted vault</span>
+            </div>
+          )}
+        </section>
+
+        <section className="lock-card" id="vault-access-card">
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Secure private vault</p>
           <h1>My Passwords</h1>
@@ -1830,6 +1874,9 @@ function App() {
                 </div>
                 <label>Email</label>
                 <input type="email" value={bootstrap.email || ''} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" />
+                <label>Account / vault name</label>
+                <input value={bootstrap.accountName || bootstrap.tenantName || ''} onChange={(e) => setBootstrap({ ...bootstrap, accountName: e.target.value, tenantName: e.target.value })} placeholder="My Private Vault" />
+                <div className="saas-inline-note"><ShieldCheck size={16} /><span>Founder tenant setup: this creates or rechecks the SaaS account record without changing your encryption or overwriting an existing cloud vault.</span></div>
                 <div className={`otp-test-panel ${otpTest.status}`}>
                   <div className="otp-test-title"><ShieldCheck size={16} /><strong>Verify your account</strong></div>
                   <p className="otp-guidance-note">{otpChannel === 'email' ? 'Choose how you would like to receive your one-time code. We will send a one-time code to your email.' : 'Choose how you would like to receive your one-time code. SMS verification is coming soon.'}</p>
@@ -1855,7 +1902,7 @@ function App() {
               <>
                 <label>Confirm master vault password</label>
                 <input type="password" value={confirmMasterPassword} onChange={(e) => setConfirmMasterPassword(e.target.value)} placeholder="Type the same password again" />
-                <p className="create-warning">If we cannot restore an existing vault, a new vault can be created only when both master password entries match.</p>
+                <p className="create-warning">Your master password is never stored by the app. If it is forgotten, the encrypted vault cannot be recovered. New vault creation only continues when both password entries match.</p>
               </>
             )}
             <button type="submit"><Unlock size={18} /> {hasLocalVault ? 'Unlock Local Vault' : 'Verify Account & Unlock'}</button>
@@ -2030,6 +2077,20 @@ function App() {
             <article><UserRoundCheck /><strong>{bootstrap.userId ? 'Ready' : 'Setup'}</strong><span>Account</span></article>
           </section>
 
+          <section className="saas-account-card">
+            <div>
+              <p className="eyebrow">SaaS account foundation</p>
+              <h2><UsersRound size={21} /> Tenant and plan status</h2>
+              <p>This section prepares the vault for future SaaS clients while keeping your current live vault local-first and safely encrypted.</p>
+            </div>
+            <div className="saas-account-grid">
+              <span><strong>Account</strong>{bootstrap.accountName || bootstrap.tenantName || 'Private Vault'}</span>
+              <span><strong>Plan</strong>{bootstrap.planCode || 'personal_free'}</span>
+              <span><strong>Status</strong>{bootstrap.planStatus || bootstrap.accountStatus || 'active'}</span>
+              <span><strong>Role</strong>{bootstrap.tenantRole || 'primary_owner'}</span>
+            </div>
+          </section>
+
           <section className="sync-panel">
             <div className="sync-title">
               <div><p className="eyebrow">Account and recovery</p><h2><Cloud size={21} /> Vault backup and restore</h2></div>
@@ -2103,7 +2164,14 @@ function App() {
               </label>
               <label>Email<input type="email" value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
               <label>Display name<input value={bootstrap.displayName} onChange={(e) => setBootstrap({ ...bootstrap, displayName: e.target.value })} /></label>
-              <label>Vault name<input value={bootstrap.tenantName} onChange={(e) => setBootstrap({ ...bootstrap, tenantName: e.target.value })} /></label>
+              <label>Account name<input value={bootstrap.accountName || bootstrap.tenantName || ''} onChange={(e) => setBootstrap({ ...bootstrap, accountName: e.target.value, tenantName: e.target.value })} /></label>
+              <label>Plan foundation<select value={bootstrap.planCode || 'personal_free'} onChange={(e) => setBootstrap({ ...bootstrap, planCode: e.target.value, planStatus: e.target.value === 'founder_private' ? 'founder_active' : 'trial_pending' })}>
+                <option value="founder_private">Founder private</option>
+                <option value="personal_free">Personal free</option>
+                <option value="personal_trial">Personal trial</option>
+                <option value="family_trial">Family trial</option>
+                <option value="business_trial">Business trial</option>
+              </select></label>
               <div className="button-stack">
                 <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Save account details</button>
                 <button type="button" className="secondary-button" disabled={syncing} onClick={syncEncryptedVault}><Cloud size={18} /> {syncing ? 'Backing up...' : 'Back up vault'}</button>

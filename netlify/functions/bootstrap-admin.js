@@ -46,7 +46,12 @@ export async function handler(event) {
   const phoneNumber = normaliseLocalPhone(body.phoneNumber || body.mobile || '');
   const phoneE164 = String(body.phoneE164 || buildPhoneE164(phoneCountryCode, phoneNumber)).trim();
   const displayName = String(body.displayName || '').trim() || 'Vault User';
-  const tenantName = String(body.tenantName || '').trim() || `${phoneE164 || email || 'Private'} Vault`;
+  const accountName = String(body.accountName || body.tenantName || '').trim() || `${phoneE164 || email || 'Private'} Vault`;
+  const tenantName = String(body.tenantName || body.accountName || '').trim() || accountName;
+  const requestedPlanCode = String(body.planCode || '').trim() || 'personal_free';
+  const requestedPlanStatus = String(body.planStatus || '').trim() || 'trial_pending';
+  const requestedAccountStatus = String(body.accountStatus || '').trim() || 'active';
+  const requestedTenantRole = String(body.tenantRole || '').trim() || 'primary_owner';
 
   if (!phoneE164) {
     return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A mobile number with country code is required for the account login foundation.' });
@@ -63,20 +68,25 @@ export async function handler(event) {
     let existingTenant = null;
 
     if (finalTenantId) {
-      const existingTenants = await selectRows('tenants', `select=id,name,status,plan&id=${eq(finalTenantId)}&limit=1`);
+      const existingTenants = await selectRows('tenants', `select=id,name,status,plan,account_name,plan_code,plan_status,account_status,tenant_role&id=${eq(finalTenantId)}&limit=1`);
       existingTenant = existingTenants?.[0] || null;
       if (existingTenant) {
         await updateRow('tenants', `id=${eq(finalTenantId)}`, {
           name: existingTenant.name || tenantName,
-          plan: existingTenant.plan || 'private_founder',
-          status: 'active',
+          plan: existingTenant.plan || requestedPlanCode || 'personal_free',
+          status: requestedAccountStatus || 'active',
+          account_name: existingTenant.account_name || accountName,
+          plan_code: existingTenant.plan_code || requestedPlanCode,
+          plan_status: existingTenant.plan_status || requestedPlanStatus,
+          account_status: requestedAccountStatus || 'active',
+          tenant_role: existingTenant.tenant_role || requestedTenantRole,
           updated_at: new Date().toISOString()
         });
       }
     }
 
     if (!finalTenantId) {
-      const existingTenants = await selectRows('tenants', `select=id,name,status,plan&name=${eq(tenantName)}&limit=1`);
+      const existingTenants = await selectRows('tenants', `select=id,name,status,plan,account_name,plan_code,plan_status,account_status,tenant_role&name=${eq(tenantName)}&limit=1`);
       existingTenant = existingTenants?.[0] || null;
       finalTenantId = existingTenant?.id || '';
 
@@ -85,14 +95,24 @@ export async function handler(event) {
         await insertRow('tenants', {
           id: finalTenantId,
           name: tenantName,
-          plan: 'private_founder',
-          status: 'active'
+          plan: requestedPlanCode,
+          status: requestedAccountStatus,
+          account_name: accountName,
+          plan_code: requestedPlanCode,
+          plan_status: requestedPlanStatus,
+          account_status: requestedAccountStatus,
+          tenant_role: requestedTenantRole
         });
       } else {
         await updateRow('tenants', `id=${eq(finalTenantId)}`, {
           name: tenantName,
-          plan: existingTenant?.plan || 'private_founder',
-          status: 'active',
+          plan: existingTenant?.plan || requestedPlanCode,
+          status: requestedAccountStatus,
+          account_name: existingTenant?.account_name || accountName,
+          plan_code: existingTenant?.plan_code || requestedPlanCode,
+          plan_status: existingTenant?.plan_status || requestedPlanStatus,
+          account_status: requestedAccountStatus,
+          tenant_role: existingTenant?.tenant_role || requestedTenantRole,
           updated_at: new Date().toISOString()
         });
       }
@@ -150,8 +170,8 @@ export async function handler(event) {
       id: publicId('audit'),
       tenant_id: finalTenantId,
       user_id: finalUserId,
-      action: existingUser ? 'account_login_foundation_rechecked' : 'account_login_foundation_created',
-      metadata: { version: APP_VERSION, provider: 'supabase', phone_e164: phoneE164, otp_ready: true, email_backup_present: Boolean(email) }
+      action: existingUser ? 'saas_account_foundation_rechecked' : 'saas_account_foundation_created',
+      metadata: { version: APP_VERSION, provider: 'supabase', phone_e164: phoneE164, otp_ready: true, email_backup_present: Boolean(email), account_name: accountName, plan_code: requestedPlanCode, plan_status: requestedPlanStatus, tenant_role: requestedTenantRole }
     });
 
     return jsonResponse(200, {
@@ -165,14 +185,19 @@ export async function handler(event) {
       phoneNumber,
       phoneE164,
       email,
+      accountName,
+      planCode: requestedPlanCode,
+      planStatus: requestedPlanStatus,
+      accountStatus: requestedAccountStatus,
+      tenantRole: requestedTenantRole,
       reusedExistingTenant: !!existingTenant?.id || !!existingUser?.tenant_id,
       reusedExistingUser: !!existingUser?.id,
       otpReady: true,
       otpProviderConnected: false,
       user: { id: finalUserId, email, display_name: displayName, role: existingUser?.role || 'administrator', phone_e164: phoneE164 },
       message: existingUser
-        ? 'Account identity already existed. Existing Supabase tenant/user IDs were rechecked and saved locally.'
-        : 'Account login foundation created in Supabase. Phone is stored in international SMS format.'
+        ? 'SaaS account foundation already existed. Existing Supabase tenant/user IDs were rechecked and saved locally.'
+        : 'SaaS account foundation created in Supabase. Phone is stored in international SMS format.'
     });
   } catch (error) {
     return jsonResponse(500, {
