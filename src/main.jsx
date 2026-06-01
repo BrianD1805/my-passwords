@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.024';
+const VERSION = 'My Passwords Ver-0.025';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2010,6 +2010,48 @@ function App() {
             <article><strong>Personal</strong><span>Private vault for one user</span></article>
             <article><strong>Family</strong><span>Prepared for shared household access</span></article>
             <article><strong>Business</strong><span>Prepared for client and team accounts</span></article>
+          </div>
+        </section>
+
+
+
+        <section className="landing-section landing-security-section" aria-label="Privacy and security">
+          <div className="landing-section-heading">
+            <p className="eyebrow">Privacy and security</p>
+            <h2>Built around the idea that private details should stay private.</h2>
+            <p>My Passwords keeps the public website separate from your private vault. Your master password is created on the vault page and your saved data is encrypted before it is stored.</p>
+          </div>
+          <div className="landing-security-grid">
+            <article><ShieldCheck size={23} /><strong>Master password stays private</strong><p>Your master vault password is not stored by the app. It is the key to decrypting your private vault.</p></article>
+            <article><Lock size={23} /><strong>Encrypted before backup</strong><p>Vault records and uploaded documents are encrypted before they are saved locally or sent to cloud storage.</p></article>
+            <article><MonitorSmartphone size={23} /><strong>Private vault route</strong><p>The installed app opens the secure vault page directly, while the public landing page remains separate.</p></article>
+          </div>
+        </section>
+
+        <section className="landing-section landing-faq-section" aria-label="Frequently asked questions">
+          <div className="landing-section-heading compact">
+            <p className="eyebrow">Questions answered</p>
+            <h2>Frequently asked questions.</h2>
+          </div>
+          <div className="landing-faq-grid">
+            <article><h3>Can My Passwords recover my master password?</h3><p>No. Your master password is what unlocks the encrypted vault. If it is forgotten, the encrypted vault cannot be decrypted.</p></article>
+            <article><h3>Where does the vault open?</h3><p>The public website opens at the main domain. Your private vault and installed PWA open at the dedicated vault page.</p></article>
+            <article><h3>Can I store documents too?</h3><p>Yes. The vault supports encrypted document storage for PDF, Word, Excel, text and related files.</p></article>
+            <article><h3>Is this only for one person?</h3><p>The current foundation supports personal use first, with family and business options planned for future SaaS stages.</p></article>
+          </div>
+        </section>
+
+        <section className="landing-section landing-contact-section" aria-label="Contact and support">
+          <div className="landing-contact-copy">
+            <p className="eyebrow">Need help?</p>
+            <h2>Support for setup, access and account questions.</h2>
+            <p>Use the support options for help with getting started, opening your vault on a new device, or asking about future family and business accounts.</p>
+          </div>
+          <div className="landing-contact-card">
+            <div><Mail size={20} /><span><strong>Email support</strong><small>Use your account email when asking for help.</small></span></div>
+            <a href="mailto:support@password-encrypt.com">support@password-encrypt.com</a>
+            <button type="button" className="primary-button" onClick={openCreateAccountPopup}><UserRoundCheck size={18} /> Create Account</button>
+            <button type="button" className="secondary-button" onClick={openVaultApp}><Unlock size={18} /> Open My Vault</button>
           </div>
         </section>
 
