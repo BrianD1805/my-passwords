@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.021';
+const VERSION = 'My Passwords Ver-0.021A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1626,6 +1626,13 @@ function App() {
 
   const hasActiveVaultFilter = Boolean(query.trim() || category);
   const viewedItem = viewItemId ? visibleItems.find((item) => item.id === viewItemId) : null;
+  const routePath = typeof window !== 'undefined' ? window.location.pathname : '/vault';
+  const isVaultRoute = ['/vault', '/app', '/login'].includes(routePath);
+  const isPublicLandingRoute = !isVaultRoute;
+
+  function openVaultApp() {
+    window.location.assign('/vault');
+  }
 
   function openVaultSection(cat) {
     setCategory(cat);
@@ -1827,24 +1834,29 @@ function App() {
     showMessage('Checklist updated.');
   }
 
-  if (locked) {
+  if (isPublicLandingRoute) {
     return (
-      <main className="lock-screen saas-lock-screen">
-        <section className="saas-landing-panel" aria-label="My Passwords SaaS introduction">
+      <main className="public-landing-page">
+        <header className="public-landing-topbar">
+          <div className="public-brand"><Lock size={22} /><span>My Passwords</span></div>
+          <button type="button" className="secondary-button public-open-button" onClick={openVaultApp}><Unlock size={17} /> Open My Vault</button>
+        </header>
+
+        <section className="saas-landing-panel public-hero-panel" aria-label="My Passwords SaaS introduction">
           <div className="saas-hero-copy">
             <div className="saas-badge"><Sparkles size={16} /> SaaS foundation</div>
             <p className="eyebrow">Encrypted password and document vault</p>
             <h1>Private by design. Ready to grow.</h1>
-            <p className="intro">A secure PWA vault for passwords, private notes, checklists and encrypted documents — built first for your live vault, now prepared for future clients and paid accounts.</p>
+            <p className="intro">A secure PWA vault for passwords, private notes, checklists and encrypted documents — built first as a live private vault, now prepared for future clients and paid accounts.</p>
             <div className="saas-hero-actions">
-              <button type="button" className="primary-button" onClick={focusMasterPassword}><Unlock size={18} /> {hasLocalVault ? 'Open My Vault' : 'Create My Vault'}</button>
+              <button type="button" className="primary-button" onClick={openVaultApp}><Unlock size={18} /> Open My Vault</button>
               <button type="button" className="secondary-button" onClick={() => setShowOnboardingDetails((value) => !value)}><UserRoundCheck size={18} /> {showOnboardingDetails ? 'Hide setup guide' : 'First-time setup'}</button>
             </div>
           </div>
           <div className="saas-proof-grid">
             <article><ShieldCheck size={22} /><strong>Browser-side encryption</strong><span>Your vault is encrypted before storage or upload.</span></article>
             <article><FileText size={22} /><strong>Secure documents</strong><span>PDF, Word, Excel and text files up to 10MB.</span></article>
-            <article><UsersRound size={22} /><strong>SaaS-ready accounts</strong><span>Tenant, owner and plan fields are now prepared.</span></article>
+            <article><UsersRound size={22} /><strong>SaaS-ready accounts</strong><span>Tenant, owner and plan fields are prepared for future onboarding.</span></article>
           </div>
           {showOnboardingDetails && (
             <div className="saas-onboarding-strip">
@@ -1857,6 +1869,18 @@ function App() {
           )}
         </section>
 
+        <section className="public-landing-note">
+          <ShieldCheck size={18} />
+          <span>The installed PWA opens directly to the private vault login at <strong>/vault</strong>. This public landing page remains separate.</span>
+        </section>
+        <p className="version public-version">{VERSION}</p>
+      </main>
+    );
+  }
+
+  if (locked) {
+    return (
+      <main className="lock-screen">
         <section className="lock-card" id="vault-access-card">
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Secure private vault</p>

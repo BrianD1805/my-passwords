@@ -2,7 +2,7 @@
   "name": "My Passwords",
   "short_name": "My Passwords",
   "description": "Private encrypted SaaS-ready password vault PWA.",
-  "start_url": "/",
+  "start_url": "/vault",
   "display": "standalone",
   "background_color": "#edf3f8",
   "theme_color": "#1d3557",
