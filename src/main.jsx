@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.023';
+const VERSION = 'My Passwords Ver-0.024';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1937,41 +1937,95 @@ function App() {
           <button type="button" className="secondary-button public-open-button" onClick={openVaultApp}><Unlock size={17} /> Open My Vault</button>
         </header>
 
-        <section className="saas-landing-panel public-hero-panel" aria-label="My Passwords SaaS introduction">
-          <div className="saas-hero-copy">
-            <div className="saas-badge"><Sparkles size={16} /> Secure SaaS-ready vault</div>
-            <p className="eyebrow">Encrypted password and document vault</p>
-            <h1>Your private vault, ready for everyday life and future teams.</h1>
-            <p className="intro">Store passwords, private notes, checklists and important documents in a clean PWA vault. Your sensitive data is encrypted in the browser before it is saved or synced.</p>
-            <div className="saas-hero-actions">
-              <button type="button" className="primary-button" onClick={openCreateAccountPopup}><UserRoundCheck size={18} /> Create Account</button>
-              <button type="button" className="secondary-button" onClick={openVaultApp}><Unlock size={18} /> Open My Vault</button>
+        <section className="landing-hero-shell" aria-label="My Passwords introduction">
+          <div className="landing-hero-copy">
+            <div className="landing-pill"><Sparkles size={16} /> Private vault for passwords, notes and documents</div>
+            <h1>Keep your important private details in one secure place.</h1>
+            <p className="landing-intro">My Passwords is a clean encrypted vault for logins, secret notes, checklists and important documents. It is designed for everyday personal use now, with room to grow into family and business vaults later.</p>
+            <div className="landing-cta-row">
+              <button type="button" className="primary-button landing-primary-cta" onClick={openCreateAccountPopup}><UserRoundCheck size={18} /> Create Account</button>
+              <button type="button" className="secondary-button landing-secondary-cta" onClick={openVaultApp}><Unlock size={18} /> Open My Vault</button>
             </div>
-            <div className="public-trust-row" aria-label="Security highlights">
-              <span><ShieldCheck size={15} /> Browser-side encryption</span>
-              <span><FileText size={15} /> Secure document storage</span>
-              <span><MonitorSmartphone size={15} /> PWA access</span>
+            <div className="landing-trust-strip" aria-label="Security highlights">
+              <span><ShieldCheck size={16} /> Browser-side encryption</span>
+              <span><Cloud size={16} /> Encrypted cloud backup</span>
+              <span><MonitorSmartphone size={16} /> Installable PWA</span>
             </div>
           </div>
-          <div className="saas-proof-grid polished-proof-grid">
-            <article><ShieldCheck size={22} /><strong>Private by design</strong><span>Your vault is encrypted before local storage, cloud backup or document upload.</span></article>
-            <article><FileText size={22} /><strong>Passwords and documents</strong><span>Save logins, notes, checklists, PDFs, Word, Excel and text documents up to 10MB.</span></article>
-            <article><UsersRound size={22} /><strong>Built for SaaS</strong><span>Tenant, account and plan foundations are ready for future paid onboarding.</span></article>
-          </div>
-          <div className="landing-steps-panel">
-            <strong>How first-time setup works</strong>
-            <span>1. Create your account profile</span>
-            <span>2. Verify by email OTP</span>
-            <span>3. Create your master vault password</span>
-            <span>4. Save your first encrypted vault</span>
+
+          <div className="landing-vault-preview" aria-label="Vault preview">
+            <div className="preview-window-bar">
+              <span></span><span></span><span></span>
+              <strong>Secure vault</strong>
+            </div>
+            <div className="preview-lock-card">
+              <div className="preview-lock-icon"><Lock size={26} /></div>
+              <p>Encrypted vault</p>
+              <h2>Passwords, documents and private notes</h2>
+              <div className="preview-search-row"><Search size={16} /> Search your vault</div>
+            </div>
+            <div className="preview-card-grid">
+              <article><KeyRound size={18} /><strong>Passwords</strong><span>Logins and access details</span></article>
+              <article><FileText size={18} /><strong>Documents</strong><span>PDF, Word, Excel and text files</span></article>
+              <article><Star size={18} /><strong>Favourites</strong><span>Fast access to essentials</span></article>
+              <article><RefreshCw size={18} /><strong>Sync</strong><span>Encrypted backup snapshots</span></article>
+            </div>
           </div>
         </section>
 
-        <section className="public-landing-note">
-          <ShieldCheck size={18} />
-          <span>The installed PWA opens directly to the private vault login at <strong>/vault</strong>. New-account onboarding starts from this public landing page only.</span>
+        <section className="landing-section landing-feature-section" aria-label="Features">
+          <div className="landing-section-heading">
+            <p className="eyebrow">Everything important, neatly organised</p>
+            <h2>A vault that feels simple, even when life is not.</h2>
+            <p>Store the details you always need, protect the details you never want exposed, and keep your most important records close at hand.</p>
+          </div>
+          <div className="landing-feature-grid">
+            <article><ShieldCheck size={24} /><h3>Private by design</h3><p>Your vault is encrypted in the browser before it is stored locally, backed up, or uploaded as a document.</p></article>
+            <article><FileText size={24} /><h3>Documents included</h3><p>Store important PDFs, Word files, Excel files, text notes and records alongside your private vault items.</p></article>
+            <article><Search size={24} /><h3>Find things quickly</h3><p>Search across folders, favourites and saved records without turning your vault into a cluttered filing cabinet.</p></article>
+            <article><MonitorSmartphone size={24} /><h3>Made for daily use</h3><p>Install it as a PWA and open your private vault directly from your phone, laptop or desktop.</p></article>
+          </div>
         </section>
-        <p className="version public-version">{VERSION}</p>
+
+        <section className="landing-section landing-how-section" aria-label="How setup works">
+          <div className="landing-section-heading compact">
+            <p className="eyebrow">Simple setup</p>
+            <h2>Create your account, then create your private vault.</h2>
+          </div>
+          <div className="landing-step-grid">
+            <article><span>1</span><strong>Create your account</strong><p>Add your name, email and mobile details for account setup and recovery.</p></article>
+            <article><span>2</span><strong>Verify securely</strong><p>Use email verification before creating or restoring a vault on a new device.</p></article>
+            <article><span>3</span><strong>Choose your master password</strong><p>Your master password protects the encrypted vault and is never stored by the app.</p></article>
+            <article><span>4</span><strong>Start saving safely</strong><p>Add passwords, notes, checklists and documents to your encrypted private vault.</p></article>
+          </div>
+        </section>
+
+        <section className="landing-section landing-plan-section" aria-label="Plans">
+          <div>
+            <p className="eyebrow">Ready to grow</p>
+            <h2>Personal now. Family and business options later.</h2>
+            <p>Start with a private personal vault, then grow into family or business options as they become available. Existing vaults stay private, encrypted and separate.</p>
+          </div>
+          <div className="landing-mini-plans">
+            <article><strong>Personal</strong><span>Private vault for one user</span></article>
+            <article><strong>Family</strong><span>Prepared for shared household access</span></article>
+            <article><strong>Business</strong><span>Prepared for client and team accounts</span></article>
+          </div>
+        </section>
+
+        <section className="landing-final-cta" aria-label="Create account">
+          <div>
+            <p className="eyebrow">Start securely</p>
+            <h2>Create your encrypted vault account.</h2>
+            <p>Set up your account from the landing page, then continue to the private vault screen to create your secure master password.</p>
+          </div>
+          <button type="button" className="primary-button landing-primary-cta" onClick={openCreateAccountPopup}><UserRoundCheck size={18} /> Create Account</button>
+        </section>
+
+        <footer className="landing-footer">
+          <span>My Passwords</span>
+          <button type="button" onClick={openVaultApp}>Open My Vault</button>
+        </footer>
 
         {isCreateAccountPopupOpen && (
           <div className="item-popup-layer create-account-popup-layer" role="dialog" aria-modal="true" aria-label="Create My Passwords account">
@@ -2007,13 +2061,13 @@ function App() {
                 {landingOnboardingStep === 2 && (
                   <div className="create-account-step">
                     <h3>Choose your starting plan</h3>
-                    <p>This is a foundation only. It prepares the account fields for future SaaS billing without enforcing payment yet.</p>
+                    <p>Choose the option that best matches how you expect to use My Passwords.</p>
                     <div className="plan-choice-grid">
-                      <button type="button" className={landingAccountDraft.planCode === 'personal_free' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'personal_free' })}><strong>Personal</strong><span>Single private vault foundation.</span></button>
-                      <button type="button" className={landingAccountDraft.planCode === 'family_foundation' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'family_foundation' })}><strong>Family</strong><span>Prepared for shared household vaults later.</span></button>
-                      <button type="button" className={landingAccountDraft.planCode === 'business_foundation' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'business_foundation' })}><strong>Business</strong><span>Prepared for teams and client accounts later.</span></button>
+                      <button type="button" className={landingAccountDraft.planCode === 'personal_free' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'personal_free' })}><strong>Personal</strong><span>A private vault for one person.</span></button>
+                      <button type="button" className={landingAccountDraft.planCode === 'family_foundation' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'family_foundation' })}><strong>Family</strong><span>For household vault sharing when available.</span></button>
+                      <button type="button" className={landingAccountDraft.planCode === 'business_foundation' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'business_foundation' })}><strong>Business</strong><span>For team and client vaults when available.</span></button>
                     </div>
-                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>Your live founder vault remains protected. This step does not change encryption, cloud backups or document blobs.</span></div>
+                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>Your existing vault remains protected. This step does not change your saved passwords, documents or encrypted backups.</span></div>
                   </div>
                 )}
 
