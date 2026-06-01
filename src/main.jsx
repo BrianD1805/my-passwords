@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.022';
+const VERSION = 'My Passwords Ver-0.023';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -816,6 +816,7 @@ function App() {
   const [touchDropTargetFolder, setTouchDropTargetFolder] = useState('');
   const [showOnboardingDetails, setShowOnboardingDetails] = useState(() => !Boolean(readStoredVault()));
   const [isCreateAccountPopupOpen, setIsCreateAccountPopupOpen] = useState(false);
+  const [isCreateVaultPopupOpen, setIsCreateVaultPopupOpen] = useState(false);
   const [landingOnboardingStep, setLandingOnboardingStep] = useState(1);
   const [landingAccountDraft, setLandingAccountDraft] = useState(() => {
     const saved = readSavedAccount();
@@ -898,9 +899,13 @@ function App() {
   }, [bootstrap]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || isFolderPopupOpen || isCreateAccountPopupOpen);
+    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen);
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, isFolderPopupOpen, isCreateAccountPopupOpen]);
+  }, [isItemPopupOpen, viewItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen]);
+
+  useEffect(() => {
+    if (!locked) setIsCreateVaultPopupOpen(false);
+  }, [locked]);
 
   async function fetchLatestCloudSnapshot(account = bootstrap) {
     if (!account.tenantId || !account.userId) return { ok: false, hasSnapshot: false, message: 'Account identity is not verified on this device yet.' };
@@ -1156,6 +1161,11 @@ function App() {
       if (!localVault) {
         const accountCheck = await ensureAccountIdentity({ silent: true });
         if (!accountCheck.ok) return;
+        if (!otpTest.verified) {
+          showVerifyOverlay('error', 'Verify your account first', 'Please verify your email before creating or restoring a vault on this device.');
+          showMessage('Please verify your account before creating or restoring a vault on this device.', 'warning');
+          return;
+        }
         activeAccount = accountCheck.account;
       }
 
@@ -2048,57 +2058,95 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Secure private vault</p>
           <h1>My Passwords</h1>
-          <p className="intro">Unlock with your master password. On a new device, verify your account first, then restore your vault securely.</p>
-          <form onSubmit={unlockVault} className="unlock-form">
-            {!hasLocalVault && (
-              <div className="account-restore-panel">
-                <div className="account-panel-title"><Phone size={17} /><strong>Restore your vault</strong></div>
-                <p>This looks like a new device. Verify your account, then enter your master password to restore your vault.</p>
-                <label>Mobile number</label>
-                <div className="phone-combo-field">
-                  <CountryPicker countryCode={bootstrap.phoneCountryCode || '+254'} countryIso={bootstrap.phoneCountryIso || 'ke'} onChange={(country) => setBootstrap({ ...bootstrap, phoneCountryCode: country.code, phoneCountryIso: country.iso, phoneE164: buildPhoneE164(country.code, bootstrap.phoneNumber) })} />
-                  <input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" />
-                </div>
-                <label>Email</label>
-                <input type="email" value={bootstrap.email || ''} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" />
-                <label>Account / vault name</label>
-                <input value={bootstrap.accountName || bootstrap.tenantName || ''} onChange={(e) => setBootstrap({ ...bootstrap, accountName: e.target.value, tenantName: e.target.value })} placeholder="My Private Vault" />
-                <div className="saas-inline-note"><ShieldCheck size={16} /><span>Founder tenant setup: this creates or rechecks the SaaS account record without changing your encryption or overwriting an existing cloud vault.</span></div>
-                <div className={`otp-test-panel ${otpTest.status}`}>
-                  <div className="otp-test-title"><ShieldCheck size={16} /><strong>Verify your account</strong></div>
-                  <p className="otp-guidance-note">{otpChannel === 'email' ? 'Choose how you would like to receive your one-time code. We will send a one-time code to your email.' : 'Choose how you would like to receive your one-time code. SMS verification is coming soon.'}</p>
-                  <div className={`otp-channel-toggle premium-toggle ${otpChannel}`} role="tablist" aria-label="Choose OTP delivery method">
-                    <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => setOtpChannel('email')}><Mail size={15} /> Email</button>
-                    <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => setOtpChannel('sms')}><Phone size={15} /> SMS</button>
-                  </div>
-                  {otpTest.message && <div className={`otp-status-line ${otpTest.verified ? 'verified' : ''}`}>{otpTest.message}</div>}
-                  {otpTest.code && <div className="test-code-box"><span>Recovery code</span><code>{otpTest.code}</code></div>}
-                  <div className="otp-flow-row">
-                    <button type="button" className="secondary-button otp-send-button" onClick={requestSelectedOtp} disabled={otpTest.status === 'requesting' || otpChannel === 'sms'}>{otpTest.status === 'requesting' ? 'Sending...' : (otpChannel === 'email' ? 'Send email OTP' : 'SMS coming soon')}</button>
-                    <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
-                    <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
-                  </div>
-                  {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Enter your master password to complete login.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Enter master password</button></div>}
-                  
-                </div>
+          {hasLocalVault ? (
+            <>
+              <p className="intro">Unlock your private vault with your master password.</p>
+              <form onSubmit={unlockVault} className="unlock-form">
+                <label>Master vault password</label>
+                <input id="master-password-input" type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" autoFocus={hasLocalVault && !suppressUnlockAutofocus} />
+                <button type="submit"><Unlock size={18} /> Unlock Local Vault</button>
+              </form>
+              <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
+            </>
+          ) : (
+            <>
+              <p className="intro">Create your encrypted vault on this device, or verify your account to open an existing secure backup.</p>
+              <div className="create-vault-entry-actions">
+                <button type="button" className="primary-button" onClick={() => { setCreateMode(true); setIsCreateVaultPopupOpen(true); }}><Plus size={18} /> Create Vault</button>
+                <button type="button" className="secondary-button" onClick={() => { setCreateMode(false); setIsCreateVaultPopupOpen(true); }}><RefreshCw size={17} /> Open Existing Vault</button>
               </div>
-            )}
-            <label>{hasLocalVault ? 'Master vault password' : 'Master vault password'}</label>
-            <input id="master-password-input" type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={hasLocalVault ? 'Enter your master password' : 'Enter or create your master password'} autoFocus={hasLocalVault && !suppressUnlockAutofocus} />
-            {!hasLocalVault && createMode && (
-              <>
-                <label>Confirm master vault password</label>
-                <input type="password" value={confirmMasterPassword} onChange={(e) => setConfirmMasterPassword(e.target.value)} placeholder="Type the same password again" />
-                <p className="create-warning">Your master password is never stored by the app. If it is forgotten, the encrypted vault cannot be recovered. New vault creation only continues when both password entries match.</p>
-              </>
-            )}
-            <button type="submit"><Unlock size={18} /> {hasLocalVault ? 'Unlock Local Vault' : 'Verify Account & Unlock'}</button>
-          </form>
-          {hasLocalVault && <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>}
+            </>
+          )}
           {message && <p className="message">{message}</p>}
           <div className="security-note"><ShieldCheck size={18} /> Your master password opens your vault. Your phone and email help verify your account.</div>
           <p className="version">{VERSION}</p>
         </section>
+
+        {isCreateVaultPopupOpen && !hasLocalVault && (
+          <div className="item-popup-layer create-vault-popup-layer" role="presentation">
+            <div className="item-popup-backdrop" onClick={() => setIsCreateVaultPopupOpen(false)} />
+            <section className="item-popup-card create-account-popup-card create-vault-popup-card" role="dialog" aria-modal="true" aria-labelledby="create-vault-title">
+              <header className="item-popup-header">
+                <div>
+                  <p className="eyebrow">Secure setup</p>
+                  <h2 id="create-vault-title"><ShieldCheck size={21} /> Create your vault</h2>
+                </div>
+                <button type="button" className="icon-button" onClick={() => setIsCreateVaultPopupOpen(false)} aria-label="Close create vault popup"><X size={18} /></button>
+              </header>
+
+              <form onSubmit={unlockVault} className="item-popup-body create-account-popup-body create-vault-popup-body">
+                <div className="create-account-step">
+                  <h3>Account details</h3>
+                  <p>Your email and mobile number help verify this device. Your master password is still the only key that opens the vault.</p>
+                  <label>Mobile number</label>
+                  <div className="phone-combo-field">
+                    <CountryPicker countryCode={bootstrap.phoneCountryCode || '+254'} countryIso={bootstrap.phoneCountryIso || 'ke'} onChange={(country) => setBootstrap({ ...bootstrap, phoneCountryCode: country.code, phoneCountryIso: country.iso, phoneE164: buildPhoneE164(country.code, bootstrap.phoneNumber) })} />
+                    <input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" />
+                  </div>
+                  <label>Email<input type="email" value={bootstrap.email || ''} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
+                  <label>Vault name<input value={bootstrap.accountName || bootstrap.tenantName || ''} onChange={(e) => setBootstrap({ ...bootstrap, accountName: e.target.value, tenantName: e.target.value })} placeholder="My Private Vault" /></label>
+                </div>
+
+                <div className="create-account-step">
+                  <h3>Verify your account</h3>
+                  <p>Request a one-time email code, then enter it below before creating or opening the vault on this device.</p>
+                  <div className={`otp-test-panel ${otpTest.status}`}>
+                    <div className="otp-test-title"><ShieldCheck size={16} /><strong>One-time code</strong></div>
+                    <div className={`otp-channel-toggle premium-toggle ${otpChannel}`} role="tablist" aria-label="Choose OTP delivery method">
+                      <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => setOtpChannel('email')}><Mail size={15} /> Email</button>
+                      <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => setOtpChannel('sms')}><Phone size={15} /> SMS</button>
+                    </div>
+                    {otpTest.message && <div className={`otp-status-line ${otpTest.verified ? 'verified' : ''}`}>{otpTest.message}</div>}
+                    {otpTest.code && <div className="test-code-box"><span>Recovery code</span><code>{otpTest.code}</code></div>}
+                    <div className="otp-flow-row create-vault-otp-row">
+                      <button type="button" className="secondary-button otp-send-button" onClick={requestSelectedOtp} disabled={otpTest.status === 'requesting' || otpChannel === 'sms'}>{otpTest.status === 'requesting' ? 'Sending...' : (otpChannel === 'email' ? 'Send email OTP' : 'SMS coming soon')}</button>
+                      <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
+                      <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
+                    </div>
+                    {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Now set your master password.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Master password</button></div>}
+                  </div>
+                </div>
+
+                <div className="create-account-step">
+                  <h3>Master password</h3>
+                  <p>Choose a strong master password you can remember. It is not stored by the app and cannot be recovered if forgotten.</p>
+                  <label>Master vault password<input id="master-password-input" type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" /></label>
+                  {createMode && (
+                    <>
+                      <label>Confirm master vault password<input type="password" value={confirmMasterPassword} onChange={(e) => setConfirmMasterPassword(e.target.value)} placeholder="Type the same password again" /></label>
+                      <p className="create-warning">New vault creation only continues when both password entries match.</p>
+                    </>
+                  )}
+                </div>
+              </form>
+
+              <footer className="item-popup-footer create-account-popup-footer">
+                <button type="button" className="secondary-button" onClick={() => setIsCreateVaultPopupOpen(false)}>Cancel</button>
+                <button type="submit" className="primary-button" onClick={(event) => unlockVault(event)}><Unlock size={18} /> {createMode ? 'Create Secure Vault' : 'Open Secure Vault'}</button>
+              </footer>
+            </section>
+          </div>
+        )}
         <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={focusMasterPassword} />
         <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
