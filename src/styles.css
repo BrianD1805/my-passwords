@@ -4668,3 +4668,14 @@ a,
     padding: 16px;
   }
 }
+
+.landing-footer-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.landing-footer-copy small {
+  color: #637489;
+  font-size: .86rem;
+  line-height: 1.35;
+}

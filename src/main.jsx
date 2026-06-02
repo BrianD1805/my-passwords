@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.025';
+const VERSION = 'My Passwords Ver-0.025A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2049,7 +2049,7 @@ function App() {
           </div>
           <div className="landing-contact-card">
             <div><Mail size={20} /><span><strong>Email support</strong><small>Use your account email when asking for help.</small></span></div>
-            <a href="mailto:support@password-encrypt.com">support@password-encrypt.com</a>
+            <a href="mailto:info@zippyweb.uk">info@zippyweb.uk</a>
             <button type="button" className="primary-button" onClick={openCreateAccountPopup}><UserRoundCheck size={18} /> Create Account</button>
             <button type="button" className="secondary-button" onClick={openVaultApp}><Unlock size={18} /> Open My Vault</button>
           </div>
@@ -2065,7 +2065,10 @@ function App() {
         </section>
 
         <footer className="landing-footer">
-          <span>My Passwords</span>
+          <div className="landing-footer-copy">
+            <span>© 2026 My Passwords</span>
+            <small>A ZippyWeb project, built to keep everyday private details safer and easier to manage.</small>
+          </div>
           <button type="button" onClick={openVaultApp}>Open My Vault</button>
         </footer>
 
