@@ -2702,14 +2702,30 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
   }
 
   .vault-folder-row {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    scrollbar-width: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    max-height: 158px;
+    overflow: hidden;
+    padding-bottom: 2px;
   }
 
-  .vault-folder-row::-webkit-scrollbar { display: none; }
-  .vault-folder-row .chip { flex: 0 0 auto; }
+  .vault-folder-row .chip {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 9px 12px;
+  }
+
+  .mobile-folder-list-button {
+    display: inline-flex;
+    width: 100%;
+    justify-content: center;
+    margin-top: 10px;
+  }
+
+  .move-folder-chip {
+    display: none;
+  }
 }
 
 
@@ -3175,27 +3191,85 @@ a,
 }
 
 
+/* Ver-0.027 folder layout and movement polish */
+.mobile-folder-list-button {
+  display: none;
+}
+
+.move-folder-chip.active {
+  background: #1d3557;
+  color: #fff;
+  border-color: #1d3557;
+  box-shadow: 0 12px 28px rgba(29, 53, 87, 0.18);
+}
+
+.vault-folder-row .chip {
+  cursor: pointer;
+}
+
+.vault-folder-row.reorder-active .chip:not(.fixed-folder-chip) {
+  cursor: grab;
+}
+
+.vault-folder-row.reorder-active .chip:not(.fixed-folder-chip):active {
+  cursor: grabbing;
+}
+
+.folder-dragging {
+  opacity: 0.96;
+  transform: translateY(-5px) scale(1.045) rotate(-1deg);
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.22), 0 0 0 3px rgba(29, 53, 87, 0.14) !important;
+  border-color: rgba(29, 53, 87, 0.35) !important;
+  z-index: 4;
+}
+
+.folder-drop-target {
+  box-shadow: inset 0 0 0 2px rgba(36, 91, 52, 0.3), 0 12px 28px rgba(31, 48, 71, 0.09) !important;
+}
+
+.folder-list-popup-card {
+  width: min(620px, calc(100vw - 50px));
+}
+
+.folder-list-popup-body {
+  padding-top: 18px;
+}
+
+.folder-list-popup-list {
+  display: grid;
+  gap: 10px;
+}
+
+.folder-picker-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.folder-picker-row.active {
+  border-color: rgba(29, 53, 87, 0.42);
+  background: linear-gradient(135deg, rgba(29, 53, 87, 0.08), rgba(51, 105, 153, 0.06));
+}
+
+.folder-picker-count {
+  min-width: 32px;
+  height: 30px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: #eef5fb;
+  color: #1d3557;
+  font-weight: 850;
+}
+
 /* Ver-0.018B mobile item actions, header polish and folder reordering */
 .mobile-top-lock {
   display: none;
 }
 
-.folder-dragging {
-  opacity: 0.68;
-  transform: scale(0.985);
-}
-
-.folder-drop-target {
-  box-shadow: inset 0 0 0 2px rgba(36, 91, 52, 0.28), 0 10px 24px rgba(31, 48, 71, 0.07) !important;
-}
-
-.vault-folder-row .chip:not(.fixed-folder-chip) {
-  cursor: grab;
-}
-
-.vault-folder-row .chip:not(.fixed-folder-chip):active {
-  cursor: grabbing;
-}
 
 .view-item-footer {
   grid-template-columns: 1fr auto;
@@ -4788,4 +4862,34 @@ a,
   color: #637489;
   font-size: .86rem;
   line-height: 1.35;
+}
+
+
+/* Ver-0.027 final mobile folder controls */
+@media (max-width: 860px) {
+  .mobile-folder-list-button {
+    display: inline-flex;
+    width: 100%;
+    justify-content: center;
+    margin-top: 10px;
+  }
+
+  .vault-folder-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    max-height: 158px;
+    overflow: hidden;
+    padding-bottom: 2px;
+  }
+
+  .vault-folder-row .chip {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 9px 12px;
+  }
+
+  .move-folder-chip {
+    display: none;
+  }
 }
