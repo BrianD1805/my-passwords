@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.027';
+const VERSION = 'My Passwords Ver-0.027A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -816,7 +816,6 @@ function App() {
   const [draggedFolderName, setDraggedFolderName] = useState('');
   const [touchReorderFolder, setTouchReorderFolder] = useState('');
   const [touchDropTargetFolder, setTouchDropTargetFolder] = useState('');
-  const [isFolderReorderEnabled, setIsFolderReorderEnabled] = useState(false);
   const [isFolderListPopupOpen, setIsFolderListPopupOpen] = useState(false);
   const [showOnboardingDetails, setShowOnboardingDetails] = useState(() => !Boolean(readStoredVault()));
   const [isCreateAccountPopupOpen, setIsCreateAccountPopupOpen] = useState(false);
@@ -1755,19 +1754,6 @@ function App() {
     setIsFolderListPopupOpen(false);
   }
 
-  function toggleFolderReorderMode() {
-    setIsFolderReorderEnabled((current) => {
-      const next = !current;
-      if (!next) {
-        setDraggedFolderName('');
-        setTouchReorderFolder('');
-        setTouchDropTargetFolder('');
-        window.clearTimeout(touchReorderRef.current.timer);
-        touchReorderRef.current = { timer: null, source: '', active: false };
-      }
-      return next;
-    });
-  }
 
   function openAddItem() {
     const preferredCategory = category && !['All', 'Favourites'].includes(category) ? category : 'Passwords';
@@ -1816,7 +1802,7 @@ function App() {
   }
 
   async function reorderFolder(sourceName, targetName) {
-    if (!isFolderReorderEnabled || !sourceName || !targetName || sourceName === targetName || sourceName === 'All' || targetName === 'All') return;
+    if (!sourceName || !targetName || sourceName === targetName || sourceName === 'All' || targetName === 'All') return;
     const currentOrder = folderChips.map((folder) => folder.name).filter((name) => name !== 'All');
     const withoutSource = currentOrder.filter((name) => name !== sourceName);
     const targetIndex = withoutSource.indexOf(targetName);
@@ -1826,7 +1812,8 @@ function App() {
   }
 
   function startTouchFolderReorder(folderName) {
-    if (!isFolderReorderEnabled || !folderName || folderName === 'All') return;
+    if (!folderName || folderName === 'All') return;
+    if (window.matchMedia?.('(max-width: 860px)').matches) return;
     window.clearTimeout(touchReorderRef.current.timer);
     touchReorderRef.current = {
       timer: window.setTimeout(() => {
@@ -1840,7 +1827,7 @@ function App() {
   }
 
   function moveTouchFolderReorder(event) {
-    if (!isFolderReorderEnabled || !touchReorderRef.current.active) return;
+    if (!touchReorderRef.current.active) return;
     const touch = event.touches?.[0];
     if (!touch) return;
     const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest?.('[data-folder-name]');
@@ -2309,7 +2296,7 @@ function App() {
         <>
           <section className="home-search-panel">
             <div className="search-box hero-search"><Search size={19} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your vault" /></div>
-            <div className={isFolderReorderEnabled ? "chip-row vault-folder-row reorder-active" : "chip-row vault-folder-row"} id="vault-list-section">
+            <div className="chip-row vault-folder-row" id="vault-list-section">
               {folderChips.map((folder) => {
                 const isDragging = draggedFolderName === folder.name || touchReorderFolder === folder.name;
                 const isDropTarget = touchDropTargetFolder === folder.name && (touchReorderFolder || draggedFolderName) && (touchReorderFolder || draggedFolderName) !== folder.name;
@@ -2318,13 +2305,13 @@ function App() {
                     key={folder.name}
                     type="button"
                     data-folder-name={folder.name}
-                    draggable={isFolderReorderEnabled && !folder.fixed}
+                    draggable={!folder.fixed}
                     className={`${folder.name === category ? 'chip active' : 'chip'}${folder.fixed ? ' fixed-folder-chip' : ''}${isDragging ? ' folder-dragging' : ''}${isDropTarget ? ' folder-drop-target' : ''}`}
                     onClick={() => !touchReorderFolder && !draggedFolderName && openVaultSection(folder.name)}
-                    onDragStart={(event) => { if (!isFolderReorderEnabled || folder.fixed) { event.preventDefault(); return; } setDraggedFolderName(folder.name); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', folder.name); }}
-                    onDragEnter={() => { if (isFolderReorderEnabled && draggedFolderName && !folder.fixed) setTouchDropTargetFolder(folder.name); }}
-                    onDragOver={(event) => { if (isFolderReorderEnabled && draggedFolderName && !folder.fixed) event.preventDefault(); }}
-                    onDrop={async (event) => { event.preventDefault(); if (!isFolderReorderEnabled) return; const source = draggedFolderName || event.dataTransfer.getData('text/plain'); setDraggedFolderName(''); setTouchDropTargetFolder(''); await reorderFolder(source, folder.name); }}
+                    onDragStart={(event) => { if (folder.fixed || window.matchMedia?.('(max-width: 860px)').matches) { event.preventDefault(); return; } setDraggedFolderName(folder.name); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', folder.name); }}
+                    onDragEnter={() => { if (draggedFolderName && !folder.fixed) setTouchDropTargetFolder(folder.name); }}
+                    onDragOver={(event) => { if (draggedFolderName && !folder.fixed) event.preventDefault(); }}
+                    onDrop={async (event) => { event.preventDefault(); const source = draggedFolderName || event.dataTransfer.getData('text/plain'); setDraggedFolderName(''); setTouchDropTargetFolder(''); await reorderFolder(source, folder.name); }}
                     onDragEnd={() => { setDraggedFolderName(''); setTouchDropTargetFolder(''); }}
                     onTouchStart={() => startTouchFolderReorder(folder.name)}
                     onTouchMove={moveTouchFolderReorder}
@@ -2343,7 +2330,6 @@ function App() {
               <span><strong>{visibleItems.length}</strong> Item{visibleItems.length === 1 ? '' : 's'}</span>
               <span><strong>{visibleItems.filter((item) => item.favourite).length}</strong> favourite{visibleItems.filter((item) => item.favourite).length === 1 ? '' : 's'}</span>
               <button type="button" className="summary-action add-folder-chip" onClick={() => setIsFolderPopupOpen(true)}><Plus size={14} /> New folder</button>
-              <button type="button" className={isFolderReorderEnabled ? 'summary-action move-folder-chip active' : 'summary-action move-folder-chip'} onClick={toggleFolderReorderMode}>{isFolderReorderEnabled ? 'Done moving' : 'Move folders'}</button>
             </div>
           </section>
 
@@ -2359,10 +2345,10 @@ function App() {
                   <button type="button" className="icon-button" onClick={() => setIsFolderListPopupOpen(false)} aria-label="Close"><X size={18} /></button>
                 </div>
                 <div className="item-popup-body folder-list-popup-body">
-                  <div className="vault-list full-vault-list folder-list-popup-list">
+                  <div className="vault-result-list folder-list-popup-list">
                     {folderChips.map((folder) => (
-                      <button key={folder.name} type="button" className={folder.name === category ? 'vault-row folder-picker-row active' : 'vault-row folder-picker-row'} onClick={() => openVaultSection(folder.name)}>
-                        <span className="item-title">{folder.favourite && <Star size={15} fill="currentColor" />} {folder.name}</span>
+                      <button key={folder.name} type="button" className={folder.name === category ? 'vault-result-row folder-picker-row active' : 'vault-result-row folder-picker-row'} onClick={() => openVaultSection(folder.name)}>
+                        <span className="vault-result-name folder-picker-name">{folder.favourite && <Star size={15} fill="currentColor" />} {folder.name}</span>
                         <span className="folder-picker-count">{folder.count}</span>
                       </button>
                     ))}
