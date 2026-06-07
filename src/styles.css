@@ -4913,3 +4913,187 @@ a,
     -webkit-user-drag: none;
   }
 }
+
+/* Ver-0.027B mobile folder favourites, premium more button and move polish */
+.mobile-folder-chip {
+  display: none !important;
+}
+
+.desktop-folder-chip {
+  display: inline-flex;
+}
+
+.folder-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.premium-more-folder-button {
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 15px;
+  border: 1px solid rgba(35,72,105,0.14);
+  background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(239,247,253,0.92));
+  color: #233c5c;
+  box-shadow: 0 12px 28px rgba(31,48,71,0.11);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.premium-more-folder-button:hover,
+.premium-more-folder-button:focus-visible {
+  background: #fff;
+  border-color: rgba(29,95,144,0.24);
+  box-shadow: 0 16px 34px rgba(31,48,71,0.16);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.folder-list-popup-card {
+  width: min(670px, calc(100vw - 50px));
+}
+
+.folder-list-popup-list {
+  gap: 11px;
+}
+
+.folder-picker-row {
+  border: 1px solid rgba(35,72,105,0.12);
+  background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(247,251,254,0.94));
+  box-shadow: 0 10px 26px rgba(31,48,71,0.06);
+  border-radius: 20px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.folder-picker-row:hover,
+.folder-picker-row:focus-within {
+  background: #fff;
+  border-color: rgba(29,95,144,0.22);
+  box-shadow: 0 16px 36px rgba(31,48,71,0.10);
+}
+
+.folder-picker-row.active {
+  border-color: rgba(29,95,144,0.30);
+  background: linear-gradient(135deg, rgba(29,95,144,0.11), rgba(255,255,255,0.96));
+}
+
+.folder-picker-main {
+  min-width: 0;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: #24384f;
+  cursor: pointer;
+  padding: 4px 2px 4px 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.folder-picker-main:focus-visible {
+  outline: 2px solid rgba(29,95,144,0.22);
+  outline-offset: 3px;
+  border-radius: 14px;
+}
+
+.folder-picker-name {
+  font-weight: 760;
+  color: #24384f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-heart-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(35,72,105,0.13);
+  background: rgba(255,255,255,0.82);
+  color: #8a9aae;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(31,48,71,0.05);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.folder-heart-button.active {
+  color: #c44a73;
+  border-color: rgba(196,74,115,0.22);
+  background: linear-gradient(135deg, rgba(255,246,249,0.98), rgba(255,255,255,0.94));
+}
+
+.folder-heart-button:disabled {
+  opacity: 0.72;
+  cursor: default;
+}
+
+.folder-heart-button:not(:disabled):hover,
+.folder-heart-button:not(:disabled):focus-visible {
+  color: #b83562;
+  border-color: rgba(184,53,98,0.30);
+  box-shadow: 0 12px 26px rgba(184,53,98,0.12);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.folder-dragging {
+  cursor: grabbing !important;
+}
+
+@media (max-width: 860px) {
+  .desktop-folder-chip {
+    display: none !important;
+  }
+
+  .mobile-folder-chip {
+    display: inline-flex !important;
+    touch-action: none;
+  }
+
+  .vault-folder-row {
+    max-height: 154px;
+    overflow: hidden;
+    align-content: flex-start;
+  }
+
+  .mobile-folder-list-button {
+    display: none !important;
+  }
+
+  .home-quick-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+  }
+
+  .folder-action-group {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .folder-action-group .add-folder-chip {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .folder-list-popup-card {
+    width: min(670px, calc(100vw - 50px));
+  }
+
+  .folder-picker-row {
+    min-height: 66px;
+    border-radius: 20px;
+  }
+}
