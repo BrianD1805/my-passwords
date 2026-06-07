@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.027B';
+const VERSION = 'My Passwords Ver-0.027C';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1661,7 +1661,7 @@ function App() {
 
   const folderChips = useMemo(() => {
     const baseFolders = [
-      { name: 'All', count: visibleItems.length, folderFavourite: true, custom: false, fixed: true },
+      { name: 'All', count: visibleItems.length, folderFavourite: favouriteFolderNames.includes('All'), custom: false, fixed: true },
       ...BUILT_IN_CATEGORIES.map((cat) => ({ name: cat, count: visibleItems.filter((item) => item.category === cat).length, folderFavourite: favouriteFolderNames.includes(cat), custom: false, fixed: false })),
       ...customFolders.map((cat) => ({ name: cat, count: visibleItems.filter((item) => item.category === cat).length, folderFavourite: favouriteFolderNames.includes(cat), custom: true, fixed: false }))
     ];
@@ -1675,12 +1675,7 @@ function App() {
     return [first, ...orderedRest].filter(Boolean);
   }, [visibleItems, customFolders, savedFolderOrder, favouriteFolderNames]);
 
-  const mobileFolderChips = useMemo(() => {
-    const allFolder = folderChips.find((folder) => folder.name === 'All');
-    const favouriteFolders = folderChips.filter((folder) => folder.name !== 'All' && folder.folderFavourite);
-    const otherFolders = folderChips.filter((folder) => folder.name !== 'All' && !folder.folderFavourite);
-    return [allFolder, ...favouriteFolders, ...otherFolders].filter(Boolean);
-  }, [folderChips]);
+  const mobileFolderChips = useMemo(() => folderChips.filter((folder) => folder.folderFavourite), [folderChips]);
 
   const hasActiveVaultFilter = Boolean(query.trim() || category);
   const viewedItem = viewItemId ? visibleItems.find((item) => item.id === viewItemId) : null;
@@ -1826,7 +1821,7 @@ function App() {
   }
 
   async function toggleFolderFavourite(folderName) {
-    if (!folderName || folderName === 'All') return;
+    if (!folderName) return;
     const nextFavourites = favouriteFolderNames.includes(folderName)
       ? favouriteFolderNames.filter((name) => name !== folderName)
       : [...favouriteFolderNames, folderName];
@@ -1835,8 +1830,9 @@ function App() {
     await saveItems(next, { autoSync: true, silentAutoSync: true });
   }
 
-  function startTouchFolderReorder(folderName) {
+  function startTouchFolderReorder(folderName, event) {
     if (!folderName || folderName === 'All') return;
+    event?.preventDefault?.();
     window.clearTimeout(touchReorderRef.current.timer);
     touchReorderRef.current = {
       timer: window.setTimeout(() => {
@@ -2353,12 +2349,12 @@ function App() {
                     data-folder-name={folder.name}
                     className={`${folder.name === category ? 'chip mobile-folder-chip active' : 'chip mobile-folder-chip'}${folder.fixed ? ' fixed-folder-chip' : ''}${isDragging ? ' folder-dragging' : ''}${isDropTarget ? ' folder-drop-target' : ''}`}
                     onClick={() => !touchReorderFolder && openVaultSection(folder.name)}
-                    onTouchStart={() => startTouchFolderReorder(folder.name)}
+                    onTouchStart={(event) => startTouchFolderReorder(folder.name, event)}
                     onTouchMove={moveTouchFolderReorder}
                     onTouchEnd={endTouchFolderReorder}
                     onTouchCancel={endTouchFolderReorder}
                   >
-                    {folder.name}
+                    <span className="folder-chip-label">{folder.name}</span>
                     {folder.custom && <span className="custom-folder-dot" title="Custom folder" aria-hidden="true" />}
                     <span className="chip-count">{folder.count}</span>
                   </button>
@@ -2396,7 +2392,7 @@ function App() {
                           key={folder.name}
                           data-folder-name={folder.name}
                           className={`${folder.name === category ? 'vault-result-row folder-picker-row active' : 'vault-result-row folder-picker-row'}${isDragging ? ' folder-dragging' : ''}${isDropTarget ? ' folder-drop-target' : ''}`}
-                          onTouchStart={() => startTouchFolderReorder(folder.name)}
+                          onTouchStart={(event) => startTouchFolderReorder(folder.name, event)}
                           onTouchMove={moveTouchFolderReorder}
                           onTouchEnd={endTouchFolderReorder}
                           onTouchCancel={endTouchFolderReorder}
@@ -2407,12 +2403,11 @@ function App() {
                           </button>
                           <button
                             type="button"
-                            className={folder.folderFavourite || folder.name === 'All' ? 'folder-heart-button active' : 'folder-heart-button'}
+                            className={folder.folderFavourite ? 'folder-heart-button active' : 'folder-heart-button'}
                             onClick={(event) => { event.stopPropagation(); toggleFolderFavourite(folder.name); }}
                             aria-label={folder.folderFavourite ? `Remove ${folder.name} from mobile favourites` : `Add ${folder.name} to mobile favourites`}
-                            disabled={folder.name === 'All'}
                           >
-                            <Heart size={18} fill={folder.folderFavourite || folder.name === 'All' ? 'currentColor' : 'none'} />
+                            <Heart size={18} fill={folder.folderFavourite ? 'currentColor' : 'none'} />
                           </button>
                         </div>
                       );
