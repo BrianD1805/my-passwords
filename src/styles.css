@@ -22,6 +22,39 @@ h1 { margin: 0; color: #14263b; font-size: clamp(2rem, 5vw, 3.8rem); line-height
 label { color: #34475d; font-weight: 700; display: grid; gap: 8px; }
 input, textarea, select { border: 1px solid #d7e1ea; border-radius: 15px; padding: 13px 14px; background: #fbfdff; color: #1f2937; outline: none; width: 100%; }
 input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0 0 0 4px rgba(69,123,157,.12); }
+
+.unlock-password-field {
+  position: relative;
+  display: grid;
+}
+
+.unlock-password-field input {
+  padding-right: 52px;
+}
+
+.unlock-form .unlock-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+  border-radius: 12px;
+  background: #eef4f8;
+  color: #26384f;
+  box-shadow: none;
+  border: 1px solid #d8e4ec;
+  display: grid;
+  place-items: center;
+}
+
+.unlock-form .unlock-password-toggle:hover,
+.unlock-form .unlock-password-toggle:focus-visible {
+  background: #e3edf5;
+  color: #14263b;
+}
 .unlock-form button, .primary-button, .lock-button, .secondary-button { min-height: 46px; border-radius: 15px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 0 18px; }
 .unlock-form button, .primary-button, .lock-button { background: #1d3557; color: white; box-shadow: 0 10px 24px rgba(29,53,87,.18); }
 .secondary-button { background: #e8f0f6; color: #20364d; border: 1px solid #d2e0ea; }
@@ -3706,6 +3739,83 @@ a,
   .public-landing-note {
     align-items: flex-start;
     text-align: left;
+  }
+}
+
+
+/* Ver-0.026 item delete confirmation and unlock password visibility */
+.delete-confirm-card {
+  width: min(520px, 100%);
+}
+
+.delete-confirm-body {
+  text-align: center;
+  justify-items: center;
+}
+
+.delete-confirm-icon {
+  width: 62px;
+  height: 62px;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  color: #9a342f;
+  background: #fff4f2;
+  border: 1px solid #f0c1bd;
+}
+
+.delete-confirm-lead {
+  margin: 0;
+  color: #2b3f54;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.delete-confirm-item-name {
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: 16px;
+  border: 1px solid #dce7ef;
+  background: #f8fbfe;
+  color: #14263b;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.delete-confirm-copy {
+  margin: 0;
+  color: #64778a;
+  line-height: 1.55;
+}
+
+.delete-confirm-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.danger-delete-button {
+  min-height: 46px;
+  border-radius: 15px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 18px;
+  color: #ffffff;
+  background: #9a342f;
+  box-shadow: 0 10px 24px rgba(154, 52, 47, 0.18);
+}
+
+.danger-delete-button:hover,
+.danger-delete-button:focus-visible {
+  background: #842b27;
+}
+
+@media (max-width: 560px) {
+  .delete-confirm-footer {
+    grid-template-columns: 1fr;
   }
 }
 

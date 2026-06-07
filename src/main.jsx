@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, KeyRound, Lock, Mail, MonitorSmartphone, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.025A';
+const VERSION = 'My Passwords Ver-0.026';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -773,6 +773,7 @@ function App() {
   const [locked, setLocked] = useState(true);
   const [masterPassword, setMasterPassword] = useState('');
   const [confirmMasterPassword, setConfirmMasterPassword] = useState('');
+  const [showUnlockPassword, setShowUnlockPassword] = useState(false);
   const [hasLocalVault, setHasLocalVault] = useState(() => Boolean(readStoredVault()));
   const [createMode, setCreateMode] = useState(() => !Boolean(readStoredVault()));
   const [items, setItems] = useState([]);
@@ -806,6 +807,7 @@ function App() {
   const [activePage, setActivePage] = useState('home');
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
   const [viewItemId, setViewItemId] = useState('');
+  const [pendingDeleteItemId, setPendingDeleteItemId] = useState('');
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [downloadingDocId, setDownloadingDocId] = useState('');
   const [isFolderPopupOpen, setIsFolderPopupOpen] = useState(false);
@@ -899,9 +901,9 @@ function App() {
   }, [bootstrap]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen);
+    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen);
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen]);
 
   useEffect(() => {
     if (!locked) setIsCreateVaultPopupOpen(false);
@@ -1437,6 +1439,22 @@ function App() {
     setForm(emptyForm(keepCategory));
     setShowFormSecret(false);
     setIsItemPopupOpen(false);
+  }
+
+  function requestDeleteItem(item) {
+    if (!item?.id) return;
+    setPendingDeleteItemId(item.id);
+  }
+
+  function cancelDeleteItem() {
+    setPendingDeleteItemId('');
+  }
+
+  async function confirmDeleteItem() {
+    const id = pendingDeleteItemId;
+    if (!id) return;
+    setPendingDeleteItemId('');
+    await deleteItem(id);
   }
 
   async function deleteItem(id) {
@@ -2162,7 +2180,10 @@ function App() {
               <p className="intro">Unlock your private vault with your master password.</p>
               <form onSubmit={unlockVault} className="unlock-form">
                 <label>Master vault password</label>
-                <input id="master-password-input" type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" autoFocus={hasLocalVault && !suppressUnlockAutofocus} />
+                <div className="unlock-password-field">
+                  <input id="master-password-input" type={showUnlockPassword ? 'text' : 'password'} value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" autoFocus={hasLocalVault && !suppressUnlockAutofocus} />
+                  <button type="button" className="unlock-password-toggle" onClick={() => setShowUnlockPassword((current) => !current)} aria-label={showUnlockPassword ? 'Hide master password' : 'Show master password'} title={showUnlockPassword ? 'Hide password' : 'Show password'}>{showUnlockPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                </div>
                 <button type="submit"><Unlock size={18} /> Unlock Local Vault</button>
               </form>
               <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
@@ -2609,13 +2630,41 @@ function App() {
               <div className="view-action-row">
                 <button type="button" className="secondary-button view-action-button" onClick={() => editViewedItem(viewedItem)} aria-label="Edit item"><Pencil size={16} /> <span>Edit</span></button>
                 <button type="button" className="secondary-button view-action-button" onClick={() => toggleFavourite(viewedItem.id)} aria-label={viewedItem.favourite ? 'Unfavourite item' : 'Favourite item'}><Star size={16} fill={viewedItem.favourite ? 'currentColor' : 'none'} /> <span>{viewedItem.favourite ? 'Unfavourite' : 'Favourite'}</span></button>
-                <button type="button" className="secondary-button danger-soft view-action-button" onClick={() => deleteItem(viewedItem.id)} aria-label="Delete item"><Trash2 size={16} /> <span>Delete</span></button>
+                <button type="button" className="secondary-button danger-soft view-action-button" onClick={() => requestDeleteItem(viewedItem)} aria-label="Delete item"><Trash2 size={16} /> <span>Delete</span></button>
               </div>
               <button type="button" className="primary-button view-done-button" onClick={closeViewItem}>Done</button>
             </div>
           </article>
         </div>
       )}
+
+
+
+      {pendingDeleteItemId && (() => {
+        const itemToDelete = items.find((item) => item.id === pendingDeleteItemId);
+        if (!itemToDelete) return null;
+        return (
+          <div className="item-popup-layer delete-confirm-layer" role="presentation">
+            <div className="item-popup-backdrop" onClick={cancelDeleteItem} />
+            <section className="item-popup-card delete-confirm-card" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
+              <header className="item-popup-header">
+                <h2 id="delete-confirm-title"><Trash2 size={21} /> Delete this item?</h2>
+                <button type="button" className="icon-button" onClick={cancelDeleteItem} aria-label="Cancel delete"><X size={20} /></button>
+              </header>
+              <div className="item-popup-body delete-confirm-body">
+                <div className="delete-confirm-icon"><AlertTriangle size={28} /></div>
+                <p className="delete-confirm-lead">Please confirm you want to delete this saved item from your vault.</p>
+                <div className="delete-confirm-item-name">{itemToDelete.title || 'Untitled item'}</div>
+                <p className="delete-confirm-copy">This removes the item from this device and then requests a fresh encrypted cloud backup. This action cannot be undone from the app screen.</p>
+              </div>
+              <footer className="item-popup-footer delete-confirm-footer">
+                <button type="button" className="secondary-button" onClick={cancelDeleteItem}><X size={16} /> Cancel</button>
+                <button type="button" className="danger-delete-button" onClick={confirmDeleteItem}><Trash2 size={16} /> Delete item</button>
+              </footer>
+            </section>
+          </div>
+        );
+      })()}
 
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <footer>{VERSION} · secure private vault</footer>
