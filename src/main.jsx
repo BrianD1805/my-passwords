@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.027C';
+const VERSION = 'My Passwords Ver-0.027D';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1675,7 +1675,11 @@ function App() {
     return [first, ...orderedRest].filter(Boolean);
   }, [visibleItems, customFolders, savedFolderOrder, favouriteFolderNames]);
 
-  const mobileFolderChips = useMemo(() => folderChips.filter((folder) => folder.folderFavourite), [folderChips]);
+  const mobileFolderChips = useMemo(() => {
+    const allFolder = folderChips.find((folder) => folder.name === 'All');
+    const homeFolders = folderChips.filter((folder) => folder.name !== 'All' && folder.folderFavourite);
+    return [allFolder, ...homeFolders].filter(Boolean);
+  }, [folderChips]);
 
   const hasActiveVaultFilter = Boolean(query.trim() || category);
   const viewedItem = viewItemId ? visibleItems.find((item) => item.id === viewItemId) : null;
@@ -2363,10 +2367,10 @@ function App() {
             </div>
             <div className="home-quick-summary">
               <span><strong>{visibleItems.length}</strong> Item{visibleItems.length === 1 ? '' : 's'}</span>
-              <span><strong>{visibleItems.filter((item) => item.favourite).length}</strong> favourite{visibleItems.filter((item) => item.favourite).length === 1 ? '' : 's'}</span>
+              <span><strong>{visibleItems.filter((item) => item.favourite).length}</strong> favourite item{visibleItems.filter((item) => item.favourite).length === 1 ? '' : 's'}</span>
               <div className="folder-action-group">
                 <button type="button" className="summary-action add-folder-chip" onClick={() => setIsFolderPopupOpen(true)}><Plus size={14} /> New folder</button>
-                <button type="button" className="premium-more-folder-button" onClick={() => setIsFolderListPopupOpen(true)} aria-label="More folders"><MoreHorizontal size={21} /></button>
+                <button type="button" className="premium-more-folder-button" onClick={() => setIsFolderListPopupOpen(true)} aria-label="Manage home folders"><MoreHorizontal size={21} /></button>
               </div>
             </div>
           </section>
@@ -2375,18 +2379,20 @@ function App() {
 
 
           {isFolderListPopupOpen && (
-            <div className="item-popup-layer folder-list-popup-layer" role="dialog" aria-modal="true" aria-label="All folders">
-              <button type="button" className="item-popup-backdrop" onClick={() => setIsFolderListPopupOpen(false)} aria-label="Close all folders" />
+            <div className="item-popup-layer folder-list-popup-layer" role="dialog" aria-modal="true" aria-label="Home folders">
+              <button type="button" className="item-popup-backdrop" onClick={() => setIsFolderListPopupOpen(false)} aria-label="Close home folders" />
               <div className="item-popup-card folder-list-popup-card">
                 <div className="item-popup-header">
-                  <h2>All folders</h2>
+                  <h2>Home folders</h2>
                   <button type="button" className="icon-button" onClick={() => setIsFolderListPopupOpen(false)} aria-label="Close"><X size={18} /></button>
                 </div>
                 <div className="item-popup-body folder-list-popup-body">
+                  <p className="folder-list-popup-note"><Home size={16} /> Highlighted folders will be added to home folders.</p>
                   <div className="vault-result-list folder-list-popup-list">
                     {folderChips.map((folder) => {
                       const isDragging = touchReorderFolder === folder.name;
                       const isDropTarget = touchDropTargetFolder === folder.name && touchReorderFolder && touchReorderFolder !== folder.name;
+                      const isHomeFolder = folder.name === 'All' || folder.folderFavourite;
                       return (
                         <div
                           key={folder.name}
@@ -2403,11 +2409,12 @@ function App() {
                           </button>
                           <button
                             type="button"
-                            className={folder.folderFavourite ? 'folder-heart-button active' : 'folder-heart-button'}
-                            onClick={(event) => { event.stopPropagation(); toggleFolderFavourite(folder.name); }}
-                            aria-label={folder.folderFavourite ? `Remove ${folder.name} from mobile favourites` : `Add ${folder.name} to mobile favourites`}
+                            className={isHomeFolder ? 'folder-home-button active' : 'folder-home-button'}
+                            onClick={(event) => { event.stopPropagation(); if (folder.name !== 'All') toggleFolderFavourite(folder.name); }}
+                            disabled={folder.name === 'All'}
+                            aria-label={folder.name === 'All' ? 'All passwords always stays in home folders' : isHomeFolder ? `Remove ${folder.name} from home folders` : `Highlight ${folder.name} as a home folder`}
                           >
-                            <Heart size={18} fill={folder.folderFavourite ? 'currentColor' : 'none'} />
+                            <Home size={18} fill={isHomeFolder ? 'currentColor' : 'none'} />
                           </button>
                         </div>
                       );

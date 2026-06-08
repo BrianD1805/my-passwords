@@ -2537,7 +2537,7 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
 .chip-count {
   min-width: 24px;
   height: 24px;
-  display: inline-grid;
+  display: none;
   place-items: center;
   border-radius: 999px;
   background: rgba(255,255,255,.75);
@@ -5014,7 +5014,7 @@ a,
   white-space: nowrap;
 }
 
-.folder-heart-button {
+.folder-home-button {
   width: 44px;
   height: 44px;
   border-radius: 16px;
@@ -5028,22 +5028,22 @@ a,
   -webkit-tap-highlight-color: transparent;
 }
 
-.folder-heart-button.active {
-  color: #c44a73;
-  border-color: rgba(196,74,115,0.22);
-  background: linear-gradient(135deg, rgba(255,246,249,0.98), rgba(255,255,255,0.94));
+.folder-home-button.active {
+  color: #315d7e;
+  border-color: rgba(49,93,126,0.22);
+  background: linear-gradient(135deg, rgba(239,247,253,0.98), rgba(255,255,255,0.94));
 }
 
-.folder-heart-button:disabled {
+.folder-home-button:disabled {
   opacity: 0.72;
   cursor: default;
 }
 
-.folder-heart-button:not(:disabled):hover,
-.folder-heart-button:not(:disabled):focus-visible {
-  color: #b83562;
-  border-color: rgba(184,53,98,0.30);
-  box-shadow: 0 12px 26px rgba(184,53,98,0.12);
+.folder-home-button:not(:disabled):hover,
+.folder-home-button:not(:disabled):focus-visible {
+  color: #274f6e;
+  border-color: rgba(39,79,110,0.30);
+  box-shadow: 0 12px 26px rgba(39,79,110,0.12);
   transform: translateY(-1px);
   outline: none;
 }
@@ -5098,7 +5098,7 @@ a,
   }
 }
 
-/* Ver-0.027C mobile favourite-folder clean start and touch-safe moving */
+/* Ver-0.027D mobile home folders and version alignment */
 @media (max-width: 860px) {
   .mobile-folder-chip {
     -webkit-user-select: none;
@@ -5133,10 +5133,62 @@ a,
   -webkit-touch-callout: none;
 }
 
-.folder-heart-button {
+.folder-home-button {
   flex: 0 0 auto;
 }
 
-.folder-heart-button.active svg {
-  filter: drop-shadow(0 5px 10px rgba(196,74,115,0.18));
+.folder-home-button.active svg {
+  filter: drop-shadow(0 5px 10px rgba(49,93,126,0.18));
+}
+
+
+/* Ver-0.027D mobile-only home-folder popup polish */
+.folder-list-popup-layer {
+  display: none;
+}
+
+.folder-list-popup-note {
+  margin: 0 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #425a72;
+  background: linear-gradient(135deg, rgba(239,247,253,0.98), rgba(255,255,255,0.94));
+  border: 1px solid rgba(49,93,126,0.12);
+  border-radius: 16px;
+  padding: 10px 12px;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.folder-home-button.active {
+  color: #315d7e;
+  border-color: rgba(49,93,126,0.26);
+  background: linear-gradient(135deg, rgba(239,247,253,0.98), rgba(255,255,255,0.94));
+}
+
+.folder-home-button.active svg {
+  filter: drop-shadow(0 5px 10px rgba(49,93,126,0.18));
+}
+
+.folder-home-button:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+@media (max-width: 860px) {
+  .folder-list-popup-layer {
+    display: grid;
+  }
+
+  .premium-more-folder-button {
+    display: inline-grid;
+  }
+}
+
+@media (min-width: 861px) {
+  .premium-more-folder-button,
+  .folder-list-popup-layer {
+    display: none !important;
+  }
 }
