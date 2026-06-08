@@ -5352,7 +5352,7 @@ a,
   }
 }
 
-/* Ver-0.029A Cards folder */
+/* Ver-0.029B Cards folder */
 .card-entry-grid {
   display: grid;
   gap: 13px;
@@ -5405,4 +5405,43 @@ a,
   .copy-all-button {
     justify-content: center;
   }
+}
+
+/* Ver-0.029B card listing/nickname and result row stability */
+.vault-results-panel,
+.vault-result-list {
+  align-content: start;
+  align-items: start;
+}
+
+.vault-result-list {
+  grid-auto-rows: min-content;
+}
+
+.vault-result-row {
+  height: auto;
+  min-height: 62px;
+}
+
+.vault-result-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  align-content: center;
+}
+
+.vault-result-subline {
+  min-width: 0;
+  color: #64778a;
+  font-size: .88rem;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-detail-subtitle {
+  color: #64778a;
+  font-size: .9rem;
+  line-height: 1.25;
 }

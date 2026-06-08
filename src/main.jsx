@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.029A';
+const VERSION = 'My Passwords Ver-0.029B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -742,7 +742,8 @@ function maskCcv(value) {
 function buildCardCopyText(item) {
   const payload = item?.payload || {};
   return [
-    `Name: ${payload.cardName || item?.title || ''}`,
+    `Nickname: ${payload.cardNickname || item?.title || ''}`,
+    `Name on card: ${payload.cardName || ''}`,
     `Card number: ${formatCardNumber(payload.cardNumber || '')}`,
     `Expiry: ${payload.cardExpiry || ''}`,
     `CCV: ${payload.cardCcv || ''}`
@@ -829,7 +830,7 @@ function App() {
   const [category, setCategory] = useState('');
   const [showSecrets, setShowSecrets] = useState({});
   const [showFormSecret, setShowFormSecret] = useState(false);
-  const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNumber: '', cardExpiry: '', cardCcv: '' });
+  const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '' });
   const [editingItemId, setEditingItemId] = useState('');
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
@@ -1322,7 +1323,7 @@ function App() {
   }
 
   function emptyForm(categoryToKeep = form.category) {
-    return { title: '', category: categoryToKeep || 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNumber: '', cardExpiry: '', cardCcv: '' };
+    return { title: '', category: categoryToKeep || 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '' };
   }
 
   async function uploadEncryptedDocumentBlob(fileInfo, documentId) {
@@ -1407,6 +1408,10 @@ function App() {
           showMessage('Add the name on the card before saving.', 'warning');
           return;
         }
+        if (!form.cardNickname.trim()) {
+          showMessage('Add a card nickname before saving.', 'warning');
+          return;
+        }
         if (cardDigits.length !== 16) {
           showMessage('Card number must be 16 digits.', 'warning');
           return;
@@ -1432,7 +1437,7 @@ function App() {
       const storedDocumentFile = isDocument ? await uploadEncryptedDocumentBlob(form.file, itemIdForSave) : null;
       const notesValue = form.category === 'Checklists' ? normaliseChecklistNotes(form.notes) : form.notes.trim();
       const itemPayload = {
-        title: isCard ? form.cardName.trim() : form.title.trim(),
+        title: isCard ? form.cardNickname.trim() : form.title.trim(),
         category: form.category,
         favourite: !!form.favourite,
         payload: isCard ? {
@@ -1442,6 +1447,7 @@ function App() {
           notes: notesValue,
           file: null,
           cardName: form.cardName.trim(),
+          cardNickname: form.cardNickname.trim(),
           cardNumber: onlyDigits(form.cardNumber),
           cardExpiry: form.cardExpiry.trim(),
           cardCcv: onlyDigits(form.cardCcv)
@@ -1504,7 +1510,8 @@ function App() {
       notes: item.payload?.notes || '',
       favourite: !!item.favourite,
       file: item.payload?.file || null,
-      cardName: item.payload?.cardName || item.title || '',
+      cardName: item.payload?.cardName || '',
+      cardNickname: item.payload?.cardNickname || item.title || '',
       cardNumber: item.payload?.cardNumber || '',
       cardExpiry: item.payload?.cardExpiry || '',
       cardCcv: item.payload?.cardCcv || ''
@@ -2514,7 +2521,8 @@ function App() {
                 <label>Folder<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, CARDS_CATEGORY].includes(e.target.value) ? '' : form.username, password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, CARDS_CATEGORY].includes(e.target.value) ? '' : form.password })}>{selectableFolders.map((cat) => <option key={cat}>{cat}</option>)}</select></label>
                 {form.category === CARDS_CATEGORY ? (
                   <div className="card-entry-grid">
-                    <label>Name on card<input value={form.cardName} onChange={(e) => setForm({ ...form, cardName: e.target.value, title: e.target.value })} placeholder="e.g. B Hallam" /></label>
+                    <label>Name on card<input value={form.cardName} onChange={(e) => setForm({ ...form, cardName: e.target.value })} placeholder="e.g. B Hallam" /></label>
+                    <label>Card nickname<input value={form.cardNickname} onChange={(e) => setForm({ ...form, cardNickname: e.target.value, title: e.target.value })} placeholder="e.g. Personal Visa, Business card" /></label>
                     <label>16 digit card number<input inputMode="numeric" autoComplete="cc-number" value={formatCardNumber(form.cardNumber)} onChange={(e) => setForm({ ...form, cardNumber: onlyDigits(e.target.value).slice(0, 16) })} placeholder="0000 0000 0000 0000" maxLength="19" /></label>
                     <div className="card-entry-two">
                       <label>Expiry<input inputMode="numeric" autoComplete="cc-exp" value={form.cardExpiry} onChange={(e) => setForm({ ...form, cardExpiry: e.target.value })} placeholder="MM/YY" /></label>
@@ -2592,7 +2600,10 @@ function App() {
               <div className="vault-result-list" aria-label="Vault results">
                 {filteredItems.map((item) => (
                   <button type="button" className="vault-result-row" key={item.id} onClick={() => openViewItem(item)} title={`Open ${item.title}`}>
-                    <span className="vault-result-name">{item.title}</span>
+                    <span className="vault-result-copy">
+                      <span className="vault-result-name">{item.category === CARDS_CATEGORY ? (item.payload?.cardNickname || item.title) : item.title}</span>
+                      {item.category === CARDS_CATEGORY && <span className="vault-result-subline">{item.payload?.cardName || 'Name on card not saved'}</span>}
+                    </span>
                     <span className="vault-result-open" aria-hidden="true"><ExternalLink size={17} /></span>
                   </button>
                 ))}
@@ -2818,15 +2829,23 @@ function App() {
                         <div className="card-detail-header">
                           <div>
                             <span className="app-field-label">Card details</span>
-                            <strong>{viewedItem.payload?.cardName || viewedItem.title}</strong>
+                            <strong>{viewedItem.payload?.cardNickname || viewedItem.title}</strong>
+                            <small className="card-detail-subtitle">{viewedItem.payload?.cardName || 'Name on card not saved'}</small>
                           </div>
                           <button type="button" className="secondary-button copy-all-button" onClick={() => copyText('Card details', buildCardCopyText(viewedItem))} aria-label="Copy all card details"><Copy size={16} /> Copy all</button>
                         </div>
                         <div className="app-field-block">
-                          <span className="app-field-label">Name</span>
+                          <span className="app-field-label">Nickname</span>
                           <div className="app-value-field">
-                            <span className="app-field-value">{viewedItem.payload?.cardName || viewedItem.title || '—'}</span>
-                            <button type="button" className="field-action" onClick={() => copyText('Card name', viewedItem.payload?.cardName || viewedItem.title)} aria-label="Copy card name" title="Copy card name"><Copy size={18} /></button>
+                            <span className="app-field-value">{viewedItem.payload?.cardNickname || viewedItem.title || '—'}</span>
+                            <button type="button" className="field-action" onClick={() => copyText('Card nickname', viewedItem.payload?.cardNickname || viewedItem.title)} aria-label="Copy card nickname" title="Copy card nickname"><Copy size={18} /></button>
+                          </div>
+                        </div>
+                        <div className="app-field-block">
+                          <span className="app-field-label">Name on card</span>
+                          <div className="app-value-field">
+                            <span className="app-field-value">{viewedItem.payload?.cardName || '—'}</span>
+                            <button type="button" className="field-action" onClick={() => copyText('Name on card', viewedItem.payload?.cardName)} aria-label="Copy name on card" title="Copy name on card"><Copy size={18} /></button>
                           </div>
                         </div>
                         <div className="app-field-block">
