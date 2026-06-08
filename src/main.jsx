@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.027D';
+const VERSION = 'My Passwords Ver-0.028';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -812,6 +812,7 @@ function App() {
   const [verifyOverlay, setVerifyOverlay] = useState({ visible: false, status: 'idle', title: '', message: '', focusMasterPassword: false });
   const [suppressUnlockAutofocus, setSuppressUnlockAutofocus] = useState(false);
   const [activePage, setActivePage] = useState('home');
+  const [activeSettingsSection, setActiveSettingsSection] = useState('account');
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
   const [viewItemId, setViewItemId] = useState('');
   const [pendingDeleteItemId, setPendingDeleteItemId] = useState('');
@@ -2514,11 +2515,11 @@ function App() {
           </section>
         </>
       ) : (
-        <section className="settings-page">
+        <section className="settings-page settings-page-v028">
           <div className="settings-header-card">
             <p className="eyebrow">Settings</p>
-            <h2><Settings size={22} /> Vault Info & Account</h2>
-            <p>Backup, restore, account recovery and technical details live here so the vault home stays clean.</p>
+            <h2><Settings size={22} /> Vault and account information</h2>
+            <p>Manage your account, safety tools and backup status from one clearer place.</p>
           </div>
 
           <section className="status-grid settings-status-grid">
@@ -2528,107 +2529,147 @@ function App() {
             <article><UserRoundCheck /><strong>{bootstrap.userId ? 'Ready' : 'Setup'}</strong><span>Account</span></article>
           </section>
 
-          <section className="saas-account-card">
-            <div>
-              <p className="eyebrow">SaaS account foundation</p>
-              <h2><UsersRound size={21} /> Tenant and plan status</h2>
-              <p>This section prepares the vault for future SaaS clients while keeping your current live vault local-first and safely encrypted.</p>
-            </div>
-            <div className="saas-account-grid">
-              <span><strong>Account</strong>{bootstrap.accountName || bootstrap.tenantName || 'Private Vault'}</span>
-              <span><strong>Plan</strong>{bootstrap.planCode || 'personal_free'}</span>
-              <span><strong>Status</strong>{bootstrap.planStatus || bootstrap.accountStatus || 'active'}</span>
-              <span><strong>Role</strong>{bootstrap.tenantRole || 'primary_owner'}</span>
-            </div>
-          </section>
+          <nav className="settings-section-buttons" aria-label="Settings sections">
+            <button type="button" className={activeSettingsSection === 'account' ? 'active' : ''} onClick={() => setActiveSettingsSection('account')}><UserRoundCheck size={18} /> My Account</button>
+            <button type="button" className={activeSettingsSection === 'tools' ? 'active' : ''} onClick={() => setActiveSettingsSection('tools')}><ShieldCheck size={18} /> Tools</button>
+            <button type="button" className={activeSettingsSection === 'stats' ? 'active' : ''} onClick={() => setActiveSettingsSection('stats')}><Database size={18} /> Stats</button>
+          </nav>
 
-          <section className="sync-panel">
-            <div className="sync-title">
-              <div><p className="eyebrow">Account and recovery</p><h2><Cloud size={21} /> Vault backup and restore</h2></div>
-              <div className="sync-actions">
-                <button type="button" className="secondary-button" onClick={checkDbHealth}><RefreshCw size={16} /> Check connection</button>
-                <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={16} /> Backup history</button>
-                <button type="button" className="secondary-button" disabled={syncing} onClick={restoreCloudToThisDevice}><RefreshCw size={16} /> Restore backup</button>
+          {activeSettingsSection === 'account' && (
+            <section className="settings-section-panel settings-account-panel" aria-label="My Account">
+              <div className="settings-section-heading">
+                <p className="eyebrow">My Account</p>
+                <h3><UserRoundCheck size={20} /> Account details</h3>
+                <p>Keep your account details up to date so you can verify your vault on another device.</p>
               </div>
-            </div>
-            <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
-            <div className={`account-status-card ${accountStatus.state}`}>
-              <div className="account-status-heading"><Phone size={18} /><strong>Account details</strong></div>
-              <span>{accountStatus.message}</span>
-              <small>Phone: {maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'not set'}{bootstrap.email ? ` · Email: ${maskEmail(bootstrap.email)}` : ''}</small>
-            </div>
-            <div className={`sync-status-card ${syncStatus.state}`}> 
-              <strong>{syncStatus.state === 'success' ? 'Cloud backup saved' : syncStatus.state === 'syncing' ? 'Backup in progress' : syncStatus.state === 'error' ? 'Backup needs attention' : syncStatus.state === 'warning' ? 'Backup warning' : 'Cloud backup status'}</strong>
-              <span>{syncStatus.message}</span>
-              {(syncStatus.lastSyncAt || syncStatus.snapshotCount) && <small>Last backup: {syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : 'Not backed up in this session'} · Items: {syncStatus.itemCount}</small>}
-            </div>
-            <div className={`device-status-card ${deviceStatus.state}`}>
-              <div className="device-status-heading"><MonitorSmartphone size={18} /><strong>This device</strong></div>
-              <span>{deviceStatus.label}</span>
-              <small>{deviceStatus.lastCloudCheckAt ? `Last checked: ${new Date(deviceStatus.lastCloudCheckAt).toLocaleString()}` : 'Not checked yet'}{deviceStatus.lastRestoreAt ? ` · Restored: ${new Date(deviceStatus.lastRestoreAt).toLocaleString()}` : ''}</small>
-            </div>
-            <div className="vault-security-info-card">
-              <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>Vault security and recovery</strong></div>
-              <div className="security-points">
-                <span>Local vault: secure copy saved on this device for fast daily unlock.</span>
-                <span>Cloud backup: secure backup for restore and device sync.</span>
-                <span>Phone/email: verifies your account on a new device.</span>
-                <span>Master password: opens your vault and is not saved by the app.</span>
-              </div>
-            </div>
-            <div className={`otp-foundation-card ${otpTest.status}`}>
-              <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>OTP recovery method</strong></div>
-              <p className="otp-guidance-note">{otpChannel === 'email' ? 'Choose how you would like to receive your one-time code. We will send a one-time code to your email.' : 'Choose how you would like to receive your one-time code. SMS verification is coming soon.'}</p>
-              <div className={`otp-channel-toggle premium-toggle ${otpChannel}`} role="tablist" aria-label="Choose OTP delivery method">
-                <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => setOtpChannel('email')}><Mail size={15} /> Email</button>
-                <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => setOtpChannel('sms')}><Phone size={15} /> SMS</button>
-              </div>
-              {otpTest.message && <div className={`otp-status-line ${otpTest.verified ? 'verified' : ''}`}>{otpTest.message}</div>}
-              {otpTest.code && <div className="test-code-box"><span>Recovery code</span><code>{otpTest.code}</code></div>}
-              <div className="otp-flow-row">
-                <button type="button" className="secondary-button otp-send-button" onClick={requestSelectedOtp} disabled={otpTest.status === 'requesting' || otpChannel === 'sms'}>{otpTest.status === 'requesting' ? 'Sending...' : (otpChannel === 'email' ? 'Send email OTP' : 'SMS coming soon')}</button>
-                <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
-                <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
-              </div>
-              {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Enter your master password to complete login or restore.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Enter master password</button></div>}
-            </div>
-            <div className="snapshot-history-card">
-              <div className="snapshot-history-title"><strong>Backup history</strong><span>{snapshotHistory.loading ? 'Loading...' : snapshotHistory.message}</span></div>
-              {!!snapshotHistory.snapshots.length && (
-                <div className="snapshot-list">
-                  {snapshotHistory.snapshots.map((snap) => (
-                    <div className="snapshot-row" key={snap.id}>
-                      <span>{snap.item_count} item(s)</span>
-                      <small>{new Date(snap.created_at).toLocaleString()}</small>
-                    </div>
-                  ))}
+
+              <section className="saas-account-card settings-inner-card">
+                <div>
+                  <p className="eyebrow">Account status</p>
+                  <h2><UsersRound size={21} /> Plan and account</h2>
+                  <p>Your vault remains protected by your master password. These details identify your account and plan.</p>
                 </div>
-              )}
-            </div>
-            {message && <p className="message sync-message">{message}</p>}
-            <form className="bootstrap-grid" onSubmit={bootstrapAdmin}>
-              <label className="combined-phone-label">Mobile number
-                <div className="phone-combo-field">
-                  <CountryPicker countryCode={bootstrap.phoneCountryCode || '+254'} countryIso={bootstrap.phoneCountryIso || 'ke'} onChange={(country) => setBootstrap({ ...bootstrap, phoneCountryCode: country.code, phoneCountryIso: country.iso, phoneE164: buildPhoneE164(country.code, bootstrap.phoneNumber) })} />
-                  <input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" />
+                <div className="saas-account-grid">
+                  <span><strong>Account</strong>{bootstrap.accountName || bootstrap.tenantName || 'Private Vault'}</span>
+                  <span><strong>Plan</strong>{bootstrap.planCode || 'personal_free'}</span>
+                  <span><strong>Status</strong>{bootstrap.planStatus || bootstrap.accountStatus || 'active'}</span>
+                  <span><strong>Role</strong>{bootstrap.tenantRole || 'primary_owner'}</span>
                 </div>
-              </label>
-              <label>Email<input type="email" value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
-              <label>Display name<input value={bootstrap.displayName} onChange={(e) => setBootstrap({ ...bootstrap, displayName: e.target.value })} /></label>
-              <label>Account name<input value={bootstrap.accountName || bootstrap.tenantName || ''} onChange={(e) => setBootstrap({ ...bootstrap, accountName: e.target.value, tenantName: e.target.value })} /></label>
-              <label>Plan foundation<select value={bootstrap.planCode || 'personal_free'} onChange={(e) => setBootstrap({ ...bootstrap, planCode: e.target.value, planStatus: e.target.value === 'founder_private' ? 'founder_active' : 'trial_pending' })}>
-                <option value="founder_private">Founder private</option>
-                <option value="personal_free">Personal free</option>
-                <option value="personal_trial">Personal trial</option>
-                <option value="family_trial">Family trial</option>
-                <option value="business_trial">Business trial</option>
-              </select></label>
-              <div className="button-stack">
-                <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Save account details</button>
-                <button type="button" className="secondary-button" disabled={syncing} onClick={syncEncryptedVault}><Cloud size={18} /> {syncing ? 'Backing up...' : 'Back up vault'}</button>
+              </section>
+
+              <div className={`account-status-card ${accountStatus.state}`}>
+                <div className="account-status-heading"><Phone size={18} /><strong>Verification details</strong></div>
+                <span>{accountStatus.message}</span>
+                <small>Phone: {maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'not set'}{bootstrap.email ? ` · Email: ${maskEmail(bootstrap.email)}` : ''}</small>
               </div>
-            </form>
-          </section>
+
+              <form className="bootstrap-grid settings-inner-card" onSubmit={bootstrapAdmin}>
+                <label className="combined-phone-label">Mobile number
+                  <div className="phone-combo-field">
+                    <CountryPicker countryCode={bootstrap.phoneCountryCode || '+254'} countryIso={bootstrap.phoneCountryIso || 'ke'} onChange={(country) => setBootstrap({ ...bootstrap, phoneCountryCode: country.code, phoneCountryIso: country.iso, phoneE164: buildPhoneE164(country.code, bootstrap.phoneNumber) })} />
+                    <input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" />
+                  </div>
+                </label>
+                <label>Email<input type="email" value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
+                <label>Display name<input value={bootstrap.displayName} onChange={(e) => setBootstrap({ ...bootstrap, displayName: e.target.value })} /></label>
+                <label>Account name<input value={bootstrap.accountName || bootstrap.tenantName || ''} onChange={(e) => setBootstrap({ ...bootstrap, accountName: e.target.value, tenantName: e.target.value })} /></label>
+                <label>Plan<select value={bootstrap.planCode || 'personal_free'} onChange={(e) => setBootstrap({ ...bootstrap, planCode: e.target.value, planStatus: e.target.value === 'founder_private' ? 'founder_active' : 'trial_pending' })}>
+                  <option value="founder_private">Founder private</option>
+                  <option value="personal_free">Personal free</option>
+                  <option value="personal_trial">Personal trial</option>
+                  <option value="family_trial">Family trial</option>
+                  <option value="business_trial">Business trial</option>
+                </select></label>
+                <div className="button-stack">
+                  <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Save account details</button>
+                </div>
+              </form>
+
+              <div className={`otp-foundation-card ${otpTest.status}`}>
+                <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>One-time code</strong></div>
+                <p className="otp-guidance-note">{otpChannel === 'email' ? 'Choose how you would like to receive your one-time code. We will send a one-time code to your email.' : 'Choose how you would like to receive your one-time code. SMS verification is coming soon.'}</p>
+                <div className={`otp-channel-toggle premium-toggle ${otpChannel}`} role="tablist" aria-label="Choose OTP delivery method">
+                  <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => setOtpChannel('email')}><Mail size={15} /> Email</button>
+                  <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => setOtpChannel('sms')}><Phone size={15} /> SMS</button>
+                </div>
+                {otpTest.message && <div className={`otp-status-line ${otpTest.verified ? 'verified' : ''}`}>{otpTest.message}</div>}
+                {otpTest.code && <div className="test-code-box"><span>Recovery code</span><code>{otpTest.code}</code></div>}
+                <div className="otp-flow-row">
+                  <button type="button" className="secondary-button otp-send-button" onClick={requestSelectedOtp} disabled={otpTest.status === 'requesting' || otpChannel === 'sms'}>{otpTest.status === 'requesting' ? 'Sending...' : (otpChannel === 'email' ? 'Send email OTP' : 'SMS coming soon')}</button>
+                  <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
+                  <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
+                </div>
+                {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Enter your master password to complete login or restore.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Enter master password</button></div>}
+              </div>
+            </section>
+          )}
+
+          {activeSettingsSection === 'tools' && (
+            <section className="settings-section-panel settings-tools-panel" aria-label="Tools">
+              <div className="settings-section-heading">
+                <p className="eyebrow">Tools</p>
+                <h3><ShieldCheck size={20} /> Checks and balances</h3>
+                <p>Run safe checks, backup actions and restore tools when you need them.</p>
+              </div>
+
+              <div className="settings-tool-grid">
+                <button type="button" className="settings-tool-card" onClick={checkDbHealth}><RefreshCw size={20} /><strong>Check connection</strong><span>Confirm the cloud backup connection is ready.</span></button>
+                <button type="button" className="settings-tool-card" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={20} /><strong>Load backup history</strong><span>Refresh the list of encrypted cloud backups.</span></button>
+                <button type="button" className="settings-tool-card" disabled={syncing} onClick={syncEncryptedVault}><Cloud size={20} /><strong>{syncing ? 'Backing up...' : 'Back up vault'}</strong><span>Save the latest encrypted vault backup.</span></button>
+                <button type="button" className="settings-tool-card" disabled={syncing} onClick={restoreCloudToThisDevice}><RefreshCw size={20} /><strong>Restore backup</strong><span>Restore the latest cloud backup to this device.</span></button>
+              </div>
+
+              <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
+
+              <div className="vault-security-info-card">
+                <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>Vault security and recovery</strong></div>
+                <div className="security-points">
+                  <span>Local vault: secure copy saved on this device for fast daily unlock.</span>
+                  <span>Cloud backup: secure backup for restore and device sync.</span>
+                  <span>Phone/email: verifies your account on a new device.</span>
+                  <span>Master password: opens your vault and is not saved by the app.</span>
+                </div>
+              </div>
+
+              {message && <p className="message sync-message">{message}</p>}
+            </section>
+          )}
+
+          {activeSettingsSection === 'stats' && (
+            <section className="settings-section-panel settings-stats-panel" aria-label="Stats">
+              <div className="settings-section-heading">
+                <p className="eyebrow">Stats</p>
+                <h3><Database size={20} /> Backup and sync information</h3>
+                <p>Review your backup status, device state and recent cloud snapshot history.</p>
+              </div>
+
+              <div className={`sync-status-card ${syncStatus.state}`}> 
+                <strong>{syncStatus.state === 'success' ? 'Cloud backup saved' : syncStatus.state === 'syncing' ? 'Backup in progress' : syncStatus.state === 'error' ? 'Backup needs attention' : syncStatus.state === 'warning' ? 'Backup warning' : 'Cloud backup status'}</strong>
+                <span>{syncStatus.message}</span>
+                {(syncStatus.lastSyncAt || syncStatus.snapshotCount) && <small>Last backup: {syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : 'Not backed up in this session'} · Items: {syncStatus.itemCount}</small>}
+              </div>
+
+              <div className={`device-status-card ${deviceStatus.state}`}>
+                <div className="device-status-heading"><MonitorSmartphone size={18} /><strong>This device</strong></div>
+                <span>{deviceStatus.label}</span>
+                <small>{deviceStatus.lastCloudCheckAt ? `Last checked: ${new Date(deviceStatus.lastCloudCheckAt).toLocaleString()}` : 'Not checked yet'}{deviceStatus.lastRestoreAt ? ` · Restored: ${new Date(deviceStatus.lastRestoreAt).toLocaleString()}` : ''}</small>
+              </div>
+
+              <div className="snapshot-history-card">
+                <div className="snapshot-history-title"><strong>Backup history</strong><span>{snapshotHistory.loading ? 'Loading...' : snapshotHistory.message}</span></div>
+                {!!snapshotHistory.snapshots.length && (
+                  <div className="snapshot-list">
+                    {snapshotHistory.snapshots.map((snap) => (
+                      <div className="snapshot-row" key={snap.id}>
+                        <span>{snap.item_count} item(s)</span>
+                        <small>{new Date(snap.created_at).toLocaleString()}</small>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
         </section>
       )}
 
