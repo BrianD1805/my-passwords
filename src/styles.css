@@ -5336,3 +5336,18 @@ a,
     padding: 14px;
   }
 }
+
+
+/* Ver-0.029 desktop-only folder switch stability
+   Keep the desktop page scrollbar gutter reserved so the centred vault layout
+   does not shudder when switching between empty folders and folders with items. */
+@media (min-width: 861px) {
+  html {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+  }
+
+  .vault-results-panel.full-vault-list {
+    min-height: 190px;
+  }
+}
