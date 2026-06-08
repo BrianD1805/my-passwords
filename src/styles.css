@@ -5351,3 +5351,58 @@ a,
     min-height: 190px;
   }
 }
+
+/* Ver-0.029A Cards folder */
+.card-entry-grid {
+  display: grid;
+  gap: 13px;
+}
+
+.card-entry-two,
+.card-detail-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.card-detail-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.card-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(29, 53, 87, 0.11);
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(246, 250, 253, 0.98), rgba(255, 255, 255, 0.96));
+  box-shadow: 0 12px 26px rgba(29, 53, 87, 0.06);
+}
+
+.card-detail-header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.copy-all-button {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .card-entry-two,
+  .card-detail-two {
+    grid-template-columns: 1fr;
+  }
+
+  .card-detail-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .copy-all-button {
+    justify-content: center;
+  }
+}
