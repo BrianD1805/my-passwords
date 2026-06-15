@@ -14,6 +14,26 @@ function tokenHash(token) {
   return createHash('sha256').update(`${token}:${secret}`).digest('hex');
 }
 
+function hasWaitingPeriodEnded(value) {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time <= Date.now();
+}
+
+async function markReleaseReadyIfDue(request) {
+  const status = String(request?.status || '').toLowerCase();
+  if (!request?.id || !['requested', 'waiting', 'owner_notified'].includes(status) || request.cancelled_at || request.released_at || !hasWaitingPeriodEnded(request.waiting_ends_at)) {
+    return request;
+  }
+  const now = new Date().toISOString();
+  const updated = await updateRow('emergency_access_requests', `id=${eq(request.id)}`, {
+    status: 'release_ready',
+    metadata: { ...(request.metadata || {}), version: APP_VERSION, release_foundation_ready: true, release_ready_at: now, release_note: 'Waiting period ended. Selected emergency package release foundation is ready; no vault contents are included in this record.' },
+    updated_at: now
+  }).catch(() => null);
+  return updated || { ...request, status: 'release_ready', metadata: { ...(request.metadata || {}), release_foundation_ready: true, release_ready_at: now } };
+}
+
 function appBaseUrl(event) {
   const envUrl = process.env.URL || process.env.DEPLOY_PRIME_URL || '';
   if (envUrl) return envUrl.replace(/\/$/, '');
@@ -25,7 +45,7 @@ function appBaseUrl(event) {
 function buildInviteEmail({ ownerName, contactName, waitingPeriod, accessScope, acceptUrl }) {
   const safeOwner = ownerName || 'A My Passwords user';
   const safeContact = contactName || 'there';
-  const text = `${safeOwner} has nominated you as their trusted emergency contact in My Passwords. This invitation does not give you access to any passwords today. If you accept, you are only confirming that you are willing to be listed as their trusted person. Waiting period: ${waitingPeriod || '7 days'}. Access scope planned: ${accessScope || 'Emergency Info folder only'}. Accept or decline: ${acceptUrl}`;
+  const text = `${safeOwner} has nominated you as their trusted emergency contact in My Passwords. This invitation does not give you access to any passwords today. If you accept, you are confirming that you are willing to be listed as their trusted person. You do not need a My Passwords account or app; this secure link works in your browser. Waiting period: ${waitingPeriod || '7 days'}. Access scope planned: ${accessScope || 'Emergency Info folder only'}. Accept or decline: ${acceptUrl}`;
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
@@ -39,7 +59,7 @@ function buildInviteEmail({ ownerName, contactName, waitingPeriod, accessScope, 
           <p style="margin:0;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
         </div>
         <a href="${acceptUrl}" style="display:inline-block;background:#1d3557;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Review invitation</a>
-        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">The account owner stays in control. Emergency access will only ever follow the waiting period and release rules they choose.</p>
+        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">The account owner stays in control during the waiting period. If they do not cancel an emergency request before the waiting period ends, their selected emergency package can become available according to their release rules.</p>
       </div>
     </div>
   </body>
@@ -103,6 +123,7 @@ export async function handler(event) {
       if (!candidateInvites.length) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Invitation was not found.' });
 
       const activeRequestStatuses = ['requested', 'waiting', 'owner_notified'];
+      const foundationReadyStatuses = ['release_ready'];
       const requestRows = [];
       for (const invite of candidateInvites.slice(0, 10)) {
         const rows = await selectRows('emergency_access_requests', `select=id,invitation_id,status,requested_at,waiting_ends_at,cancelled_at,released_at,contact_email,created_at,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&invitation_id=${eq(invite.id)}&order=requested_at.desc&limit=5`).catch(() => []);
@@ -121,9 +142,11 @@ export async function handler(event) {
       const allRequests = requestRows
         .filter((row) => row?.id)
         .sort((a, b) => new Date(b.requested_at || b.created_at || 0) - new Date(a.requested_at || a.created_at || 0));
-      const latestRequest = allRequests.find((row) => activeRequestStatuses.includes(String(row.status || '').toLowerCase()) && !row.cancelled_at && !row.released_at) || allRequests[0] || null;
+      let latestRequest = allRequests.find((row) => [...activeRequestStatuses, ...foundationReadyStatuses].includes(String(row.status || '').toLowerCase()) && !row.cancelled_at && !row.released_at) || allRequests[0] || null;
+      latestRequest = await markReleaseReadyIfDue(latestRequest);
       const requestStatus = String(latestRequest?.status || '').toLowerCase();
       const hasActiveRequest = latestRequest && activeRequestStatuses.includes(requestStatus) && !latestRequest.cancelled_at && !latestRequest.released_at;
+      const isReleaseReady = latestRequest && foundationReadyStatuses.includes(requestStatus) && !latestRequest.cancelled_at && !latestRequest.released_at;
 
       let invitation = null;
       if (latestRequest?.invitation_id) invitation = candidateInvites.find((entry) => entry.id === latestRequest.invitation_id) || null;
@@ -132,12 +155,14 @@ export async function handler(event) {
 
       // A request can only be created from an accepted invite. If the request exists but the older local plan still says sent,
       // surface the owner panel as accepted rather than leaving the UI stuck on Invitation sent.
-      const invitationStatus = hasActiveRequest && !['declined', 'cancelled'].includes(String(invitation.status || '').toLowerCase())
+      const invitationStatus = (hasActiveRequest || isReleaseReady) && !['declined', 'cancelled'].includes(String(invitation.status || '').toLowerCase())
         ? 'accepted'
         : (invitation.status || 'pending');
       const requestMessage = latestRequest
-        ? (hasActiveRequest
-            ? 'Emergency access requested. The waiting period has started. No vault contents have been released.'
+        ? (isReleaseReady
+            ? 'The waiting period has ended. The selected emergency package release foundation is ready. No vault contents are included in this stage yet.'
+            : hasActiveRequest
+              ? 'Emergency access requested. The waiting period has started. If you do not cancel before it ends, the selected emergency package can become available. No vault contents have been released yet.'
             : requestStatus === 'cancelled'
               ? 'Emergency access request cancelled. No vault contents were released.'
               : 'Emergency access request status checked. No vault contents have been released.')
@@ -160,9 +185,12 @@ export async function handler(event) {
           released_at: latestRequest.released_at || null,
           message: requestMessage
         } : null,
-        message: hasActiveRequest
-          ? 'Emergency access request is active.'
-          : `Invitation status: ${invitationStatus}.`
+        releaseReady: isReleaseReady,
+        message: isReleaseReady
+          ? 'Waiting period ended. Emergency release foundation is ready.'
+          : hasActiveRequest
+            ? 'Emergency access request is active.'
+            : `Invitation status: ${invitationStatus}.`
       });
     }
 
@@ -181,7 +209,7 @@ export async function handler(event) {
       const userId = String(body.userId || '').trim();
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
       await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: { reset_by_owner: true, reset_at: new Date().toISOString(), version: APP_VERSION } });
-      await updateRow('emergency_access_requests', `invitation_id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&status=${inList(['requested','waiting','owner_notified'])}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: { cancelled_by_owner_reset: true, version: APP_VERSION } }).catch(() => null);
+      await updateRow('emergency_access_requests', `invitation_id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&status=${inList(['requested','waiting','owner_notified','release_ready'])}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: { cancelled_by_owner_reset: true, version: APP_VERSION } }).catch(() => null);
       return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: 'reset', message: 'Emergency invitation reset. You can send a fresh invite now.' });
     }
 

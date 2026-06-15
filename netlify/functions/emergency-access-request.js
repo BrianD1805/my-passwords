@@ -17,10 +17,30 @@ function waitingPeriodMs(value) {
   return amount * 24 * 60 * 60 * 1000;
 }
 
+function hasWaitingPeriodEnded(value) {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time <= Date.now();
+}
+
+async function markReleaseReadyIfDue(request) {
+  const status = String(request?.status || '').toLowerCase();
+  if (!request?.id || !['requested', 'waiting', 'owner_notified'].includes(status) || request.cancelled_at || request.released_at || !hasWaitingPeriodEnded(request.waiting_ends_at)) {
+    return request;
+  }
+  const now = new Date().toISOString();
+  const updated = await updateRow('emergency_access_requests', `id=${eq(request.id)}`, {
+    status: 'release_ready',
+    metadata: { ...(request.metadata || {}), version: APP_VERSION, release_foundation_ready: true, release_ready_at: now, release_note: 'Waiting period ended. Selected emergency package release foundation is ready; no vault contents are included in this record.' },
+    updated_at: now
+  }).catch(() => null);
+  return updated || { ...request, status: 'release_ready', metadata: { ...(request.metadata || {}), release_foundation_ready: true, release_ready_at: now } };
+}
+
 function buildOwnerNotification({ ownerName, contactName, waitingPeriod, accessScope, requestedAt, waitingEndsAt }) {
   const safeOwner = ownerName || 'there';
   const safeContact = contactName || 'Your trusted person';
-  const text = `${safeOwner}, ${safeContact} has requested emergency access in My Passwords. This does not release any vault contents. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. Requested: ${requestedAt}. Waiting period ends: ${waitingEndsAt}. Open your vault settings to review or cancel this request.`;
+  const text = `${safeOwner}, ${safeContact} has requested emergency access in My Passwords. No vault contents have been released yet. If you do not cancel before the waiting period ends, the selected emergency package can become available. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. Requested: ${requestedAt}. Waiting period ends: ${waitingEndsAt}. Open your vault settings to review or cancel this request before the waiting period ends.`;
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
@@ -28,13 +48,13 @@ function buildOwnerNotification({ ownerName, contactName, waitingPeriod, accessS
       <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
         <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Emergency access request</h1>
         <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeOwner}, ${safeContact} has requested emergency access in My Passwords.</p>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">No vault contents have been released. The request has started the waiting-period record only.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">No vault contents have been released yet. If you do not cancel before the waiting period ends, your selected emergency package can become available to your trusted person.</p>
         <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
           <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
           <p style="margin:0 0 8px;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
           <p style="margin:0;"><strong>Waiting period ends:</strong> ${waitingEndsAt}</p>
         </div>
-        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">Open your vault settings to review or cancel this request.</p>
+        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">Open your vault settings to review or cancel this request before the waiting period ends.</p>
       </div>
     </div>
   </body>
@@ -98,16 +118,20 @@ export async function handler(event) {
     if (invitation.status !== 'accepted') return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'Accept the emergency contact invitation before requesting emergency access.' });
     if (invitation.expires_at && new Date(invitation.expires_at).getTime() < Date.now()) return jsonResponse(410, { ok: false, version: APP_VERSION, message: 'This invitation has expired. Please ask the account owner to send a new one.' });
 
-    const existing = await selectRows('emergency_access_requests', `select=*&invitation_id=${eq(invitation.id)}&status=in.(requested,waiting,owner_notified)&order=requested_at.desc&limit=1`);
+    const existing = await selectRows('emergency_access_requests', `select=*&invitation_id=${eq(invitation.id)}&status=in.(requested,waiting,owner_notified,release_ready)&order=requested_at.desc&limit=1`);
     if (existing?.[0]?.id) {
+      const currentRequest = await markReleaseReadyIfDue(existing[0]);
       return jsonResponse(200, {
         ok: true,
         version: APP_VERSION,
-        requestId: existing[0].id,
-        status: existing[0].status,
-        requestedAt: existing[0].requested_at,
-        waitingEndsAt: existing[0].waiting_ends_at,
-        message: 'Emergency access request is already active. No vault contents have been released.'
+        requestId: currentRequest.id,
+        status: currentRequest.status,
+        requestedAt: currentRequest.requested_at,
+        waitingEndsAt: currentRequest.waiting_ends_at,
+        releaseReady: String(currentRequest.status || '').toLowerCase() === 'release_ready',
+        message: String(currentRequest.status || '').toLowerCase() === 'release_ready'
+          ? 'The waiting period has ended. The selected emergency package release foundation is ready, but no vault contents are included in this stage yet.'
+          : 'Emergency access request is already active. The owner has until the waiting period ends to cancel it. No vault contents have been released.'
       });
     }
 
@@ -172,8 +196,8 @@ export async function handler(event) {
       requestedAt,
       waitingEndsAt,
       message: notification.sent
-        ? 'Emergency access request sent to the account owner. No vault contents have been released.'
-        : 'Emergency access request recorded. No vault contents have been released.'
+        ? 'Emergency access request sent to the account owner. If the owner does not cancel before the waiting period ends, the selected emergency package can become available. No vault contents have been released yet.'
+        : 'Emergency access request recorded. If the owner does not cancel before the waiting period ends, the selected emergency package can become available. No vault contents have been released yet.'
     });
   } catch (error) {
     return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Emergency access request could not be saved.', error: error.message, details: error.details || null });

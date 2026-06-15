@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.033F';
+const VERSION = 'My Passwords Ver-0.034';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2440,7 +2440,7 @@ function App() {
             <div className="preview-lock-icon"><UsersRound size={26} /></div>
             <p className="eyebrow">Emergency Access</p>
             <h1>Emergency contact invitation</h1>
-            <p>You have been invited to be a trusted emergency contact. This does not give you access to any passwords today. It confirms that you are willing to be listed as the trusted person and, in a later emergency, lets you request access from the account owner.</p>
+            <p>You have been invited to be a trusted emergency contact. This does not give you access to any passwords today. It confirms that you are willing to be listed as the trusted person and, in a later emergency, lets you request access. You do not need a My Passwords account or app; this secure link works in your browser.</p>
             {inviteAcceptance.message && <div className={`emergency-invite-status ${inviteAcceptance.status}`}>{inviteAcceptance.message}</div>}
             {emergencyRequestState.message && <div className={`emergency-invite-status ${emergencyRequestState.status}`}>{emergencyRequestState.message}</div>}
             <div className="emergency-invite-actions">
@@ -2450,14 +2450,14 @@ function App() {
             {inviteAcceptance.status === 'accepted' && (
               <div className="emergency-request-card">
                 <strong>Need to request emergency access?</strong>
-                <p>This starts the waiting period and notifies the account owner. It still does not reveal any vault contents.</p>
+                <p>This starts the waiting period and notifies the account owner. If the request is not cancelled before the waiting period ends, the selected emergency package can become available here in a later release stage. It still does not reveal any vault contents today.</p>
                 <button type="button" className={`secondary-button emergency-request-button ${emergencyRequestState.status === 'requested' ? 'success' : ''}`} disabled={emergencyRequestState.status === 'working' || emergencyRequestState.status === 'requested'} onClick={requestEmergencyAccessFromInvite}>
                   {emergencyRequestState.status === 'working' ? <RefreshCw size={17} className="spin-icon" /> : emergencyRequestState.status === 'requested' ? <ShieldCheck size={17} /> : <AlertTriangle size={17} />}
                   {emergencyRequestState.status === 'working' ? 'Requesting...' : emergencyRequestState.status === 'requested' ? 'Request sent' : emergencyRequestState.status === 'error' ? 'Try request again' : 'Request emergency access'}
                 </button>
               </div>
             )}
-            <p className="emergency-invite-note">The account owner stays in control. No passwords are released by this step.</p>
+            <p className="emergency-invite-note">The account owner can cancel during the waiting period. No passwords are released by this step.</p>
           </article>
           <footer className="landing-footer emergency-invite-footer"><span>© 2026 My Passwords</span><button type="button" onClick={openVaultApp}>Open My Vault</button></footer>
         </section>
@@ -2795,6 +2795,7 @@ function App() {
   const requestStatusText = String(emergencyDraft.requestStatus || 'not_requested').replace(/_/g, ' ');
   const normalisedRequestStatus = String(emergencyDraft.requestStatus || '').toLowerCase();
   const hasActiveEmergencyRequest = ['requested', 'waiting', 'owner_notified'].includes(normalisedRequestStatus);
+  const isEmergencyReleaseReady = normalisedRequestStatus === 'release_ready';
   const invitationStatusTitle = emergencyDraft.invitationStatus === 'accepted'
     ? 'Invitation accepted'
     : emergencyDraft.invitationStatus === 'declined'
@@ -2813,15 +2814,19 @@ function App() {
         : ['invitation_sent', 'sent', 'pending'].includes(emergencyDraft.invitationStatus)
           ? 'Invitation sent. Your trusted person can accept the invitation, but no vault access is granted yet.'
           : 'Save the plan, then send an invitation when you are ready.';
-  const requestStatusTitle = hasActiveEmergencyRequest
-    ? 'Emergency access requested'
+  const requestStatusTitle = isEmergencyReleaseReady
+    ? 'Waiting period ended'
+    : hasActiveEmergencyRequest
+      ? 'Emergency access requested'
     : normalisedRequestStatus === 'cancelled'
       ? 'Emergency request cancelled'
       : normalisedRequestStatus && normalisedRequestStatus !== 'not_requested'
         ? `Emergency request ${requestStatusText}`
         : '';
-  const requestStatusCopy = hasActiveEmergencyRequest
-    ? 'Your trusted person has requested emergency access. The waiting period has started. No passwords have been released.'
+  const requestStatusCopy = isEmergencyReleaseReady
+    ? 'The waiting period has ended. This request is now ready for the selected emergency package release stage. No vault contents are released by Ver-0.034 yet.'
+    : hasActiveEmergencyRequest
+      ? 'Your trusted person has requested emergency access. The waiting period has started. If you do not cancel before it ends, your selected emergency package can become available. No passwords have been released yet.'
     : normalisedRequestStatus === 'cancelled'
       ? 'The emergency access request has been cancelled. No vault contents were released.'
       : emergencyDraft.requestMessage || '';
@@ -3159,11 +3164,11 @@ function App() {
                 <ShieldCheck size={22} />
                 <div>
                   <strong>You stay in control</strong>
-                  <p>This saves your nominated contact inside your encrypted vault. It does not give anyone automatic access to your passwords.</p>
+                  <p>This saves your nominated contact inside your encrypted vault. If they request emergency access, you are notified and can cancel during the waiting period. If you do not cancel before the waiting period ends, your selected emergency package can become available.</p>
                 </div>
               </div>
 
-              <div className={`emergency-invite-status-card ${hasActiveEmergencyRequest ? 'request-active' : ''}`}>
+              <div className={`emergency-invite-status-card ${(hasActiveEmergencyRequest || isEmergencyReleaseReady) ? 'request-active' : ''}`}>
                 <div className="emergency-status-copy">
                   <div className="emergency-status-summary">
                     <span className="emergency-status-pill"><ShieldCheck size={16} /> {invitationStatusTitle}</span>
@@ -3179,6 +3184,7 @@ function App() {
                   </div>
                   {emergencyInviteState.message && <small className="emergency-last-check-note">{emergencyInviteState.message}</small>}
                   {emergencyDraft.invitationUrl && <small className="emergency-invite-link-note">Invite link ready for testing or resending.</small>}
+                  {(hasActiveEmergencyRequest || isEmergencyReleaseReady) && <small className="emergency-last-check-note">Important: cancel this request before the waiting period ends if it should not proceed.</small>}
                 </div>
                 <div className="emergency-invite-actions-mini" aria-label="Emergency invitation actions">
                   <div className="emergency-invite-action-row primary-actions">
@@ -3188,7 +3194,7 @@ function App() {
                     {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={copyEmergencyInviteLink}><Copy size={16} /> Copy invite link</button>}
                   </div>
                   <div className="emergency-invite-action-row safety-actions">
-                    {['requested', 'waiting', 'owner_notified'].includes(normalisedRequestStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyAccessRequest} disabled={emergencyInviteState.status === 'cancelling-request'}><X size={16} /> Cancel request</button>}
+                    {['requested', 'waiting', 'owner_notified', 'release_ready'].includes(normalisedRequestStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyAccessRequest} disabled={emergencyInviteState.status === 'cancelling-request'}><X size={16} /> Cancel request</button>}
                     {['invitation_sent', 'sent', 'pending'].includes(emergencyDraft.invitationStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyInvitation}><X size={16} /> Cancel invite</button>}
                     {emergencyDraft.invitationId && <button type="button" className="secondary-button danger-soft" onClick={resetEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resetting'}><RefreshCw size={16} /> {emergencyInviteState.status === 'resetting' ? 'Resetting...' : 'Reset invite'}</button>}
                   </div>
@@ -3216,9 +3222,10 @@ function App() {
                 </div>
                 <label className="emergency-access-notes-label">Notes or instructions<textarea value={emergencyDraft.instructions} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, instructions: e.target.value })} placeholder="Add any wishes, instructions, or details you want kept with this emergency plan." /></label>
                 <div className="emergency-access-points">
-                  <span>Emergency requests now start a waiting-period record, but no vault contents are released yet.</span>
-                  <span>Your trusted person does not need to install the app; the secure invite link opens in a browser.</span>
-                  <span>Your master password is not saved here.</span>
+                  <span>Emergency requests start a waiting period. If you do not cancel before it ends, the selected emergency package can become available in the release stage.</span>
+                  <span>Your trusted person does not need My Passwords installed or their own vault; the secure invite link opens in any browser.</span>
+                  <span>If they already have their own My Passwords Vault, optional account linking can be added later without making it required.</span>
+                  <span>Your master password is not saved here, and the first release scope should remain the Emergency Info package rather than the full vault by default.</span>
                   <span>You can change this nominated person at any time.</span>
                 </div>
                 {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last updated: {new Date(emergencyDraft.updatedAt).toLocaleString()}</p>}
