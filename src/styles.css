@@ -5542,3 +5542,139 @@ a,
     grid-template-columns: 1fr;
   }
 }
+
+/* Ver-0.031 Emergency Access invite foundation */
+.emergency-invite-status-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid rgba(29, 53, 87, 0.12);
+  border-radius: 22px;
+  background: #ffffff;
+  padding: 15px;
+  box-shadow: 0 12px 30px rgba(29, 53, 87, 0.07);
+}
+
+.emergency-invite-status-card strong {
+  color: #14263b;
+  font-size: 1rem;
+}
+
+.emergency-invite-status-card p {
+  margin: 4px 0 0;
+  color: #5f7286;
+  line-height: 1.45;
+}
+
+.emergency-invite-status-card small {
+  display: block;
+  margin-top: 6px;
+  color: #718295;
+  font-weight: 800;
+}
+
+.emergency-invite-actions-mini {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.emergency-invite-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.emergency-invite-shell {
+  width: min(760px, 100%);
+  display: grid;
+  gap: 16px;
+}
+
+.emergency-invite-brand {
+  justify-content: center;
+}
+
+.emergency-invite-card {
+  border: 1px solid rgba(29, 53, 87, 0.12);
+  border-radius: 32px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: clamp(24px, 5vw, 42px);
+  text-align: center;
+  box-shadow: 0 22px 60px rgba(29, 53, 87, 0.13);
+}
+
+.emergency-invite-card h1 {
+  margin: 6px 0 12px;
+  color: #14263b;
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  letter-spacing: -0.04em;
+}
+
+.emergency-invite-card p {
+  margin: 0 auto 14px;
+  max-width: 560px;
+  color: #5f7286;
+  line-height: 1.6;
+}
+
+.emergency-invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 20px 0 12px;
+}
+
+.emergency-invite-status {
+  margin: 16px auto 0;
+  max-width: 560px;
+  border-radius: 18px;
+  border: 1px solid rgba(29, 95, 144, 0.16);
+  background: #f7fbff;
+  padding: 12px 14px;
+  color: #1d4f79;
+  font-weight: 800;
+}
+
+.emergency-invite-status.error {
+  border-color: rgba(150, 54, 54, 0.18);
+  background: #fff6f6;
+  color: #963636;
+}
+
+.emergency-invite-status.accepted {
+  border-color: rgba(47, 115, 83, 0.18);
+  background: #f4fbf7;
+  color: #2f7353;
+}
+
+.emergency-invite-note {
+  font-size: .9rem;
+}
+
+.emergency-invite-footer {
+  justify-content: space-between;
+}
+
+@media (max-width: 720px) {
+  .emergency-invite-status-card {
+    grid-template-columns: 1fr;
+  }
+
+  .emergency-invite-actions-mini {
+    justify-content: stretch;
+  }
+
+  .emergency-invite-actions-mini .secondary-button {
+    width: 100%;
+  }
+
+  .emergency-invite-actions .primary-button,
+  .emergency-invite-actions .secondary-button {
+    width: 100%;
+  }
+}
