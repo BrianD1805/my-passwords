@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.034';
+const VERSION = 'My Passwords Ver-0.035';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -682,6 +682,13 @@ function emptyEmergencyAccessPlan() {
     waitingPeriod: '7 days',
     accessScope: 'Emergency Info folder only',
     instructions: '',
+    emergencyPackageEnabled: true,
+    emergencyPackageTitle: 'Emergency Info package',
+    emergencyPackageMessage: '',
+    emergencyPackageContacts: '',
+    emergencyPackageDocuments: '',
+    emergencyPackageChecklist: '',
+    emergencyPackageUpdatedAt: '',
     invitationStatus: 'not_invited',
     invitationId: '',
     invitationSentAt: '',
@@ -706,7 +713,17 @@ function getEmergencyAccessPlan(vaultItems) {
 
 function hasEmergencyAccessPlan(plan) {
   const value = plan || {};
-  return Boolean(String(value.contactName || '').trim() || String(value.relationship || '').trim() || String(value.contactEmail || '').trim() || String(value.contactPhone || '').trim() || String(value.instructions || '').trim());
+  return Boolean(
+    String(value.contactName || '').trim()
+    || String(value.relationship || '').trim()
+    || String(value.contactEmail || '').trim()
+    || String(value.contactPhone || '').trim()
+    || String(value.instructions || '').trim()
+    || String(value.emergencyPackageMessage || '').trim()
+    || String(value.emergencyPackageContacts || '').trim()
+    || String(value.emergencyPackageDocuments || '').trim()
+    || String(value.emergencyPackageChecklist || '').trim()
+  );
 }
 
 function upsertEmergencyAccessMetaItem(vaultItems, plan) {
@@ -719,6 +736,13 @@ function upsertEmergencyAccessMetaItem(vaultItems, plan) {
     contactEmail: String(plan?.contactEmail || '').trim().toLowerCase(),
     contactPhone: String(plan?.contactPhone || '').trim(),
     instructions: String(plan?.instructions || '').trim(),
+    emergencyPackageEnabled: plan?.emergencyPackageEnabled !== false,
+    emergencyPackageTitle: String(plan?.emergencyPackageTitle || 'Emergency Info package').trim(),
+    emergencyPackageMessage: String(plan?.emergencyPackageMessage || '').trim(),
+    emergencyPackageContacts: String(plan?.emergencyPackageContacts || '').trim(),
+    emergencyPackageDocuments: String(plan?.emergencyPackageDocuments || '').trim(),
+    emergencyPackageChecklist: String(plan?.emergencyPackageChecklist || '').trim(),
+    emergencyPackageUpdatedAt: String(plan?.emergencyPackageUpdatedAt || plan?.updatedAt || '').trim(),
     updatedAt: new Date().toISOString()
   };
   if (!hasEmergencyAccessPlan(cleanPlan)) return withoutEmergencyMeta;
@@ -1851,6 +1875,11 @@ function App() {
   const isEmergencyInviteRoute = routePath === '/emergency-invite';
   const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute;
 
+  useEffect(() => {
+    if (isEmergencyInviteRoute) loadEmergencyInviteStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEmergencyInviteRoute]);
+
   function openVaultApp() {
     window.location.assign('/vault');
   }
@@ -2007,7 +2036,14 @@ function App() {
       relationship: String(emergencyDraft.relationship || '').trim(),
       contactEmail: String(emergencyDraft.contactEmail || '').trim().toLowerCase(),
       contactPhone: String(emergencyDraft.contactPhone || '').trim(),
-      instructions: String(emergencyDraft.instructions || '').trim()
+      instructions: String(emergencyDraft.instructions || '').trim(),
+      emergencyPackageEnabled: emergencyDraft.emergencyPackageEnabled !== false,
+      emergencyPackageTitle: String(emergencyDraft.emergencyPackageTitle || 'Emergency Info package').trim(),
+      emergencyPackageMessage: String(emergencyDraft.emergencyPackageMessage || '').trim(),
+      emergencyPackageContacts: String(emergencyDraft.emergencyPackageContacts || '').trim(),
+      emergencyPackageDocuments: String(emergencyDraft.emergencyPackageDocuments || '').trim(),
+      emergencyPackageChecklist: String(emergencyDraft.emergencyPackageChecklist || '').trim(),
+      emergencyPackageUpdatedAt: new Date().toISOString()
     };
     if (!cleanPlan.contactName) return showMessage("Add the trusted person's name first.", 'warning');
     if (!cleanPlan.contactEmail && !cleanPlan.contactPhone) return showMessage('Add at least one contact detail for your trusted person.', 'warning');
@@ -2033,7 +2069,14 @@ function App() {
       relationship: String(emergencyDraft.relationship || '').trim(),
       contactEmail: String(emergencyDraft.contactEmail || '').trim().toLowerCase(),
       contactPhone: String(emergencyDraft.contactPhone || '').trim(),
-      instructions: String(emergencyDraft.instructions || '').trim()
+      instructions: String(emergencyDraft.instructions || '').trim(),
+      emergencyPackageEnabled: emergencyDraft.emergencyPackageEnabled !== false,
+      emergencyPackageTitle: String(emergencyDraft.emergencyPackageTitle || 'Emergency Info package').trim(),
+      emergencyPackageMessage: String(emergencyDraft.emergencyPackageMessage || '').trim(),
+      emergencyPackageContacts: String(emergencyDraft.emergencyPackageContacts || '').trim(),
+      emergencyPackageDocuments: String(emergencyDraft.emergencyPackageDocuments || '').trim(),
+      emergencyPackageChecklist: String(emergencyDraft.emergencyPackageChecklist || '').trim(),
+      emergencyPackageUpdatedAt: new Date().toISOString()
     };
     if (!cleanPlan.contactName) return showMessage("Add the trusted person's name first.", 'warning');
     if (!cleanPlan.contactEmail || !cleanPlan.contactEmail.includes('@')) return showMessage("Add a valid email address for the trusted person before sending an invitation.", 'warning');
@@ -2249,6 +2292,34 @@ function App() {
   }
 
 
+  async function loadEmergencyInviteStatus() {
+    const params = new URLSearchParams(window.location.search || '');
+    const token = params.get('token') || '';
+    if (!token) return;
+    try {
+      const result = await postJson('/.netlify/functions/emergency-access-request', { action: 'status', token });
+      if (!result.ok) return;
+      if (result.invitationStatus === 'accepted') {
+        setInviteAcceptance({ status: 'accepted', message: result.invitationMessage || 'Invitation accepted. You can request emergency access if needed.' });
+      } else if (result.invitationStatus === 'declined') {
+        setInviteAcceptance({ status: 'declined', message: result.invitationMessage || 'Invitation declined.' });
+      } else if (result.invitationStatus === 'cancelled') {
+        setInviteAcceptance({ status: 'error', message: result.invitationMessage || 'This invitation has been cancelled by the account owner.' });
+      }
+      if (result.requestId) {
+        const ready = result.status === 'release_ready' || result.releaseReady;
+        setEmergencyRequestState({
+          status: ready ? 'release-ready' : 'requested',
+          message: result.message || (ready ? 'The waiting period has ended. The emergency package release screen is ready.' : 'Emergency access request is active. The owner can cancel before the waiting period ends.'),
+          releaseReady: ready,
+          waitingEndsAt: result.waitingEndsAt || ''
+        });
+      }
+    } catch (error) {
+      // Silent status refresh: the page still works if the trusted person taps the buttons manually.
+    }
+  }
+
   async function respondToEmergencyInvitation(responseStatus) {
     const params = new URLSearchParams(window.location.search || '');
     const token = params.get('token') || '';
@@ -2279,7 +2350,12 @@ function App() {
     try {
       const result = await postJson('/.netlify/functions/emergency-access-request', { token }, { signal: controller.signal });
       if (!result.ok) throw new Error(result.message || 'The emergency access request could not be started.');
-      setEmergencyRequestState({ status: 'requested', message: result.message || 'Emergency access request recorded. No vault contents have been released.' });
+      setEmergencyRequestState({
+        status: result.releaseReady || result.status === 'release_ready' ? 'release-ready' : 'requested',
+        message: result.message || 'Emergency access request recorded. No vault contents have been released.',
+        releaseReady: result.releaseReady || result.status === 'release_ready',
+        waitingEndsAt: result.waitingEndsAt || ''
+      });
     } catch (error) {
       const note = error.name === 'AbortError'
         ? 'The request is taking longer than expected. Please tap Request emergency access again, or ask the account owner to check status.'
@@ -2449,15 +2525,26 @@ function App() {
             </div>
             {inviteAcceptance.status === 'accepted' && (
               <div className="emergency-request-card">
-                <strong>Need to request emergency access?</strong>
-                <p>This starts the waiting period and notifies the account owner. If the request is not cancelled before the waiting period ends, the selected emergency package can become available here in a later release stage. It still does not reveal any vault contents today.</p>
-                <button type="button" className={`secondary-button emergency-request-button ${emergencyRequestState.status === 'requested' ? 'success' : ''}`} disabled={emergencyRequestState.status === 'working' || emergencyRequestState.status === 'requested'} onClick={requestEmergencyAccessFromInvite}>
-                  {emergencyRequestState.status === 'working' ? <RefreshCw size={17} className="spin-icon" /> : emergencyRequestState.status === 'requested' ? <ShieldCheck size={17} /> : <AlertTriangle size={17} />}
-                  {emergencyRequestState.status === 'working' ? 'Requesting...' : emergencyRequestState.status === 'requested' ? 'Request sent' : emergencyRequestState.status === 'error' ? 'Try request again' : 'Request emergency access'}
+                <strong>{emergencyRequestState.status === 'release-ready' ? 'Waiting period ended' : 'Need to request emergency access?'}</strong>
+                <p>{emergencyRequestState.status === 'release-ready'
+                  ? 'The waiting period has ended. This page is now ready for the emergency package release stage. Ver-0.035 still does not expose normal vault passwords; it confirms the release-ready state and prepares the secure package screen.'
+                  : 'This starts the waiting period and notifies the account owner. If the request is not cancelled before the waiting period ends, the selected emergency package can become available here. It still does not reveal any vault contents today.'}</p>
+                {emergencyRequestState.status === 'release-ready' && (
+                  <div className="emergency-release-ready-card">
+                    <ShieldCheck size={18} />
+                    <div>
+                      <strong>Emergency package release foundation</strong>
+                      <span>The selected emergency package is marked as ready. The next secure release step will show only the owner-approved emergency package, not the full vault by default.</span>
+                    </div>
+                  </div>
+                )}
+                <button type="button" className={`secondary-button emergency-request-button ${['requested', 'release-ready'].includes(emergencyRequestState.status) ? 'success' : ''}`} disabled={emergencyRequestState.status === 'working' || emergencyRequestState.status === 'requested' || emergencyRequestState.status === 'release-ready'} onClick={requestEmergencyAccessFromInvite}>
+                  {emergencyRequestState.status === 'working' ? <RefreshCw size={17} className="spin-icon" /> : ['requested', 'release-ready'].includes(emergencyRequestState.status) ? <ShieldCheck size={17} /> : <AlertTriangle size={17} />}
+                  {emergencyRequestState.status === 'working' ? 'Requesting...' : emergencyRequestState.status === 'release-ready' ? 'Release-ready' : emergencyRequestState.status === 'requested' ? 'Request sent' : emergencyRequestState.status === 'error' ? 'Try request again' : 'Request emergency access'}
                 </button>
               </div>
             )}
-            <p className="emergency-invite-note">The account owner can cancel during the waiting period. No passwords are released by this step.</p>
+            <p className="emergency-invite-note">The account owner can cancel during the waiting period. Ver-0.035 prepares the emergency package release screen but does not expose the full vault.</p>
           </article>
           <footer className="landing-footer emergency-invite-footer"><span>© 2026 My Passwords</span><button type="button" onClick={openVaultApp}>Open My Vault</button></footer>
         </section>
@@ -2824,7 +2911,7 @@ function App() {
         ? `Emergency request ${requestStatusText}`
         : '';
   const requestStatusCopy = isEmergencyReleaseReady
-    ? 'The waiting period has ended. This request is now ready for the selected emergency package release stage. No vault contents are released by Ver-0.034 yet.'
+    ? 'The waiting period has ended. This request is ready for the selected emergency package release stage. Ver-0.035 prepares the release-ready screen and package foundation without exposing the full vault.'
     : hasActiveEmergencyRequest
       ? 'Your trusted person has requested emergency access. The waiting period has started. If you do not cancel before it ends, your selected emergency package can become available. No passwords have been released yet.'
     : normalisedRequestStatus === 'cancelled'
@@ -3214,13 +3301,41 @@ function App() {
                     <option value="14 days">14 days</option>
                     <option value="30 days">30 days</option>
                   </select></label>
-                  <label>Access scope<select value={emergencyDraft.accessScope} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, accessScope: e.target.value })}>
-                    <option value="Emergency Info folder only">Emergency Info folder only</option>
-                    <option value="Selected folders later">Selected folders later</option>
-                    <option value="Full vault later">Full vault later</option>
-                  </select></label>
                 </div>
                 <label className="emergency-access-notes-label">Notes or instructions<textarea value={emergencyDraft.instructions} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, instructions: e.target.value })} placeholder="Add any wishes, instructions, or details you want kept with this emergency plan." /></label>
+
+                <div className="emergency-package-editor-card">
+                  <div className="emergency-package-editor-heading">
+                    <FileText size={20} />
+                    <div>
+                      <strong>Emergency package foundation</strong>
+                      <span>This is the safe first package that can become available after the waiting period. It is saved inside your encrypted vault plan. Normal saved passwords and cards are not included by default.</span>
+                    </div>
+                  </div>
+                  <label className="emergency-toggle-row">
+                    <input type="checkbox" checked={emergencyDraft.emergencyPackageEnabled !== false} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageEnabled: e.target.checked })} />
+                    <span>Prepare an Emergency Info package for release after the waiting period if I do not cancel.</span>
+                  </label>
+                  <div className="bootstrap-grid emergency-package-grid">
+                    <label>Package title<input value={emergencyDraft.emergencyPackageTitle || 'Emergency Info package'} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageTitle: e.target.value })} placeholder="Emergency Info package" /></label>
+                    <label>Release scope<select value={emergencyDraft.accessScope} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, accessScope: e.target.value })}>
+                      <option value="Emergency Info folder only">Emergency Info folder only</option>
+                      <option value="Selected folders later">Selected folders later</option>
+                      <option value="Selected documents later">Selected documents later</option>
+                      <option value="Full vault later">Full vault later — future explicit choice only</option>
+                    </select></label>
+                  </div>
+                  <label className="emergency-access-notes-label">Emergency message<textarea value={emergencyDraft.emergencyPackageMessage || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageMessage: e.target.value })} placeholder="Write the message your trusted person should see first if the waiting period ends." /></label>
+                  <label className="emergency-access-notes-label">Important contacts<textarea value={emergencyDraft.emergencyPackageContacts || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageContacts: e.target.value })} placeholder="Solicitor, doctor, accountant, family contacts, executor, insurance contact..." /></label>
+                  <label className="emergency-access-notes-label">Documents and locations<textarea value={emergencyDraft.emergencyPackageDocuments || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageDocuments: e.target.value })} placeholder="Where to find will, policy documents, house papers, key files, physical documents..." /></label>
+                  <label className="emergency-access-notes-label">Checklist for trusted person<textarea value={emergencyDraft.emergencyPackageChecklist || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageChecklist: e.target.value })} placeholder="Step 1: Contact..., Step 2: Check..., Step 3: Do not..." /></label>
+                  <div className="emergency-access-points package-safety-points">
+                    <span>Default release scope remains Emergency Info only.</span>
+                    <span>Cards and the full vault remain excluded unless a future build adds an explicit owner choice.</span>
+                    <span>This build prepares the package data and release-ready screen; it does not expose normal vault items through the emergency link.</span>
+                  </div>
+                </div>
+
                 <div className="emergency-access-points">
                   <span>Emergency requests start a waiting period. If you do not cancel before it ends, the selected emergency package can become available in the release stage.</span>
                   <span>Your trusted person does not need My Passwords installed or their own vault; the secure invite link opens in any browser.</span>

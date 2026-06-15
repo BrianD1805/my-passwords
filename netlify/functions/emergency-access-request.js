@@ -115,10 +115,39 @@ export async function handler(event) {
     const rows = await selectRows('emergency_access_invitations', `select=*&invite_token_hash=${eq(tokenHash(token))}&limit=1`);
     const invitation = rows?.[0];
     if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'This invitation link was not found or has expired.' });
-    if (invitation.status !== 'accepted') return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'Accept the emergency contact invitation before requesting emergency access.' });
     if (invitation.expires_at && new Date(invitation.expires_at).getTime() < Date.now()) return jsonResponse(410, { ok: false, version: APP_VERSION, message: 'This invitation has expired. Please ask the account owner to send a new one.' });
 
     const existing = await selectRows('emergency_access_requests', `select=*&invitation_id=${eq(invitation.id)}&status=in.(requested,waiting,owner_notified,release_ready)&order=requested_at.desc&limit=1`);
+
+    if (action === 'status') {
+      const currentRequest = existing?.[0]?.id ? await markReleaseReadyIfDue(existing[0]) : null;
+      return jsonResponse(200, {
+        ok: true,
+        version: APP_VERSION,
+        invitationId: invitation.id,
+        invitationStatus: invitation.status,
+        invitationMessage: invitation.status === 'accepted'
+          ? 'Invitation accepted. You can request emergency access if needed.'
+          : invitation.status === 'declined'
+            ? 'Invitation declined. No access has been granted.'
+            : invitation.status === 'cancelled'
+              ? 'This invitation has been cancelled by the account owner.'
+              : 'Invitation found. Please accept the invitation before requesting emergency access.',
+        requestId: currentRequest?.id || '',
+        status: currentRequest?.status || 'not_requested',
+        requestedAt: currentRequest?.requested_at || '',
+        waitingEndsAt: currentRequest?.waiting_ends_at || '',
+        releaseReady: String(currentRequest?.status || '').toLowerCase() === 'release_ready',
+        message: currentRequest?.id
+          ? (String(currentRequest.status || '').toLowerCase() === 'release_ready'
+              ? 'The waiting period has ended. The emergency package release screen is ready. The full vault is not exposed by default.'
+              : 'Emergency access request is active. The owner can cancel before the waiting period ends.')
+          : ''
+      });
+    }
+
+    if (invitation.status !== 'accepted') return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'Accept the emergency contact invitation before requesting emergency access.' });
+
     if (existing?.[0]?.id) {
       const currentRequest = await markReleaseReadyIfDue(existing[0]);
       return jsonResponse(200, {
