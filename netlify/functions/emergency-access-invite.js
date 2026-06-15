@@ -28,7 +28,7 @@ async function markReleaseReadyIfDue(request) {
   const now = new Date().toISOString();
   const updated = await updateRow('emergency_access_requests', `id=${eq(request.id)}`, {
     status: 'release_ready',
-    metadata: { ...(request.metadata || {}), version: APP_VERSION, release_foundation_ready: true, release_ready_at: now, release_note: 'Waiting period ended. Selected emergency package release foundation is ready; no vault contents are included in this record.' },
+    metadata: { ...(request.metadata || {}), version: APP_VERSION, release_foundation_ready: true, release_ready_at: now, release_note: 'Waiting period ended. The selected owner-prepared emergency package can now be released from the secure invite link.' },
     updated_at: now
   }).catch(() => null);
   return updated || { ...request, status: 'release_ready', metadata: { ...(request.metadata || {}), release_foundation_ready: true, release_ready_at: now } };
@@ -96,6 +96,41 @@ export async function handler(event) {
   const action = String(body.action || 'send').trim();
 
   try {
+    if (action === 'save_package') {
+      const invitationId = String(body.invitationId || '').trim();
+      const tenantId = String(body.tenantId || '').trim();
+      const userId = String(body.userId || '').trim();
+      const packageEnvelope = body.packageEnvelope || null;
+      const packageSummary = body.packageSummary || {};
+      if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
+      if (!packageEnvelope?.encrypted || !packageEnvelope?.salt || !packageEnvelope?.iv) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Emergency package data is incomplete.' });
+      const rows = await selectRows('emergency_access_invitations', `select=id,status,access_scope,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
+      const invitation = rows?.[0];
+      if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Invitation was not found.' });
+      if (invitation.status === 'cancelled') return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'This invitation has been cancelled. Reset it and send a fresh invitation first.' });
+      const now = new Date().toISOString();
+      const cleanSummary = {
+        releaseScope: packageSummary.releaseScope || invitation.access_scope || 'Emergency Info folder only',
+        fullVaultAccess: Boolean(packageSummary.fullVaultAccess),
+        itemCount: Number(packageSummary.itemCount || 0),
+        preparedAt: packageSummary.preparedAt || now,
+        title: packageSummary.title || 'Emergency vault package',
+        version: APP_VERSION
+      };
+      await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, {
+        access_scope: cleanSummary.releaseScope,
+        metadata: {
+          ...(invitation.metadata || {}),
+          version: APP_VERSION,
+          emergency_package_envelope: packageEnvelope,
+          emergency_package_summary: cleanSummary,
+          emergency_package_saved_at: now
+        },
+        updated_at: now
+      });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, packageSavedAt: now, packageSummary: cleanSummary, message: 'Emergency release package encrypted and saved for the secure invite link.' });
+    }
+
     if (action === 'status') {
       const invitationId = String(body.invitationId || '').trim();
       const tenantId = String(body.tenantId || '').trim();
@@ -105,7 +140,7 @@ export async function handler(event) {
         return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
       }
 
-      const invitationSelect = 'select=id,status,sent_at,accepted_at,declined_at,cancelled_at,invite_url,contact_email,contact_name,created_at';
+      const invitationSelect = 'select=id,status,sent_at,accepted_at,declined_at,cancelled_at,invite_url,contact_email,contact_name,created_at,metadata';
       const candidateInvites = [];
 
       if (invitationId) {
@@ -160,7 +195,7 @@ export async function handler(event) {
         : (invitation.status || 'pending');
       const requestMessage = latestRequest
         ? (isReleaseReady
-            ? 'The waiting period has ended. The selected emergency package release foundation is ready. No vault contents are included in this stage yet.'
+            ? 'The waiting period has ended. The selected emergency package release foundation is ready. The owner-prepared emergency package is ready if it has been saved.'
             : hasActiveRequest
               ? 'Emergency access requested. The waiting period has started. If you do not cancel before it ends, the selected emergency package can become available. No vault contents have been released yet.'
             : requestStatus === 'cancelled'
@@ -186,13 +221,16 @@ export async function handler(event) {
           message: requestMessage
         } : null,
         releaseReady: isReleaseReady,
+        packageSummary: isReleaseReady ? (invitation.metadata?.emergency_package_summary || null) : null,
         message: isReleaseReady
-          ? 'Waiting period ended. Emergency release foundation is ready.'
+          ? 'Waiting period ended. Emergency package is ready.'
           : hasActiveRequest
             ? 'Emergency access request is active.'
             : `Invitation status: ${invitationStatus}.`
       });
     }
+
+
 
     if (action === 'cancel') {
       const invitationId = String(body.invitationId || '').trim();

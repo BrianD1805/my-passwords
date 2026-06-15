@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.035';
+const VERSION = 'My Passwords Ver-0.036';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -203,6 +203,77 @@ async function decryptEnvelope(envelope, masterPassword) {
   const key = await deriveKey(masterPassword, salt);
   const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToArrayBuffer(iv) }, key, base64ToArrayBuffer(encrypted));
   return JSON.parse(new TextDecoder().decode(decrypted));
+}
+
+
+function tokenFromInviteUrl(inviteUrl) {
+  try {
+    const parsed = new URL(String(inviteUrl || ''), window.location.origin);
+    return parsed.searchParams.get('token') || '';
+  } catch {
+    return '';
+  }
+}
+
+async function encryptEmergencyReleasePackage(packageData, inviteToken) {
+  const token = String(inviteToken || '').trim();
+  if (!token) throw new Error('Emergency invite token is missing.');
+  const salt = arrayBufferToBase64(crypto.getRandomValues(new Uint8Array(16)));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(token, salt);
+  const encoded = new TextEncoder().encode(JSON.stringify(packageData));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+  return {
+    version: VERSION,
+    packageVersion: '1',
+    algorithm: 'AES-GCM/PBKDF2-SHA256',
+    salt,
+    iv: arrayBufferToBase64(iv),
+    encrypted: arrayBufferToBase64(encrypted),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+async function decryptEmergencyReleasePackage(envelope, inviteToken) {
+  if (!envelope?.encrypted || !envelope?.salt || !envelope?.iv) throw new Error('Emergency package is not available yet.');
+  const key = await deriveKey(String(inviteToken || ''), envelope.salt);
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToArrayBuffer(envelope.iv) }, key, base64ToArrayBuffer(envelope.encrypted));
+  return JSON.parse(new TextDecoder().decode(decrypted));
+}
+
+function buildEmergencyReleasePackage(plan, vaultItems, account) {
+  const scope = String(plan?.accessScope || 'Emergency Info folder only');
+  const fullAccess = scope === 'Full vault access';
+  const visibleItems = getVisibleVaultItems(vaultItems);
+  const includedItems = fullAccess
+    ? visibleItems
+    : visibleItems.filter((item) => String(item?.category || '') === 'Emergency Info');
+  return {
+    version: VERSION,
+    preparedAt: new Date().toISOString(),
+    ownerName: account?.displayName || account?.accountName || 'My Passwords user',
+    contactName: plan?.contactName || '',
+    releaseScope: scope,
+    fullVaultAccess: fullAccess,
+    title: plan?.emergencyPackageTitle || (fullAccess ? 'Full vault emergency access' : 'Emergency Info package'),
+    message: plan?.emergencyPackageMessage || '',
+    importantContacts: plan?.emergencyPackageContacts || '',
+    documentsAndLocations: plan?.emergencyPackageDocuments || '',
+    checklist: plan?.emergencyPackageChecklist || '',
+    ownerInstructions: plan?.instructions || '',
+    itemCount: includedItems.length,
+    items: includedItems.map((item) => ({
+      id: item.id,
+      title: item.title || 'Untitled',
+      category: item.category || 'Passwords',
+      favourite: Boolean(item.favourite),
+      payload: item.payload || {},
+      updatedAt: item.updatedAt || ''
+    })),
+    notes: fullAccess
+      ? 'The owner selected Full vault access. This package includes saved vault records that were available in the unlocked vault when the package was prepared. Encrypted document file downloads are not separately decrypted in this first full-access foundation.'
+      : 'The owner selected Emergency Info only. This package includes Emergency Info records and the owner-written emergency package fields.'
+  };
 }
 
 async function decryptVault(masterPassword) {
@@ -955,6 +1026,7 @@ function App() {
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
   const [inviteAcceptance, setInviteAcceptance] = useState({ status: 'idle', message: '' });
   const [emergencyRequestState, setEmergencyRequestState] = useState({ status: 'idle', message: '' });
+  const [emergencyReleasePackage, setEmergencyReleasePackage] = useState(null);
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
   const [viewItemId, setViewItemId] = useState('');
   const [pendingDeleteItemId, setPendingDeleteItemId] = useState('');
@@ -2052,13 +2124,44 @@ function App() {
       setEmergencySaveState('saving');
       const next = upsertEmergencyAccessMetaItem(items, cleanPlan);
       await saveItems(next, { autoSync: true, silentAutoSync: true });
-      setEmergencyDraft(getEmergencyAccessPlan(next));
+      const saved = getEmergencyAccessPlan(next);
+      setEmergencyDraft(saved);
+      if (saved.invitationId && saved.invitationUrl) {
+        try { await saveEmergencyReleasePackageForPlan(saved, next); }
+        catch (packageError) { showMessage(packageError.message || 'Plan saved, but the emergency release package could not be refreshed.', 'warning'); return; }
+      }
       showMessage('Emergency access plan saved securely inside your vault.', 'success');
     } catch (error) {
       showMessage('Emergency access plan could not be saved. Please try again.', 'error');
     } finally {
       setEmergencySaveState('idle');
     }
+  }
+
+
+  async function saveEmergencyReleasePackageForPlan(planToSave = emergencyDraft, currentItems = items) {
+    const inviteUrl = planToSave.invitationUrl || '';
+    const inviteToken = tokenFromInviteUrl(inviteUrl);
+    if (!planToSave.invitationId || !inviteToken) return { ok: false, skipped: true, message: 'Invite link is not ready yet.' };
+    if (!bootstrap.tenantId || !bootstrap.userId) return { ok: false, skipped: true, message: 'Account details are missing.' };
+    const releasePackage = buildEmergencyReleasePackage(planToSave, currentItems, bootstrap);
+    const envelope = await encryptEmergencyReleasePackage(releasePackage, inviteToken);
+    const result = await postJson('/.netlify/functions/emergency-access-invite', {
+      action: 'save_package',
+      invitationId: planToSave.invitationId,
+      tenantId: bootstrap.tenantId,
+      userId: bootstrap.userId,
+      packageEnvelope: envelope,
+      packageSummary: {
+        releaseScope: releasePackage.releaseScope,
+        fullVaultAccess: releasePackage.fullVaultAccess,
+        itemCount: releasePackage.itemCount,
+        preparedAt: releasePackage.preparedAt,
+        title: releasePackage.title
+      }
+    });
+    if (!result.ok) throw new Error(result.message || 'Emergency release package could not be saved.');
+    return result;
   }
 
 
@@ -2114,9 +2217,16 @@ function App() {
       const next = upsertEmergencyAccessMetaItem(items, savedPlan);
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       const nextPlan = getEmergencyAccessPlan(next);
+      try { await saveEmergencyReleasePackageForPlan(nextPlan, next); }
+      catch (packageError) {
+        setEmergencyDraft(nextPlan);
+        setEmergencyInviteState({ status: 'warning', message: packageError.message || 'Invite saved, but the emergency release package could not be prepared.' });
+        showMessage(packageError.message || 'Invite saved, but the emergency release package could not be prepared.', 'warning');
+        return;
+      }
       setEmergencyDraft(nextPlan);
       setEmergencyInviteState({ status: result.emailSent ? 'sent' : 'ready', message: result.message || nextPlan.invitationMessage });
-      showMessage(result.message || 'Emergency access invitation saved.', result.emailSent ? 'success' : 'warning');
+      showMessage(result.message || 'Emergency access invitation and release package saved.', result.emailSent ? 'success' : 'warning');
     } catch (error) {
       const note = error.message || 'Emergency invitation could not be sent. Please try again.';
       setEmergencyInviteState({ status: 'error', message: note });
@@ -2308,11 +2418,18 @@ function App() {
       }
       if (result.requestId) {
         const ready = result.status === 'release_ready' || result.releaseReady;
+        let releasedPackage = null;
+        if (ready && result.packageEnvelope) {
+          try { releasedPackage = await decryptEmergencyReleasePackage(result.packageEnvelope, token); }
+          catch (packageError) { releasedPackage = { error: packageError.message || 'Emergency package could not be opened.' }; }
+        }
+        setEmergencyReleasePackage(releasedPackage);
         setEmergencyRequestState({
           status: ready ? 'release-ready' : 'requested',
           message: result.message || (ready ? 'The waiting period has ended. The emergency package release screen is ready.' : 'Emergency access request is active. The owner can cancel before the waiting period ends.'),
           releaseReady: ready,
-          waitingEndsAt: result.waitingEndsAt || ''
+          waitingEndsAt: result.waitingEndsAt || '',
+          packageSummary: result.packageSummary || null
         });
       }
     } catch (error) {
@@ -2350,11 +2467,19 @@ function App() {
     try {
       const result = await postJson('/.netlify/functions/emergency-access-request', { token }, { signal: controller.signal });
       if (!result.ok) throw new Error(result.message || 'The emergency access request could not be started.');
+      const ready = result.releaseReady || result.status === 'release_ready';
+      let releasedPackage = null;
+      if (ready && result.packageEnvelope) {
+        try { releasedPackage = await decryptEmergencyReleasePackage(result.packageEnvelope, token); }
+        catch (packageError) { releasedPackage = { error: packageError.message || 'Emergency package could not be opened.' }; }
+      }
+      setEmergencyReleasePackage(releasedPackage);
       setEmergencyRequestState({
-        status: result.releaseReady || result.status === 'release_ready' ? 'release-ready' : 'requested',
+        status: ready ? 'release-ready' : 'requested',
         message: result.message || 'Emergency access request recorded. No vault contents have been released.',
-        releaseReady: result.releaseReady || result.status === 'release_ready',
-        waitingEndsAt: result.waitingEndsAt || ''
+        releaseReady: ready,
+        waitingEndsAt: result.waitingEndsAt || '',
+        packageSummary: result.packageSummary || null
       });
     } catch (error) {
       const note = error.name === 'AbortError'
@@ -2527,15 +2652,55 @@ function App() {
               <div className="emergency-request-card">
                 <strong>{emergencyRequestState.status === 'release-ready' ? 'Waiting period ended' : 'Need to request emergency access?'}</strong>
                 <p>{emergencyRequestState.status === 'release-ready'
-                  ? 'The waiting period has ended. This page is now ready for the emergency package release stage. Ver-0.035 still does not expose normal vault passwords; it confirms the release-ready state and prepares the secure package screen.'
+                  ? 'The waiting period has ended. If the owner prepared a release package, it can now be opened here. Full vault records are shown only when the owner deliberately selected Full vault access.'
                   : 'This starts the waiting period and notifies the account owner. If the request is not cancelled before the waiting period ends, the selected emergency package can become available here. It still does not reveal any vault contents today.'}</p>
                 {emergencyRequestState.status === 'release-ready' && (
                   <div className="emergency-release-ready-card">
                     <ShieldCheck size={18} />
                     <div>
-                      <strong>Emergency package release foundation</strong>
-                      <span>The selected emergency package is marked as ready. The next secure release step will show only the owner-approved emergency package, not the full vault by default.</span>
+                      <strong>Emergency package ready</strong>
+                      <span>The selected emergency package is marked as ready. If the owner selected Full vault access, the prepared vault records are shown below.</span>
                     </div>
+                  </div>
+                )}
+                {emergencyRequestState.status === 'release-ready' && emergencyReleasePackage?.error && (
+                  <div className="emergency-invite-status error">{emergencyReleasePackage.error}</div>
+                )}
+                {emergencyRequestState.status === 'release-ready' && emergencyReleasePackage && !emergencyReleasePackage.error && (
+                  <div className="emergency-package-viewer">
+                    <div className="emergency-package-viewer-head">
+                      <strong>{emergencyReleasePackage.title || 'Emergency package'}</strong>
+                      <span>{emergencyReleasePackage.releaseScope || 'Emergency Info folder only'} · {emergencyReleasePackage.itemCount || 0} item(s)</span>
+                    </div>
+                    {emergencyReleasePackage.message && <p>{emergencyReleasePackage.message}</p>}
+                    {emergencyReleasePackage.importantContacts && <div><strong>Important contacts</strong><pre>{emergencyReleasePackage.importantContacts}</pre></div>}
+                    {emergencyReleasePackage.documentsAndLocations && <div><strong>Documents and locations</strong><pre>{emergencyReleasePackage.documentsAndLocations}</pre></div>}
+                    {emergencyReleasePackage.checklist && <div><strong>Checklist</strong><pre>{emergencyReleasePackage.checklist}</pre></div>}
+                    {emergencyReleasePackage.ownerInstructions && <div><strong>Owner instructions</strong><pre>{emergencyReleasePackage.ownerInstructions}</pre></div>}
+                    {!!emergencyReleasePackage.items?.length && (
+                      <div className="emergency-released-items">
+                        <strong>Released vault records</strong>
+                        {emergencyReleasePackage.items.map((item) => (
+                          <article className="emergency-released-item" key={item.id}>
+                            <div><strong>{item.title}</strong><span>{item.category}</span></div>
+                            {item.payload?.url && <p><b>URL:</b> {item.payload.url}</p>}
+                            {item.payload?.username && <p><b>Username:</b> {item.payload.username}</p>}
+                            {item.payload?.password && <p><b>Password:</b> {item.payload.password}</p>}
+                            {item.payload?.notes && <pre>{item.payload.notes}</pre>}
+                            {item.category === 'Cards' && (
+                              <div className="emergency-card-fields">
+                                {item.payload?.cardNickname && <p><b>Nickname:</b> {item.payload.cardNickname}</p>}
+                                {item.payload?.cardName && <p><b>Name on card:</b> {item.payload.cardName}</p>}
+                                {item.payload?.cardNumber && <p><b>Number:</b> {item.payload.cardNumber}</p>}
+                                {item.payload?.cardExpiry && <p><b>Expiry:</b> {item.payload.cardExpiry}</p>}
+                                {item.payload?.cardCcv && <p><b>CCV:</b> {item.payload.cardCcv}</p>}
+                              </div>
+                            )}
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                    <small>{emergencyReleasePackage.notes}</small>
                   </div>
                 )}
                 <button type="button" className={`secondary-button emergency-request-button ${['requested', 'release-ready'].includes(emergencyRequestState.status) ? 'success' : ''}`} disabled={emergencyRequestState.status === 'working' || emergencyRequestState.status === 'requested' || emergencyRequestState.status === 'release-ready'} onClick={requestEmergencyAccessFromInvite}>
@@ -2544,7 +2709,7 @@ function App() {
                 </button>
               </div>
             )}
-            <p className="emergency-invite-note">The account owner can cancel during the waiting period. Ver-0.035 prepares the emergency package release screen but does not expose the full vault.</p>
+            <p className="emergency-invite-note">The account owner can cancel during the waiting period. If they do not cancel, the selected emergency package can become available here.</p>
           </article>
           <footer className="landing-footer emergency-invite-footer"><span>© 2026 My Passwords</span><button type="button" onClick={openVaultApp}>Open My Vault</button></footer>
         </section>
@@ -2911,9 +3076,9 @@ function App() {
         ? `Emergency request ${requestStatusText}`
         : '';
   const requestStatusCopy = isEmergencyReleaseReady
-    ? 'The waiting period has ended. This request is ready for the selected emergency package release stage. Ver-0.035 prepares the release-ready screen and package foundation without exposing the full vault.'
+    ? 'The waiting period has ended. The selected emergency package is now release-ready. If you prepared Full vault access, the trusted person can open those prepared vault records from their secure emergency link.'
     : hasActiveEmergencyRequest
-      ? 'Your trusted person has requested emergency access. The waiting period has started. If you do not cancel before it ends, your selected emergency package can become available. No passwords have been released yet.'
+      ? 'Your trusted person has requested emergency access. The waiting period has started. If you do not cancel before it ends, your selected emergency package can become available. No passwords have been released before the waiting period ends.'
     : normalisedRequestStatus === 'cancelled'
       ? 'The emergency access request has been cancelled. No vault contents were released.'
       : emergencyDraft.requestMessage || '';
@@ -3309,12 +3474,12 @@ function App() {
                     <FileText size={20} />
                     <div>
                       <strong>Emergency package foundation</strong>
-                      <span>This is the safe first package that can become available after the waiting period. It is saved inside your encrypted vault plan. Normal saved passwords and cards are not included by default.</span>
+                      <span>This is the package that can become available after the waiting period. Emergency Info is the safer default. Full vault access can be selected deliberately for next of kin.</span>
                     </div>
                   </div>
                   <label className="emergency-toggle-row">
                     <input type="checkbox" checked={emergencyDraft.emergencyPackageEnabled !== false} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageEnabled: e.target.checked })} />
-                    <span>Prepare an Emergency Info package for release after the waiting period if I do not cancel.</span>
+                    <span>Prepare an emergency release package after the waiting period if I do not cancel.</span>
                   </label>
                   <div className="bootstrap-grid emergency-package-grid">
                     <label>Package title<input value={emergencyDraft.emergencyPackageTitle || 'Emergency Info package'} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageTitle: e.target.value })} placeholder="Emergency Info package" /></label>
@@ -3322,7 +3487,7 @@ function App() {
                       <option value="Emergency Info folder only">Emergency Info folder only</option>
                       <option value="Selected folders later">Selected folders later</option>
                       <option value="Selected documents later">Selected documents later</option>
-                      <option value="Full vault later">Full vault later — future explicit choice only</option>
+                      <option value="Full vault access">Full vault access — includes passwords and cards</option>
                     </select></label>
                   </div>
                   <label className="emergency-access-notes-label">Emergency message<textarea value={emergencyDraft.emergencyPackageMessage || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageMessage: e.target.value })} placeholder="Write the message your trusted person should see first if the waiting period ends." /></label>
@@ -3330,9 +3495,9 @@ function App() {
                   <label className="emergency-access-notes-label">Documents and locations<textarea value={emergencyDraft.emergencyPackageDocuments || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageDocuments: e.target.value })} placeholder="Where to find will, policy documents, house papers, key files, physical documents..." /></label>
                   <label className="emergency-access-notes-label">Checklist for trusted person<textarea value={emergencyDraft.emergencyPackageChecklist || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageChecklist: e.target.value })} placeholder="Step 1: Contact..., Step 2: Check..., Step 3: Do not..." /></label>
                   <div className="emergency-access-points package-safety-points">
-                    <span>Default release scope remains Emergency Info only.</span>
-                    <span>Cards and the full vault remain excluded unless a future build adds an explicit owner choice.</span>
-                    <span>This build prepares the package data and release-ready screen; it does not expose normal vault items through the emergency link.</span>
+                    <span>Emergency Info is the safer default; Full vault access is available for next-of-kin use.</span>
+                    <span>Cards and full-vault records are included only when you deliberately choose Full vault access above.</span>
+                    <span>This build prepares an encrypted emergency release package. Full vault access is available only by explicit owner choice.</span>
                   </div>
                 </div>
 
@@ -3340,7 +3505,7 @@ function App() {
                   <span>Emergency requests start a waiting period. If you do not cancel before it ends, the selected emergency package can become available in the release stage.</span>
                   <span>Your trusted person does not need My Passwords installed or their own vault; the secure invite link opens in any browser.</span>
                   <span>If they already have their own My Passwords Vault, optional account linking can be added later without making it required.</span>
-                  <span>Your master password is not saved here, and the first release scope should remain the Emergency Info package rather than the full vault by default.</span>
+                  <span>Your master password is not saved here. Full vault access must be selected deliberately and should be used for next of kin only.</span>
                   <span>You can change this nominated person at any time.</span>
                 </div>
                 {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last updated: {new Date(emergencyDraft.updatedAt).toLocaleString()}</p>}

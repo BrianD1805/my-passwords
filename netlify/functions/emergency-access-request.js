@@ -138,9 +138,11 @@ export async function handler(event) {
         requestedAt: currentRequest?.requested_at || '',
         waitingEndsAt: currentRequest?.waiting_ends_at || '',
         releaseReady: String(currentRequest?.status || '').toLowerCase() === 'release_ready',
+        packageEnvelope: String(currentRequest?.status || '').toLowerCase() === 'release_ready' ? (invitation.metadata?.emergency_package_envelope || null) : null,
+        packageSummary: String(currentRequest?.status || '').toLowerCase() === 'release_ready' ? (invitation.metadata?.emergency_package_summary || null) : null,
         message: currentRequest?.id
           ? (String(currentRequest.status || '').toLowerCase() === 'release_ready'
-              ? 'The waiting period has ended. The emergency package release screen is ready. The full vault is not exposed by default.'
+              ? 'The waiting period has ended. The owner-prepared emergency package is ready if it has been saved.'
               : 'Emergency access request is active. The owner can cancel before the waiting period ends.')
           : ''
       });
@@ -158,8 +160,10 @@ export async function handler(event) {
         requestedAt: currentRequest.requested_at,
         waitingEndsAt: currentRequest.waiting_ends_at,
         releaseReady: String(currentRequest.status || '').toLowerCase() === 'release_ready',
+        packageEnvelope: String(currentRequest.status || '').toLowerCase() === 'release_ready' ? (invitation.metadata?.emergency_package_envelope || null) : null,
+        packageSummary: String(currentRequest.status || '').toLowerCase() === 'release_ready' ? (invitation.metadata?.emergency_package_summary || null) : null,
         message: String(currentRequest.status || '').toLowerCase() === 'release_ready'
-          ? 'The waiting period has ended. The selected emergency package release foundation is ready, but no vault contents are included in this stage yet.'
+          ? 'The waiting period has ended. The owner-prepared emergency package is ready if it has been saved.'
           : 'Emergency access request is already active. The owner has until the waiting period ends to cancel it. No vault contents have been released.'
       });
     }

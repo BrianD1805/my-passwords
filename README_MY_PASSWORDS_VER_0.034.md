@@ -32,5 +32,5 @@ This build adds the owner-notification and waiting-period release foundation. It
 7. Confirm the copy explains that if the owner does not cancel before the waiting period ends, the selected emergency package can become available.
 8. Confirm Cancel request still works and no vault contents are released.
 
-## Notes for future Ver-0.035
-Ver-0.035 should design/build the actual emergency package release page and package format. The release package should be controlled and selected by the owner, with Emergency Info package as the safest default.
+## Notes for future Ver-0.036
+Ver-0.036 should design/build the actual emergency package release page and package format. The release package should be controlled and selected by the owner, with Emergency Info package as the safest default.
