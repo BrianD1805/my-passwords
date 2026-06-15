@@ -5850,3 +5850,27 @@ a,
     justify-content: center;
   }
 }
+
+/* Ver-0.032C Emergency request button state fix */
+.emergency-request-button {
+  min-width: 210px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.emergency-request-button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.emergency-request-button.success,
+.emergency-request-button.success:disabled {
+  border-color: rgba(47, 115, 83, 0.22);
+  background: #f4fbf7;
+  color: #2f7353;
+  opacity: 1;
+  cursor: default;
+}
+
+.emergency-invite-status.error + .emergency-request-card .emergency-request-button,
+.emergency-request-button:not(:disabled) {
+  cursor: pointer;
+}

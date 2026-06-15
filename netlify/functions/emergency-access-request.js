@@ -49,20 +49,29 @@ async function notifyOwner({ ownerEmail, ownerName, contactName, waitingPeriod, 
     return { sent: false, provider: 'resend', reason: 'Owner email notification is not configured.' };
   }
   const content = buildOwnerNotification({ ownerName, contactName, waitingPeriod, accessScope, requestedAt, waitingEndsAt });
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to: ownerEmail,
-      subject: 'Emergency access request for My Passwords',
-      html: content.html,
-      text: content.text
-    })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) return { sent: false, provider: 'resend', reason: data?.message || `Resend returned HTTP ${response.status}.`, details: data };
-  return { sent: true, provider: 'resend', providerId: data?.id || '' };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        from,
+        to: ownerEmail,
+        subject: 'Emergency access request for My Passwords',
+        html: content.html,
+        text: content.text
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { sent: false, provider: 'resend', reason: data?.message || `Resend returned HTTP ${response.status}.`, details: data };
+    return { sent: true, provider: 'resend', providerId: data?.id || '' };
+  } catch (error) {
+    return { sent: false, provider: 'resend', reason: error.name === 'AbortError' ? 'Owner email notification timed out, but the request was recorded.' : (error.message || 'Owner email notification could not be sent.') };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function handler(event) {
@@ -108,6 +117,26 @@ export async function handler(event) {
     const requestId = publicId('emergencyrequest');
     const ownerName = invitation.metadata?.owner_name || 'there';
     const ownerEmail = invitation.metadata?.owner_email || '';
+    await insertRow('emergency_access_requests', {
+      id: requestId,
+      invitation_id: invitation.id,
+      tenant_id: invitation.tenant_id,
+      user_id: invitation.user_id,
+      contact_email: invitation.contact_email,
+      contact_name: invitation.contact_name,
+      waiting_period: invitation.waiting_period,
+      access_scope: invitation.access_scope,
+      status: 'requested',
+      requested_at: requestedAt,
+      waiting_ends_at: waitingEndsAt,
+      owner_notified_at: null,
+      email_provider: 'resend',
+      email_provider_id: '',
+      metadata: { version: APP_VERSION, notification_sent: false, notification_reason: 'Notification pending.' },
+      created_at: requestedAt,
+      updated_at: requestedAt
+    });
+
     const notification = await notifyOwner({
       ownerEmail,
       ownerName,
@@ -118,25 +147,22 @@ export async function handler(event) {
       waitingEndsAt
     });
 
-    await insertRow('emergency_access_requests', {
-      id: requestId,
-      invitation_id: invitation.id,
-      tenant_id: invitation.tenant_id,
-      user_id: invitation.user_id,
-      contact_email: invitation.contact_email,
-      contact_name: invitation.contact_name,
-      waiting_period: invitation.waiting_period,
-      access_scope: invitation.access_scope,
-      status: notification.sent ? 'owner_notified' : 'requested',
-      requested_at: requestedAt,
-      waiting_ends_at: waitingEndsAt,
-      owner_notified_at: notification.sent ? requestedAt : null,
-      email_provider: notification.provider,
-      email_provider_id: notification.providerId || '',
-      metadata: { version: APP_VERSION, notification_sent: notification.sent, notification_reason: notification.reason || null, notification_details: notification.details || null },
-      created_at: requestedAt,
-      updated_at: requestedAt
-    });
+    if (notification.sent) {
+      await updateRow('emergency_access_requests', `id=${eq(requestId)}`, {
+        status: 'owner_notified',
+        owner_notified_at: requestedAt,
+        email_provider: notification.provider,
+        email_provider_id: notification.providerId || '',
+        metadata: { version: APP_VERSION, notification_sent: true },
+        updated_at: new Date().toISOString()
+      });
+    } else {
+      await updateRow('emergency_access_requests', `id=${eq(requestId)}`, {
+        email_provider: notification.provider,
+        metadata: { version: APP_VERSION, notification_sent: false, notification_reason: notification.reason || null, notification_details: notification.details || null },
+        updated_at: new Date().toISOString()
+      });
+    }
 
     return jsonResponse(200, {
       ok: true,

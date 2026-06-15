@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.032B';
+const VERSION = 'My Passwords Ver-0.032C';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -233,10 +233,11 @@ function storeCloudSnapshotLocally(snapshot) {
   return envelope;
 }
 
-async function postJson(url, payload) {
+async function postJson(url, payload, options = {}) {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
+    signal: options.signal,
     body: JSON.stringify(payload)
   });
   let data = {};
@@ -2264,13 +2265,20 @@ function App() {
       setEmergencyRequestState({ status: 'error', message: 'This invitation link is missing its secure token.' });
       return;
     }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
     setEmergencyRequestState({ status: 'working', message: 'Sending emergency access request...' });
     try {
-      const result = await postJson('/.netlify/functions/emergency-access-request', { token });
+      const result = await postJson('/.netlify/functions/emergency-access-request', { token }, { signal: controller.signal });
       if (!result.ok) throw new Error(result.message || 'The emergency access request could not be started.');
-      setEmergencyRequestState({ status: 'requested', message: result.message || 'Emergency access request sent to the account owner.' });
+      setEmergencyRequestState({ status: 'requested', message: result.message || 'Emergency access request recorded. No vault contents have been released.' });
     } catch (error) {
-      setEmergencyRequestState({ status: 'error', message: error.message || 'Emergency access request could not be sent.' });
+      const note = error.name === 'AbortError'
+        ? 'The request is taking longer than expected. Please tap Request emergency access again, or ask the account owner to check status.'
+        : (error.message || 'Emergency access request could not be sent.');
+      setEmergencyRequestState({ status: 'error', message: note });
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 
@@ -2435,7 +2443,10 @@ function App() {
               <div className="emergency-request-card">
                 <strong>Need to request emergency access?</strong>
                 <p>This starts the waiting period and notifies the account owner. It still does not reveal any vault contents.</p>
-                <button type="button" className="secondary-button" disabled={emergencyRequestState.status === 'working' || emergencyRequestState.status === 'requested'} onClick={requestEmergencyAccessFromInvite}><AlertTriangle size={17} /> {emergencyRequestState.status === 'working' ? 'Sending request...' : 'Request emergency access'}</button>
+                <button type="button" className={`secondary-button emergency-request-button ${emergencyRequestState.status === 'requested' ? 'success' : ''}`} disabled={emergencyRequestState.status === 'working' || emergencyRequestState.status === 'requested'} onClick={requestEmergencyAccessFromInvite}>
+                  {emergencyRequestState.status === 'working' ? <RefreshCw size={17} className="spin-icon" /> : emergencyRequestState.status === 'requested' ? <ShieldCheck size={17} /> : <AlertTriangle size={17} />}
+                  {emergencyRequestState.status === 'working' ? 'Requesting...' : emergencyRequestState.status === 'requested' ? 'Request sent' : emergencyRequestState.status === 'error' ? 'Try request again' : 'Request emergency access'}
+                </button>
               </div>
             )}
             <p className="emergency-invite-note">The account owner stays in control. No passwords are released by this step.</p>
