@@ -5678,3 +5678,72 @@ a,
     width: 100%;
   }
 }
+
+/* Ver-0.031A Emergency Access compact settings polish */
+.emergency-access-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+  background: #f8fbfe;
+  border: 1px solid #d9e5ee;
+  border-radius: 20px;
+  padding: 14px;
+}
+
+.emergency-access-grid label,
+.emergency-access-notes-label {
+  min-width: 0;
+}
+
+.emergency-access-grid input,
+.emergency-access-grid select {
+  width: 100%;
+}
+
+.emergency-access-notes-label textarea {
+  min-height: 96px;
+}
+
+.emergency-access-actions {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  min-width: 0;
+}
+
+.emergency-access-actions .emergency-save-button {
+  width: auto;
+  min-width: 148px;
+  max-width: 220px;
+  min-height: 42px;
+  padding: 0 18px;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.emergency-save-button:disabled {
+  opacity: 0.78;
+  cursor: wait;
+}
+
+.spin-icon {
+  animation: button-spinner-spin 0.9s linear infinite;
+}
+
+@media (max-width: 1060px) and (min-width: 741px) {
+  .emergency-access-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 740px) {
+  .emergency-access-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .emergency-access-actions .emergency-save-button {
+    width: auto;
+    min-width: 140px;
+  }
+}

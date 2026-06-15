@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.031';
+const VERSION = 'My Passwords Ver-0.031A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -920,6 +920,7 @@ function App() {
   const [activeSettingsSection, setActiveSettingsSection] = useState('account');
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
+  const [emergencySaveState, setEmergencySaveState] = useState('idle');
   const [inviteAcceptance, setInviteAcceptance] = useState({ status: 'idle', message: '' });
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
   const [viewItemId, setViewItemId] = useState('');
@@ -2003,12 +2004,15 @@ function App() {
     if (!cleanPlan.contactEmail && !cleanPlan.contactPhone) return showMessage('Add at least one contact detail for your trusted person.', 'warning');
     if (cleanPlan.contactEmail && !cleanPlan.contactEmail.includes('@')) return showMessage("The trusted person's email address does not look valid.", 'warning');
     try {
+      setEmergencySaveState('saving');
       const next = upsertEmergencyAccessMetaItem(items, cleanPlan);
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       setEmergencyDraft(getEmergencyAccessPlan(next));
       showMessage('Emergency access plan saved securely inside your vault.', 'success');
     } catch (error) {
       showMessage('Emergency access plan could not be saved. Please try again.', 'error');
+    } finally {
+      setEmergencySaveState('idle');
     }
   }
 
@@ -2997,7 +3001,7 @@ function App() {
                 </div>
                 {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last updated: {new Date(emergencyDraft.updatedAt).toLocaleString()}</p>}
                 <div className="button-stack emergency-access-actions">
-                  <button type="submit" className="primary-button"><UsersRound size={18} /> Save emergency access plan</button>
+                  <button type="submit" className="primary-button emergency-save-button" disabled={emergencySaveState === 'saving'}>{emergencySaveState === 'saving' ? <RefreshCw size={17} className="spin-icon" /> : <UsersRound size={17} />} {emergencySaveState === 'saving' ? 'Saving...' : 'Save plan'}</button>
                 </div>
               </form>
             </section>
