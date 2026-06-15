@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.029B';
+const VERSION = 'My Passwords Ver-0.030';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -15,6 +15,8 @@ const BUILT_IN_CATEGORIES = ['Passwords', 'Cards', 'Bank Details', 'Secret Keys'
 const categories = ['All', ...BUILT_IN_CATEGORIES];
 const FOLDER_META_CATEGORY = '__my_passwords_folder_meta';
 const FOLDER_META_ID = '__my_passwords_custom_folders';
+const EMERGENCY_ACCESS_META_CATEGORY = '__my_passwords_emergency_access_meta';
+const EMERGENCY_ACCESS_META_ID = '__my_passwords_emergency_access_plan';
 const DOCUMENTS_CATEGORY = 'Documents';
 const CARDS_CATEGORY = 'Cards';
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
@@ -605,8 +607,16 @@ function isFolderMetaItem(item) {
   return item?.category === FOLDER_META_CATEGORY || item?.id === FOLDER_META_ID;
 }
 
+function isEmergencyAccessMetaItem(item) {
+  return item?.category === EMERGENCY_ACCESS_META_CATEGORY || item?.id === EMERGENCY_ACCESS_META_ID;
+}
+
+function isInternalMetaItem(item) {
+  return isFolderMetaItem(item) || isEmergencyAccessMetaItem(item);
+}
+
 function getVisibleVaultItems(vaultItems) {
-  return Array.isArray(vaultItems) ? vaultItems.filter((item) => !isFolderMetaItem(item)) : [];
+  return Array.isArray(vaultItems) ? vaultItems.filter((item) => !isInternalMetaItem(item)) : [];
 }
 
 function normaliseFolderName(value) {
@@ -653,14 +663,62 @@ function upsertFolderMetaItem(vaultItems, folders, folderOrder, favouriteFolders
     payload: { folders: cleanFolders, folderOrder: cleanOrder, favouriteFolders: cleanFavourites },
     updatedAt: new Date().toISOString()
   };
-  const withoutMeta = getVisibleVaultItems(vaultItems);
-  return (cleanFolders.length || cleanOrder.length || cleanFavourites.length) ? [metaItem, ...withoutMeta] : withoutMeta;
+  const withoutFolderMeta = Array.isArray(vaultItems) ? vaultItems.filter((item) => !isFolderMetaItem(item)) : [];
+  return (cleanFolders.length || cleanOrder.length || cleanFavourites.length) ? [metaItem, ...withoutFolderMeta] : withoutFolderMeta;
 }
 
 function folderExists(folder, folders) {
   const target = normaliseFolderName(folder).toLowerCase();
   return folders.some((entry) => entry.toLowerCase() === target);
 }
+
+function emptyEmergencyAccessPlan() {
+  return {
+    contactName: '',
+    relationship: '',
+    contactEmail: '',
+    contactPhone: '',
+    waitingPeriod: '7 days',
+    accessScope: 'Emergency Info folder only',
+    instructions: '',
+    updatedAt: ''
+  };
+}
+
+function getEmergencyAccessPlan(vaultItems) {
+  const meta = Array.isArray(vaultItems) ? vaultItems.find(isEmergencyAccessMetaItem) : null;
+  return { ...emptyEmergencyAccessPlan(), ...(meta?.payload || {}) };
+}
+
+function hasEmergencyAccessPlan(plan) {
+  const value = plan || {};
+  return Boolean(String(value.contactName || '').trim() || String(value.relationship || '').trim() || String(value.contactEmail || '').trim() || String(value.contactPhone || '').trim() || String(value.instructions || '').trim());
+}
+
+function upsertEmergencyAccessMetaItem(vaultItems, plan) {
+  const withoutEmergencyMeta = Array.isArray(vaultItems) ? vaultItems.filter((item) => !isEmergencyAccessMetaItem(item)) : [];
+  const cleanPlan = {
+    ...emptyEmergencyAccessPlan(),
+    ...plan,
+    contactName: String(plan?.contactName || '').trim(),
+    relationship: String(plan?.relationship || '').trim(),
+    contactEmail: String(plan?.contactEmail || '').trim().toLowerCase(),
+    contactPhone: String(plan?.contactPhone || '').trim(),
+    instructions: String(plan?.instructions || '').trim(),
+    updatedAt: new Date().toISOString()
+  };
+  if (!hasEmergencyAccessPlan(cleanPlan)) return withoutEmergencyMeta;
+  const metaItem = {
+    id: EMERGENCY_ACCESS_META_ID,
+    title: 'Emergency access plan',
+    category: EMERGENCY_ACCESS_META_CATEGORY,
+    favourite: false,
+    payload: cleanPlan,
+    updatedAt: cleanPlan.updatedAt
+  };
+  return [metaItem, ...withoutEmergencyMeta];
+}
+
 
 function getFileExtension(fileName) {
   const clean = String(fileName || '').toLowerCase();
@@ -854,6 +912,7 @@ function App() {
   const [suppressUnlockAutofocus, setSuppressUnlockAutofocus] = useState(false);
   const [activePage, setActivePage] = useState('home');
   const [activeSettingsSection, setActiveSettingsSection] = useState('account');
+  const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
   const [viewItemId, setViewItemId] = useState('');
   const [pendingDeleteItemId, setPendingDeleteItemId] = useState('');
@@ -949,6 +1008,10 @@ function App() {
     localStorage.setItem(BOOTSTRAP_KEY, JSON.stringify(account));
     localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account));
   }, [bootstrap]);
+
+  useEffect(() => {
+    if (!locked) setEmergencyDraft(getEmergencyAccessPlan(items));
+  }, [locked, items]);
 
   useEffect(() => {
     document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen);
@@ -1916,6 +1979,30 @@ function App() {
     await saveItems(next, { autoSync: true, silentAutoSync: true });
   }
 
+
+  async function saveEmergencyAccessPlan(event) {
+    event.preventDefault();
+    const cleanPlan = {
+      ...emergencyDraft,
+      contactName: String(emergencyDraft.contactName || '').trim(),
+      relationship: String(emergencyDraft.relationship || '').trim(),
+      contactEmail: String(emergencyDraft.contactEmail || '').trim().toLowerCase(),
+      contactPhone: String(emergencyDraft.contactPhone || '').trim(),
+      instructions: String(emergencyDraft.instructions || '').trim()
+    };
+    if (!cleanPlan.contactName) return showMessage("Add the trusted person's name first.", 'warning');
+    if (!cleanPlan.contactEmail && !cleanPlan.contactPhone) return showMessage('Add at least one contact detail for your trusted person.', 'warning');
+    if (cleanPlan.contactEmail && !cleanPlan.contactEmail.includes('@')) return showMessage("The trusted person's email address does not look valid.", 'warning');
+    try {
+      const next = upsertEmergencyAccessMetaItem(items, cleanPlan);
+      await saveItems(next, { autoSync: true, silentAutoSync: true });
+      setEmergencyDraft(getEmergencyAccessPlan(next));
+      showMessage('Emergency access plan saved securely inside your vault.', 'success');
+    } catch (error) {
+      showMessage('Emergency access plan could not be saved. Please try again.', 'error');
+    }
+  }
+
   function startTouchFolderReorder(folderName, event) {
     if (!folderName || folderName === 'All') return;
     event?.preventDefault?.();
@@ -2629,6 +2716,7 @@ function App() {
 
           <nav className="settings-section-buttons" aria-label="Settings sections">
             <button type="button" className={activeSettingsSection === 'account' ? 'active' : ''} onClick={() => setActiveSettingsSection('account')}><UserRoundCheck size={18} /> My Account</button>
+            <button type="button" className={activeSettingsSection === 'emergency' ? 'active' : ''} onClick={() => setActiveSettingsSection('emergency')}><UsersRound size={18} /> Emergency Access</button>
             <button type="button" className={activeSettingsSection === 'tools' ? 'active' : ''} onClick={() => setActiveSettingsSection('tools')}><ShieldCheck size={18} /> Tools</button>
             <button type="button" className={activeSettingsSection === 'stats' ? 'active' : ''} onClick={() => setActiveSettingsSection('stats')}><Database size={18} /> Stats</button>
           </nav>
@@ -2699,6 +2787,55 @@ function App() {
                 </div>
                 {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Enter your master password to complete login or restore.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Enter master password</button></div>}
               </div>
+            </section>
+          )}
+
+          {activeSettingsSection === 'emergency' && (
+            <section className="settings-section-panel settings-emergency-panel" aria-label="Emergency Access">
+              <div className="settings-section-heading">
+                <p className="eyebrow">Emergency Access</p>
+                <h3><UsersRound size={20} /> Trusted person planning</h3>
+                <p>Nominate someone you trust so the right person is recorded if emergency access is enabled later.</p>
+              </div>
+
+              <div className="emergency-access-intro-card">
+                <ShieldCheck size={22} />
+                <div>
+                  <strong>You stay in control</strong>
+                  <p>This saves your nominated contact inside your encrypted vault. It does not give anyone automatic access to your passwords.</p>
+                </div>
+              </div>
+
+              <form className="emergency-access-form" onSubmit={saveEmergencyAccessPlan}>
+                <div className="bootstrap-grid emergency-access-grid">
+                  <label>Trusted person name<input value={emergencyDraft.contactName} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactName: e.target.value })} placeholder="Full name" /></label>
+                  <label>Relationship<input value={emergencyDraft.relationship} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, relationship: e.target.value })} placeholder="Spouse, child, sibling, solicitor..." /></label>
+                  <label>Email<input type="email" value={emergencyDraft.contactEmail} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactEmail: e.target.value })} placeholder="trusted@example.com" /></label>
+                  <label>Phone<input inputMode="tel" value={emergencyDraft.contactPhone} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactPhone: e.target.value })} placeholder="Mobile or landline" /></label>
+                  <label>Waiting period<select value={emergencyDraft.waitingPeriod} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, waitingPeriod: e.target.value })}>
+                    <option value="24 hours">24 hours</option>
+                    <option value="3 days">3 days</option>
+                    <option value="7 days">7 days</option>
+                    <option value="14 days">14 days</option>
+                    <option value="30 days">30 days</option>
+                  </select></label>
+                  <label>Access scope<select value={emergencyDraft.accessScope} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, accessScope: e.target.value })}>
+                    <option value="Emergency Info folder only">Emergency Info folder only</option>
+                    <option value="Selected folders later">Selected folders later</option>
+                    <option value="Full vault later">Full vault later</option>
+                  </select></label>
+                </div>
+                <label className="emergency-access-notes-label">Notes or instructions<textarea value={emergencyDraft.instructions} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, instructions: e.target.value })} placeholder="Add any wishes, instructions, or details you want kept with this emergency plan." /></label>
+                <div className="emergency-access-points">
+                  <span>Request approval and release rules will be added carefully in a later step.</span>
+                  <span>Your master password is not saved here.</span>
+                  <span>You can change this nominated person at any time.</span>
+                </div>
+                {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last updated: {new Date(emergencyDraft.updatedAt).toLocaleString()}</p>}
+                <div className="button-stack emergency-access-actions">
+                  <button type="submit" className="primary-button"><UsersRound size={18} /> Save emergency access plan</button>
+                </div>
+              </form>
             </section>
           )}
 

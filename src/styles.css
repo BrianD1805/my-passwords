@@ -5445,3 +5445,100 @@ a,
   font-size: .9rem;
   line-height: 1.25;
 }
+
+/* Ver-0.030 Emergency Access planning */
+.settings-section-buttons {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.settings-emergency-panel {
+  overflow: hidden;
+}
+
+.emergency-access-intro-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid rgba(29, 95, 144, 0.16);
+  border-radius: 22px;
+  background: linear-gradient(135deg, #f7fbff 0%, #eef6fb 100%);
+  padding: 15px;
+  color: #24384e;
+}
+
+.emergency-access-intro-card svg {
+  color: #1d5f90;
+  margin-top: 2px;
+}
+
+.emergency-access-intro-card strong {
+  color: #14263b;
+  font-size: 1rem;
+}
+
+.emergency-access-intro-card p {
+  margin: 4px 0 0;
+  color: #63778b;
+  line-height: 1.45;
+}
+
+.emergency-access-form {
+  display: grid;
+  gap: 13px;
+}
+
+.emergency-access-grid {
+  margin: 0;
+}
+
+.emergency-access-notes-label textarea {
+  min-height: 118px;
+  resize: vertical;
+}
+
+.emergency-access-points {
+  display: grid;
+  gap: 7px;
+  border: 1px solid rgba(29, 53, 87, 0.1);
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 12px 14px;
+  color: #53687f;
+  font-weight: 700;
+  font-size: 0.91rem;
+}
+
+.emergency-access-points span::before {
+  content: '•';
+  color: #1d5f90;
+  font-weight: 900;
+  margin-right: 8px;
+}
+
+.emergency-access-updated {
+  margin: 0;
+  color: #718295;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.emergency-access-actions {
+  align-items: start;
+}
+
+@media (max-width: 980px) and (min-width: 861px) {
+  .settings-section-buttons {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .settings-section-buttons {
+    grid-template-columns: 1fr;
+  }
+
+  .emergency-access-intro-card {
+    grid-template-columns: 1fr;
+  }
+}
