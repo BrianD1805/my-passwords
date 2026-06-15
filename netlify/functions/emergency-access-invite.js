@@ -5,6 +5,10 @@ function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
 }
 
+function inList(values) {
+  return `in.(${values.map((value) => String(value)).join(',')})`;
+}
+
 function tokenHash(token) {
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'my-passwords-emergency-invite';
   return createHash('sha256').update(`${token}:${secret}`).digest('hex');
@@ -29,13 +33,13 @@ function buildInviteEmail({ ownerName, contactName, waitingPeriod, accessScope, 
       <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
         <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Emergency contact invitation</h1>
         <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, ${safeOwner} has nominated you as their trusted emergency contact in My Passwords.</p>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">This does not give you access to any passwords today. It simply confirms that you are willing to be listed as their trusted person if emergency access is enabled later.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">This does not give you access to any passwords today. You do not need to install the app; this secure link opens in any browser.</p>
         <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
           <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
           <p style="margin:0;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
         </div>
         <a href="${acceptUrl}" style="display:inline-block;background:#1d3557;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Review invitation</a>
-        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">The account owner stays in control. Emergency release rules will be added carefully in a later step.</p>
+        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">The account owner stays in control. Emergency access will only ever follow the waiting period and release rules they choose.</p>
       </div>
     </div>
   </body>
@@ -77,12 +81,12 @@ export async function handler(event) {
       const tenantId = String(body.tenantId || '').trim();
       const userId = String(body.userId || '').trim();
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
-      const rows = await selectRows('emergency_access_invitations', `select=id,status,sent_at,accepted_at,declined_at,cancelled_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
+      const rows = await selectRows('emergency_access_invitations', `select=id,status,sent_at,accepted_at,declined_at,cancelled_at,invite_url&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
       const invitation = rows?.[0];
       if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Invitation was not found.' });
       const requestRows = await selectRows('emergency_access_requests', `select=id,status,requested_at,waiting_ends_at,cancelled_at,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&invitation_id=${eq(invitationId)}&order=requested_at.desc&limit=1`).catch(() => []);
       const latestRequest = requestRows?.[0] || null;
-      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, ...invitation, request: latestRequest ? { id: latestRequest.id, status: latestRequest.status, requested_at: latestRequest.requested_at, waiting_ends_at: latestRequest.waiting_ends_at, message: latestRequest.status === 'cancelled' ? 'Emergency access request cancelled.' : 'Emergency access request is active. No vault contents have been released.' } : null, message: `Invitation status: ${invitation.status}.` });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, ...invitation, inviteUrl: invitation.invite_url || '', request: latestRequest ? { id: latestRequest.id, status: latestRequest.status, requested_at: latestRequest.requested_at, waiting_ends_at: latestRequest.waiting_ends_at, message: latestRequest.status === 'cancelled' ? 'Emergency access request cancelled.' : 'Emergency access request is active. No vault contents have been released.' } : null, message: `Invitation status: ${invitation.status}.` });
     }
 
     if (action === 'cancel') {
@@ -92,6 +96,48 @@ export async function handler(event) {
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
       await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() });
       return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: 'cancelled', message: 'Emergency access invitation cancelled.' });
+    }
+
+    if (action === 'reset') {
+      const invitationId = String(body.invitationId || '').trim();
+      const tenantId = String(body.tenantId || '').trim();
+      const userId = String(body.userId || '').trim();
+      if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
+      await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: { reset_by_owner: true, reset_at: new Date().toISOString(), version: APP_VERSION } });
+      await updateRow('emergency_access_requests', `invitation_id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&status=${inList(['requested','waiting','owner_notified'])}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: { cancelled_by_owner_reset: true, version: APP_VERSION } }).catch(() => null);
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: 'reset', message: 'Emergency invitation reset. You can send a fresh invite now.' });
+    }
+
+    if (action === 'resend') {
+      const invitationId = String(body.invitationId || '').trim();
+      const tenantId = String(body.tenantId || '').trim();
+      const userId = String(body.userId || '').trim();
+      if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
+      const rows = await selectRows('emergency_access_invitations', `select=*&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
+      const invitation = rows?.[0];
+      if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Invitation was not found.' });
+      if (invitation.status === 'cancelled') return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'This invitation has been cancelled. Reset it and send a fresh invitation.' });
+      const inviteUrl = invitation.invite_url || '';
+      if (!inviteUrl) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'This older invitation does not have a stored invite link. Reset it and send a fresh invitation.' });
+      const delivery = await sendWithResend({
+        to: invitation.contact_email,
+        ownerName: invitation.metadata?.owner_name || 'My Passwords user',
+        contactName: invitation.contact_name,
+        waitingPeriod: invitation.waiting_period,
+        accessScope: invitation.access_scope,
+        acceptUrl: inviteUrl
+      });
+      const now = new Date().toISOString();
+      const nextStatus = delivery.sent ? 'sent' : (invitation.status || 'pending');
+      await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, {
+        status: nextStatus,
+        sent_at: delivery.sent ? now : invitation.sent_at,
+        email_provider: delivery.provider || invitation.email_provider,
+        email_provider_id: delivery.providerId || invitation.email_provider_id || '',
+        updated_at: now,
+        metadata: { ...(invitation.metadata || {}), resent_at: now, resend_email_sent: delivery.sent, resend_reason: delivery.reason || null, version: APP_VERSION }
+      });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: nextStatus, emailSent: delivery.sent, sentAt: delivery.sent ? now : invitation.sent_at || '', inviteUrl, message: delivery.sent ? 'Emergency invitation resent.' : 'Invite link is ready, but email sending is not configured.' });
     }
 
     const tenantId = String(body.tenantId || '').trim();
@@ -109,9 +155,9 @@ export async function handler(event) {
     if (!contactName) return jsonResponse(400, { ok: false, version: APP_VERSION, message: "Add the trusted person's name first." });
     if (!contactEmail || !contactEmail.includes('@')) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Add a valid email address for the trusted person.' });
 
-    const existing = await selectRows('emergency_access_invitations', `select=id,status&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(contactEmail)}&status=in.(sent,accepted,pending)&limit=1`);
+    const existing = await selectRows('emergency_access_invitations', `select=id,status,invite_url,sent_at,accepted_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(contactEmail)}&status=in.(sent,accepted,pending)&limit=1`);
     if (existing?.[0]?.id) {
-      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId: existing[0].id, status: existing[0].status, emailSent: false, message: 'An invitation already exists for this trusted person.' });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId: existing[0].id, status: existing[0].status, emailSent: false, inviteUrl: existing[0].invite_url || '', sentAt: existing[0].sent_at || '', acceptedAt: existing[0].accepted_at || '', message: 'This person has already been invited. You can resend, copy the invite link, check status, or reset the invite.' });
     }
 
     const invitationId = publicId('emergencyinvite');
@@ -150,7 +196,8 @@ export async function handler(event) {
       status: delivery.sent ? 'sent' : 'pending',
       emailSent: delivery.sent,
       sentAt: delivery.sent ? now : '',
-      acceptUrl: delivery.sent ? '' : inviteUrl,
+      acceptUrl: inviteUrl,
+      inviteUrl,
       message: delivery.sent ? 'Emergency contact invitation sent.' : 'Invitation prepared, but email sending is not configured yet.'
     });
   } catch (error) {

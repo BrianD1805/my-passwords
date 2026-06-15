@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.032';
+const VERSION = 'My Passwords Ver-0.032A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -687,6 +687,7 @@ function emptyEmergencyAccessPlan() {
     invitationAcceptedAt: '',
     invitationCancelledAt: '',
     invitationMessage: '',
+    invitationUrl: '',
     requestStatus: 'not_requested',
     requestId: '',
     requestRequestedAt: '',
@@ -2043,6 +2044,7 @@ function App() {
     try {
       const account = { ...bootstrap };
       const result = await postJson('/.netlify/functions/emergency-access-invite', {
+        action: 'send',
         tenantId: account.tenantId,
         userId: account.userId,
         ownerName: account.displayName || account.accountName || 'My Passwords user',
@@ -2057,12 +2059,13 @@ function App() {
       if (!result.ok) throw new Error(result.message || 'The invitation could not be sent.');
       const savedPlan = {
         ...cleanPlan,
-        invitationStatus: result.emailSent ? 'invitation_sent' : 'invitation_ready',
+        invitationStatus: result.status || (result.emailSent ? 'sent' : 'pending'),
         invitationId: result.invitationId || cleanPlan.invitationId || '',
-        invitationSentAt: result.sentAt || new Date().toISOString(),
-        invitationAcceptedAt: '',
+        invitationSentAt: result.sentAt || cleanPlan.invitationSentAt || new Date().toISOString(),
+        invitationAcceptedAt: result.acceptedAt || cleanPlan.invitationAcceptedAt || '',
         invitationCancelledAt: '',
-        invitationMessage: result.emailSent ? 'Invitation sent.' : 'Invitation prepared. Email sending is not configured yet.'
+        invitationMessage: result.message || (result.emailSent ? 'Invitation sent.' : 'Invitation prepared. Email sending is not configured yet.'),
+        invitationUrl: result.inviteUrl || result.acceptUrl || cleanPlan.invitationUrl || ''
       };
       const next = upsertEmergencyAccessMetaItem(items, savedPlan);
       await saveItems(next, { autoSync: true, silentAutoSync: true });
@@ -2089,6 +2092,7 @@ function App() {
         invitationAcceptedAt: result.accepted_at || emergencyDraft.invitationAcceptedAt,
         invitationCancelledAt: result.cancelled_at || emergencyDraft.invitationCancelledAt,
         invitationMessage: result.message || emergencyDraft.invitationMessage,
+        invitationUrl: result.inviteUrl || emergencyDraft.invitationUrl || '',
         requestStatus: result.request?.status || emergencyDraft.requestStatus || 'not_requested',
         requestId: result.request?.id || emergencyDraft.requestId || '',
         requestRequestedAt: result.request?.requested_at || emergencyDraft.requestRequestedAt || '',
@@ -2113,7 +2117,8 @@ function App() {
       ...emergencyDraft,
       invitationStatus: 'cancelled',
       invitationCancelledAt: new Date().toISOString(),
-      invitationMessage: 'Invitation cancelled.'
+      invitationMessage: 'Invitation cancelled.',
+      invitationUrl: ''
     };
     try {
       if (savedPlan.invitationId) {
@@ -2127,6 +2132,82 @@ function App() {
     } catch (error) {
       showMessage('Invitation could not be cancelled. Please try again.', 'error');
     }
+  }
+
+
+  async function resendEmergencyAccessInvite() {
+    if (!emergencyDraft.invitationId) return showMessage('Send an invitation first.', 'warning');
+    setEmergencyInviteState({ status: 'resending', message: 'Resending invitation...' });
+    try {
+      const result = await postJson('/.netlify/functions/emergency-access-invite', {
+        action: 'resend',
+        invitationId: emergencyDraft.invitationId,
+        tenantId: bootstrap.tenantId,
+        userId: bootstrap.userId
+      });
+      if (!result.ok) throw new Error(result.message || 'Invitation could not be resent.');
+      const savedPlan = {
+        ...emergencyDraft,
+        invitationStatus: result.status || emergencyDraft.invitationStatus || 'sent',
+        invitationSentAt: result.sentAt || emergencyDraft.invitationSentAt || new Date().toISOString(),
+        invitationMessage: result.message || 'Invitation resent.',
+        invitationUrl: result.inviteUrl || emergencyDraft.invitationUrl || ''
+      };
+      const next = upsertEmergencyAccessMetaItem(items, savedPlan);
+      await saveItems(next, { autoSync: true, silentAutoSync: true });
+      setEmergencyDraft(getEmergencyAccessPlan(next));
+      setEmergencyInviteState({ status: 'resent', message: savedPlan.invitationMessage });
+      showMessage(savedPlan.invitationMessage, result.emailSent ? 'success' : 'warning');
+    } catch (error) {
+      const note = error.message || 'Invitation could not be resent.';
+      setEmergencyInviteState({ status: 'error', message: note });
+      showMessage(note, 'error');
+    }
+  }
+
+  async function resetEmergencyAccessInvite() {
+    if (!emergencyDraft.invitationId) return showMessage('There is no invite to reset.', 'warning');
+    setEmergencyInviteState({ status: 'resetting', message: 'Resetting invitation...' });
+    try {
+      const result = await postJson('/.netlify/functions/emergency-access-invite', {
+        action: 'reset',
+        invitationId: emergencyDraft.invitationId,
+        tenantId: bootstrap.tenantId,
+        userId: bootstrap.userId
+      });
+      if (!result.ok) throw new Error(result.message || 'Invite could not be reset.');
+      const savedPlan = {
+        ...emergencyDraft,
+        invitationStatus: 'not_invited',
+        invitationId: '',
+        invitationSentAt: '',
+        invitationAcceptedAt: '',
+        invitationCancelledAt: '',
+        invitationMessage: 'Previous invitation reset. You can send a fresh invite now.',
+        invitationUrl: '',
+        requestStatus: 'not_requested',
+        requestId: '',
+        requestRequestedAt: '',
+        requestWaitingEndsAt: '',
+        requestMessage: '',
+        requestLastCheckedAt: new Date().toISOString()
+      };
+      const next = upsertEmergencyAccessMetaItem(items, savedPlan);
+      await saveItems(next, { autoSync: true, silentAutoSync: true });
+      setEmergencyDraft(getEmergencyAccessPlan(next));
+      setEmergencyInviteState({ status: 'reset', message: savedPlan.invitationMessage });
+      showMessage('Emergency invitation reset. You can send a fresh invite now.', 'success');
+    } catch (error) {
+      const note = error.message || 'Emergency invitation could not be reset.';
+      setEmergencyInviteState({ status: 'error', message: note });
+      showMessage(note, 'error');
+    }
+  }
+
+  async function copyEmergencyInviteLink() {
+    const link = emergencyDraft.invitationUrl;
+    if (!link) return showMessage('Check status or resend the invitation to refresh the invite link.', 'warning');
+    await copyText('Emergency invite link', link);
   }
 
   async function cancelEmergencyAccessRequest() {
@@ -3031,17 +3112,21 @@ function App() {
               <div className="emergency-invite-status-card">
                 <div>
                   <strong>Invitation status</strong>
-                  <p>{['invitation_sent', 'sent'].includes(emergencyDraft.invitationStatus) ? 'Invitation sent. Your trusted person can accept the invitation, but no vault access is granted yet.' : emergencyDraft.invitationStatus === 'accepted' ? 'Invitation accepted. Your trusted person can request emergency access if needed.' : emergencyDraft.invitationStatus === 'declined' ? 'Invitation declined. You can update the trusted person or send a new invitation.' : emergencyDraft.invitationStatus === 'cancelled' ? 'Invitation cancelled. You can send a new invitation when ready.' : 'Not invited yet. Save the plan, then send an invitation when you are ready.'}</p>
+                  <p>{['invitation_sent', 'sent', 'pending'].includes(emergencyDraft.invitationStatus) ? 'Invitation sent. Your trusted person can accept the invitation, but no vault access is granted yet.' : emergencyDraft.invitationStatus === 'accepted' ? 'Invitation accepted. Your trusted person can request emergency access if needed.' : emergencyDraft.invitationStatus === 'declined' ? 'Invitation declined. You can update the trusted person or send a new invitation.' : emergencyDraft.invitationStatus === 'cancelled' ? 'Invitation cancelled. You can send a new invitation when ready.' : 'Not invited yet. Save the plan, then send an invitation when you are ready.'}</p>
                   {emergencyDraft.invitationSentAt && <small>Sent: {new Date(emergencyDraft.invitationSentAt).toLocaleString()}</small>}
                   {emergencyDraft.requestStatus && emergencyDraft.requestStatus !== 'not_requested' && <small>Request: {String(emergencyDraft.requestStatus).replace(/_/g, ' ')}{emergencyDraft.requestWaitingEndsAt ? ` · Waiting period ends: ${new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString()}` : ''}</small>}
                   {emergencyDraft.requestMessage && <small>{emergencyDraft.requestMessage}</small>}
                   {emergencyInviteState.message && <small>{emergencyInviteState.message}</small>}
+                  {emergencyDraft.invitationUrl && <small className="emergency-invite-link-note">Invite link ready for testing or resending.</small>}
                 </div>
                 <div className="emergency-invite-actions-mini">
                   <button type="button" className="secondary-button" onClick={sendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'sending'}><Mail size={16} /> {emergencyInviteState.status === 'sending' ? 'Sending...' : 'Send invitation'}</button>
                   {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={checkEmergencyInvitationStatus} disabled={emergencyInviteState.status === 'checking'}><RefreshCw size={16} /> {emergencyInviteState.status === 'checking' ? 'Checking...' : 'Check status'}</button>}
+                  {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={resendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resending'}><Mail size={16} /> {emergencyInviteState.status === 'resending' ? 'Resending...' : 'Resend invite'}</button>}
+                  {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={copyEmergencyInviteLink}><Copy size={16} /> Copy invite link</button>}
                   {['requested', 'waiting', 'owner_notified'].includes(emergencyDraft.requestStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyAccessRequest} disabled={emergencyInviteState.status === 'cancelling-request'}><X size={16} /> Cancel request</button>}
-                  {['invitation_sent', 'sent'].includes(emergencyDraft.invitationStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyInvitation}><X size={16} /> Cancel invite</button>}
+                  {['invitation_sent', 'sent', 'pending', 'accepted'].includes(emergencyDraft.invitationStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyInvitation}><X size={16} /> Cancel invite</button>}
+                  {emergencyDraft.invitationId && <button type="button" className="secondary-button danger-soft" onClick={resetEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resetting'}><RefreshCw size={16} /> {emergencyInviteState.status === 'resetting' ? 'Resetting...' : 'Reset invite'}</button>}
                 </div>
               </div>
 
@@ -3067,6 +3152,7 @@ function App() {
                 <label className="emergency-access-notes-label">Notes or instructions<textarea value={emergencyDraft.instructions} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, instructions: e.target.value })} placeholder="Add any wishes, instructions, or details you want kept with this emergency plan." /></label>
                 <div className="emergency-access-points">
                   <span>Emergency requests now start a waiting-period record, but no vault contents are released yet.</span>
+                  <span>Your trusted person does not need to install the app; the secure invite link opens in a browser.</span>
                   <span>Your master password is not saved here.</span>
                   <span>You can change this nominated person at any time.</span>
                 </div>
