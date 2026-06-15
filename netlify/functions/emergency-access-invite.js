@@ -81,35 +81,62 @@ export async function handler(event) {
       const tenantId = String(body.tenantId || '').trim();
       const userId = String(body.userId || '').trim();
       const contactEmail = String(body.contactEmail || '').trim().toLowerCase();
-      if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
+      if (!tenantId || !userId || (!invitationId && !contactEmail)) {
+        return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
+      }
 
-      const rows = await selectRows('emergency_access_invitations', `select=id,status,sent_at,accepted_at,declined_at,cancelled_at,invite_url,contact_email,contact_name&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
-      let invitation = rows?.[0] || null;
+      const invitationSelect = 'select=id,status,sent_at,accepted_at,declined_at,cancelled_at,invite_url,contact_email,contact_name,created_at';
+      const candidateInvites = [];
 
-      // If the local encrypted plan is pointing at an older invite, recover by checking the latest invite for the same trusted person's email.
+      if (invitationId) {
+        const exactRows = await selectRows('emergency_access_invitations', `${invitationSelect}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`).catch(() => []);
+        if (exactRows?.[0]?.id) candidateInvites.push(exactRows[0]);
+      }
+
       if (contactEmail) {
-        const matchingInvites = await selectRows('emergency_access_invitations', `select=id,status,sent_at,accepted_at,declined_at,cancelled_at,invite_url,contact_email,contact_name&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(contactEmail)}&order=created_at.desc&limit=5`).catch(() => []);
-        const latestOpenInvite = (matchingInvites || []).find((entry) => !entry.cancelled_at && ['accepted', 'sent', 'pending'].includes(String(entry.status || '').toLowerCase()));
-        if (latestOpenInvite?.id && (!invitation?.id || latestOpenInvite.id !== invitation.id || latestOpenInvite.status === 'accepted')) {
-          invitation = latestOpenInvite;
+        const emailRows = await selectRows('emergency_access_invitations', `${invitationSelect}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(contactEmail)}&order=created_at.desc&limit=10`).catch(() => []);
+        for (const row of (emailRows || [])) {
+          if (row?.id && !candidateInvites.some((entry) => entry.id === row.id)) candidateInvites.push(row);
         }
       }
 
-      if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Invitation was not found.' });
+      if (!candidateInvites.length) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Invitation was not found.' });
 
-      const requestRowsByInvite = await selectRows('emergency_access_requests', `select=id,status,requested_at,waiting_ends_at,cancelled_at,released_at,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&invitation_id=${eq(invitation.id)}&order=requested_at.desc&limit=3`).catch(() => []);
-      const requestRowsByEmail = (invitation.contact_email || contactEmail)
-        ? await selectRows('emergency_access_requests', `select=id,status,requested_at,waiting_ends_at,cancelled_at,released_at,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(invitation.contact_email || contactEmail)}&order=requested_at.desc&limit=5`).catch(() => [])
-        : [];
-
-      const allRequests = [...(requestRowsByInvite || []), ...(requestRowsByEmail || [])]
-        .filter((row, index, list) => row?.id && list.findIndex((item) => item.id === row.id) === index)
-        .sort((a, b) => new Date(b.requested_at || b.created_at || 0) - new Date(a.requested_at || a.created_at || 0));
       const activeRequestStatuses = ['requested', 'waiting', 'owner_notified'];
+      const requestRows = [];
+      for (const invite of candidateInvites.slice(0, 10)) {
+        const rows = await selectRows('emergency_access_requests', `select=id,invitation_id,status,requested_at,waiting_ends_at,cancelled_at,released_at,contact_email,created_at,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&invitation_id=${eq(invite.id)}&order=requested_at.desc&limit=5`).catch(() => []);
+        for (const row of (rows || [])) {
+          if (row?.id && !requestRows.some((entry) => entry.id === row.id)) requestRows.push(row);
+        }
+      }
+
+      if (contactEmail) {
+        const emailRequestRows = await selectRows('emergency_access_requests', `select=id,invitation_id,status,requested_at,waiting_ends_at,cancelled_at,released_at,contact_email,created_at,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(contactEmail)}&order=requested_at.desc&limit=10`).catch(() => []);
+        for (const row of (emailRequestRows || [])) {
+          if (row?.id && !requestRows.some((entry) => entry.id === row.id)) requestRows.push(row);
+        }
+      }
+
+      const allRequests = requestRows
+        .filter((row) => row?.id)
+        .sort((a, b) => new Date(b.requested_at || b.created_at || 0) - new Date(a.requested_at || a.created_at || 0));
       const latestRequest = allRequests.find((row) => activeRequestStatuses.includes(String(row.status || '').toLowerCase()) && !row.cancelled_at && !row.released_at) || allRequests[0] || null;
       const requestStatus = String(latestRequest?.status || '').toLowerCase();
+      const hasActiveRequest = latestRequest && activeRequestStatuses.includes(requestStatus) && !latestRequest.cancelled_at && !latestRequest.released_at;
+
+      let invitation = null;
+      if (latestRequest?.invitation_id) invitation = candidateInvites.find((entry) => entry.id === latestRequest.invitation_id) || null;
+      if (!invitation) invitation = candidateInvites.find((entry) => String(entry.status || '').toLowerCase() === 'accepted' && !entry.cancelled_at) || null;
+      if (!invitation) invitation = candidateInvites.find((entry) => !entry.cancelled_at && ['sent', 'pending'].includes(String(entry.status || '').toLowerCase())) || candidateInvites[0];
+
+      // A request can only be created from an accepted invite. If the request exists but the older local plan still says sent,
+      // surface the owner panel as accepted rather than leaving the UI stuck on Invitation sent.
+      const invitationStatus = hasActiveRequest && !['declined', 'cancelled'].includes(String(invitation.status || '').toLowerCase())
+        ? 'accepted'
+        : (invitation.status || 'pending');
       const requestMessage = latestRequest
-        ? (activeRequestStatuses.includes(requestStatus)
+        ? (hasActiveRequest
             ? 'Emergency access requested. The waiting period has started. No vault contents have been released.'
             : requestStatus === 'cancelled'
               ? 'Emergency access request cancelled. No vault contents were released.'
@@ -121,9 +148,11 @@ export async function handler(event) {
         version: APP_VERSION,
         invitationId: invitation.id,
         ...invitation,
+        status: invitationStatus,
         inviteUrl: invitation.invite_url || '',
         request: latestRequest ? {
           id: latestRequest.id,
+          invitation_id: latestRequest.invitation_id || invitation.id,
           status: latestRequest.status,
           requested_at: latestRequest.requested_at,
           waiting_ends_at: latestRequest.waiting_ends_at,
@@ -131,9 +160,9 @@ export async function handler(event) {
           released_at: latestRequest.released_at || null,
           message: requestMessage
         } : null,
-        message: latestRequest && activeRequestStatuses.includes(requestStatus)
+        message: hasActiveRequest
           ? 'Emergency access request is active.'
-          : `Invitation status: ${invitation.status}.`
+          : `Invitation status: ${invitationStatus}.`
       });
     }
 

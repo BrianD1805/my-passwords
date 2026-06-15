@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.032E';
+const VERSION = 'My Passwords Ver-0.033F';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2088,10 +2088,14 @@ function App() {
       const result = await postJson('/.netlify/functions/emergency-access-invite', { action: 'status', invitationId: emergencyDraft.invitationId, tenantId: bootstrap.tenantId, userId: bootstrap.userId, contactEmail: emergencyDraft.contactEmail });
       if (!result.ok) throw new Error(result.message || 'Invitation status could not be checked.');
       const latestRequestStatus = String(result.request?.status || emergencyDraft.requestStatus || 'not_requested').toLowerCase();
+      const statusHasActiveRequest = ['requested', 'waiting', 'owner_notified'].includes(latestRequestStatus) && !result.request?.cancelled_at && !result.request?.released_at;
+      const latestInvitationStatus = statusHasActiveRequest && !['declined', 'cancelled'].includes(String(result.status || '').toLowerCase())
+        ? 'accepted'
+        : (result.status || emergencyDraft.invitationStatus);
       const savedPlan = {
         ...emergencyDraft,
-        invitationId: result.invitationId || result.id || emergencyDraft.invitationId,
-        invitationStatus: result.status || emergencyDraft.invitationStatus,
+        invitationId: result.invitationId || result.id || result.request?.invitation_id || emergencyDraft.invitationId,
+        invitationStatus: latestInvitationStatus,
         invitationSentAt: result.sent_at || emergencyDraft.invitationSentAt,
         invitationAcceptedAt: result.accepted_at || emergencyDraft.invitationAcceptedAt,
         invitationCancelledAt: result.cancelled_at || emergencyDraft.invitationCancelledAt,
@@ -2108,6 +2112,7 @@ function App() {
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       setEmergencyDraft(getEmergencyAccessPlan(next));
       setEmergencyInviteState({ status: 'checked', message: result.request?.message || result.message || 'Invitation status checked.' });
+      showMessage(result.request?.message || result.message || 'Invitation status checked.', result.request ? 'success' : 'info');
     } catch (error) {
       const note = error.message || 'Invitation status could not be checked.';
       setEmergencyInviteState({ status: 'error', message: note });
