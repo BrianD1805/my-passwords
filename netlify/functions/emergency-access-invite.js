@@ -80,13 +80,61 @@ export async function handler(event) {
       const invitationId = String(body.invitationId || '').trim();
       const tenantId = String(body.tenantId || '').trim();
       const userId = String(body.userId || '').trim();
+      const contactEmail = String(body.contactEmail || '').trim().toLowerCase();
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
-      const rows = await selectRows('emergency_access_invitations', `select=id,status,sent_at,accepted_at,declined_at,cancelled_at,invite_url&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
-      const invitation = rows?.[0];
+
+      const rows = await selectRows('emergency_access_invitations', `select=id,status,sent_at,accepted_at,declined_at,cancelled_at,invite_url,contact_email,contact_name&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
+      let invitation = rows?.[0] || null;
+
+      // If the local encrypted plan is pointing at an older invite, recover by checking the latest invite for the same trusted person's email.
+      if (contactEmail) {
+        const matchingInvites = await selectRows('emergency_access_invitations', `select=id,status,sent_at,accepted_at,declined_at,cancelled_at,invite_url,contact_email,contact_name&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(contactEmail)}&order=created_at.desc&limit=5`).catch(() => []);
+        const latestOpenInvite = (matchingInvites || []).find((entry) => !entry.cancelled_at && ['accepted', 'sent', 'pending'].includes(String(entry.status || '').toLowerCase()));
+        if (latestOpenInvite?.id && (!invitation?.id || latestOpenInvite.id !== invitation.id || latestOpenInvite.status === 'accepted')) {
+          invitation = latestOpenInvite;
+        }
+      }
+
       if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Invitation was not found.' });
-      const requestRows = await selectRows('emergency_access_requests', `select=id,status,requested_at,waiting_ends_at,cancelled_at,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&invitation_id=${eq(invitationId)}&order=requested_at.desc&limit=1`).catch(() => []);
-      const latestRequest = requestRows?.[0] || null;
-      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, ...invitation, inviteUrl: invitation.invite_url || '', request: latestRequest ? { id: latestRequest.id, status: latestRequest.status, requested_at: latestRequest.requested_at, waiting_ends_at: latestRequest.waiting_ends_at, message: latestRequest.status === 'cancelled' ? 'Emergency access request cancelled.' : 'Emergency access request is active. No vault contents have been released.' } : null, message: `Invitation status: ${invitation.status}.` });
+
+      const requestRowsByInvite = await selectRows('emergency_access_requests', `select=id,status,requested_at,waiting_ends_at,cancelled_at,released_at,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&invitation_id=${eq(invitation.id)}&order=requested_at.desc&limit=3`).catch(() => []);
+      const requestRowsByEmail = (invitation.contact_email || contactEmail)
+        ? await selectRows('emergency_access_requests', `select=id,status,requested_at,waiting_ends_at,cancelled_at,released_at,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(invitation.contact_email || contactEmail)}&order=requested_at.desc&limit=5`).catch(() => [])
+        : [];
+
+      const allRequests = [...(requestRowsByInvite || []), ...(requestRowsByEmail || [])]
+        .filter((row, index, list) => row?.id && list.findIndex((item) => item.id === row.id) === index)
+        .sort((a, b) => new Date(b.requested_at || b.created_at || 0) - new Date(a.requested_at || a.created_at || 0));
+      const activeRequestStatuses = ['requested', 'waiting', 'owner_notified'];
+      const latestRequest = allRequests.find((row) => activeRequestStatuses.includes(String(row.status || '').toLowerCase()) && !row.cancelled_at && !row.released_at) || allRequests[0] || null;
+      const requestStatus = String(latestRequest?.status || '').toLowerCase();
+      const requestMessage = latestRequest
+        ? (activeRequestStatuses.includes(requestStatus)
+            ? 'Emergency access requested. The waiting period has started. No vault contents have been released.'
+            : requestStatus === 'cancelled'
+              ? 'Emergency access request cancelled. No vault contents were released.'
+              : 'Emergency access request status checked. No vault contents have been released.')
+        : '';
+
+      return jsonResponse(200, {
+        ok: true,
+        version: APP_VERSION,
+        invitationId: invitation.id,
+        ...invitation,
+        inviteUrl: invitation.invite_url || '',
+        request: latestRequest ? {
+          id: latestRequest.id,
+          status: latestRequest.status,
+          requested_at: latestRequest.requested_at,
+          waiting_ends_at: latestRequest.waiting_ends_at,
+          cancelled_at: latestRequest.cancelled_at || null,
+          released_at: latestRequest.released_at || null,
+          message: requestMessage
+        } : null,
+        message: latestRequest && activeRequestStatuses.includes(requestStatus)
+          ? 'Emergency access request is active.'
+          : `Invitation status: ${invitation.status}.`
+      });
     }
 
     if (action === 'cancel') {
