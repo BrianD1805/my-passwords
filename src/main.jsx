@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.032C';
+const VERSION = 'My Passwords Ver-0.032D';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2783,6 +2783,40 @@ function App() {
     );
   }
 
+  const inviteStatusText = String(emergencyDraft.invitationStatus || 'not_invited').replace(/_/g, ' ');
+  const requestStatusText = String(emergencyDraft.requestStatus || 'not_requested').replace(/_/g, ' ');
+  const hasActiveEmergencyRequest = ['requested', 'waiting', 'owner_notified'].includes(emergencyDraft.requestStatus);
+  const invitationStatusTitle = emergencyDraft.invitationStatus === 'accepted'
+    ? 'Invitation accepted'
+    : emergencyDraft.invitationStatus === 'declined'
+      ? 'Invitation declined'
+      : emergencyDraft.invitationStatus === 'cancelled'
+        ? 'Invitation cancelled'
+        : ['invitation_sent', 'sent', 'pending'].includes(emergencyDraft.invitationStatus)
+          ? 'Invitation sent'
+          : 'Not invited yet';
+  const invitationStatusCopy = emergencyDraft.invitationStatus === 'accepted'
+    ? 'Your trusted person has accepted the invitation. They can request emergency access if needed.'
+    : emergencyDraft.invitationStatus === 'declined'
+      ? 'Your trusted person declined the invitation. You can update the details or send a new invitation.'
+      : emergencyDraft.invitationStatus === 'cancelled'
+        ? 'This invitation has been cancelled. You can send a new invitation when ready.'
+        : ['invitation_sent', 'sent', 'pending'].includes(emergencyDraft.invitationStatus)
+          ? 'Invitation sent. Your trusted person can accept the invitation, but no vault access is granted yet.'
+          : 'Save the plan, then send an invitation when you are ready.';
+  const requestStatusTitle = hasActiveEmergencyRequest
+    ? 'Emergency access requested'
+    : emergencyDraft.requestStatus === 'cancelled'
+      ? 'Emergency request cancelled'
+      : emergencyDraft.requestStatus && emergencyDraft.requestStatus !== 'not_requested'
+        ? `Emergency request ${requestStatusText}`
+        : '';
+  const requestStatusCopy = hasActiveEmergencyRequest
+    ? 'Your trusted person has requested emergency access. The waiting period has started. No passwords have been released.'
+    : emergencyDraft.requestStatus === 'cancelled'
+      ? 'The emergency access request has been cancelled. No vault contents were released.'
+      : emergencyDraft.requestMessage || '';
+
   return (
     <main className="app-shell">
       <header className="topbar app-home-topbar">
@@ -3120,14 +3154,21 @@ function App() {
                 </div>
               </div>
 
-              <div className="emergency-invite-status-card">
-                <div>
-                  <strong>Invitation status</strong>
-                  <p>{['invitation_sent', 'sent', 'pending'].includes(emergencyDraft.invitationStatus) ? 'Invitation sent. Your trusted person can accept the invitation, but no vault access is granted yet.' : emergencyDraft.invitationStatus === 'accepted' ? 'Invitation accepted. Your trusted person can request emergency access if needed.' : emergencyDraft.invitationStatus === 'declined' ? 'Invitation declined. You can update the trusted person or send a new invitation.' : emergencyDraft.invitationStatus === 'cancelled' ? 'Invitation cancelled. You can send a new invitation when ready.' : 'Not invited yet. Save the plan, then send an invitation when you are ready.'}</p>
-                  {emergencyDraft.invitationSentAt && <small>Sent: {new Date(emergencyDraft.invitationSentAt).toLocaleString()}</small>}
-                  {emergencyDraft.requestStatus && emergencyDraft.requestStatus !== 'not_requested' && <small>Request: {String(emergencyDraft.requestStatus).replace(/_/g, ' ')}{emergencyDraft.requestWaitingEndsAt ? ` · Waiting period ends: ${new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString()}` : ''}</small>}
-                  {emergencyDraft.requestMessage && <small>{emergencyDraft.requestMessage}</small>}
-                  {emergencyInviteState.message && <small>{emergencyInviteState.message}</small>}
+              <div className={`emergency-invite-status-card ${hasActiveEmergencyRequest ? 'request-active' : ''}`}>
+                <div className="emergency-status-copy">
+                  <div className="emergency-status-summary">
+                    <span className="emergency-status-pill"><ShieldCheck size={16} /> {invitationStatusTitle}</span>
+                    {requestStatusTitle && <span className="emergency-status-pill request"><AlertTriangle size={16} /> {requestStatusTitle}</span>}
+                  </div>
+                  <p>{invitationStatusCopy}</p>
+                  {requestStatusCopy && <p className="emergency-request-owner-message">{requestStatusCopy}</p>}
+                  <div className="emergency-status-detail-grid">
+                    {emergencyDraft.invitationSentAt && <small><strong>Invite sent</strong>{new Date(emergencyDraft.invitationSentAt).toLocaleString()}</small>}
+                    {emergencyDraft.invitationAcceptedAt && <small><strong>Invite accepted</strong>{new Date(emergencyDraft.invitationAcceptedAt).toLocaleString()}</small>}
+                    {emergencyDraft.requestRequestedAt && <small><strong>Request made</strong>{new Date(emergencyDraft.requestRequestedAt).toLocaleString()}</small>}
+                    {emergencyDraft.requestWaitingEndsAt && <small><strong>Waiting period ends</strong>{new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString()}</small>}
+                  </div>
+                  {emergencyInviteState.message && <small className="emergency-last-check-note">{emergencyInviteState.message}</small>}
                   {emergencyDraft.invitationUrl && <small className="emergency-invite-link-note">Invite link ready for testing or resending.</small>}
                 </div>
                 <div className="emergency-invite-actions-mini" aria-label="Emergency invitation actions">
@@ -3139,7 +3180,7 @@ function App() {
                   </div>
                   <div className="emergency-invite-action-row safety-actions">
                     {['requested', 'waiting', 'owner_notified'].includes(emergencyDraft.requestStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyAccessRequest} disabled={emergencyInviteState.status === 'cancelling-request'}><X size={16} /> Cancel request</button>}
-                    {['invitation_sent', 'sent', 'pending', 'accepted'].includes(emergencyDraft.invitationStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyInvitation}><X size={16} /> Cancel invite</button>}
+                    {['invitation_sent', 'sent', 'pending'].includes(emergencyDraft.invitationStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyInvitation}><X size={16} /> Cancel invite</button>}
                     {emergencyDraft.invitationId && <button type="button" className="secondary-button danger-soft" onClick={resetEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resetting'}><RefreshCw size={16} /> {emergencyInviteState.status === 'resetting' ? 'Resetting...' : 'Reset invite'}</button>}
                   </div>
                 </div>

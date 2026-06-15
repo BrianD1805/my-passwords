@@ -5874,3 +5874,94 @@ a,
 .emergency-request-button:not(:disabled) {
   cursor: pointer;
 }
+
+
+/* Ver-0.032D Emergency Access owner status display fix */
+.emergency-invite-status-card.request-active {
+  border-color: rgba(47, 115, 83, 0.22);
+  background: linear-gradient(135deg, #ffffff, #f6fbf8);
+}
+
+.emergency-status-copy {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.emergency-status-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.emergency-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  border: 1px solid rgba(29, 95, 144, 0.16);
+  border-radius: 999px;
+  background: #f4f8fc;
+  padding: 8px 12px;
+  color: #173a5d;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.emergency-status-pill.request {
+  border-color: rgba(47, 115, 83, 0.22);
+  background: #f4fbf7;
+  color: #2f7353;
+}
+
+.emergency-request-owner-message {
+  border: 1px solid rgba(47, 115, 83, 0.18);
+  border-radius: 16px;
+  background: #f4fbf7;
+  padding: 11px 12px;
+  color: #2f7353 !important;
+  font-weight: 850;
+}
+
+.emergency-status-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.emergency-invite-status-card .emergency-status-detail-grid small {
+  margin: 0;
+  border: 1px solid #dbe7f0;
+  border-radius: 14px;
+  background: #f8fbfe;
+  padding: 9px 10px;
+  color: #566d83;
+  font-weight: 750;
+}
+
+.emergency-status-detail-grid small strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #173a5d;
+  font-size: .74rem;
+  letter-spacing: .02em;
+}
+
+.emergency-last-check-note,
+.emergency-invite-link-note {
+  color: #667b90 !important;
+}
+
+@media (max-width: 920px) {
+  .emergency-status-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .emergency-status-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
