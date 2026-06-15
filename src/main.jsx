@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.032A';
+const VERSION = 'My Passwords Ver-0.032B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -3119,14 +3119,18 @@ function App() {
                   {emergencyInviteState.message && <small>{emergencyInviteState.message}</small>}
                   {emergencyDraft.invitationUrl && <small className="emergency-invite-link-note">Invite link ready for testing or resending.</small>}
                 </div>
-                <div className="emergency-invite-actions-mini">
-                  <button type="button" className="secondary-button" onClick={sendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'sending'}><Mail size={16} /> {emergencyInviteState.status === 'sending' ? 'Sending...' : 'Send invitation'}</button>
-                  {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={checkEmergencyInvitationStatus} disabled={emergencyInviteState.status === 'checking'}><RefreshCw size={16} /> {emergencyInviteState.status === 'checking' ? 'Checking...' : 'Check status'}</button>}
-                  {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={resendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resending'}><Mail size={16} /> {emergencyInviteState.status === 'resending' ? 'Resending...' : 'Resend invite'}</button>}
-                  {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={copyEmergencyInviteLink}><Copy size={16} /> Copy invite link</button>}
-                  {['requested', 'waiting', 'owner_notified'].includes(emergencyDraft.requestStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyAccessRequest} disabled={emergencyInviteState.status === 'cancelling-request'}><X size={16} /> Cancel request</button>}
-                  {['invitation_sent', 'sent', 'pending', 'accepted'].includes(emergencyDraft.invitationStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyInvitation}><X size={16} /> Cancel invite</button>}
-                  {emergencyDraft.invitationId && <button type="button" className="secondary-button danger-soft" onClick={resetEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resetting'}><RefreshCw size={16} /> {emergencyInviteState.status === 'resetting' ? 'Resetting...' : 'Reset invite'}</button>}
+                <div className="emergency-invite-actions-mini" aria-label="Emergency invitation actions">
+                  <div className="emergency-invite-action-row primary-actions">
+                    <button type="button" className="secondary-button" onClick={sendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'sending'}><Mail size={16} /> {emergencyInviteState.status === 'sending' ? 'Sending...' : 'Send invitation'}</button>
+                    {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={checkEmergencyInvitationStatus} disabled={emergencyInviteState.status === 'checking'}><RefreshCw size={16} /> {emergencyInviteState.status === 'checking' ? 'Checking...' : 'Check status'}</button>}
+                    {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={resendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resending'}><Mail size={16} /> {emergencyInviteState.status === 'resending' ? 'Resending...' : 'Resend invite'}</button>}
+                    {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={copyEmergencyInviteLink}><Copy size={16} /> Copy invite link</button>}
+                  </div>
+                  <div className="emergency-invite-action-row safety-actions">
+                    {['requested', 'waiting', 'owner_notified'].includes(emergencyDraft.requestStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyAccessRequest} disabled={emergencyInviteState.status === 'cancelling-request'}><X size={16} /> Cancel request</button>}
+                    {['invitation_sent', 'sent', 'pending', 'accepted'].includes(emergencyDraft.invitationStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyInvitation}><X size={16} /> Cancel invite</button>}
+                    {emergencyDraft.invitationId && <button type="button" className="secondary-button danger-soft" onClick={resetEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resetting'}><RefreshCw size={16} /> {emergencyInviteState.status === 'resetting' ? 'Resetting...' : 'Reset invite'}</button>}
+                  </div>
                 </div>
               </div>
 

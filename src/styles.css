@@ -5546,9 +5546,9 @@ a,
 /* Ver-0.031 Emergency Access invite foundation */
 .emergency-invite-status-card {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
   gap: 14px;
-  align-items: center;
+  align-items: start;
   border: 1px solid rgba(29, 53, 87, 0.12);
   border-radius: 22px;
   background: #ffffff;
@@ -5575,10 +5575,25 @@ a,
 }
 
 .emergency-invite-actions-mini {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.emergency-invite-action-row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 9px;
+  align-items: center;
+}
+
+.emergency-invite-action-row.primary-actions {
+  justify-content: flex-start;
+}
+
+.emergency-invite-action-row.safety-actions {
+  justify-content: flex-start;
+  padding-top: 2px;
 }
 
 .emergency-invite-page {
@@ -5665,8 +5680,9 @@ a,
     grid-template-columns: 1fr;
   }
 
-  .emergency-invite-actions-mini {
-    justify-content: stretch;
+  .emergency-invite-action-row {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .emergency-invite-actions-mini .secondary-button {
