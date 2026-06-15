@@ -5747,3 +5747,90 @@ a,
     min-width: 140px;
   }
 }
+
+/* Ver-0.031B Settings OTP compact layout */
+
+/* Ver-0.032 Emergency Access request foundation */
+@media (min-width: 861px) {
+  .settings-account-panel .settings-otp-card {
+    grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
+    align-items: center;
+    column-gap: 18px;
+    row-gap: 12px;
+    max-width: 980px;
+  }
+
+  .settings-account-panel .settings-otp-card .vault-security-info-heading,
+  .settings-account-panel .settings-otp-card .otp-guidance-note {
+    grid-column: 1;
+  }
+
+  .settings-account-panel .settings-otp-card .otp-channel-toggle {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    max-width: 460px;
+    width: 100%;
+    justify-self: start;
+  }
+
+  .settings-account-panel .settings-otp-card .otp-status-line,
+  .settings-account-panel .settings-otp-card .test-code-box,
+  .settings-account-panel .settings-otp-card .otp-next-step {
+    grid-column: 1 / -1;
+    max-width: 720px;
+  }
+
+  .settings-account-panel .settings-otp-card .otp-flow-row {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(150px, 220px) minmax(170px, 260px) minmax(130px, 180px);
+    justify-content: start;
+    align-items: center;
+  }
+
+  .settings-account-panel .settings-otp-card .otp-flow-row input,
+  .settings-account-panel .settings-otp-card .otp-flow-row .secondary-button {
+    width: 100%;
+  }
+}
+
+/* Ver-0.032 Emergency Access request foundation */
+.emergency-request-card {
+  margin: 18px auto 8px;
+  max-width: 560px;
+  border: 1px solid rgba(29, 95, 144, 0.16);
+  border-radius: 22px;
+  background: linear-gradient(135deg, #f7fbff 0%, #eef6fb 100%);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.emergency-request-card strong {
+  color: #14263b;
+  font-size: 1rem;
+}
+
+.emergency-request-card p {
+  margin: 0;
+  color: #5f7286;
+  line-height: 1.45;
+}
+
+.emergency-request-card .secondary-button {
+  justify-self: start;
+}
+
+.emergency-invite-status.requested,
+.emergency-invite-status.owner_notified {
+  border-color: rgba(47, 115, 83, 0.18);
+  background: #f4fbf7;
+  color: #2f7353;
+}
+
+@media (max-width: 720px) {
+  .emergency-request-card .secondary-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

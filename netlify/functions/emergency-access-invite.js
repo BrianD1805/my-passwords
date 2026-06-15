@@ -80,7 +80,9 @@ export async function handler(event) {
       const rows = await selectRows('emergency_access_invitations', `select=id,status,sent_at,accepted_at,declined_at,cancelled_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
       const invitation = rows?.[0];
       if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Invitation was not found.' });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, ...invitation, message: `Invitation status: ${invitation.status}.` });
+      const requestRows = await selectRows('emergency_access_requests', `select=id,status,requested_at,waiting_ends_at,cancelled_at,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&invitation_id=${eq(invitationId)}&order=requested_at.desc&limit=1`).catch(() => []);
+      const latestRequest = requestRows?.[0] || null;
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, ...invitation, request: latestRequest ? { id: latestRequest.id, status: latestRequest.status, requested_at: latestRequest.requested_at, waiting_ends_at: latestRequest.waiting_ends_at, message: latestRequest.status === 'cancelled' ? 'Emergency access request cancelled.' : 'Emergency access request is active. No vault contents have been released.' } : null, message: `Invitation status: ${invitation.status}.` });
     }
 
     if (action === 'cancel') {
