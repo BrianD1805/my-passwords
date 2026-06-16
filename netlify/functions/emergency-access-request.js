@@ -13,6 +13,7 @@ function tokenHash(token) {
 function waitingPeriodMs(value) {
   const text = String(value || '7 days').toLowerCase();
   const amount = Number.parseInt(text, 10) || 7;
+  if (text.includes('minute')) return amount * 60 * 1000;
   if (text.includes('hour')) return amount * 60 * 60 * 1000;
   return amount * 24 * 60 * 60 * 1000;
 }

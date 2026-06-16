@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.036';
+const VERSION = 'My Passwords Ver-0.036A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2219,9 +2219,12 @@ function App() {
       const nextPlan = getEmergencyAccessPlan(next);
       try { await saveEmergencyReleasePackageForPlan(nextPlan, next); }
       catch (packageError) {
+        const packageNote = result.emailSent
+          ? `Invitation email sent. ${packageError.message || 'The emergency release package could not be prepared yet.'}`
+          : `${result.message || 'Invite link prepared.'} ${packageError.message || 'The emergency release package could not be prepared yet.'}`;
         setEmergencyDraft(nextPlan);
-        setEmergencyInviteState({ status: 'warning', message: packageError.message || 'Invite saved, but the emergency release package could not be prepared.' });
-        showMessage(packageError.message || 'Invite saved, but the emergency release package could not be prepared.', 'warning');
+        setEmergencyInviteState({ status: 'warning', message: packageNote });
+        showMessage(packageNote, 'warning');
         return;
       }
       setEmergencyDraft(nextPlan);
@@ -3460,6 +3463,7 @@ function App() {
                   <label>Email<input type="email" value={emergencyDraft.contactEmail} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactEmail: e.target.value })} placeholder="trusted@example.com" /></label>
                   <label>Phone<input inputMode="tel" value={emergencyDraft.contactPhone} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactPhone: e.target.value })} placeholder="Mobile or landline" /></label>
                   <label>Waiting period<select value={emergencyDraft.waitingPeriod} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, waitingPeriod: e.target.value })}>
+                    <option value="10 minutes">10 minutes — testing only</option>
                     <option value="24 hours">24 hours</option>
                     <option value="3 days">3 days</option>
                     <option value="7 days">7 days</option>

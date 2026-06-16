@@ -71,23 +71,32 @@ async function sendWithResend({ to, ownerName, contactName, waitingPeriod, acces
   const apiKey = process.env.RESEND_API_KEY || '';
   const from = process.env.OTP_EMAIL_FROM || '';
   if (!apiKey || !from) {
-    return { sent: false, provider: 'resend', reason: 'Email sending is not configured yet.' };
+    return { sent: false, provider: 'resend', reason: 'Email sending is not configured yet. The invite link was still created and can be copied manually.' };
   }
   const content = buildInviteEmail({ ownerName, contactName, waitingPeriod, accessScope, acceptUrl });
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to,
-      subject: 'Emergency contact invitation for My Passwords',
-      html: content.html,
-      text: content.text
-    })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) return { sent: false, provider: 'resend', reason: data?.message || `Resend returned HTTP ${response.status}.`, details: data };
-  return { sent: true, provider: 'resend', providerId: data?.id || '' };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        from,
+        to,
+        subject: 'Emergency contact invitation for My Passwords',
+        html: content.html,
+        text: content.text
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { sent: false, provider: 'resend', reason: data?.message || `Resend returned HTTP ${response.status}.`, details: data };
+    return { sent: true, provider: 'resend', providerId: data?.id || '' };
+  } catch (error) {
+    return { sent: false, provider: 'resend', reason: error.name === 'AbortError' ? 'Resend timed out. The invite link was still created and can be copied manually.' : (error.message || 'Resend could not send the invitation email.') };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function handler(event) {
@@ -280,7 +289,7 @@ export async function handler(event) {
         updated_at: now,
         metadata: { ...(invitation.metadata || {}), resent_at: now, resend_email_sent: delivery.sent, resend_reason: delivery.reason || null, version: APP_VERSION }
       });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: nextStatus, emailSent: delivery.sent, sentAt: delivery.sent ? now : invitation.sent_at || '', inviteUrl, message: delivery.sent ? 'Emergency invitation resent.' : 'Invite link is ready, but email sending is not configured.' });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: nextStatus, emailSent: delivery.sent, sentAt: delivery.sent ? now : invitation.sent_at || '', inviteUrl, message: delivery.sent ? 'Emergency invitation resent.' : `Invite link is ready, but the email was not sent. ${delivery.reason || 'Use Copy invite link for testing.'}` });
     }
 
     const tenantId = String(body.tenantId || '').trim();
@@ -341,7 +350,7 @@ export async function handler(event) {
       sentAt: delivery.sent ? now : '',
       acceptUrl: inviteUrl,
       inviteUrl,
-      message: delivery.sent ? 'Emergency contact invitation sent.' : 'Invitation prepared, but email sending is not configured yet.'
+      message: delivery.sent ? 'Emergency contact invitation sent.' : `Invitation link prepared, but the email was not sent. ${delivery.reason || 'Use Copy invite link for testing.'}`
     });
   } catch (error) {
     return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Emergency access invitation could not be prepared.', error: error.message, details: error.details || null });
