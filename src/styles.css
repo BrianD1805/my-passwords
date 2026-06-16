@@ -6137,3 +6137,165 @@ a,
   margin: 5px 0;
   word-break: break-word;
 }
+
+/* Ver-0.036C Emergency Access UX pass */
+.emergency-owner-flow-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(29, 53, 87, 0.12);
+  border-radius: 24px;
+  background: #ffffff;
+  padding: 15px;
+  box-shadow: 0 12px 30px rgba(29, 53, 87, 0.07);
+}
+
+.emergency-owner-flow-card.request-active {
+  border-color: rgba(47, 115, 83, 0.22);
+  background: linear-gradient(135deg, #ffffff, #f6fbf8);
+}
+
+.emergency-owner-status-summary {
+  padding-bottom: 2px;
+}
+
+.emergency-owner-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.emergency-owner-flow-section {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  border: 1px solid #dbe7f0;
+  border-radius: 20px;
+  background: #f8fbfe;
+  padding: 14px;
+  min-width: 0;
+}
+
+.emergency-owner-flow-section.request-section {
+  border-color: rgba(47, 115, 83, 0.18);
+  background: #f7fcf9;
+}
+
+.emergency-owner-section-heading {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  color: #173a5d;
+}
+
+.emergency-owner-section-heading strong {
+  display: block;
+  color: #14263b;
+  font-size: 1rem;
+  margin-bottom: 2px;
+}
+
+.emergency-owner-section-heading p {
+  margin: 0;
+  color: #5f7286;
+  line-height: 1.45;
+}
+
+.emergency-status-detail-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.emergency-invite-action-row.request-actions,
+.emergency-owner-flow-section .emergency-invite-action-row {
+  gap: 8px;
+}
+
+.emergency-request-warning {
+  margin: 0;
+  border: 1px solid rgba(150, 54, 54, 0.16);
+  border-radius: 14px;
+  background: #fff8f8;
+  color: #963636;
+  padding: 10px 11px;
+  font-weight: 850;
+  line-height: 1.4;
+}
+
+.emergency-access-qa-card,
+.emergency-invite-qa-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dbe7f0;
+  border-radius: 20px;
+  background: #ffffff;
+  padding: 13px 14px;
+  color: #53687f;
+}
+
+.emergency-access-qa-card > strong {
+  color: #14263b;
+  font-size: 1rem;
+}
+
+.emergency-access-qa-card details,
+.emergency-invite-qa-card details,
+.emergency-package-note {
+  border: 1px solid rgba(29, 95, 144, 0.12);
+  border-radius: 15px;
+  background: #f8fbfe;
+  padding: 0;
+  overflow: hidden;
+}
+
+.emergency-access-qa-card summary,
+.emergency-invite-qa-card summary,
+.emergency-package-note summary {
+  cursor: pointer;
+  padding: 11px 12px;
+  color: #173a5d;
+  font-weight: 900;
+  list-style-position: inside;
+}
+
+.emergency-access-qa-card p,
+.emergency-invite-qa-card p,
+.emergency-package-note p {
+  margin: 0;
+  padding: 0 12px 12px;
+  color: #5f7286;
+  line-height: 1.45;
+  font-weight: 650;
+}
+
+.emergency-invite-qa-card {
+  margin: 16px auto 0;
+  max-width: 560px;
+  text-align: left;
+}
+
+.emergency-package-note {
+  margin-top: 2px;
+}
+
+@media (max-width: 900px) {
+  .emergency-owner-flow-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .emergency-owner-flow-card,
+  .emergency-owner-flow-section {
+    padding: 12px;
+  }
+
+  .emergency-status-detail-grid.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .emergency-owner-flow-section .secondary-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

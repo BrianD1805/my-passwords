@@ -20,18 +20,67 @@ function hasWaitingPeriodEnded(value) {
   return Number.isFinite(time) && time <= Date.now();
 }
 
-async function markReleaseReadyIfDue(request) {
+function buildReleaseReadyEmail({ contactName, ownerName, accessScope, requestUrl }) {
+  const safeContact = contactName || 'there';
+  const safeOwner = ownerName || 'the account owner';
+  const safeScope = accessScope || 'Emergency Info folder only';
+  const text = `${safeContact}, the waiting period for your My Passwords Emergency Access request has ended. If ${safeOwner} has not cancelled the request, you can use your secure browser link to open the prepared emergency package. Access scope: ${safeScope}. Open: ${requestUrl}`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;"><div style="max-width:560px;margin:0 auto;padding:28px 18px;"><div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);"><h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Emergency access is ready</h1><p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, the waiting period for your My Passwords Emergency Access request has ended.</p><p style="margin:0 0 18px;line-height:1.55;color:#536579;">If the account owner has not cancelled the request, you can use your secure browser link to open the prepared emergency package.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;"><p style="margin:0;"><strong>Access scope:</strong> ${safeScope}</p></div>${requestUrl ? `<a href="${requestUrl}" style="display:inline-block;background:#173a5d;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Open emergency access</a>` : ''}<p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">You do not need to install My Passwords. This secure link opens in your browser.</p></div></div></body></html>`;
+  return { html, text };
+}
+
+async function notifyEmergencyContactReleaseReady({ invitation, request }) {
+  const apiKey = process.env.RESEND_API_KEY || '';
+  const from = process.env.OTP_EMAIL_FROM || '';
+  const metadata = invitation?.metadata || {};
+  if (metadata.release_ready_email_sent || request?.metadata?.release_ready_email_sent) return { sent: false, skipped: true, reason: 'Release-ready email was already sent.' };
+  const to = invitation?.contact_email || request?.contact_email || '';
+  if (!apiKey || !from || !to || !to.includes('@')) return { sent: false, provider: 'resend', reason: 'Release-ready email is not configured.' };
+  const requestUrl = invitation?.invite_url || metadata.request_access_url || '';
+  const content = buildReleaseReadyEmail({ contactName: invitation?.contact_name || request?.contact_name, ownerName: metadata.owner_name || 'the account owner', accessScope: invitation?.access_scope || request?.access_scope, requestUrl });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ from, to, subject: 'Emergency access is ready', html: content.html, text: content.text }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { sent: false, provider: 'resend', reason: data?.message || `Resend returned HTTP ${response.status}.`, details: data };
+    return { sent: true, provider: 'resend', providerId: data?.id || '' };
+  } catch (error) {
+    return { sent: false, provider: 'resend', reason: error.name === 'AbortError' ? 'Release-ready email timed out.' : (error.message || 'Release-ready email could not be sent.') };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function markReleaseReadyIfDue(request, invitation = null) {
   const status = String(request?.status || '').toLowerCase();
   if (!request?.id || !['requested', 'waiting', 'owner_notified'].includes(status) || request.cancelled_at || request.released_at || !hasWaitingPeriodEnded(request.waiting_ends_at)) {
     return request;
   }
   const now = new Date().toISOString();
+  const releaseEmail = invitation ? await notifyEmergencyContactReleaseReady({ invitation, request }).catch((error) => ({ sent: false, reason: error.message || 'Release-ready email failed.' })) : null;
+  const nextMetadata = {
+    ...(request.metadata || {}),
+    version: APP_VERSION,
+    release_foundation_ready: true,
+    release_ready_at: now,
+    release_note: 'Waiting period ended. The selected owner-prepared emergency package can now be released from the secure invite link.',
+    release_ready_email_sent: Boolean(releaseEmail?.sent) || Boolean(request.metadata?.release_ready_email_sent),
+    release_ready_email_provider_id: releaseEmail?.providerId || request.metadata?.release_ready_email_provider_id || '',
+    release_ready_email_reason: releaseEmail && !releaseEmail.sent && !releaseEmail.skipped ? (releaseEmail.reason || '') : (request.metadata?.release_ready_email_reason || '')
+  };
   const updated = await updateRow('emergency_access_requests', `id=${eq(request.id)}`, {
     status: 'release_ready',
-    metadata: { ...(request.metadata || {}), version: APP_VERSION, release_foundation_ready: true, release_ready_at: now, release_note: 'Waiting period ended. The selected owner-prepared emergency package can now be released from the secure invite link.' },
+    metadata: nextMetadata,
     updated_at: now
   }).catch(() => null);
-  return updated || { ...request, status: 'release_ready', metadata: { ...(request.metadata || {}), release_foundation_ready: true, release_ready_at: now } };
+  if (invitation?.id && releaseEmail?.sent) {
+    await updateRow('emergency_access_invitations', `id=${eq(invitation.id)}`, {
+      updated_at: now,
+      metadata: { ...(invitation.metadata || {}), release_ready_email_sent: true, release_ready_email_sent_at: now, release_ready_email_provider_id: releaseEmail.providerId || '', version: APP_VERSION }
+    }).catch(() => null);
+  }
+  return updated || { ...request, status: 'release_ready', metadata: nextMetadata };
 }
 
 function appBaseUrl(event) {
@@ -245,15 +294,15 @@ export async function handler(event) {
         .filter((row) => row?.id)
         .sort((a, b) => new Date(b.requested_at || b.created_at || 0) - new Date(a.requested_at || a.created_at || 0));
       let latestRequest = allRequests.find((row) => [...activeRequestStatuses, ...foundationReadyStatuses].includes(String(row.status || '').toLowerCase()) && !row.cancelled_at && !row.released_at) || allRequests[0] || null;
-      latestRequest = await markReleaseReadyIfDue(latestRequest);
-      const requestStatus = String(latestRequest?.status || '').toLowerCase();
-      const hasActiveRequest = latestRequest && activeRequestStatuses.includes(requestStatus) && !latestRequest.cancelled_at && !latestRequest.released_at;
-      const isReleaseReady = latestRequest && foundationReadyStatuses.includes(requestStatus) && !latestRequest.cancelled_at && !latestRequest.released_at;
 
       let invitation = null;
       if (latestRequest?.invitation_id) invitation = candidateInvites.find((entry) => entry.id === latestRequest.invitation_id) || null;
       if (!invitation) invitation = candidateInvites.find((entry) => String(entry.status || '').toLowerCase() === 'accepted' && !entry.cancelled_at) || null;
       if (!invitation) invitation = candidateInvites.find((entry) => !entry.cancelled_at && ['sent', 'pending'].includes(String(entry.status || '').toLowerCase())) || candidateInvites[0];
+      latestRequest = await markReleaseReadyIfDue(latestRequest, invitation);
+      const requestStatus = String(latestRequest?.status || '').toLowerCase();
+      const hasActiveRequest = latestRequest && activeRequestStatuses.includes(requestStatus) && !latestRequest.cancelled_at && !latestRequest.released_at;
+      const isReleaseReady = latestRequest && foundationReadyStatuses.includes(requestStatus) && !latestRequest.cancelled_at && !latestRequest.released_at;
 
       // A request can only be created from an accepted invite. If the request exists but the older local plan still says sent,
       // surface the owner panel as accepted rather than leaving the UI stuck on Invitation sent.

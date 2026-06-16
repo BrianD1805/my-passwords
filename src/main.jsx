@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.036B';
+const VERSION = 'My Passwords Ver-0.036C';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2749,7 +2749,20 @@ function App() {
                 </button>
               </div>
             )}
-            <p className="emergency-invite-note">The account owner can cancel during the waiting period. If they do not cancel, the selected emergency package can become available here.</p>
+            <div className="emergency-invite-qa-card">
+              <details>
+                <summary>What happens after I request access?</summary>
+                <p>The account owner is notified and the waiting period starts. Nothing is released while the owner can still cancel.</p>
+              </details>
+              <details>
+                <summary>How will I know when the waiting period has ended?</summary>
+                <p>You should receive an email when access is ready. You can also return to this same secure link; it will show the emergency package when it becomes available.</p>
+              </details>
+              <details>
+                <summary>Do I need to install My Passwords?</summary>
+                <p>No. This secure page works in your browser.</p>
+              </details>
+            </div>
           </article>
           <footer className="landing-footer emergency-invite-footer"><span>© 2026 My Passwords</span><button type="button" onClick={openVaultApp}>Open My Vault</button></footer>
         </section>
@@ -3460,38 +3473,56 @@ function App() {
                 </div>
               </div>
 
-              <div className={`emergency-invite-status-card ${(hasActiveEmergencyRequest || isEmergencyReleaseReady) ? 'request-active' : ''}`}>
-                <div className="emergency-status-copy">
-                  <div className="emergency-status-summary">
-                    <span className="emergency-status-pill"><ShieldCheck size={16} /> {invitationStatusTitle}</span>
-                    {requestStatusTitle && <span className="emergency-status-pill request"><AlertTriangle size={16} /> {requestStatusTitle}</span>}
-                  </div>
-                  <p>{invitationStatusCopy}</p>
-                  {requestStatusCopy && <p className="emergency-request-owner-message">{requestStatusCopy}</p>}
-                  <div className="emergency-status-detail-grid">
-                    {emergencyDraft.invitationSentAt && <small><strong>Invite sent</strong>{new Date(emergencyDraft.invitationSentAt).toLocaleString()}</small>}
-                    {emergencyDraft.invitationAcceptedAt && <small><strong>Invite accepted</strong>{new Date(emergencyDraft.invitationAcceptedAt).toLocaleString()}</small>}
-                    {emergencyDraft.requestRequestedAt && <small><strong>Request made</strong>{new Date(emergencyDraft.requestRequestedAt).toLocaleString()}</small>}
-                    {emergencyDraft.requestWaitingEndsAt && <small><strong>Waiting period ends</strong>{new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString()}</small>}
-                  </div>
-                  {emergencyInviteState.message && <small className="emergency-last-check-note">{emergencyInviteState.message}</small>}
-                  {emergencyDraft.invitationUrl && <small className="emergency-invite-link-note">Secure link ready for testing, resending, or requesting emergency access after acceptance.</small>}
-                  {(hasActiveEmergencyRequest || isEmergencyReleaseReady) && <small className="emergency-last-check-note">Important: cancel this request before the waiting period ends if it should not proceed.</small>}
+              <div className={`emergency-owner-flow-card ${(hasActiveEmergencyRequest || isEmergencyReleaseReady) ? 'request-active' : ''}`}>
+                <div className="emergency-status-summary emergency-owner-status-summary">
+                  <span className="emergency-status-pill"><ShieldCheck size={16} /> {invitationStatusTitle}</span>
+                  {requestStatusTitle && <span className="emergency-status-pill request"><AlertTriangle size={16} /> {requestStatusTitle}</span>}
                 </div>
-                <div className="emergency-invite-actions-mini" aria-label="Emergency invitation actions">
-                  <div className="emergency-invite-action-row primary-actions">
-                    <button type="button" className="secondary-button" onClick={sendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'sending'}><Mail size={16} /> {emergencyInviteState.status === 'sending' ? 'Sending...' : 'Send invitation'}</button>
-                    {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={checkEmergencyInvitationStatus} disabled={emergencyInviteState.status === 'checking'}><RefreshCw size={16} /> {emergencyInviteState.status === 'checking' ? 'Checking...' : 'Check status'}</button>}
-                    {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={resendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resending'}><Mail size={16} /> {emergencyInviteState.status === 'resending' ? 'Resending...' : 'Resend invite'}</button>}
-                    {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={copyEmergencyInviteLink}><Copy size={16} /> Copy invite link</button>}
-                    {emergencyDraft.invitationStatus === 'accepted' && emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={resendEmergencyRequestLink} disabled={emergencyInviteState.status === 'resending-request-link'}><Mail size={16} /> {emergencyInviteState.status === 'resending-request-link' ? 'Sending link...' : 'Resend request link'}</button>}
-                    {emergencyDraft.invitationStatus === 'accepted' && emergencyDraft.invitationUrl && <button type="button" className="secondary-button" onClick={copyEmergencyRequestLink}><Copy size={16} /> Copy request link</button>}
-                  </div>
-                  <div className="emergency-invite-action-row safety-actions">
-                    {['requested', 'waiting', 'owner_notified', 'release_ready'].includes(normalisedRequestStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyAccessRequest} disabled={emergencyInviteState.status === 'cancelling-request'}><X size={16} /> Cancel request</button>}
-                    {['invitation_sent', 'sent', 'pending'].includes(emergencyDraft.invitationStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyInvitation}><X size={16} /> Cancel invite</button>}
-                    {emergencyDraft.invitationId && <button type="button" className="secondary-button danger-soft" onClick={resetEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resetting'}><RefreshCw size={16} /> {emergencyInviteState.status === 'resetting' ? 'Resetting...' : 'Reset invite'}</button>}
-                  </div>
+
+                <div className="emergency-owner-flow-grid">
+                  <section className="emergency-owner-flow-section invite-section" aria-label="Invitation status">
+                    <div className="emergency-owner-section-heading">
+                      <Mail size={18} />
+                      <div>
+                        <strong>Invitation</strong>
+                        <p>{invitationStatusCopy}</p>
+                      </div>
+                    </div>
+                    <div className="emergency-status-detail-grid compact">
+                      {emergencyDraft.invitationSentAt && <small><strong>Sent</strong>{new Date(emergencyDraft.invitationSentAt).toLocaleString()}</small>}
+                      {emergencyDraft.invitationAcceptedAt && <small><strong>Accepted</strong>{new Date(emergencyDraft.invitationAcceptedAt).toLocaleString()}</small>}
+                    </div>
+                    {emergencyInviteState.message && <small className="emergency-last-check-note">{emergencyInviteState.message}</small>}
+                    <div className="emergency-invite-action-row primary-actions">
+                      <button type="button" className="secondary-button" onClick={sendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'sending'}><Mail size={16} /> {emergencyInviteState.status === 'sending' ? 'Sending...' : 'Send invitation'}</button>
+                      {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={checkEmergencyInvitationStatus} disabled={emergencyInviteState.status === 'checking'}><RefreshCw size={16} /> {emergencyInviteState.status === 'checking' ? 'Checking...' : 'Check status'}</button>}
+                      {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={resendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resending'}><Mail size={16} /> {emergencyInviteState.status === 'resending' ? 'Resending...' : 'Resend invite'}</button>}
+                      {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={copyEmergencyInviteLink}><Copy size={16} /> Copy invite link</button>}
+                      {['invitation_sent', 'sent', 'pending'].includes(emergencyDraft.invitationStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyInvitation}><X size={16} /> Cancel invitation</button>}
+                      {emergencyDraft.invitationId && <button type="button" className="secondary-button danger-soft" onClick={resetEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resetting'}><RefreshCw size={16} /> {emergencyInviteState.status === 'resetting' ? 'Resetting...' : 'Reset invite'}</button>}
+                    </div>
+                  </section>
+
+                  <section className="emergency-owner-flow-section request-section" aria-label="Emergency request status">
+                    <div className="emergency-owner-section-heading">
+                      <AlertTriangle size={18} />
+                      <div>
+                        <strong>Request access</strong>
+                        <p>{requestStatusCopy || 'After the invitation is accepted, your trusted person can use their secure browser link to request emergency access.'}</p>
+                      </div>
+                    </div>
+                    <div className="emergency-status-detail-grid compact">
+                      {emergencyDraft.requestRequestedAt && <small><strong>Requested</strong>{new Date(emergencyDraft.requestRequestedAt).toLocaleString()}</small>}
+                      {emergencyDraft.requestWaitingEndsAt && <small><strong>Waiting period ends</strong>{new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString()}</small>}
+                    </div>
+                    {isEmergencyReleaseReady && <p className="emergency-request-owner-message">Waiting period completed. The nominee can open the secure request link to view the prepared emergency package.</p>}
+                    {hasActiveEmergencyRequest && <p className="emergency-request-warning">Cancel before the waiting period ends if this emergency request should not continue.</p>}
+                    <div className="emergency-invite-action-row request-actions">
+                      {emergencyDraft.invitationStatus === 'accepted' && emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={resendEmergencyRequestLink} disabled={emergencyInviteState.status === 'resending-request-link'}><Mail size={16} /> {emergencyInviteState.status === 'resending-request-link' ? 'Sending link...' : 'Resend request link'}</button>}
+                      {emergencyDraft.invitationStatus === 'accepted' && emergencyDraft.invitationUrl && <button type="button" className="secondary-button" onClick={copyEmergencyRequestLink}><Copy size={16} /> Copy request link</button>}
+                      {['requested', 'waiting', 'owner_notified', 'release_ready'].includes(normalisedRequestStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyAccessRequest} disabled={emergencyInviteState.status === 'cancelling-request'}><X size={16} /> Cancel emergency request</button>}
+                    </div>
+                  </section>
                 </div>
               </div>
 
@@ -3537,19 +3568,34 @@ function App() {
                   <label className="emergency-access-notes-label">Important contacts<textarea value={emergencyDraft.emergencyPackageContacts || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageContacts: e.target.value })} placeholder="Solicitor, doctor, accountant, family contacts, executor, insurance contact..." /></label>
                   <label className="emergency-access-notes-label">Documents and locations<textarea value={emergencyDraft.emergencyPackageDocuments || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageDocuments: e.target.value })} placeholder="Where to find will, policy documents, house papers, key files, physical documents..." /></label>
                   <label className="emergency-access-notes-label">Checklist for trusted person<textarea value={emergencyDraft.emergencyPackageChecklist || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageChecklist: e.target.value })} placeholder="Step 1: Contact..., Step 2: Check..., Step 3: Do not..." /></label>
-                  <div className="emergency-access-points package-safety-points">
-                    <span>Emergency Info is the safer default; Full vault access is available for next-of-kin use.</span>
-                    <span>Cards and full-vault records are included only when you deliberately choose Full vault access above.</span>
-                    <span>This build prepares an encrypted emergency release package. Full vault access is available only by explicit owner choice.</span>
-                  </div>
+                  <details className="emergency-package-note">
+                    <summary>About the release scope</summary>
+                    <p>Emergency Info is the safer default. Full vault access is available only when deliberately selected for next-of-kin use.</p>
+                  </details>
                 </div>
 
-                <div className="emergency-access-points">
-                  <span>Emergency requests start a waiting period. If you do not cancel before it ends, the selected emergency package can become available in the release stage.</span>
-                  <span>Your trusted person does not need My Passwords installed or their own vault; the secure invite link opens in any browser.</span>
-                  <span>If they already have their own My Passwords Vault, optional account linking can be added later without making it required.</span>
-                  <span>Your master password is not saved here. Full vault access must be selected deliberately and should be used for next of kin only.</span>
-                  <span>You can change this nominated person at any time.</span>
+                <div className="emergency-access-qa-card">
+                  <strong>Emergency Access questions</strong>
+                  <details>
+                    <summary>What happens when my trusted person requests access?</summary>
+                    <p>A waiting period starts and you are notified. No vault contents are released while the waiting period is active.</p>
+                  </details>
+                  <details>
+                    <summary>Can I cancel an emergency request?</summary>
+                    <p>Yes. Use Cancel emergency request before the waiting period ends if the request should not continue.</p>
+                  </details>
+                  <details>
+                    <summary>Does my trusted person need the app?</summary>
+                    <p>No. Their invite and request access links open in a normal browser. They do not need to install the PWA or create their own vault.</p>
+                  </details>
+                  <details>
+                    <summary>How will they know when the waiting period has ended?</summary>
+                    <p>When the system next checks and marks the request as ready, it emails the trusted person. They can also open the same secure request link; it changes to the emergency package view when ready.</p>
+                  </details>
+                  <details>
+                    <summary>What is Full vault access?</summary>
+                    <p>Full vault access is an explicit next-of-kin option. It prepares the selected emergency package without saving or sending your master password.</p>
+                  </details>
                 </div>
                 {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last updated: {new Date(emergencyDraft.updatedAt).toLocaleString()}</p>}
                 <div className="button-stack emergency-access-actions">

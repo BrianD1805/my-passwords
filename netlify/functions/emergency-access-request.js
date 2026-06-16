@@ -24,18 +24,35 @@ function hasWaitingPeriodEnded(value) {
   return Number.isFinite(time) && time <= Date.now();
 }
 
-async function markReleaseReadyIfDue(request) {
+async function markReleaseReadyIfDue(request, invitation = null) {
   const status = String(request?.status || '').toLowerCase();
   if (!request?.id || !['requested', 'waiting', 'owner_notified'].includes(status) || request.cancelled_at || request.released_at || !hasWaitingPeriodEnded(request.waiting_ends_at)) {
     return request;
   }
   const now = new Date().toISOString();
+  const releaseEmail = invitation ? await notifyEmergencyContactReleaseReady({ invitation, request }).catch((error) => ({ sent: false, reason: error.message || 'Release-ready email failed.' })) : null;
+  const nextMetadata = {
+    ...(request.metadata || {}),
+    version: APP_VERSION,
+    release_foundation_ready: true,
+    release_ready_at: now,
+    release_note: 'Waiting period ended. Selected emergency package release foundation is ready; no vault contents are included in this record.',
+    release_ready_email_sent: Boolean(releaseEmail?.sent) || Boolean(request.metadata?.release_ready_email_sent),
+    release_ready_email_provider_id: releaseEmail?.providerId || request.metadata?.release_ready_email_provider_id || '',
+    release_ready_email_reason: releaseEmail && !releaseEmail.sent && !releaseEmail.skipped ? (releaseEmail.reason || '') : (request.metadata?.release_ready_email_reason || '')
+  };
   const updated = await updateRow('emergency_access_requests', `id=${eq(request.id)}`, {
     status: 'release_ready',
-    metadata: { ...(request.metadata || {}), version: APP_VERSION, release_foundation_ready: true, release_ready_at: now, release_note: 'Waiting period ended. Selected emergency package release foundation is ready; no vault contents are included in this record.' },
+    metadata: nextMetadata,
     updated_at: now
   }).catch(() => null);
-  return updated || { ...request, status: 'release_ready', metadata: { ...(request.metadata || {}), release_foundation_ready: true, release_ready_at: now } };
+  if (invitation?.id && releaseEmail?.sent) {
+    await updateRow('emergency_access_invitations', `id=${eq(invitation.id)}`, {
+      updated_at: now,
+      metadata: { ...(invitation.metadata || {}), release_ready_email_sent: true, release_ready_email_sent_at: now, release_ready_email_provider_id: releaseEmail.providerId || '', version: APP_VERSION }
+    }).catch(() => null);
+  }
+  return updated || { ...request, status: 'release_ready', metadata: nextMetadata };
 }
 
 function buildOwnerNotification({ ownerName, contactName, waitingPeriod, accessScope, requestedAt, waitingEndsAt }) {
@@ -95,6 +112,72 @@ async function notifyOwner({ ownerEmail, ownerName, contactName, waitingPeriod, 
   }
 }
 
+function buildReleaseReadyEmail({ contactName, ownerName, accessScope, requestUrl }) {
+  const safeContact = contactName || 'there';
+  const safeOwner = ownerName || 'the account owner';
+  const safeScope = accessScope || 'Emergency Info folder only';
+  const text = `${safeContact}, the waiting period for your My Passwords Emergency Access request has ended. If ${safeOwner} has not cancelled the request, you can use your secure browser link to open the prepared emergency package. Access scope: ${safeScope}. Open: ${requestUrl}`;
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
+    <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
+      <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
+        <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Emergency access is ready</h1>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, the waiting period for your My Passwords Emergency Access request has ended.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">If the account owner has not cancelled the request, you can use your secure browser link to open the prepared emergency package.</p>
+        <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
+          <p style="margin:0;"><strong>Access scope:</strong> ${safeScope}</p>
+        </div>
+        ${requestUrl ? `<a href="${requestUrl}" style="display:inline-block;background:#173a5d;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Open emergency access</a>` : ''}
+        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">You do not need to install My Passwords. This secure link opens in your browser.</p>
+      </div>
+    </div>
+  </body>
+</html>`;
+  return { html, text };
+}
+
+async function notifyEmergencyContactReleaseReady({ invitation, request }) {
+  const apiKey = process.env.RESEND_API_KEY || '';
+  const from = process.env.OTP_EMAIL_FROM || '';
+  const metadata = invitation?.metadata || {};
+  if (metadata.release_ready_email_sent) return { sent: false, skipped: true, reason: 'Release-ready email was already sent.' };
+  const to = invitation?.contact_email || request?.contact_email || '';
+  if (!apiKey || !from || !to || !to.includes('@')) {
+    return { sent: false, provider: 'resend', reason: 'Release-ready email is not configured.' };
+  }
+  const requestUrl = invitation?.invite_url || metadata.request_access_url || '';
+  const content = buildReleaseReadyEmail({
+    contactName: invitation?.contact_name || request?.contact_name,
+    ownerName: metadata.owner_name || 'the account owner',
+    accessScope: invitation?.access_scope || request?.access_scope,
+    requestUrl
+  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        from,
+        to,
+        subject: 'Emergency access is ready',
+        html: content.html,
+        text: content.text
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { sent: false, provider: 'resend', reason: data?.message || `Resend returned HTTP ${response.status}.`, details: data };
+    return { sent: true, provider: 'resend', providerId: data?.id || '' };
+  } catch (error) {
+    return { sent: false, provider: 'resend', reason: error.name === 'AbortError' ? 'Release-ready email timed out.' : (error.message || 'Release-ready email could not be sent.') };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function handler(event) {
   if (!requirePost(event)) return jsonResponse(405, { ok: false, message: 'POST required.' });
   const body = parseBody(event);
@@ -121,7 +204,7 @@ export async function handler(event) {
     const existing = await selectRows('emergency_access_requests', `select=*&invitation_id=${eq(invitation.id)}&status=in.(requested,waiting,owner_notified,release_ready)&order=requested_at.desc&limit=1`);
 
     if (action === 'status') {
-      const currentRequest = existing?.[0]?.id ? await markReleaseReadyIfDue(existing[0]) : null;
+      const currentRequest = existing?.[0]?.id ? await markReleaseReadyIfDue(existing[0], invitation) : null;
       return jsonResponse(200, {
         ok: true,
         version: APP_VERSION,
@@ -152,7 +235,7 @@ export async function handler(event) {
     if (invitation.status !== 'accepted') return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'Accept the emergency contact invitation before requesting emergency access.' });
 
     if (existing?.[0]?.id) {
-      const currentRequest = await markReleaseReadyIfDue(existing[0]);
+      const currentRequest = await markReleaseReadyIfDue(existing[0], invitation);
       return jsonResponse(200, {
         ok: true,
         version: APP_VERSION,
