@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.036A';
+const VERSION = 'My Passwords Ver-0.036B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2375,6 +2375,43 @@ function App() {
     await copyText('Emergency invite link', link);
   }
 
+  async function copyEmergencyRequestLink() {
+    const link = emergencyDraft.invitationUrl;
+    if (!link) return showMessage('Check status or resend the request link to refresh it.', 'warning');
+    await copyText('Emergency request access link', link);
+  }
+
+  async function resendEmergencyRequestLink() {
+    if (!emergencyDraft.invitationId) return showMessage('Send an invitation first.', 'warning');
+    if (emergencyDraft.invitationStatus !== 'accepted') return showMessage('The trusted person must accept the invitation before you can resend the Request Access link.', 'warning');
+    setEmergencyInviteState({ status: 'resending-request-link', message: 'Resending Request Access link...' });
+    try {
+      const result = await postJson('/.netlify/functions/emergency-access-invite', {
+        action: 'resend_request_link',
+        invitationId: emergencyDraft.invitationId,
+        tenantId: bootstrap.tenantId,
+        userId: bootstrap.userId
+      });
+      if (!result.ok) throw new Error(result.message || 'Request Access link could not be resent.');
+      const savedPlan = {
+        ...emergencyDraft,
+        invitationStatus: result.status || emergencyDraft.invitationStatus || 'accepted',
+        invitationMessage: result.message || 'Request Access link resent.',
+        invitationUrl: result.requestUrl || result.inviteUrl || emergencyDraft.invitationUrl || '',
+        requestLinkResentAt: new Date().toISOString()
+      };
+      const next = upsertEmergencyAccessMetaItem(items, savedPlan);
+      await saveItems(next, { autoSync: true, silentAutoSync: true });
+      setEmergencyDraft(getEmergencyAccessPlan(next));
+      setEmergencyInviteState({ status: 'request-link-resent', message: savedPlan.invitationMessage });
+      showMessage(savedPlan.invitationMessage, result.emailSent ? 'success' : 'warning');
+    } catch (error) {
+      const note = error.message || 'Request Access link could not be resent.';
+      setEmergencyInviteState({ status: 'error', message: note });
+      showMessage(note, 'error');
+    }
+  }
+
   async function cancelEmergencyAccessRequest() {
     if (!emergencyDraft.requestId) return showMessage('There is no emergency request to cancel.', 'warning');
     setEmergencyInviteState({ status: 'cancelling-request', message: 'Cancelling emergency request...' });
@@ -3061,7 +3098,7 @@ function App() {
           ? 'Invitation sent'
           : 'Not invited yet';
   const invitationStatusCopy = emergencyDraft.invitationStatus === 'accepted'
-    ? 'Your trusted person has accepted the invitation. They can request emergency access if needed.'
+    ? 'Your trusted person has accepted the invitation. They should receive a secure Request Access link by email and can use that browser link if emergency access is ever needed.'
     : emergencyDraft.invitationStatus === 'declined'
       ? 'Your trusted person declined the invitation. You can update the details or send a new invitation.'
       : emergencyDraft.invitationStatus === 'cancelled'
@@ -3438,7 +3475,7 @@ function App() {
                     {emergencyDraft.requestWaitingEndsAt && <small><strong>Waiting period ends</strong>{new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString()}</small>}
                   </div>
                   {emergencyInviteState.message && <small className="emergency-last-check-note">{emergencyInviteState.message}</small>}
-                  {emergencyDraft.invitationUrl && <small className="emergency-invite-link-note">Invite link ready for testing or resending.</small>}
+                  {emergencyDraft.invitationUrl && <small className="emergency-invite-link-note">Secure link ready for testing, resending, or requesting emergency access after acceptance.</small>}
                   {(hasActiveEmergencyRequest || isEmergencyReleaseReady) && <small className="emergency-last-check-note">Important: cancel this request before the waiting period ends if it should not proceed.</small>}
                 </div>
                 <div className="emergency-invite-actions-mini" aria-label="Emergency invitation actions">
@@ -3447,6 +3484,8 @@ function App() {
                     {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={checkEmergencyInvitationStatus} disabled={emergencyInviteState.status === 'checking'}><RefreshCw size={16} /> {emergencyInviteState.status === 'checking' ? 'Checking...' : 'Check status'}</button>}
                     {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={resendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resending'}><Mail size={16} /> {emergencyInviteState.status === 'resending' ? 'Resending...' : 'Resend invite'}</button>}
                     {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={copyEmergencyInviteLink}><Copy size={16} /> Copy invite link</button>}
+                    {emergencyDraft.invitationStatus === 'accepted' && emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={resendEmergencyRequestLink} disabled={emergencyInviteState.status === 'resending-request-link'}><Mail size={16} /> {emergencyInviteState.status === 'resending-request-link' ? 'Sending link...' : 'Resend request link'}</button>}
+                    {emergencyDraft.invitationStatus === 'accepted' && emergencyDraft.invitationUrl && <button type="button" className="secondary-button" onClick={copyEmergencyRequestLink}><Copy size={16} /> Copy request link</button>}
                   </div>
                   <div className="emergency-invite-action-row safety-actions">
                     {['requested', 'waiting', 'owner_notified', 'release_ready'].includes(normalisedRequestStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyAccessRequest} disabled={emergencyInviteState.status === 'cancelling-request'}><X size={16} /> Cancel request</button>}

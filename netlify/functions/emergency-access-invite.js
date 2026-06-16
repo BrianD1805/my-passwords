@@ -67,6 +67,64 @@ function buildInviteEmail({ ownerName, contactName, waitingPeriod, accessScope, 
   return { html, text };
 }
 
+
+function buildRequestLinkEmail({ ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
+  const safeOwner = ownerName || 'The account owner';
+  const safeContact = contactName || 'there';
+  const text = `Hello ${safeContact}, this is your My Passwords Emergency Access request link for ${safeOwner}. Keep this email somewhere safe. If there is ever an emergency, use this secure browser link to request access: ${requestUrl}. This link does not release any vault contents by itself. It starts the waiting period and notifies the account owner. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}.`;
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
+    <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
+      <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
+        <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Your Emergency Access link</h1>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, this is your My Passwords Emergency Access request link for ${safeOwner}.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Keep this email somewhere safe. If there is ever an emergency, use the secure link below to request access.</p>
+        <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
+          <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
+          <p style="margin:0;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
+        </div>
+        <a href="${requestUrl}" style="display:inline-block;background:#1d3557;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Request emergency access</a>
+        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">This link does not release any vault contents by itself. It starts the waiting period and notifies the account owner.</p>
+      </div>
+    </div>
+  </body>
+</html>`;
+  return { html, text };
+}
+
+async function sendRequestLinkWithResend({ to, ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
+  const apiKey = process.env.RESEND_API_KEY || '';
+  const from = process.env.OTP_EMAIL_FROM || '';
+  if (!apiKey || !from || !to || !to.includes('@') || !requestUrl) {
+    return { sent: false, provider: 'resend', reason: 'Request link email is not configured or the request link is missing.' };
+  }
+  const content = buildRequestLinkEmail({ ownerName, contactName, waitingPeriod, accessScope, requestUrl });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        from,
+        to,
+        subject: 'Your My Passwords Emergency Access link',
+        html: content.html,
+        text: content.text
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { sent: false, provider: 'resend', reason: data?.message || `Resend returned HTTP ${response.status}.`, details: data };
+    return { sent: true, provider: 'resend', providerId: data?.id || '' };
+  } catch (error) {
+    return { sent: false, provider: 'resend', reason: error.name === 'AbortError' ? 'Request link email timed out.' : (error.message || 'Request link email could not be sent.') };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function sendWithResend({ to, ownerName, contactName, waitingPeriod, accessScope, acceptUrl }) {
   const apiKey = process.env.RESEND_API_KEY || '';
   const from = process.env.OTP_EMAIL_FROM || '';
@@ -258,6 +316,54 @@ export async function handler(event) {
       await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: { reset_by_owner: true, reset_at: new Date().toISOString(), version: APP_VERSION } });
       await updateRow('emergency_access_requests', `invitation_id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&status=${inList(['requested','waiting','owner_notified','release_ready'])}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: { cancelled_by_owner_reset: true, version: APP_VERSION } }).catch(() => null);
       return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: 'reset', message: 'Emergency invitation reset. You can send a fresh invite now.' });
+    }
+
+    if (action === 'resend_request_link') {
+      const invitationId = String(body.invitationId || '').trim();
+      const tenantId = String(body.tenantId || '').trim();
+      const userId = String(body.userId || '').trim();
+      if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
+      const rows = await selectRows('emergency_access_invitations', `select=*&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
+      const invitation = rows?.[0];
+      if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Invitation was not found.' });
+      if (invitation.status === 'cancelled') return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'This invitation has been cancelled. Reset it and send a fresh invitation.' });
+      if (invitation.status !== 'accepted') return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'The trusted person must accept the invitation before a Request Access link can be resent.' });
+      const requestUrl = invitation.invite_url || invitation.metadata?.request_access_url || '';
+      if (!requestUrl) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'This invitation does not have a stored Request Access link. Reset it and send a fresh invitation.' });
+      const delivery = await sendRequestLinkWithResend({
+        to: invitation.contact_email,
+        ownerName: invitation.metadata?.owner_name || 'My Passwords user',
+        contactName: invitation.contact_name,
+        waitingPeriod: invitation.waiting_period,
+        accessScope: invitation.access_scope,
+        requestUrl
+      });
+      const now = new Date().toISOString();
+      await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, {
+        email_provider: delivery.provider || invitation.email_provider,
+        email_provider_id: delivery.providerId || invitation.email_provider_id || '',
+        expires_at: null,
+        updated_at: now,
+        metadata: {
+          ...(invitation.metadata || {}),
+          request_access_url: requestUrl,
+          request_link_resent_at: now,
+          request_link_email_sent: delivery.sent,
+          request_link_provider_id: delivery.providerId || '',
+          request_link_reason: delivery.sent ? null : (delivery.reason || null),
+          version: APP_VERSION
+        }
+      });
+      return jsonResponse(200, {
+        ok: true,
+        version: APP_VERSION,
+        invitationId,
+        status: invitation.status,
+        requestUrl,
+        inviteUrl: requestUrl,
+        emailSent: delivery.sent,
+        message: delivery.sent ? 'Request Access link resent.' : `Request Access link is ready, but the email was not sent. ${delivery.reason || 'Use Copy request link for testing.'}`
+      });
     }
 
     if (action === 'resend') {
