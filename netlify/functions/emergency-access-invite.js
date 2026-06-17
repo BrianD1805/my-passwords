@@ -108,7 +108,7 @@ function buildInviteEmail({ ownerName, contactName, waitingPeriod, accessScope, 
           <p style="margin:0;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
         </div>
         <a href="${acceptUrl}" style="display:inline-block;background:#1d3557;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Review invitation</a>
-        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">The account owner stays in control during the waiting period. If they do not cancel an emergency request before the waiting period ends, their selected emergency package can become available according to their release rules.</p>
+        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">The account owner stays in control during the waiting period. If they do not cancel an emergency request before the waiting period ends, their selected emergency package will become available according to their release rules.</p>
       </div>
     </div>
   </body>
@@ -313,7 +313,7 @@ export async function handler(event) {
         ? (isReleaseReady
             ? 'The waiting period has ended. The selected emergency package release foundation is ready. The owner-prepared emergency package is ready if it has been saved.'
             : hasActiveRequest
-              ? 'Emergency access requested. The waiting period has started. If you do not cancel before it ends, the selected emergency package can become available. No vault contents have been released yet.'
+              ? 'Emergency access requested. The waiting period has started. If you do not cancel before it ends, the selected emergency package will become available. No vault contents have been released yet.'
             : requestStatus === 'cancelled'
               ? 'Emergency access request cancelled. No vault contents were released.'
               : 'Emergency access request status checked. No vault contents have been released.')

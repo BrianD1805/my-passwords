@@ -58,7 +58,7 @@ async function markReleaseReadyIfDue(request, invitation = null) {
 function buildOwnerNotification({ ownerName, contactName, waitingPeriod, accessScope, requestedAt, waitingEndsAt }) {
   const safeOwner = ownerName || 'there';
   const safeContact = contactName || 'Your trusted person';
-  const text = `${safeOwner}, ${safeContact} has requested emergency access in My Passwords. No vault contents have been released yet. If you do not cancel before the waiting period ends, the selected emergency package can become available. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. Requested: ${requestedAt}. Waiting period ends: ${waitingEndsAt}. Open your vault settings to review or cancel this request before the waiting period ends.`;
+  const text = `${safeOwner}, ${safeContact} has requested emergency access in My Passwords. No vault contents have been released yet. If you do not cancel before the waiting period ends, the selected emergency package will become available. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. Requested: ${requestedAt}. Waiting period ends: ${waitingEndsAt}. Open your vault settings to review or cancel this request before the waiting period ends.`;
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
@@ -66,7 +66,7 @@ function buildOwnerNotification({ ownerName, contactName, waitingPeriod, accessS
       <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
         <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Emergency access request</h1>
         <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeOwner}, ${safeContact} has requested emergency access in My Passwords.</p>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">No vault contents have been released yet. If you do not cancel before the waiting period ends, your selected emergency package can become available to your trusted person.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">No vault contents have been released yet. If you do not cancel before the waiting period ends, your selected emergency package will become available to your trusted person.</p>
         <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
           <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
           <p style="margin:0 0 8px;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
@@ -313,8 +313,8 @@ export async function handler(event) {
       requestedAt,
       waitingEndsAt,
       message: notification.sent
-        ? 'Emergency access request sent to the account owner. If the owner does not cancel before the waiting period ends, the selected emergency package can become available. No vault contents have been released yet.'
-        : 'Emergency access request recorded. If the owner does not cancel before the waiting period ends, the selected emergency package can become available. No vault contents have been released yet.'
+        ? 'Emergency access request sent to the account owner. If the owner does not cancel before the waiting period ends, the selected emergency package will become available. No vault contents have been released yet.'
+        : 'Emergency access request recorded. If the owner does not cancel before the waiting period ends, the selected emergency package will become available. No vault contents have been released yet.'
     });
   } catch (error) {
     return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Emergency access request could not be saved.', error: error.message, details: error.details || null });

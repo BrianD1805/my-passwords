@@ -6299,3 +6299,36 @@ a,
     justify-content: center;
   }
 }
+
+/* Ver-0.036D Emergency Access layout refinements */
+.emergency-package-notes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.emergency-package-notes-grid .emergency-access-notes-label {
+  display: grid;
+  min-width: 0;
+}
+
+.emergency-access-qa-card {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.emergency-access-qa-card > strong {
+  grid-column: 1 / -1;
+}
+
+.emergency-access-qa-card details {
+  min-width: 0;
+  height: 100%;
+}
+
+@media (max-width: 760px) {
+  .emergency-package-notes-grid,
+  .emergency-access-qa-card {
+    grid-template-columns: 1fr;
+  }
+}

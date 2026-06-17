@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.036C';
+const VERSION = 'My Passwords Ver-0.036D';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2693,7 +2693,7 @@ function App() {
                 <strong>{emergencyRequestState.status === 'release-ready' ? 'Waiting period ended' : 'Need to request emergency access?'}</strong>
                 <p>{emergencyRequestState.status === 'release-ready'
                   ? 'The waiting period has ended. If the owner prepared a release package, it can now be opened here. Full vault records are shown only when the owner deliberately selected Full vault access.'
-                  : 'This starts the waiting period and notifies the account owner. If the request is not cancelled before the waiting period ends, the selected emergency package can become available here. It still does not reveal any vault contents today.'}</p>
+                  : 'This starts the waiting period and notifies the account owner. If the request is not cancelled before the waiting period ends, the selected emergency package will become available here. It still does not reveal any vault contents today.'}</p>
                 {emergencyRequestState.status === 'release-ready' && (
                   <div className="emergency-release-ready-card">
                     <ShieldCheck size={18} />
@@ -3131,7 +3131,7 @@ function App() {
   const requestStatusCopy = isEmergencyReleaseReady
     ? 'The waiting period has ended. The selected emergency package is now release-ready. If you prepared Full vault access, the trusted person can open those prepared vault records from their secure emergency link.'
     : hasActiveEmergencyRequest
-      ? 'Your trusted person has requested emergency access. The waiting period has started. If you do not cancel before it ends, your selected emergency package can become available. No passwords have been released before the waiting period ends.'
+      ? 'Your trusted person has requested emergency access. The waiting period has started. If you do not cancel before it ends, your selected emergency package will become available. No passwords have been released before the waiting period ends.'
     : normalisedRequestStatus === 'cancelled'
       ? 'The emergency access request has been cancelled. No vault contents were released.'
       : emergencyDraft.requestMessage || '';
@@ -3469,9 +3469,27 @@ function App() {
                 <ShieldCheck size={22} />
                 <div>
                   <strong>You stay in control</strong>
-                  <p>This saves your nominated contact inside your encrypted vault. If they request emergency access, you are notified and can cancel during the waiting period. If you do not cancel before the waiting period ends, your selected emergency package can become available.</p>
+                  <p>This saves your nominated contact inside your encrypted vault. If they request emergency access, you are notified and can cancel during the waiting period. If you do not cancel before the waiting period ends, your selected emergency package will become available.</p>
                 </div>
               </div>
+
+              <form className="emergency-access-form" onSubmit={saveEmergencyAccessPlan}>
+                <div className="bootstrap-grid emergency-access-grid">
+                  <label>Trusted person name<input value={emergencyDraft.contactName} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactName: e.target.value })} placeholder="Full name" /></label>
+                  <label>Relationship<input value={emergencyDraft.relationship} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, relationship: e.target.value })} placeholder="Spouse, child, sibling, solicitor..." /></label>
+                  <label>Email<input type="email" value={emergencyDraft.contactEmail} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactEmail: e.target.value })} placeholder="trusted@example.com" /></label>
+                  <label>Phone<input inputMode="tel" value={emergencyDraft.contactPhone} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactPhone: e.target.value })} placeholder="Mobile or landline" /></label>
+                  <label>Waiting period<select value={emergencyDraft.waitingPeriod} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, waitingPeriod: e.target.value })}>
+                    <option value="10 minutes">10 minutes — testing only</option>
+                    <option value="24 hours">24 hours</option>
+                    <option value="3 days">3 days</option>
+                    <option value="7 days">7 days</option>
+                    <option value="14 days">14 days</option>
+                    <option value="30 days">30 days</option>
+                  </select></label>
+                </div>
+                <label className="emergency-access-notes-label">Notes or instructions<textarea value={emergencyDraft.instructions} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, instructions: e.target.value })} placeholder="Add any wishes, instructions, or details you want kept with this emergency plan." /></label>
+
 
               <div className={`emergency-owner-flow-card ${(hasActiveEmergencyRequest || isEmergencyReleaseReady) ? 'request-active' : ''}`}>
                 <div className="emergency-status-summary emergency-owner-status-summary">
@@ -3526,29 +3544,13 @@ function App() {
                 </div>
               </div>
 
-              <form className="emergency-access-form" onSubmit={saveEmergencyAccessPlan}>
-                <div className="bootstrap-grid emergency-access-grid">
-                  <label>Trusted person name<input value={emergencyDraft.contactName} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactName: e.target.value })} placeholder="Full name" /></label>
-                  <label>Relationship<input value={emergencyDraft.relationship} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, relationship: e.target.value })} placeholder="Spouse, child, sibling, solicitor..." /></label>
-                  <label>Email<input type="email" value={emergencyDraft.contactEmail} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactEmail: e.target.value })} placeholder="trusted@example.com" /></label>
-                  <label>Phone<input inputMode="tel" value={emergencyDraft.contactPhone} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactPhone: e.target.value })} placeholder="Mobile or landline" /></label>
-                  <label>Waiting period<select value={emergencyDraft.waitingPeriod} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, waitingPeriod: e.target.value })}>
-                    <option value="10 minutes">10 minutes — testing only</option>
-                    <option value="24 hours">24 hours</option>
-                    <option value="3 days">3 days</option>
-                    <option value="7 days">7 days</option>
-                    <option value="14 days">14 days</option>
-                    <option value="30 days">30 days</option>
-                  </select></label>
-                </div>
-                <label className="emergency-access-notes-label">Notes or instructions<textarea value={emergencyDraft.instructions} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, instructions: e.target.value })} placeholder="Add any wishes, instructions, or details you want kept with this emergency plan." /></label>
 
                 <div className="emergency-package-editor-card">
                   <div className="emergency-package-editor-heading">
                     <FileText size={20} />
                     <div>
                       <strong>Emergency package foundation</strong>
-                      <span>This is the package that can become available after the waiting period. Emergency Info is the safer default. Full vault access can be selected deliberately for next of kin.</span>
+                      <span>This is the package that will become available after the waiting period. Emergency Info is the safer default. Full Vault Access can be selected deliberately for next of kin.</span>
                     </div>
                   </div>
                   <label className="emergency-toggle-row">
@@ -3561,17 +3563,15 @@ function App() {
                       <option value="Emergency Info folder only">Emergency Info folder only</option>
                       <option value="Selected folders later">Selected folders later</option>
                       <option value="Selected documents later">Selected documents later</option>
-                      <option value="Full vault access">Full vault access — includes passwords and cards</option>
+                      <option value="Full vault access">Full vault access</option>
                     </select></label>
                   </div>
-                  <label className="emergency-access-notes-label">Emergency message<textarea value={emergencyDraft.emergencyPackageMessage || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageMessage: e.target.value })} placeholder="Write the message your trusted person should see first if the waiting period ends." /></label>
-                  <label className="emergency-access-notes-label">Important contacts<textarea value={emergencyDraft.emergencyPackageContacts || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageContacts: e.target.value })} placeholder="Solicitor, doctor, accountant, family contacts, executor, insurance contact..." /></label>
-                  <label className="emergency-access-notes-label">Documents and locations<textarea value={emergencyDraft.emergencyPackageDocuments || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageDocuments: e.target.value })} placeholder="Where to find will, policy documents, house papers, key files, physical documents..." /></label>
-                  <label className="emergency-access-notes-label">Checklist for trusted person<textarea value={emergencyDraft.emergencyPackageChecklist || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageChecklist: e.target.value })} placeholder="Step 1: Contact..., Step 2: Check..., Step 3: Do not..." /></label>
-                  <details className="emergency-package-note">
-                    <summary>About the release scope</summary>
-                    <p>Emergency Info is the safer default. Full vault access is available only when deliberately selected for next-of-kin use.</p>
-                  </details>
+                  <div className="emergency-package-notes-grid">
+                    <label className="emergency-access-notes-label">Emergency message<textarea value={emergencyDraft.emergencyPackageMessage || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageMessage: e.target.value })} placeholder="Write the message your trusted person should see first if the waiting period ends." /></label>
+                    <label className="emergency-access-notes-label">Important contacts<textarea value={emergencyDraft.emergencyPackageContacts || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageContacts: e.target.value })} placeholder="Solicitor, doctor, accountant, family contacts, executor, insurance contact..." /></label>
+                    <label className="emergency-access-notes-label">Documents and locations<textarea value={emergencyDraft.emergencyPackageDocuments || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageDocuments: e.target.value })} placeholder="Where to find will, policy documents, house papers, key files, physical documents..." /></label>
+                    <label className="emergency-access-notes-label">Checklist for trusted person<textarea value={emergencyDraft.emergencyPackageChecklist || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageChecklist: e.target.value })} placeholder="Step 1: Contact..., Step 2: Check..., Step 3: Do not..." /></label>
+                  </div>
                 </div>
 
                 <div className="emergency-access-qa-card">
