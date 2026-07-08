@@ -385,10 +385,45 @@ export async function handler(event) {
       const invitationId = String(body.invitationId || '').trim();
       const tenantId = String(body.tenantId || '').trim();
       const userId = String(body.userId || '').trim();
+      const bodyContactEmail = String(body.contactEmail || '').trim().toLowerCase();
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
-      await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: { reset_by_owner: true, reset_at: new Date().toISOString(), version: APP_VERSION } });
-      await updateRow('emergency_access_requests', `invitation_id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&status=${inList(['requested','waiting','owner_notified','release_ready'])}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: { cancelled_by_owner_reset: true, version: APP_VERSION } }).catch(() => null);
-      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: 'reset', message: 'Emergency invitation reset. You can send a fresh invite now.' });
+
+      const invitationRows = await selectRows('emergency_access_invitations', `select=*&id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&limit=1`).catch(() => []);
+      const invitation = invitationRows?.[0] || null;
+      const contactEmail = bodyContactEmail || String(invitation?.contact_email || '').trim().toLowerCase();
+      const now = new Date().toISOString();
+      const resetMetadata = { reset_by_owner: true, reset_at: now, version: APP_VERSION };
+
+      await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, {
+        status: 'cancelled',
+        cancelled_at: now,
+        updated_at: now,
+        metadata: { ...(invitation?.metadata || {}), ...resetMetadata, request_link_available: false }
+      }).catch(() => null);
+
+      if (contactEmail) {
+        await updateRow('emergency_access_invitations', `tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(contactEmail)}&status=${inList(['pending','sent','accepted','declined'])}`, {
+          status: 'cancelled',
+          cancelled_at: now,
+          updated_at: now,
+          metadata: resetMetadata
+        }).catch(() => null);
+        await updateRow('emergency_access_requests', `tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(contactEmail)}&status=${inList(['requested','waiting','owner_notified','release_ready'])}`, {
+          status: 'cancelled',
+          cancelled_at: now,
+          updated_at: now,
+          metadata: { cancelled_by_owner_reset: true, reset_at: now, version: APP_VERSION }
+        }).catch(() => null);
+      }
+
+      await updateRow('emergency_access_requests', `invitation_id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&status=${inList(['requested','waiting','owner_notified','release_ready'])}`, {
+        status: 'cancelled',
+        cancelled_at: now,
+        updated_at: now,
+        metadata: { cancelled_by_owner_reset: true, reset_at: now, version: APP_VERSION }
+      }).catch(() => null);
+
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: 'reset', message: 'Emergency invitation, acceptance and request details reset. You can send a fresh invite now.' });
     }
 
     if (action === 'resend_request_link') {

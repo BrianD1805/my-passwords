@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.037';
+const VERSION = 'My Passwords Ver-0.037A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2338,7 +2338,8 @@ function App() {
         action: 'reset',
         invitationId: emergencyDraft.invitationId,
         tenantId: bootstrap.tenantId,
-        userId: bootstrap.userId
+        userId: bootstrap.userId,
+        contactEmail: emergencyDraft.contactEmail
       });
       if (!result.ok) throw new Error(result.message || 'Invite could not be reset.');
       const savedPlan = {
@@ -2348,20 +2349,24 @@ function App() {
         invitationSentAt: '',
         invitationAcceptedAt: '',
         invitationCancelledAt: '',
-        invitationMessage: 'Previous invitation reset. You can send a fresh invite now.',
+        invitationMessage: 'Previous invitation, acceptance and emergency request details have been reset. You can send a fresh invite now.',
         invitationUrl: '',
         requestStatus: 'not_requested',
         requestId: '',
         requestRequestedAt: '',
         requestWaitingEndsAt: '',
         requestMessage: '',
-        requestLastCheckedAt: new Date().toISOString()
+        requestLastCheckedAt: new Date().toISOString(),
+        requestLinkResentAt: '',
+        releaseReadyAt: '',
+        releaseMessage: '',
+        openAccessUrl: ''
       };
       const next = upsertEmergencyAccessMetaItem(items, savedPlan);
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       setEmergencyDraft(getEmergencyAccessPlan(next));
       setEmergencyInviteState({ status: 'reset', message: savedPlan.invitationMessage });
-      showMessage('Emergency invitation reset. You can send a fresh invite now.', 'success');
+      showMessage('Emergency invitation, acceptance and request details reset. You can send a fresh invite now.', 'success');
     } catch (error) {
       const note = error.message || 'Emergency invitation could not be reset.';
       setEmergencyInviteState({ status: 'error', message: note });
