@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.036D';
+const VERSION = 'My Passwords Ver-0.037';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2673,6 +2673,19 @@ function App() {
   }
 
   if (isEmergencyInviteRoute) {
+    const emergencyStep = new URLSearchParams(window.location.search || '').get('step') || 'invite';
+    const isRequestStep = emergencyStep === 'request';
+    const isOpenStep = emergencyStep === 'open';
+    const pageTitle = isOpenStep
+      ? 'Open emergency access'
+      : isRequestStep
+        ? 'Request emergency access'
+        : 'Trusted person nomination';
+    const pageIntro = isOpenStep
+      ? 'This secure page is used after the waiting period has ended. If the account owner has not cancelled the request, the prepared emergency package can be opened here.'
+      : isRequestStep
+        ? 'Use this secure page only if you need to request emergency access. The account owner will be notified and the waiting period will start. No vault contents are released at this step.'
+        : 'You have been nominated as a trusted person. This does not give you access to any passwords today. If you accept, a separate secure Request Access link will be emailed to you for future use. You do not need a My Passwords account or app; this secure link works in your browser.';
     return (
       <main className="public-landing-page emergency-invite-page">
         <section className="emergency-invite-shell">
@@ -2680,20 +2693,24 @@ function App() {
           <article className="emergency-invite-card">
             <div className="preview-lock-icon"><UsersRound size={26} /></div>
             <p className="eyebrow">Emergency Access</p>
-            <h1>Emergency contact invitation</h1>
-            <p>You have been invited to be a trusted emergency contact. This does not give you access to any passwords today. It confirms that you are willing to be listed as the trusted person and, in a later emergency, lets you request access. You do not need a My Passwords account or app; this secure link works in your browser.</p>
+            <h1>{pageTitle}</h1>
+            <p>{pageIntro}</p>
             {inviteAcceptance.message && <div className={`emergency-invite-status ${inviteAcceptance.status}`}>{inviteAcceptance.message}</div>}
             {emergencyRequestState.message && <div className={`emergency-invite-status ${emergencyRequestState.status}`}>{emergencyRequestState.message}</div>}
-            <div className="emergency-invite-actions">
-              <button type="button" className="primary-button" disabled={inviteAcceptance.status === 'working' || inviteAcceptance.status === 'accepted'} onClick={() => respondToEmergencyInvitation('accepted')}><ShieldCheck size={18} /> Accept invitation</button>
-              <button type="button" className="secondary-button" disabled={inviteAcceptance.status === 'working' || inviteAcceptance.status === 'declined'} onClick={() => respondToEmergencyInvitation('declined')}><X size={18} /> Decline</button>
-            </div>
+            {emergencyStep === 'invite' && (
+              <div className="emergency-invite-actions">
+                <button type="button" className="primary-button" disabled={inviteAcceptance.status === 'working' || inviteAcceptance.status === 'accepted'} onClick={() => respondToEmergencyInvitation('accepted')}><ShieldCheck size={18} /> Accept nomination</button>
+                <button type="button" className="secondary-button" disabled={inviteAcceptance.status === 'working' || inviteAcceptance.status === 'declined'} onClick={() => respondToEmergencyInvitation('declined')}><X size={18} /> Decline</button>
+              </div>
+            )}
             {inviteAcceptance.status === 'accepted' && (
               <div className="emergency-request-card">
-                <strong>{emergencyRequestState.status === 'release-ready' ? 'Waiting period ended' : 'Need to request emergency access?'}</strong>
+                <strong>{emergencyRequestState.status === 'release-ready' ? 'Emergency package ready' : isOpenStep ? 'Waiting period not finished yet' : 'Request access when needed'}</strong>
                 <p>{emergencyRequestState.status === 'release-ready'
                   ? 'The waiting period has ended. If the owner prepared a release package, it can now be opened here. Full vault records are shown only when the owner deliberately selected Full vault access.'
-                  : 'This starts the waiting period and notifies the account owner. If the request is not cancelled before the waiting period ends, the selected emergency package will become available here. It still does not reveal any vault contents today.'}</p>
+                  : isOpenStep
+                    ? 'This is the open-access page, but the emergency package is not ready yet. Please check the waiting period, or look for the fresh email when access is ready.'
+                    : 'This starts the waiting period and notifies the account owner. If the request is not cancelled before the waiting period ends, the selected emergency package will become available here. It still does not reveal any vault contents today.'}</p>
                 {emergencyRequestState.status === 'release-ready' && (
                   <div className="emergency-release-ready-card">
                     <ShieldCheck size={18} />
@@ -2745,18 +2762,18 @@ function App() {
                 )}
                 <button type="button" className={`secondary-button emergency-request-button ${['requested', 'release-ready'].includes(emergencyRequestState.status) ? 'success' : ''}`} disabled={emergencyRequestState.status === 'working' || emergencyRequestState.status === 'requested' || emergencyRequestState.status === 'release-ready'} onClick={requestEmergencyAccessFromInvite}>
                   {emergencyRequestState.status === 'working' ? <RefreshCw size={17} className="spin-icon" /> : ['requested', 'release-ready'].includes(emergencyRequestState.status) ? <ShieldCheck size={17} /> : <AlertTriangle size={17} />}
-                  {emergencyRequestState.status === 'working' ? 'Requesting...' : emergencyRequestState.status === 'release-ready' ? 'Release-ready' : emergencyRequestState.status === 'requested' ? 'Request sent' : emergencyRequestState.status === 'error' ? 'Try request again' : 'Request emergency access'}
+                  {emergencyRequestState.status === 'working' ? 'Requesting...' : emergencyRequestState.status === 'release-ready' ? 'Emergency package ready' : emergencyRequestState.status === 'requested' ? 'Request sent' : emergencyRequestState.status === 'error' ? 'Try request again' : 'Request emergency access'}
                 </button>
               </div>
             )}
             <div className="emergency-invite-qa-card">
               <details>
                 <summary>What happens after I request access?</summary>
-                <p>The account owner is notified and the waiting period starts. Nothing is released while the owner can still cancel.</p>
+                <p>The account owner is notified and the waiting period starts. Nothing is released while the owner can still cancel. If the owner does not cancel before the waiting period ends, the selected emergency package will become available from the secure Open Vault link.</p>
               </details>
               <details>
                 <summary>How will I know when the waiting period has ended?</summary>
-                <p>You should receive an email when access is ready. You can also return to this same secure link; it will show the emergency package when it becomes available.</p>
+                <p>You should receive a fresh email with an Open Vault button when the waiting period has ended and the request has not been cancelled. If it does not arrive, check Spam or Junk first. You can also return to this secure page to check the latest status.</p>
               </details>
               <details>
                 <summary>Do I need to install My Passwords?</summary>

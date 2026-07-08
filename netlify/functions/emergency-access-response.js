@@ -10,29 +10,46 @@ function tokenHash(token) {
   return createHash('sha256').update(`${token}:${secret}`).digest('hex');
 }
 
+function firstName(name) {
+  return String(name || 'the account owner').trim().split(/\s+/)[0] || 'the account owner';
+}
+
+function withEmergencyStep(url, step) {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set('step', step);
+    return parsed.toString();
+  } catch {
+    const join = url.includes('?') ? '&' : '?';
+    return `${url}${join}step=${encodeURIComponent(step)}`;
+  }
+}
+
 function buildAcceptedEmail({ ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
   const safeOwner = ownerName || 'The account owner';
+  const ownerFirst = firstName(safeOwner);
   const safeContact = contactName || 'there';
-  const text = `Hello ${safeContact}, you have accepted ${safeOwner}'s Emergency Access invitation for My Passwords. Keep this email somewhere safe. If there is ever an emergency, you can use this secure browser link to request access: ${requestUrl}. This link does not release any vault contents by itself. It starts the waiting period and notifies the account owner. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}.`;
+  const text = `Hello ${safeContact}, you have accepted ${safeOwner}'s My Passwords trusted person nomination. Keep this email somewhere safe. If there is ever an emergency, use this secure browser link to request access: ${requestUrl}. This link does not release any vault contents by itself. It starts the waiting period and notifies ${safeOwner}. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. After the waiting period ends, look for a fresh email with an Open ${ownerFirst}'s Vault link. If no email arrives, check Spam or Junk first.`;
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
     <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
       <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
-        <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Emergency Access accepted</h1>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, you have accepted ${safeOwner}'s Emergency Access invitation for My Passwords.</p>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Keep this email somewhere safe. If there is ever an emergency, use the secure link below to request access.</p>
+        <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Your link for ${ownerFirst}</h1>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, you have accepted ${safeOwner}'s My Passwords trusted person nomination.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Keep this email somewhere safe. Use the secure browser link below only if you need to request emergency access.</p>
         <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
           <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
           <p style="margin:0;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
         </div>
-        <a href="${requestUrl}" style="display:inline-block;background:#1d3557;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Request emergency access</a>
-        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">This link does not release any vault contents by itself. It starts the waiting period and notifies the account owner.</p>
+        <a href="${requestUrl}" style="display:inline-block;background:#1d3557;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Request access for ${ownerFirst}</a>
+        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">Next step: if you request access, ${safeOwner} is notified and can cancel during the waiting period. If the waiting period ends without cancellation, watch for a fresh email with an Open ${ownerFirst}'s Vault link. Check Spam or Junk if you do not see it.</p>
       </div>
     </div>
   </body>
 </html>`;
-  return { html, text };
+  return { html, text, subject: `Your My Passwords link for ${ownerFirst}` };
 }
 
 async function sendAcceptedConfirmation({ to, ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
@@ -52,7 +69,7 @@ async function sendAcceptedConfirmation({ to, ownerName, contactName, waitingPer
       body: JSON.stringify({
         from,
         to,
-        subject: 'Your My Passwords Emergency Access link',
+        subject: content.subject || 'Your My Passwords link',
         html: content.html,
         text: content.text
       })
@@ -82,7 +99,7 @@ export async function handler(event) {
     if (invitation.expires_at && new Date(invitation.expires_at).getTime() < Date.now()) return jsonResponse(410, { ok: false, version: APP_VERSION, message: 'This invitation has expired. Please ask the account owner to send a new one.' });
 
     const now = new Date().toISOString();
-    const requestUrl = invitation.invite_url || '';
+    const requestUrl = invitation.metadata?.request_access_url || withEmergencyStep(invitation.invite_url || '', 'request');
     const confirmation = responseStatus === 'accepted'
       ? await sendAcceptedConfirmation({
           to: invitation.contact_email,

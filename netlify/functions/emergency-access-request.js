@@ -18,6 +18,22 @@ function waitingPeriodMs(value) {
   return amount * 24 * 60 * 60 * 1000;
 }
 
+function firstName(name) {
+  return String(name || 'the account owner').trim().split(/\s+/)[0] || 'the account owner';
+}
+
+function withEmergencyStep(url, step) {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set('step', step);
+    return parsed.toString();
+  } catch {
+    const join = url.includes('?') ? '&' : '?';
+    return `${url}${join}step=${encodeURIComponent(step)}`;
+  }
+}
+
 function hasWaitingPeriodEnded(value) {
   if (!value) return false;
   const time = new Date(value).getTime();
@@ -97,7 +113,7 @@ async function notifyOwner({ ownerEmail, ownerName, contactName, waitingPeriod, 
       body: JSON.stringify({
         from,
         to: ownerEmail,
-        subject: 'Emergency access request for My Passwords',
+        subject: `${contactName || 'Your trusted person'} requested access for ${ownerName || 'My Passwords'}`,
         html: content.html,
         text: content.text
       })
@@ -115,26 +131,28 @@ async function notifyOwner({ ownerEmail, ownerName, contactName, waitingPeriod, 
 function buildReleaseReadyEmail({ contactName, ownerName, accessScope, requestUrl }) {
   const safeContact = contactName || 'there';
   const safeOwner = ownerName || 'the account owner';
+  const ownerFirst = firstName(safeOwner);
   const safeScope = accessScope || 'Emergency Info folder only';
-  const text = `${safeContact}, the waiting period for your My Passwords Emergency Access request has ended. If ${safeOwner} has not cancelled the request, you can use your secure browser link to open the prepared emergency package. Access scope: ${safeScope}. Open: ${requestUrl}`;
+  const buttonText = `Open ${ownerFirst}'s Vault`;
+  const text = `${safeContact}, the waiting period for your My Passwords access request for ${safeOwner} has ended. If ${safeOwner} has not cancelled the request, use this fresh secure browser link to open the prepared emergency package: ${requestUrl}. Access scope: ${safeScope}. If you cannot find this email later, check your Spam or Junk folder first.`;
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
     <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
       <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
-        <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Emergency access is ready</h1>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, the waiting period for your My Passwords Emergency Access request has ended.</p>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">If the account owner has not cancelled the request, you can use your secure browser link to open the prepared emergency package.</p>
+        <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">${ownerFirst}'s vault is ready</h1>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, the waiting period for your My Passwords access request for ${safeOwner} has ended.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">If ${safeOwner} has not cancelled the request, you can now use this secure browser link to open the prepared emergency package.</p>
         <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
           <p style="margin:0;"><strong>Access scope:</strong> ${safeScope}</p>
         </div>
-        ${requestUrl ? `<a href="${requestUrl}" style="display:inline-block;background:#173a5d;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Open emergency access</a>` : ''}
-        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">You do not need to install My Passwords. This secure link opens in your browser.</p>
+        ${requestUrl ? `<a href="${requestUrl}" style="display:inline-block;background:#173a5d;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">${buttonText}</a>` : ''}
+        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">You do not need to install My Passwords. This secure link opens in your browser. If you cannot find this email later, check Spam or Junk first.</p>
       </div>
     </div>
   </body>
 </html>`;
-  return { html, text };
+  return { html, text, subject: `${ownerFirst}'s My Passwords vault is ready` };
 }
 
 async function notifyEmergencyContactReleaseReady({ invitation, request }) {
@@ -146,7 +164,7 @@ async function notifyEmergencyContactReleaseReady({ invitation, request }) {
   if (!apiKey || !from || !to || !to.includes('@')) {
     return { sent: false, provider: 'resend', reason: 'Release-ready email is not configured.' };
   }
-  const requestUrl = invitation?.invite_url || metadata.request_access_url || '';
+  const requestUrl = metadata.open_access_url || withEmergencyStep(invitation?.invite_url || metadata.request_access_url || '', 'open');
   const content = buildReleaseReadyEmail({
     contactName: invitation?.contact_name || request?.contact_name,
     ownerName: metadata.owner_name || 'the account owner',
@@ -163,7 +181,7 @@ async function notifyEmergencyContactReleaseReady({ invitation, request }) {
       body: JSON.stringify({
         from,
         to,
-        subject: 'Emergency access is ready',
+        subject: content.subject || 'My Passwords access is ready',
         html: content.html,
         text: content.text
       })
