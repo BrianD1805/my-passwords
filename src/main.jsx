@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.038D';
+const VERSION = 'My Passwords Ver-0.038F';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -209,7 +209,8 @@ function markSecureDevicePasswordConfirmed() {
   const nextRecord = {
     ...record,
     lastPasswordCheckAt: new Date().toISOString(),
-    quickUnlockCount: 0
+    quickUnlockCount: 0,
+    passwordReminderDismissedAt: new Date().toISOString()
   };
   saveBiometricUnlockRecord(nextRecord);
   return nextRecord;
@@ -1543,6 +1544,15 @@ function App() {
     }
   }
 
+  function confirmSecureDevicePasswordCheck() {
+    const confirmedRecord = markSecureDevicePasswordConfirmed();
+    if (confirmedRecord) {
+      setBiometricUnlock(confirmedRecord);
+      setBiometricStatus((current) => ({ ...current, state: 'enabled' }));
+    }
+    return confirmedRecord;
+  }
+
   async function openVaultWithPassword(password, options = {}) {
     const fromBiometric = options.fromBiometric === true;
     showVerifyOverlay('working', fromBiometric ? 'Checking secure device unlock' : 'Opening your vault', fromBiometric ? 'Use the device method your browser offers, such as PIN, fingerprint, face unlock, passkey or device lock. If you do not trust the method shown, cancel and use your password.' : 'Please wait while we verify your account and unlock this device.');
@@ -1574,6 +1584,7 @@ function App() {
           if (cloudRestore.restored) {
             setMasterPassword(password);
             setLocked(false);
+            if (!fromBiometric) confirmSecureDevicePasswordCheck();
             showVerifyOverlay('success', 'Vault restored', 'Your vault has been restored on this device.');
             showMessage(`Vault restored from your latest cloud backup. ${cloudRestore.items.length} item(s) loaded on this device.`);
             if (options.setupBiometricAfterPassword) await setupBiometricUnlockForPassword(password, { fromLoginIcon: true });
@@ -1604,13 +1615,7 @@ function App() {
           label: fromBiometric ? 'This device opened your local vault after device verification.' : (canCheckCloud ? 'This device unlocked from its local vault. Your cloud backup was checked safely.' : 'This device unlocked locally. Save your account details to enable cloud restore.'),
           source: fromBiometric ? 'secure-device-local-vault' : 'local-vault'
         }));
-        if (!fromBiometric) {
-          const confirmedRecord = markSecureDevicePasswordConfirmed();
-          if (confirmedRecord) {
-            setBiometricUnlock(confirmedRecord);
-            setBiometricStatus((current) => ({ ...current, state: 'enabled' }));
-          }
-        }
+        if (!fromBiometric) confirmSecureDevicePasswordCheck();
         showMessage(fromBiometric ? 'Vault opened with secure device unlock.' : (canCheckCloud ? 'Vault unlocked locally. Your cloud backup was checked safely.' : 'Vault unlocked locally. Save your account details to enable cloud restore.'));
         setLocked(false);
         showVerifyOverlay('success', 'Vault unlocked', fromBiometric ? 'Your device verified you and opened the encrypted vault.' : 'Your vault is open on this device.');
@@ -1635,6 +1640,7 @@ function App() {
       setCreateMode(false);
       setConfirmMasterPassword('');
       setItems(starterItems);
+      if (!fromBiometric) confirmSecureDevicePasswordCheck();
       showMessage('New secure vault created on this device. No existing cloud backup was overwritten.');
       setLocked(false);
       showVerifyOverlay('success', 'Vault created', 'Your encrypted vault has been created on this device.');
@@ -1757,8 +1763,8 @@ function App() {
     }
     const reminderReason = getSecureDevicePasswordReminderReason(record);
     if (reminderReason) {
-      showVerifyOverlay('error', 'Password check required', `${reminderReason} Please tap Enter master password, then type your password to keep it familiar. Secure device unlock will be available again afterwards.`, { focusMasterPassword: true });
-      showMessage('Password check required. Tap Enter master password and type your password to open the vault this time.', 'warning');
+      showVerifyOverlay('error', 'Password check required', `${reminderReason} Please use the password field and tap Unlock Local Vault. After the password opens the vault successfully, the secure device unlock counter will restart from 0.`, { focusMasterPassword: false });
+      showMessage('Password check required. Type your password and tap Unlock Local Vault. The 10-use counter will restart after a successful password unlock.', 'warning');
       return;
     }
     try {
@@ -3356,7 +3362,7 @@ function App() {
                     <button type="button" className="unlock-password-toggle" onClick={() => setShowUnlockPassword((current) => !current)} aria-label={showUnlockPassword ? 'Hide master password' : 'Show master password'} title={showUnlockPassword ? 'Hide password' : 'Show password'}>{showUnlockPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
                     {hasLocalVault && !createMode && biometricStatus.supported && (
                       <button type="button" className={`unlock-biometric-icon-button ${biometricUnlock ? 'enabled' : 'setup'}`} onClick={handleBiometricIconAction} disabled={biometricStatus.state === 'setting-up'} aria-label={biometricUnlock ? 'Open with secure device unlock' : 'Set up secure device unlock'} title={biometricUnlock ? 'Open with secure device unlock' : 'Enter password, then tap the key to set up secure device unlock'}>
-                        <KeyRound size={32} strokeWidth={1.9} />
+                        <KeyRound size={29} strokeWidth={1.6} />
                       </button>
                     )}
                   </div>
