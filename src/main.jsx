@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.038C';
+const VERSION = 'My Passwords Ver-0.038D';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1757,9 +1757,8 @@ function App() {
     }
     const reminderReason = getSecureDevicePasswordReminderReason(record);
     if (reminderReason) {
-      showVerifyOverlay('error', 'Password check required', `${reminderReason} Please type your master password to keep it familiar. Secure device unlock will be available again afterwards.`, { focusMasterPassword: true });
-      showMessage('Password check required. Enter your master password to open the vault this time.', 'warning');
-      focusMasterPassword();
+      showVerifyOverlay('error', 'Password check required', `${reminderReason} Please tap Enter master password, then type your password to keep it familiar. Secure device unlock will be available again afterwards.`, { focusMasterPassword: true });
+      showMessage('Password check required. Tap Enter master password and type your password to open the vault this time.', 'warning');
       return;
     }
     try {
@@ -3352,15 +3351,15 @@ function App() {
               <form onSubmit={unlockVault} className="unlock-form">
                 <label>Master vault password</label>
                 <div className="unlock-password-and-biometric-row">
-                  <div className="unlock-password-field">
+                  <div className={`unlock-password-field ${hasLocalVault && !createMode && biometricStatus.supported ? 'has-secure-device-key' : ''}`}>
                     <input id="master-password-input" type={showUnlockPassword ? 'text' : 'password'} value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter password" autoFocus={hasLocalVault && !suppressUnlockAutofocus} />
                     <button type="button" className="unlock-password-toggle" onClick={() => setShowUnlockPassword((current) => !current)} aria-label={showUnlockPassword ? 'Hide master password' : 'Show master password'} title={showUnlockPassword ? 'Hide password' : 'Show password'}>{showUnlockPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+                    {hasLocalVault && !createMode && biometricStatus.supported && (
+                      <button type="button" className={`unlock-biometric-icon-button ${biometricUnlock ? 'enabled' : 'setup'}`} onClick={handleBiometricIconAction} disabled={biometricStatus.state === 'setting-up'} aria-label={biometricUnlock ? 'Open with secure device unlock' : 'Set up secure device unlock'} title={biometricUnlock ? 'Open with secure device unlock' : 'Enter password, then tap the key to set up secure device unlock'}>
+                        <KeyRound size={32} strokeWidth={1.9} />
+                      </button>
+                    )}
                   </div>
-                  {hasLocalVault && !createMode && biometricStatus.supported && (
-                    <button type="button" className={`unlock-biometric-icon-button ${biometricUnlock ? 'enabled' : 'setup'}`} onClick={handleBiometricIconAction} disabled={biometricStatus.state === 'setting-up'} aria-label={biometricUnlock ? 'Open with secure device unlock' : 'Set up secure device unlock'} title={biometricUnlock ? 'Open with secure device unlock' : 'Enter password, then tap the key to set up secure device unlock'}>
-                      <KeyRound size={42} strokeWidth={1.7} />
-                    </button>
-                  )}
                 </div>
                 <button type="submit"><Unlock size={18} /> Unlock Local Vault</button>
               </form>
@@ -3822,7 +3821,7 @@ function App() {
                 <div className="biometric-actions">
                   {biometricUnlock && <button type="button" className="secondary-button danger-lite" onClick={disableBiometricUnlock}>Remove from this device</button>}
                 </div>
-                <p className="biometric-note"><strong>Security note:</strong> this is a trusted-device convenience feature, not a password replacement. Your browser may offer PIN, fingerprint, face unlock, passkey or device lock. My Passwords will force a master-password check every 14 days or after 10 quick unlocks so you do not forget it.</p>
+                <p className="biometric-note"><strong>Security note:</strong> this is a trusted-device convenience feature, not a password replacement. Your browser may offer PIN, fingerprint, face unlock, passkey or device lock. My Passwords will pause quick unlock every 14 days or after 10 quick unlocks and ask you to type your master password, so you do not forget it.</p>
               </section>
             </section>
           )}

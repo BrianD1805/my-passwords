@@ -23,74 +23,79 @@ label { color: #34475d; font-weight: 700; display: grid; gap: 8px; }
 input, textarea, select { border: 1px solid #d7e1ea; border-radius: 15px; padding: 13px 14px; background: #fbfdff; color: #1f2937; outline: none; width: 100%; }
 input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0 0 0 4px rgba(69,123,157,.12); }
 
-.unlock-password-and-biometric-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px;
-  align-items: stretch;
-  gap: 10px;
+ .unlock-password-and-biometric-row {
+  display: block;
+  width: 100%;
 }
 
 .unlock-password-field {
   position: relative;
   display: grid;
+  width: 100%;
 }
 
 .unlock-password-field input {
+  min-height: 50px;
   padding-right: 52px;
 }
 
-.unlock-biometric-icon-button {
-  width: 58px;
-  height: 100%;
-  min-height: 50px;
+.unlock-password-field.has-secure-device-key input {
+  padding-right: 104px;
+}
+
+.unlock-form .unlock-password-toggle,
+.unlock-form .unlock-biometric-icon-button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
   padding: 0;
-  border-radius: 0;
   display: grid;
   place-items: center;
-  background: transparent !important;
-  color: #0f172a !important;
-  border: 0 !important;
   box-shadow: none !important;
   -webkit-tap-highlight-color: transparent;
 }
 
-.unlock-biometric-icon-button.enabled,
-.unlock-biometric-icon-button.setup {
+.unlock-form .unlock-password-toggle {
+  right: 8px;
+  border-radius: 12px;
+  background: #eef4f8;
+  color: #26384f;
+  border: 1px solid #d8e4ec;
+}
+
+.unlock-password-field.has-secure-device-key .unlock-password-toggle {
+  right: 54px;
+}
+
+.unlock-form .unlock-biometric-icon-button {
+  right: 8px;
+  border-radius: 12px;
+  background: transparent !important;
+  color: #0f172a !important;
+  border: 0 !important;
+}
+
+.unlock-form .unlock-biometric-icon-button.enabled,
+.unlock-form .unlock-biometric-icon-button.setup {
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
 }
 
-.unlock-biometric-icon-button svg {
-  width: 42px;
-  height: 42px;
+.unlock-form .unlock-biometric-icon-button svg {
+  width: 32px;
+  height: 32px;
   display: block;
 }
 
-.unlock-biometric-icon-button:hover,
-.unlock-biometric-icon-button:focus-visible {
-  transform: none;
+.unlock-form .unlock-biometric-icon-button:hover,
+.unlock-form .unlock-biometric-icon-button:focus-visible {
+  transform: translateY(-50%);
   box-shadow: none !important;
   color: #0f172a !important;
-}
-
-
-.unlock-form .unlock-password-toggle {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  width: 38px;
-  height: 38px;
-  min-height: 38px;
-  padding: 0;
-  border-radius: 12px;
-  background: #eef4f8;
-  color: #26384f;
-  box-shadow: none;
-  border: 1px solid #d8e4ec;
-  display: grid;
-  place-items: center;
 }
 
 .unlock-form .unlock-password-toggle:hover,
@@ -6378,7 +6383,7 @@ a,
 }
 
 
-/* Ver-0.038C secure device PWA unlock */
+/* Ver-0.038D secure device PWA unlock */
 .biometric-login-button {
   margin-top: 10px;
   width: 100%;
@@ -6473,9 +6478,9 @@ a,
   color: #475569;
   font-size: 0.88rem;
   line-height: 1.55;
-  padding: 13px 14px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
   border: 1px solid rgba(148, 163, 184, 0.2);
 }
 

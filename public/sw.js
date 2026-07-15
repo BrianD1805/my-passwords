@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-passwords-v0.038C';
+const CACHE_NAME = 'my-passwords-v0.038D';
 const APP_SHELL = ['/', '/vault', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
