@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Fingerprint, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.038B';
+const VERSION = 'My Passwords Ver-0.038C';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -319,10 +319,10 @@ async function unwrapMasterPasswordForBiometric(record) {
 
 function friendlyBiometricName() {
   const ua = navigator.userAgent || '';
-  if (/iPhone|iPad|Macintosh/i.test(ua)) return 'Face ID / Touch ID where supported';
-  if (/Android/i.test(ua)) return 'secure device check where supported';
-  if (/Windows/i.test(ua)) return 'Windows Hello where supported';
-  return 'secure device check where supported';
+  if (/iPhone|iPad|Macintosh/i.test(ua)) return 'Face ID, Touch ID, passkey or device code';
+  if (/Android/i.test(ua)) return 'Fingerprint, face unlock, passkey, PIN or device lock';
+  if (/Windows/i.test(ua)) return 'Windows Hello, passkey or device PIN';
+  return 'Passkey, biometric, PIN or device lock';
 }
 
 async function deriveKey(masterPassword, saltBase64) {
@@ -1545,7 +1545,7 @@ function App() {
 
   async function openVaultWithPassword(password, options = {}) {
     const fromBiometric = options.fromBiometric === true;
-    showVerifyOverlay('working', fromBiometric ? 'Checking secure device unlock' : 'Opening your vault', fromBiometric ? 'Use your trusted device check to open this vault. If your device only offers a weak unlock method, cancel and use your password.' : 'Please wait while we verify your account and unlock this device.');
+    showVerifyOverlay('working', fromBiometric ? 'Checking secure device unlock' : 'Opening your vault', fromBiometric ? 'Use the device method your browser offers, such as PIN, fingerprint, face unlock, passkey or device lock. If you do not trust the method shown, cancel and use your password.' : 'Please wait while we verify your account and unlock this device.');
     try {
       const localVault = readStoredVault();
       let activeAccount = bootstrap;
@@ -1661,13 +1661,13 @@ function App() {
       return false;
     }
     if (!password || password.length < 8) {
-      showMessage('Enter your password first, then tap the secure device icon to set up quick unlock on this device.');
+      showMessage('Enter your password first, then tap the secure key icon to set up quick unlock on this device.');
       focusMasterPassword();
       return false;
     }
     try {
       setBiometricStatus((current) => ({ ...current, state: 'setting-up' }));
-      showVerifyOverlay('working', 'Setting up secure device unlock', 'Your device will ask for local verification. If your device only offers a weak unlock method, cancel and keep using your password.');
+      showVerifyOverlay('working', 'Setting up secure device unlock', 'Your browser will ask for a local device check, such as PIN, fingerprint, face unlock, passkey or device lock. If you do not trust the method shown, cancel and keep using your password.');
       const userLabel = bootstrap.email || bootstrap.displayName || 'My Passwords user';
       const credential = await navigator.credentials.create({
         publicKey: {
@@ -1705,7 +1705,7 @@ function App() {
       saveBiometricUnlockRecord(record);
       setBiometricUnlock(record);
       setBiometricStatus({ supported: true, label: record.label, state: 'enabled' });
-      showVerifyOverlay('success', 'Secure device unlock enabled', 'This device can now open your local vault from the secure device icon.');
+      showVerifyOverlay('success', 'Secure device unlock enabled', 'This device can now open your local vault from the secure key icon.');
       showMessage('Secure device unlock enabled on this device.', 'success');
       return true;
     } catch (error) {
@@ -1730,7 +1730,7 @@ function App() {
       return;
     }
     if (!masterPassword || masterPassword.length < 8) {
-      showMessage('Enter password first, then tap the secure device icon to set up quick unlock on this device.');
+      showMessage('Enter password first, then tap the secure key icon to set up quick unlock on this device.');
       focusMasterPassword();
       return;
     }
@@ -1764,7 +1764,7 @@ function App() {
     }
     try {
       setSuppressUnlockAutofocus(true);
-      showVerifyOverlay('working', 'Checking secure device unlock', 'Use your trusted device check to continue. If your device only offers a weak unlock method, cancel and use your password instead.');
+      showVerifyOverlay('working', 'Checking secure device unlock', 'Use the device method your browser offers to continue. If you do not trust the method shown, cancel and use your password instead.');
       const assertion = await navigator.credentials.get({
         publicKey: {
           challenge: crypto.getRandomValues(new Uint8Array(32)),
@@ -3357,8 +3357,8 @@ function App() {
                     <button type="button" className="unlock-password-toggle" onClick={() => setShowUnlockPassword((current) => !current)} aria-label={showUnlockPassword ? 'Hide master password' : 'Show master password'} title={showUnlockPassword ? 'Hide password' : 'Show password'}>{showUnlockPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
                   </div>
                   {hasLocalVault && !createMode && biometricStatus.supported && (
-                    <button type="button" className={`unlock-biometric-icon-button ${biometricUnlock ? 'enabled' : 'setup'}`} onClick={handleBiometricIconAction} disabled={biometricStatus.state === 'setting-up'} aria-label={biometricUnlock ? 'Open with secure device unlock' : 'Set up secure device unlock'} title={biometricUnlock ? 'Open with secure device unlock' : 'Enter password, then tap to set up secure device unlock'}>
-                      <Fingerprint size={30} strokeWidth={1.8} />
+                    <button type="button" className={`unlock-biometric-icon-button ${biometricUnlock ? 'enabled' : 'setup'}`} onClick={handleBiometricIconAction} disabled={biometricStatus.state === 'setting-up'} aria-label={biometricUnlock ? 'Open with secure device unlock' : 'Set up secure device unlock'} title={biometricUnlock ? 'Open with secure device unlock' : 'Enter password, then tap the key to set up secure device unlock'}>
+                      <KeyRound size={42} strokeWidth={1.7} />
                     </button>
                   )}
                 </div>
@@ -3811,8 +3811,8 @@ function App() {
               </div>
 
               <section className={`biometric-settings-card settings-inner-card ${biometricUnlock ? 'enabled' : ''}`}>
-                <div className="vault-security-info-heading"><Fingerprint size={18} /><strong>Secure device unlock on this device</strong></div>
-                <p>{biometricStatus.supported ? 'Use the secure device icon beside the password field on the login screen. Enter your password once and tap the icon to set this device up; after that, the icon can open your local vault quickly on this device.' : 'This browser or device does not support secure device unlock for this PWA.'}</p>
+                <div className="vault-security-info-heading"><KeyRound size={19} /><strong>Secure device unlock on this device</strong></div>
+                <p>{biometricStatus.supported ? 'Use the secure key icon beside the password field on the login screen. Your phone or browser may offer a PIN, fingerprint, face unlock, passkey or device lock. Enter your password once and tap the key icon to set this device up; after that, the icon can open your local vault quickly on this device.' : 'This browser or device does not support secure device unlock for this PWA.'}</p>
                 <div className="biometric-status-grid">
                   <span><strong>Status</strong>{biometricUnlock ? 'Enabled on this device' : (biometricStatus.supported ? 'Set up from login icon' : 'Not available')}</span>
                   <span><strong>Device method</strong>{biometricStatus.label}</span>
@@ -3822,7 +3822,7 @@ function App() {
                 <div className="biometric-actions">
                   {biometricUnlock && <button type="button" className="secondary-button danger-lite" onClick={disableBiometricUnlock}>Remove from this device</button>}
                 </div>
-                <p className="biometric-note"><strong>Security note:</strong> this is a trusted-device convenience feature, not a password replacement. My Passwords will force a master-password check every 14 days or after 10 quick unlocks so you do not forget it.</p>
+                <p className="biometric-note"><strong>Security note:</strong> this is a trusted-device convenience feature, not a password replacement. Your browser may offer PIN, fingerprint, face unlock, passkey or device lock. My Passwords will force a master-password check every 14 days or after 10 quick unlocks so you do not forget it.</p>
               </section>
             </section>
           )}

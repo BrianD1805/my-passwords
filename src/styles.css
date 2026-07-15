@@ -25,9 +25,9 @@ input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0
 
 .unlock-password-and-biometric-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
-  align-items: center;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 58px;
+  align-items: stretch;
+  gap: 10px;
 }
 
 .unlock-password-field {
@@ -40,8 +40,8 @@ input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0
 }
 
 .unlock-biometric-icon-button {
-  width: 44px;
-  height: 50px;
+  width: 58px;
+  height: 100%;
   min-height: 50px;
   padding: 0;
   border-radius: 0;
@@ -59,6 +59,12 @@ input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
+}
+
+.unlock-biometric-icon-button svg {
+  width: 42px;
+  height: 42px;
+  display: block;
 }
 
 .unlock-biometric-icon-button:hover,
@@ -96,7 +102,8 @@ input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0
 .unlock-form button, .primary-button, .lock-button { background: #1d3557; color: white; box-shadow: 0 10px 24px rgba(29,53,87,.18); }
 .secondary-button { background: #e8f0f6; color: #20364d; border: 1px solid #d2e0ea; }
 .message { background: #fff6db; color: #74530b; border: 1px solid #f2d58a; border-radius: 16px; padding: 13px 15px; line-height: 1.45; }
-.security-note { margin-top: 18px; color: #30465b; background: #eef7f1; border: 1px solid #cbe9d4; border-radius: 16px; padding: 12px; display: flex; justify-content: center; gap: 8px; align-items: center; }
+.security-note { margin-top: 18px; color: #30465b; background: #eef7f1; border: 1px solid #cbe9d4; border-radius: 18px; padding: 14px 16px; display: flex; justify-content: center; gap: 10px; align-items: flex-start; line-height: 1.45; text-align: left; }
+.security-note svg { flex: 0 0 auto; margin-top: 2px; }
 .version { color: #7b8fa3; font-size: .85rem; margin-top: 18px; }
 
 .app-shell { width: min(1220px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0; }
@@ -6371,7 +6378,7 @@ a,
 }
 
 
-/* Ver-0.038B secure device PWA unlock */
+/* Ver-0.038C secure device PWA unlock */
 .biometric-login-button {
   margin-top: 10px;
   width: 100%;
@@ -6462,9 +6469,14 @@ a,
 }
 
 .biometric-note {
-  margin: 12px 0 0;
-  color: #64748b;
-  font-size: 0.86rem;
+  margin: 14px 0 0;
+  color: #475569;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  padding: 13px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
 @media (max-width: 720px) {
