@@ -25,9 +25,9 @@ input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0
 
 .unlock-password-and-biometric-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 50px;
+  grid-template-columns: minmax(0, 1fr) 44px;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .unlock-password-field {
@@ -40,29 +40,32 @@ input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0
 }
 
 .unlock-biometric-icon-button {
-  width: 50px;
+  width: 44px;
   height: 50px;
   min-height: 50px;
   padding: 0;
-  border-radius: 16px;
+  border-radius: 0;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, #eef7ff, #edfdf5) !important;
-  color: #0f5132 !important;
-  border: 1px solid rgba(16, 185, 129, 0.28) !important;
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08) !important;
+  background: transparent !important;
+  color: #0f172a !important;
+  border: 0 !important;
+  box-shadow: none !important;
   -webkit-tap-highlight-color: transparent;
 }
 
-.unlock-biometric-icon-button.enabled {
-  background: linear-gradient(135deg, #e0f2fe, #dcfce7) !important;
-  border-color: rgba(37, 99, 235, 0.24) !important;
+.unlock-biometric-icon-button.enabled,
+.unlock-biometric-icon-button.setup {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .unlock-biometric-icon-button:hover,
 .unlock-biometric-icon-button:focus-visible {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 26px rgba(37, 99, 235, 0.12) !important;
+  transform: none;
+  box-shadow: none !important;
+  color: #0f172a !important;
 }
 
 
@@ -6368,7 +6371,7 @@ a,
 }
 
 
-/* Ver-0.038A Biometric / fingerprint PWA unlock */
+/* Ver-0.038B secure device PWA unlock */
 .biometric-login-button {
   margin-top: 10px;
   width: 100%;
