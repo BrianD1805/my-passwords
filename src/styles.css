@@ -23,6 +23,13 @@ label { color: #34475d; font-weight: 700; display: grid; gap: 8px; }
 input, textarea, select { border: 1px solid #d7e1ea; border-radius: 15px; padding: 13px 14px; background: #fbfdff; color: #1f2937; outline: none; width: 100%; }
 input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0 0 0 4px rgba(69,123,157,.12); }
 
+.unlock-password-and-biometric-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 50px;
+  align-items: center;
+  gap: 10px;
+}
+
 .unlock-password-field {
   position: relative;
   display: grid;
@@ -31,6 +38,33 @@ input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0
 .unlock-password-field input {
   padding-right: 52px;
 }
+
+.unlock-biometric-icon-button {
+  width: 50px;
+  height: 50px;
+  min-height: 50px;
+  padding: 0;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #eef7ff, #edfdf5) !important;
+  color: #0f5132 !important;
+  border: 1px solid rgba(16, 185, 129, 0.28) !important;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08) !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.unlock-biometric-icon-button.enabled {
+  background: linear-gradient(135deg, #e0f2fe, #dcfce7) !important;
+  border-color: rgba(37, 99, 235, 0.24) !important;
+}
+
+.unlock-biometric-icon-button:hover,
+.unlock-biometric-icon-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(37, 99, 235, 0.12) !important;
+}
+
 
 .unlock-form .unlock-password-toggle {
   position: absolute;
@@ -6334,7 +6368,7 @@ a,
 }
 
 
-/* Ver-0.038 Biometric / fingerprint PWA unlock */
+/* Ver-0.038A Biometric / fingerprint PWA unlock */
 .biometric-login-button {
   margin-top: 10px;
   width: 100%;
@@ -6361,7 +6395,20 @@ a,
 .biometric-settings-card {
   margin-top: 16px;
   border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 22px;
+  padding: 18px;
+  overflow: hidden;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.92));
+  box-shadow: 0 12px 28px rgba(29, 53, 87, 0.06);
+}
+
+.biometric-settings-card .vault-security-info-heading {
+  margin-bottom: 10px;
+}
+
+.biometric-settings-card > p {
+  margin: 0;
+  line-height: 1.5;
 }
 
 .biometric-settings-card.enabled {
