@@ -6332,3 +6332,97 @@ a,
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Ver-0.038 Biometric / fingerprint PWA unlock */
+.biometric-login-button {
+  margin-top: 10px;
+  width: 100%;
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(236, 253, 245, 0.96));
+  color: #0f172a;
+  border-radius: 16px;
+  padding: 13px 16px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.09);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.biometric-login-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px rgba(37, 99, 235, 0.14);
+}
+
+.biometric-settings-card {
+  margin-top: 16px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.92));
+}
+
+.biometric-settings-card.enabled {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(236, 253, 245, 0.94));
+}
+
+.biometric-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.biometric-status-grid span {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 14px;
+  padding: 10px 12px;
+  color: #334155;
+  font-size: 0.88rem;
+}
+
+.biometric-status-grid strong {
+  display: block;
+  color: #0f172a;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.biometric-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.biometric-actions .secondary-button {
+  width: auto;
+}
+
+.danger-lite {
+  border-color: rgba(239, 68, 68, 0.28) !important;
+  color: #991b1b !important;
+  background: rgba(254, 242, 242, 0.92) !important;
+}
+
+.biometric-note {
+  margin: 12px 0 0;
+  color: #64748b;
+  font-size: 0.86rem;
+}
+
+@media (max-width: 720px) {
+  .biometric-status-grid {
+    grid-template-columns: 1fr;
+  }
+  .biometric-actions,
+  .biometric-actions .secondary-button {
+    width: 100%;
+  }
+}

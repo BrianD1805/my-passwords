@@ -1,15 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Fingerprint, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.037A';
+const VERSION = 'My Passwords Ver-0.038';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
 const LEGACY_SALT_KEY = 'my-passwords-v0.001-salt';
 const BOOTSTRAP_KEY = 'my-passwords-v0.002-bootstrap-profile';
 const ACCOUNT_KEY = 'my-passwords-v0.011-account-identity';
+const BIOMETRIC_UNLOCK_KEY = 'my-passwords-v0.038-device-biometric-unlock';
+const BIOMETRIC_KEY_DB_NAME = 'my-passwords-device-biometric-key-v0.038';
+const BIOMETRIC_KEY_STORE = 'deviceKeys';
+const BIOMETRIC_KEY_ID = 'local-master-password-wrap-key';
 
 const BUILT_IN_CATEGORIES = ['Passwords', 'Cards', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Documents', 'Emergency Info'];
 const categories = ['All', ...BUILT_IN_CATEGORIES];
@@ -157,6 +161,132 @@ function base64ToArrayBuffer(base64) {
     }
   }
   return bytes.buffer;
+}
+
+
+function arrayBufferToBase64Url(buffer) {
+  return arrayBufferToBase64(buffer).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function base64UrlToArrayBuffer(value) {
+  const base64 = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+  return base64ToArrayBuffer(padded);
+}
+
+function readBiometricUnlockRecord() {
+  try {
+    const raw = localStorage.getItem(BIOMETRIC_UNLOCK_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.credentialId || !parsed?.wrappedMasterPassword || !parsed?.iv) return null;
+    return parsed;
+  } catch (error) {
+    return null;
+  }
+}
+
+function saveBiometricUnlockRecord(record) {
+  localStorage.setItem(BIOMETRIC_UNLOCK_KEY, JSON.stringify(record));
+}
+
+function isBiometricUnlockSupported() {
+  return Boolean(window.isSecureContext && navigator.credentials && window.PublicKeyCredential && crypto?.subtle && window.indexedDB);
+}
+
+function openBiometricKeyDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(BIOMETRIC_KEY_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(BIOMETRIC_KEY_STORE)) db.createObjectStore(BIOMETRIC_KEY_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('Could not open local biometric key store.'));
+  });
+}
+
+async function saveBiometricDeviceKey(key) {
+  const db = await openBiometricKeyDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(BIOMETRIC_KEY_STORE, 'readwrite');
+    tx.objectStore(BIOMETRIC_KEY_STORE).put(key, BIOMETRIC_KEY_ID);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error || new Error('Could not save biometric device key.'));
+    };
+  });
+}
+
+async function readBiometricDeviceKey() {
+  const db = await openBiometricKeyDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(BIOMETRIC_KEY_STORE, 'readonly');
+    const request = tx.objectStore(BIOMETRIC_KEY_STORE).get(BIOMETRIC_KEY_ID);
+    request.onsuccess = () => {
+      db.close();
+      resolve(request.result || null);
+    };
+    request.onerror = () => {
+      db.close();
+      reject(request.error || new Error('Could not read biometric device key.'));
+    };
+  });
+}
+
+async function deleteBiometricDeviceKey() {
+  if (!window.indexedDB) return;
+  try {
+    const db = await openBiometricKeyDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(BIOMETRIC_KEY_STORE, 'readwrite');
+      tx.objectStore(BIOMETRIC_KEY_STORE).delete(BIOMETRIC_KEY_ID);
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => {
+        db.close();
+        reject(tx.error || new Error('Could not clear biometric device key.'));
+      };
+    });
+  } catch (error) {
+    // Best effort only. The localStorage record is still removed by the caller.
+  }
+}
+
+async function wrapMasterPasswordForBiometric(masterPassword) {
+  const deviceKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, deviceKey, new TextEncoder().encode(masterPassword));
+  await saveBiometricDeviceKey(deviceKey);
+  return {
+    iv: arrayBufferToBase64(iv),
+    wrappedMasterPassword: arrayBufferToBase64(encrypted)
+  };
+}
+
+async function unwrapMasterPasswordForBiometric(record) {
+  const deviceKey = await readBiometricDeviceKey();
+  if (!deviceKey) throw new Error('This device no longer has the biometric unlock key.');
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: base64ToArrayBuffer(record.iv) },
+    deviceKey,
+    base64ToArrayBuffer(record.wrappedMasterPassword)
+  );
+  return new TextDecoder().decode(decrypted);
+}
+
+function friendlyBiometricName() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|Macintosh/i.test(ua)) return 'Face ID / Touch ID';
+  if (/Android/i.test(ua)) return 'Fingerprint / screen lock';
+  if (/Windows/i.test(ua)) return 'Windows Hello';
+  return 'device biometrics';
 }
 
 async function deriveKey(masterPassword, saltBase64) {
@@ -1019,6 +1149,8 @@ function App() {
   const [otpChannel, setOtpChannel] = useState('email');
   const [verifyOverlay, setVerifyOverlay] = useState({ visible: false, status: 'idle', title: '', message: '', focusMasterPassword: false });
   const [suppressUnlockAutofocus, setSuppressUnlockAutofocus] = useState(false);
+  const [biometricUnlock, setBiometricUnlock] = useState(() => readBiometricUnlockRecord());
+  const [biometricStatus, setBiometricStatus] = useState(() => ({ supported: isBiometricUnlockSupported(), label: isBiometricUnlockSupported() ? friendlyBiometricName() : 'Not supported on this browser/device', state: readBiometricUnlockRecord() ? 'enabled' : 'available' }));
   const [activePage, setActivePage] = useState('home');
   const [activeSettingsSection, setActiveSettingsSection] = useState('account');
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
@@ -1375,19 +1507,19 @@ function App() {
     }
   }
 
-  async function unlockVault(event) {
-    event.preventDefault();
-    setSuppressUnlockAutofocus(false);
-    if (masterPassword.length < 8) {
-      showMessage('Use at least 8 characters for your master password.');
-      return;
-    }
-    showVerifyOverlay('working', 'Opening your vault', 'Please wait while we verify your account and unlock this device.');
+  async function openVaultWithPassword(password, options = {}) {
+    const fromBiometric = options.fromBiometric === true;
+    showVerifyOverlay('working', fromBiometric ? 'Checking your fingerprint' : 'Opening your vault', fromBiometric ? 'Use your device fingerprint, face or screen lock to open this vault.' : 'Please wait while we verify your account and unlock this device.');
     try {
       const localVault = readStoredVault();
       let activeAccount = bootstrap;
 
       if (!localVault) {
+        if (fromBiometric) {
+          showVerifyOverlay('error', 'Master password needed', 'Biometric unlock can only be used after this device already has a local encrypted vault.', { focusMasterPassword: true });
+          showMessage('Use your master password first on this device.');
+          return;
+        }
         const accountCheck = await ensureAccountIdentity({ silent: true });
         if (!accountCheck.ok) return;
         if (!otpTest.verified) {
@@ -1400,10 +1532,11 @@ function App() {
 
       const canCheckCloud = Boolean(activeAccount.tenantId && activeAccount.userId);
 
-      if (canCheckCloud) {
+      if (canCheckCloud && !fromBiometric) {
         try {
-          const cloudRestore = await restoreLatestCloudVault(masterPassword, { showSuccess: false, reason: 'unlock', account: activeAccount });
+          const cloudRestore = await restoreLatestCloudVault(password, { showSuccess: false, reason: 'unlock', account: activeAccount });
           if (cloudRestore.restored) {
+            setMasterPassword(password);
             setLocked(false);
             showVerifyOverlay('success', 'Vault restored', 'Your vault has been restored on this device.');
             showMessage(`Vault restored from your latest cloud backup. ${cloudRestore.items.length} item(s) loaded on this device.`);
@@ -1424,17 +1557,19 @@ function App() {
       }
 
       if (localVault) {
-        const existing = await decryptVault(masterPassword);
+        const existing = await decryptVault(password);
         if (!existing) throw new Error('Vault could not be decrypted.');
+        setMasterPassword(password);
         setItems(existing);
         setDeviceStatus((current) => ({
           ...current,
-          state: canCheckCloud ? 'local-fallback' : 'local-only',
-          label: canCheckCloud ? 'This device unlocked from its local vault. Your cloud backup was checked safely.' : 'This device unlocked locally. Save your account details to enable cloud restore.',
-          source: 'local-vault'
+          state: fromBiometric ? 'biometric-unlock' : (canCheckCloud ? 'local-fallback' : 'local-only'),
+          label: fromBiometric ? 'This device opened your local vault after biometric verification.' : (canCheckCloud ? 'This device unlocked from its local vault. Your cloud backup was checked safely.' : 'This device unlocked locally. Save your account details to enable cloud restore.'),
+          source: fromBiometric ? 'device-biometric-local-vault' : 'local-vault'
         }));
-        showMessage(canCheckCloud ? 'Vault unlocked locally. Your cloud backup was checked safely.' : 'Vault unlocked locally. Save your account details to enable cloud restore.');
+        showMessage(fromBiometric ? 'Vault opened with your device biometric check.' : (canCheckCloud ? 'Vault unlocked locally. Your cloud backup was checked safely.' : 'Vault unlocked locally. Save your account details to enable cloud restore.'));
         setLocked(false);
+        showVerifyOverlay('success', 'Vault unlocked', fromBiometric ? 'Your device verified you and opened the encrypted vault.' : 'Your vault is open on this device.');
         return;
       }
 
@@ -1444,21 +1579,127 @@ function App() {
         return;
       }
 
-      if (masterPassword !== confirmMasterPassword) {
+      if (password !== confirmMasterPassword) {
         showMessage('The two master password entries do not match. Nothing has been saved.');
         return;
       }
 
-      await encryptVault(starterItems, masterPassword);
+      await encryptVault(starterItems, password);
+      setMasterPassword(password);
       setHasLocalVault(true);
       setCreateMode(false);
       setConfirmMasterPassword('');
       setItems(starterItems);
       showMessage('New secure vault created on this device. No existing cloud backup was overwritten.');
       setLocked(false);
+      showVerifyOverlay('success', 'Vault created', 'Your encrypted vault has been created on this device.');
     } catch (error) {
       showVerifyOverlay('error', 'Something went wrong', 'We could not unlock your vault. Please check your master password and try again.');
       showMessage('Could not unlock. Check your master password. Nothing new was saved.');
+    }
+  }
+
+  async function unlockVault(event) {
+    event.preventDefault();
+    setSuppressUnlockAutofocus(false);
+    if (masterPassword.length < 8) {
+      showMessage('Use at least 8 characters for your master password.');
+      return;
+    }
+    await openVaultWithPassword(masterPassword);
+  }
+
+  async function enableBiometricUnlock() {
+    if (!isBiometricUnlockSupported()) {
+      showMessage('Fingerprint unlock is not supported on this browser or device.');
+      return;
+    }
+    if (!masterPassword || masterPassword.length < 8 || locked) {
+      showMessage('Unlock with your master password first, then enable fingerprint unlock on this device.');
+      return;
+    }
+    try {
+      setBiometricStatus((current) => ({ ...current, state: 'setting-up' }));
+      showVerifyOverlay('working', 'Setting up fingerprint unlock', 'Your device will ask for fingerprint, face or screen-lock verification.');
+      const userLabel = bootstrap.email || bootstrap.displayName || 'My Passwords user';
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          rp: { name: 'My Passwords' },
+          user: {
+            id: crypto.getRandomValues(new Uint8Array(32)),
+            name: userLabel,
+            displayName: bootstrap.displayName || userLabel
+          },
+          pubKeyCredParams: [
+            { type: 'public-key', alg: -7 },
+            { type: 'public-key', alg: -257 }
+          ],
+          authenticatorSelection: {
+            userVerification: 'required',
+            residentKey: 'preferred'
+          },
+          attestation: 'none',
+          timeout: 60000
+        }
+      });
+      if (!credential?.rawId) throw new Error('Your device did not return a biometric credential.');
+      const wrapped = await wrapMasterPasswordForBiometric(masterPassword);
+      const record = {
+        credentialId: arrayBufferToBase64Url(credential.rawId),
+        label: friendlyBiometricName(),
+        userLabel,
+        createdAt: new Date().toISOString(),
+        ...wrapped
+      };
+      saveBiometricUnlockRecord(record);
+      setBiometricUnlock(record);
+      setBiometricStatus({ supported: true, label: record.label, state: 'enabled' });
+      showVerifyOverlay('success', 'Fingerprint unlock enabled', 'This device can now open your local vault after biometric verification.');
+      showMessage('Fingerprint unlock enabled on this device.', 'success');
+    } catch (error) {
+      setBiometricStatus((current) => ({ ...current, state: biometricUnlock ? 'enabled' : 'available' }));
+      showVerifyOverlay('error', 'Fingerprint setup failed', 'The device biometric setup was cancelled or could not be completed.');
+      showMessage('Fingerprint unlock was not enabled on this device.', 'warning');
+    }
+  }
+
+  async function disableBiometricUnlock() {
+    localStorage.removeItem(BIOMETRIC_UNLOCK_KEY);
+    await deleteBiometricDeviceKey();
+    setBiometricUnlock(null);
+    setBiometricStatus((current) => ({ ...current, state: current.supported ? 'available' : 'unsupported' }));
+    showMessage('Fingerprint unlock removed from this device.', 'success');
+  }
+
+  async function unlockWithBiometric() {
+    const record = readBiometricUnlockRecord();
+    if (!record) {
+      showMessage('Fingerprint unlock has not been enabled on this device yet.');
+      return;
+    }
+    if (!isBiometricUnlockSupported()) {
+      showMessage('Fingerprint unlock is not available on this browser or device.');
+      return;
+    }
+    try {
+      setSuppressUnlockAutofocus(true);
+      showVerifyOverlay('working', 'Checking your fingerprint', 'Use your device fingerprint, face or screen lock to continue.');
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          allowCredentials: [{ type: 'public-key', id: base64UrlToArrayBuffer(record.credentialId) }],
+          userVerification: 'required',
+          timeout: 60000
+        }
+      });
+      if (!assertion?.rawId) throw new Error('Biometric verification was not completed.');
+      const unlockedMasterPassword = await unwrapMasterPasswordForBiometric(record);
+      setMasterPassword(unlockedMasterPassword);
+      await openVaultWithPassword(unlockedMasterPassword, { fromBiometric: true });
+    } catch (error) {
+      showVerifyOverlay('error', 'Fingerprint unlock failed', 'Use your master password or try fingerprint unlock again.', { focusMasterPassword: true });
+      showMessage('Fingerprint unlock failed. Use your master password or try again.', 'warning');
     }
   }
 
@@ -1492,6 +1733,9 @@ function App() {
     localStorage.removeItem(LEGACY_STORAGE_KEY);
     localStorage.removeItem(SALT_KEY);
     localStorage.removeItem(LEGACY_SALT_KEY);
+    localStorage.removeItem(BIOMETRIC_UNLOCK_KEY);
+    deleteBiometricDeviceKey();
+    setBiometricUnlock(null);
     setHasLocalVault(false);
     setCreateMode(true);
     setMasterPassword('');
@@ -3030,6 +3274,11 @@ function App() {
                   <button type="button" className="unlock-password-toggle" onClick={() => setShowUnlockPassword((current) => !current)} aria-label={showUnlockPassword ? 'Hide master password' : 'Show master password'} title={showUnlockPassword ? 'Hide password' : 'Show password'}>{showUnlockPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
                 </div>
                 <button type="submit"><Unlock size={18} /> Unlock Local Vault</button>
+                {hasLocalVault && biometricUnlock && !createMode && (
+                  <button type="button" className="biometric-login-button" onClick={unlockWithBiometric}>
+                    <Fingerprint size={18} /> Open with {biometricUnlock.label || 'fingerprint'}
+                  </button>
+                )}
               </form>
               <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
             </>
@@ -3476,6 +3725,22 @@ function App() {
                 </div>
                 {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Enter your master password to complete login or restore.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Enter master password</button></div>}
               </div>
+
+              <section className={`biometric-settings-card settings-inner-card ${biometricUnlock ? 'enabled' : ''}`}>
+                <div className="vault-security-info-heading"><Fingerprint size={18} /><strong>Fingerprint unlock on this device</strong></div>
+                <p>{biometricStatus.supported ? `Use ${biometricStatus.label} to open this local PWA vault after you have unlocked once with your master password.` : 'This browser or device does not support secure biometric unlock for this PWA.'}</p>
+                <div className="biometric-status-grid">
+                  <span><strong>Status</strong>{biometricUnlock ? 'Enabled on this device' : (biometricStatus.supported ? 'Available after setup' : 'Not available')}</span>
+                  <span><strong>Device method</strong>{biometricStatus.label}</span>
+                  <span><strong>Scope</strong>This device only</span>
+                  <span><strong>Master password</strong>Still required as backup</span>
+                </div>
+                <div className="biometric-actions">
+                  <button type="button" className="secondary-button" onClick={enableBiometricUnlock} disabled={!biometricStatus.supported || biometricStatus.state === 'setting-up'}><Fingerprint size={17} /> {biometricUnlock ? 'Re-enable fingerprint unlock' : 'Enable fingerprint unlock'}</button>
+                  {biometricUnlock && <button type="button" className="secondary-button danger-lite" onClick={disableBiometricUnlock}>Remove from this device</button>}
+                </div>
+                <p className="biometric-note">This is a convenience unlock for this device only. If it fails, your master password still opens the vault.</p>
+              </section>
             </section>
           )}
 
