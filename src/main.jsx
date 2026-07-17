@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
-const VERSION = 'My Passwords Ver-0.038F';
+const VERSION = 'My Passwords Ver-0.038G';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -3362,7 +3362,7 @@ function App() {
                     <button type="button" className="unlock-password-toggle" onClick={() => setShowUnlockPassword((current) => !current)} aria-label={showUnlockPassword ? 'Hide master password' : 'Show master password'} title={showUnlockPassword ? 'Hide password' : 'Show password'}>{showUnlockPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
                     {hasLocalVault && !createMode && biometricStatus.supported && (
                       <button type="button" className={`unlock-biometric-icon-button ${biometricUnlock ? 'enabled' : 'setup'}`} onClick={handleBiometricIconAction} disabled={biometricStatus.state === 'setting-up'} aria-label={biometricUnlock ? 'Open with secure device unlock' : 'Set up secure device unlock'} title={biometricUnlock ? 'Open with secure device unlock' : 'Enter password, then tap the key to set up secure device unlock'}>
-                        <KeyRound size={29} strokeWidth={1.6} />
+                        <KeyRound size={26} strokeWidth={1.25} />
                       </button>
                     )}
                   </div>

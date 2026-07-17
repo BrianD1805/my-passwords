@@ -74,7 +74,7 @@ input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0
   right: 8px;
   border-radius: 12px;
   background: transparent !important;
-  color: #0f172a !important;
+  color: #334155 !important;
   border: 0 !important;
 }
 
@@ -86,8 +86,8 @@ input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0
 }
 
 .unlock-form .unlock-biometric-icon-button svg {
-  width: 32px;
-  height: 32px;
+  width: 29px;
+  height: 29px;
   display: block;
 }
 
@@ -95,7 +95,7 @@ input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0
 .unlock-form .unlock-biometric-icon-button:focus-visible {
   transform: translateY(-50%);
   box-shadow: none !important;
-  color: #0f172a !important;
+  color: #334155 !important;
 }
 
 .unlock-form .unlock-password-toggle:hover,
