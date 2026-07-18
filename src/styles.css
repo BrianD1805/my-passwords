@@ -86,8 +86,8 @@ input:focus, textarea:focus, select:focus { border-color: #457b9d; box-shadow: 0
 }
 
 .unlock-form .unlock-biometric-icon-button svg {
-  width: 29px;
-  height: 29px;
+  width: 26px;
+  height: 26px;
   display: block;
 }
 
