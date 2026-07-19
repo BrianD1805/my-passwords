@@ -215,3 +215,13 @@ create index if not exists idx_users_onboarding_status
 grant usage on schema public to service_role;
 grant select, insert, update, delete on public.tenants to service_role;
 grant select, insert, update, delete on public.users to service_role;
+
+-- My Passwords Ver-0.039
+-- SaaS authentication, tenant isolation and single-site admin foundation.
+-- Apply db/migrations/2026-07-18_saas_auth_admin_subscription_foundation_ver_0_039.sql
+-- to add subscription_plans, tenant_subscriptions, billing_events and users.last_login_at.
+
+
+-- My Passwords Ver-0.039A
+-- Apply db/migrations/2026-07-19_founder_gbp_currency_fix_ver_0_039A.sql
+-- to restore the first tenant Founder Plan and make GBP the global subscription currency.

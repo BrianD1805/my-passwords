@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
+import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.038H';
+const VERSION = 'My Passwords Ver-0.039A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -16,6 +17,49 @@ const BIOMETRIC_KEY_STORE = 'deviceKeys';
 const BIOMETRIC_KEY_ID = 'local-master-password-wrap-key';
 const SECURE_DEVICE_PASSWORD_CONFIRM_DAYS = 14;
 const SECURE_DEVICE_UNLOCK_COUNT_LIMIT = 10;
+
+const FALLBACK_SAAS_PLANS = [
+  { code: 'personal', displayName: 'Personal', description: 'A private vault for one person.', currency: 'GBP', monthlyPriceMinor: 0, trialDays: 14 },
+  { code: 'family', displayName: 'Family', description: 'For household vault sharing when available.', currency: 'GBP', monthlyPriceMinor: 0, trialDays: 14 },
+  { code: 'business', displayName: 'Business', description: 'For team and client vaults when available.', currency: 'GBP', monthlyPriceMinor: 0, trialDays: 14 }
+];
+
+function publicPlanPriceLabel(plan) {
+  const amount = Number(plan?.monthlyPriceMinor || 0);
+  if (!amount) return plan?.trialDays ? `${plan.trialDays}-day trial` : 'Pricing coming soon';
+  try {
+    return `${new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(amount / 100)} / month`;
+  } catch {
+    return `${(amount / 100).toFixed(2)} GBP / month`;
+  }
+}
+
+function planDisplayName(planCode) {
+  const code = String(planCode || '').trim().toLowerCase();
+  if (code === 'founder_private' || code === 'private_founder') return 'Founder Plan';
+  if (code === 'personal_free' || code === 'personal') return 'Personal';
+  if (code === 'family') return 'Family';
+  if (code === 'business') return 'Business';
+  return code ? code.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Personal';
+}
+
+function planStatusDisplayName(planStatus, accountStatus = '') {
+  const status = String(planStatus || accountStatus || '').trim().toLowerCase();
+  if (status === 'founder_active') return 'Founder Active';
+  if (status === 'trial_pending') return 'Trial Pending';
+  if (status === 'signup_pending') return 'Signup Pending';
+  if (status === 'trial_active' || status === 'trialing') return 'Trial Active';
+  if (status === 'active') return 'Active';
+  if (status === 'suspended') return 'Suspended';
+  return status ? status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Active';
+}
+
+function tenantRoleDisplayName(tenantRole) {
+  const role = String(tenantRole || '').trim().toLowerCase();
+  if (role === 'founder_first_tenant') return 'Founder';
+  if (role === 'primary_owner') return 'Primary Owner';
+  return role ? role.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Primary Owner';
+}
 
 const BUILT_IN_CATEGORIES = ['Passwords', 'Cards', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Documents', 'Emergency Info'];
 const categories = ['All', ...BUILT_IN_CATEGORIES];
@@ -474,6 +518,7 @@ function storeCloudSnapshotLocally(snapshot) {
 async function postJson(url, payload, options = {}) {
   const response = await fetch(url, {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'content-type': 'application/json' },
     signal: options.signal,
     body: JSON.stringify(payload)
@@ -1169,6 +1214,8 @@ function App() {
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
   const [accountStatus, setAccountStatus] = useState({ state: 'local-first', message: 'Your account details help you recover your vault on a new device.' });
+  const [customerSession, setCustomerSession] = useState({ checked: false, authenticated: false, message: 'Secure session has not been checked yet.' });
+  const [publicPlans, setPublicPlans] = useState(FALLBACK_SAAS_PLANS);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'No cloud backup has run yet. Your vault is backed up when you save, delete, favourite or edit an item.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
   const [snapshotHistory, setSnapshotHistory] = useState({ loaded: false, loading: false, total: 0, snapshots: [], message: 'Backup history has not been loaded yet.' });
@@ -1222,7 +1269,7 @@ function App() {
       phoneNumber: saved.phoneNumber || '',
       phoneE164: saved.phoneE164 || '',
       accountName: saved.accountName || saved.tenantName || 'My Private Vault',
-      planCode: saved.planCode || 'personal_free'
+      planCode: ['personal', 'family', 'business'].includes(saved.planCode) ? saved.planCode : 'personal'
     };
   });
   const touchReorderRef = useRef({ timer: null, source: '', active: false });
@@ -1293,6 +1340,69 @@ function App() {
   }, [bootstrap]);
 
   useEffect(() => {
+    let cancelled = false;
+    fetch('/.netlify/functions/public-plans')
+      .then((response) => response.json())
+      .then((result) => {
+        if (cancelled || !result?.ok || !Array.isArray(result.plans) || !result.plans.length) return;
+        setPublicPlans(result.plans.map((plan) => ({
+          code: plan.code,
+          displayName: plan.display_name,
+          description: plan.description,
+          currency: plan.currency,
+          monthlyPriceMinor: Number(plan.monthly_price_minor || 0),
+          quarterlyPriceMinor: Number(plan.quarterly_price_minor || 0),
+          annualPriceMinor: Number(plan.annual_price_minor || 0),
+          trialDays: Number(plan.trial_days || 0),
+          isFeatured: Boolean(plan.is_featured)
+        })));
+      })
+      .catch(() => null);
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkSecureSession() {
+      try {
+        const response = await fetch('/.netlify/functions/session-status', { credentials: 'same-origin' });
+        const result = await response.json();
+        if (cancelled) return;
+        if (result?.authenticated) {
+          const next = {
+            ...bootstrap,
+            tenantId: result.tenantId || bootstrap.tenantId,
+            userId: result.userId || bootstrap.userId,
+            displayName: result.account?.displayName || bootstrap.displayName,
+            email: result.account?.email || bootstrap.email,
+            phoneE164: result.account?.phoneE164 || bootstrap.phoneE164,
+            accountName: result.account?.accountName || bootstrap.accountName,
+            tenantName: result.account?.accountName || bootstrap.tenantName,
+            planCode: result.account?.planCode || bootstrap.planCode,
+            planStatus: result.account?.planStatus || bootstrap.planStatus,
+            accountStatus: result.account?.accountStatus || bootstrap.accountStatus,
+            tenantRole: result.account?.tenantRole || bootstrap.tenantRole,
+            accountVerified: true,
+            otpStatus: 'Secure session active'
+          };
+          setBootstrap(next);
+          setCustomerSession({ checked: true, authenticated: true, message: result.message || 'Secure account session is active.' });
+          setAccountStatus({ state: 'ready', message: 'Secure account session is active on this device.' });
+        } else {
+          setCustomerSession({ checked: true, authenticated: false, message: result?.message || 'Verify your account to establish a secure session.' });
+          setAccountStatus((current) => current.state === 'ready' ? current : { state: 'session-needed', message: result?.message || 'Verify your account to establish a secure session.' });
+        }
+      } catch (error) {
+        if (!cancelled) setCustomerSession({ checked: true, authenticated: false, message: 'Secure session could not be checked.' });
+      }
+    }
+    checkSecureSession();
+    return () => { cancelled = true; };
+    // Session check intentionally runs once when this app instance starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     if (!locked) setEmergencyDraft(getEmergencyAccessPlan(items));
   }, [locked, items]);
 
@@ -1358,6 +1468,9 @@ function App() {
   }
 
   async function ensureAccountIdentity({ silent = false } = {}) {
+    if (customerSession.authenticated && bootstrap.tenantId && bootstrap.userId) {
+      return { ok: true, account: bootstrap, result: { authenticated: true, tenantId: bootstrap.tenantId, userId: bootstrap.userId } };
+    }
     const checked = validateAccountIdentity(bootstrap);
     if (!checked.ok) {
       setAccountStatus({ state: 'needs-details', message: checked.message });
@@ -1395,11 +1508,11 @@ function App() {
       const next = {
         ...bootstrap,
         ...payload,
-        tenantId: result.tenantId,
-        userId: result.userId,
+        tenantId: result.tenantId || bootstrap.tenantId,
+        userId: result.userId || bootstrap.userId,
         phoneE164: result.phoneE164 || payload.phoneE164,
-        accountVerified: true,
-        otpStatus: 'Recovery verification ready',
+        accountVerified: false,
+        otpStatus: 'OTP verification required',
         accountName: result.accountName || payload.accountName || payload.tenantName,
         planCode: result.planCode || payload.planCode || 'personal_free',
         planStatus: result.planStatus || payload.planStatus || 'trial_pending',
@@ -1407,8 +1520,8 @@ function App() {
         tenantRole: result.tenantRole || payload.tenantRole || 'primary_owner'
       };
       setBootstrap(next);
-      setAccountStatus({ state: 'ready', message: `Account details saved. Your master password is still required to open the vault.` });
-      if (!silent) showMessage(`Account details saved. Your master password is still required to open the vault.`);
+      setAccountStatus({ state: 'verification-required', message: result.message || 'Verify the one-time code to establish a secure session.' });
+      if (!silent) showMessage(result.message || 'Verify the one-time code to establish a secure session.');
       return { ok: true, account: next, result };
     } catch (error) {
       const note = `Could not save account details. ${error.message || 'Please try again.'}`;
@@ -1527,6 +1640,21 @@ function App() {
         code
       });
       if (!result.ok) throw new Error(result.message || 'Code verification failed.');
+      const nextAccount = {
+        ...bootstrap,
+        tenantId: result.tenantId || bootstrap.tenantId,
+        userId: result.userId || bootstrap.userId,
+        accountName: result.account?.accountName || bootstrap.accountName,
+        tenantName: result.account?.accountName || bootstrap.tenantName,
+        planCode: result.account?.planCode || bootstrap.planCode,
+        planStatus: result.account?.planStatus || bootstrap.planStatus,
+        accountStatus: result.account?.accountStatus || bootstrap.accountStatus,
+        tenantRole: result.account?.tenantRole || bootstrap.tenantRole,
+        accountVerified: true,
+        otpStatus: 'Secure session active'
+      };
+      setBootstrap(nextAccount);
+      setCustomerSession({ checked: true, authenticated: true, message: result.message || 'Secure account session is active.' });
       setOtpTest((current) => ({
         ...current,
         status: 'verified',
@@ -1541,6 +1669,17 @@ function App() {
       setOtpTest((current) => ({ ...current, status: 'error', verified: false, message: note }));
       showVerifyOverlay('error', 'Something went wrong', 'The code did not verify. Please check the code and try again.');
       showMessage(note, 'error');
+    }
+  }
+
+  async function endCustomerSession() {
+    try {
+      const result = await postJson('/.netlify/functions/session-status', { action: 'logout' });
+      setCustomerSession({ checked: true, authenticated: false, message: result.message || 'Secure account session ended.' });
+      setAccountStatus({ state: 'session-needed', message: 'Secure session ended. Verify your account before the next cloud backup or restore.' });
+      showMessage('Secure account session ended on this device.');
+    } catch (error) {
+      showMessage('Secure session could not be ended. Please try again.', 'error');
     }
   }
 
@@ -2102,12 +2241,14 @@ function App() {
     setSyncing(true);
     showMessage('Saving account details...');
     try {
-      const result = await postJson('/.netlify/functions/bootstrap-admin', { ...bootstrap, email, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: checked.phoneE164, accountLoginFoundation: true, saasAccountFoundation: true, accountName: bootstrap.accountName || bootstrap.tenantName || 'Private Vault', planCode: bootstrap.planCode || 'personal_free', planStatus: bootstrap.planStatus || 'trial_pending', accountStatus: bootstrap.accountStatus || 'active', tenantRole: bootstrap.tenantRole || 'primary_owner' });
+      const profilePayload = { ...bootstrap, email, displayName: bootstrap.displayName, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: checked.phoneE164, accountName: bootstrap.accountName || bootstrap.tenantName || 'Private Vault' };
+      const result = await postJson(customerSession.authenticated ? '/.netlify/functions/account-profile' : '/.netlify/functions/bootstrap-admin', profilePayload);
       if (result.ok) {
-        const next = { ...bootstrap, email, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: result.phoneE164 || checked.phoneE164, tenantId: result.tenantId, userId: result.userId, accountVerified: true, otpStatus: 'Recovery verification ready', accountName: result.accountName || bootstrap.accountName || bootstrap.tenantName, planCode: result.planCode || bootstrap.planCode || 'personal_free', planStatus: result.planStatus || bootstrap.planStatus || 'trial_pending', accountStatus: result.accountStatus || bootstrap.accountStatus || 'active', tenantRole: result.tenantRole || bootstrap.tenantRole || 'primary_owner' };
+        const next = { ...bootstrap, email, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: result.phoneE164 || checked.phoneE164, tenantId: result.tenantId || bootstrap.tenantId, userId: result.userId || bootstrap.userId, accountVerified: customerSession.authenticated, otpStatus: customerSession.authenticated ? 'Secure session active' : 'OTP verification required', accountName: result.accountName || bootstrap.accountName || bootstrap.tenantName, planCode: result.planCode || bootstrap.planCode || 'personal', planStatus: result.planStatus || bootstrap.planStatus || 'trial_pending', accountStatus: result.accountStatus || bootstrap.accountStatus || 'active', tenantRole: result.tenantRole || bootstrap.tenantRole || 'primary_owner' };
         setBootstrap(next);
+        if (!customerSession.authenticated) setAccountStatus({ state: 'verification-required', message: result.message || 'Verify the one-time code to establish a secure session.' });
         showMessage(result.message || 'Account details saved.');
-        if (masterPassword) {
+        if (masterPassword && customerSession.authenticated) {
           window.setTimeout(async () => {
             try {
               const restore = await restoreLatestCloudVault(masterPassword, { showSuccess: false, reason: 'bootstrap' });
@@ -2298,7 +2439,7 @@ function App() {
       phoneNumber: current.phoneNumber || bootstrap.phoneNumber || '',
       phoneE164: current.phoneE164 || bootstrap.phoneE164 || '',
       accountName: current.accountName || bootstrap.accountName || bootstrap.tenantName || 'My Private Vault',
-      planCode: current.planCode || bootstrap.planCode || 'personal_free'
+      planCode: ['personal', 'family', 'business'].includes(current.planCode) ? current.planCode : (['personal', 'family', 'business'].includes(bootstrap.planCode) ? bootstrap.planCode : 'personal')
     }));
     setIsCreateAccountPopupOpen(true);
   }
@@ -2326,7 +2467,7 @@ function App() {
       displayName: String(landingAccountDraft.displayName || '').trim(),
       accountName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
       tenantName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
-      planCode: landingAccountDraft.planCode || 'personal_free',
+      planCode: landingAccountDraft.planCode || 'personal',
       planStatus: landingAccountDraft.planCode === 'founder_private' ? 'founder_active' : 'trial_pending',
       accountStatus: 'active',
       tenantRole: 'primary_owner',
@@ -3201,9 +3342,7 @@ function App() {
             <p>Start with a private personal vault, then grow into family or business options as they become available. Existing vaults stay private, encrypted and separate.</p>
           </div>
           <div className="landing-mini-plans">
-            <article><strong>Personal</strong><span>Private vault for one user</span></article>
-            <article><strong>Family</strong><span>Prepared for shared household access</span></article>
-            <article><strong>Business</strong><span>Prepared for client and team accounts</span></article>
+            {publicPlans.map((plan) => <article key={plan.code} className={plan.isFeatured ? 'featured' : ''}><strong>{plan.displayName}</strong><span>{plan.description}</span><small>{publicPlanPriceLabel(plan)}</small></article>)}
           </div>
         </section>
 
@@ -3302,9 +3441,7 @@ function App() {
                     <h3>Choose your starting plan</h3>
                     <p>Choose the option that best matches how you expect to use My Passwords.</p>
                     <div className="plan-choice-grid">
-                      <button type="button" className={landingAccountDraft.planCode === 'personal_free' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'personal_free' })}><strong>Personal</strong><span>A private vault for one person.</span></button>
-                      <button type="button" className={landingAccountDraft.planCode === 'family_foundation' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'family_foundation' })}><strong>Family</strong><span>For household vault sharing when available.</span></button>
-                      <button type="button" className={landingAccountDraft.planCode === 'business_foundation' ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: 'business_foundation' })}><strong>Business</strong><span>For team and client vaults when available.</span></button>
+                      {publicPlans.map((plan) => <button type="button" key={plan.code} className={landingAccountDraft.planCode === plan.code ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: plan.code })}><strong>{plan.displayName}</strong><span>{plan.description}</span><small>{publicPlanPriceLabel(plan)}</small></button>)}
                     </div>
                     <div className="saas-inline-note"><ShieldCheck size={16} /><span>Your existing vault remains protected. This step does not change your saved passwords, documents or encrypted backups.</span></div>
                   </div>
@@ -3323,7 +3460,7 @@ function App() {
                       <span><strong>Account</strong>{landingAccountDraft.accountName || 'My Private Vault'}</span>
                       <span><strong>Email</strong>{landingAccountDraft.email || 'not set'}</span>
                       <span><strong>Phone</strong>{landingAccountDraft.phoneE164 || buildPhoneE164(landingAccountDraft.phoneCountryCode, landingAccountDraft.phoneNumber) || 'not set'}</span>
-                      <span><strong>Plan</strong>{landingAccountDraft.planCode || 'personal_free'}</span>
+                      <span><strong>Plan</strong>{landingAccountDraft.planCode || 'personal'}</span>
                     </div>
                   </div>
                 )}
@@ -3764,9 +3901,9 @@ function App() {
                 </div>
                 <div className="saas-account-grid">
                   <span><strong>Account</strong>{bootstrap.accountName || bootstrap.tenantName || 'Private Vault'}</span>
-                  <span><strong>Plan</strong>{bootstrap.planCode || 'personal_free'}</span>
-                  <span><strong>Status</strong>{bootstrap.planStatus || bootstrap.accountStatus || 'active'}</span>
-                  <span><strong>Role</strong>{bootstrap.tenantRole || 'primary_owner'}</span>
+                  <span><strong>Plan</strong>{planDisplayName(bootstrap.planCode)}</span>
+                  <span><strong>Status</strong>{planStatusDisplayName(bootstrap.planStatus, bootstrap.accountStatus)}</span>
+                  <span><strong>Role</strong>{tenantRoleDisplayName(bootstrap.tenantRole)}</span>
                 </div>
               </section>
 
@@ -3774,6 +3911,11 @@ function App() {
                 <div className="account-status-heading"><Phone size={18} /><strong>Verification details</strong></div>
                 <span>{accountStatus.message}</span>
                 <small>Phone: {maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'not set'}{bootstrap.email ? ` · Email: ${maskEmail(bootstrap.email)}` : ''}</small>
+              </div>
+
+              <div className={`secure-session-card ${customerSession.authenticated ? 'active' : 'inactive'}`}>
+                <div><ShieldCheck size={19} /><span><strong>{customerSession.authenticated ? 'Secure session active' : 'Secure session required'}</strong><small>{customerSession.message}</small></span></div>
+                {customerSession.authenticated && <button type="button" className="secondary-button" onClick={endCustomerSession}>End session</button>}
               </div>
 
               <form className="bootstrap-grid settings-inner-card" onSubmit={bootstrapAdmin}>
@@ -3786,13 +3928,7 @@ function App() {
                 <label>Email<input type="email" value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
                 <label>Display name<input value={bootstrap.displayName} onChange={(e) => setBootstrap({ ...bootstrap, displayName: e.target.value })} /></label>
                 <label>Account name<input value={bootstrap.accountName || bootstrap.tenantName || ''} onChange={(e) => setBootstrap({ ...bootstrap, accountName: e.target.value, tenantName: e.target.value })} /></label>
-                <label>Plan<select value={bootstrap.planCode || 'personal_free'} onChange={(e) => setBootstrap({ ...bootstrap, planCode: e.target.value, planStatus: e.target.value === 'founder_private' ? 'founder_active' : 'trial_pending' })}>
-                  <option value="founder_private">Founder private</option>
-                  <option value="personal_free">Personal free</option>
-                  <option value="personal_trial">Personal trial</option>
-                  <option value="family_trial">Family trial</option>
-                  <option value="business_trial">Business trial</option>
-                </select></label>
+                <div className="account-managed-field"><span>Plan</span><strong>{planDisplayName(bootstrap.planCode)}</strong><small>Plans and subscription status are controlled by My Passwords Admin and verified billing events.</small></div>
                 <div className="button-stack">
                   <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Save account details</button>
                 </div>
@@ -4238,4 +4374,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById('root')).render(window.location.pathname.startsWith('/admin') ? <AdminApp version={VERSION} /> : <App />);

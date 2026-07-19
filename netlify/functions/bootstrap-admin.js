@@ -1,4 +1,4 @@
-import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, updateRow } from './_db.js';
+import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows } from './_db.js';
 
 const defaultCategories = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
 
@@ -25,13 +25,20 @@ function buildPhoneE164(countryCode, phoneNumber) {
   return code && local ? `${code}${local}` : '';
 }
 
+function allowedRequestedPlan(value) {
+  const plan = String(value || '').trim().toLowerCase();
+  if (['family', 'family_foundation', 'family_trial'].includes(plan)) return 'family';
+  if (['business', 'business_foundation', 'business_trial'].includes(plan)) return 'business';
+  return 'personal';
+}
+
 async function findExistingUser(email, phoneE164) {
   if (phoneE164) {
-    const byPhone = await selectRows('users', `select=id,tenant_id,email,display_name,role,phone_e164,phone_country_code,phone_number&phone_e164=${eq(phoneE164)}&limit=1`);
+    const byPhone = await selectRows('users', `select=id,tenant_id,email,display_name,role,status,phone_e164,phone_country_code,phone_number&phone_e164=${eq(phoneE164)}&limit=1`);
     if (byPhone?.[0]) return byPhone[0];
   }
   if (email) {
-    const byEmail = await selectRows('users', `select=id,tenant_id,email,display_name,role,phone_e164,phone_country_code,phone_number&email=${eq(email)}&limit=1`);
+    const byEmail = await selectRows('users', `select=id,tenant_id,email,display_name,role,status,phone_e164,phone_country_code,phone_number&email=${eq(email)}&limit=1`);
     if (byEmail?.[0]) return byEmail[0];
   }
   return null;
@@ -47,131 +54,88 @@ export async function handler(event) {
   const phoneE164 = String(body.phoneE164 || buildPhoneE164(phoneCountryCode, phoneNumber)).trim();
   const displayName = String(body.displayName || '').trim() || 'Vault User';
   const accountName = String(body.accountName || body.tenantName || '').trim() || `${phoneE164 || email || 'Private'} Vault`;
-  const tenantName = String(body.tenantName || body.accountName || '').trim() || accountName;
-  const requestedPlanCode = String(body.planCode || '').trim() || 'personal_free';
-  const requestedPlanStatus = String(body.planStatus || '').trim() || 'trial_pending';
-  const requestedAccountStatus = String(body.accountStatus || '').trim() || 'active';
-  const requestedTenantRole = String(body.tenantRole || '').trim() || 'primary_owner';
+  const selectedPlanCode = allowedRequestedPlan(body.planCode);
 
-  if (!phoneE164) {
-    return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A mobile number with country code is required for the account login foundation.' });
-  }
-
-  if (email && !email.includes('@')) {
-    return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'The backup email address is not valid.' });
-  }
+  if (!phoneE164) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A mobile number with country code is required.' });
+  if (email && !email.includes('@')) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'The backup email address is not valid.' });
 
   try {
     const existingUser = await findExistingUser(email, phoneE164);
-    let finalTenantId = existingUser?.tenant_id || '';
-    let finalUserId = existingUser?.id || '';
-    let existingTenant = null;
-
-    if (finalTenantId) {
-      const existingTenants = await selectRows('tenants', `select=id,name,status,plan,account_name,plan_code,plan_status,account_status,tenant_role&id=${eq(finalTenantId)}&limit=1`);
-      existingTenant = existingTenants?.[0] || null;
-      if (existingTenant) {
-        await updateRow('tenants', `id=${eq(finalTenantId)}`, {
-          name: existingTenant.name || tenantName,
-          plan: existingTenant.plan || requestedPlanCode || 'personal_free',
-          status: requestedAccountStatus || 'active',
-          account_name: existingTenant.account_name || accountName,
-          plan_code: existingTenant.plan_code || requestedPlanCode,
-          plan_status: existingTenant.plan_status || requestedPlanStatus,
-          account_status: requestedAccountStatus || 'active',
-          tenant_role: existingTenant.tenant_role || requestedTenantRole,
-          updated_at: new Date().toISOString()
-        });
-      }
-    }
-
-    if (!finalTenantId) {
-      const existingTenants = await selectRows('tenants', `select=id,name,status,plan,account_name,plan_code,plan_status,account_status,tenant_role&name=${eq(tenantName)}&limit=1`);
-      existingTenant = existingTenants?.[0] || null;
-      finalTenantId = existingTenant?.id || '';
-
-      if (!finalTenantId) {
-        finalTenantId = publicId('tenant');
-        await insertRow('tenants', {
-          id: finalTenantId,
-          name: tenantName,
-          plan: requestedPlanCode,
-          status: requestedAccountStatus,
-          account_name: accountName,
-          plan_code: requestedPlanCode,
-          plan_status: requestedPlanStatus,
-          account_status: requestedAccountStatus,
-          tenant_role: requestedTenantRole
-        });
-      } else {
-        await updateRow('tenants', `id=${eq(finalTenantId)}`, {
-          name: tenantName,
-          plan: existingTenant?.plan || requestedPlanCode,
-          status: requestedAccountStatus,
-          account_name: existingTenant?.account_name || accountName,
-          plan_code: existingTenant?.plan_code || requestedPlanCode,
-          plan_status: existingTenant?.plan_status || requestedPlanStatus,
-          account_status: requestedAccountStatus,
-          tenant_role: existingTenant?.tenant_role || requestedTenantRole,
-          updated_at: new Date().toISOString()
-        });
-      }
-    }
-
-    if (!finalUserId) {
-      finalUserId = publicId('user');
-      await insertRow('users', {
-        id: finalUserId,
-        tenant_id: finalTenantId,
-        email,
-        display_name: displayName,
-        role: 'administrator',
-        status: 'active',
-        phone_country_code: phoneCountryCode,
-        phone_number: phoneNumber,
-        phone_e164: phoneE164,
-        phone_verified: false,
-        email_verified: false,
-        account_login_method: 'phone_otp_ready'
-      });
-    } else {
-      await updateRow('users', `id=${eq(finalUserId)}`, {
-        email: email || existingUser.email || '',
-        display_name: displayName,
-        role: existingUser.role || 'administrator',
-        status: 'active',
-        phone_country_code: phoneCountryCode,
-        phone_number: phoneNumber,
-        phone_e164: phoneE164,
-        account_login_method: 'phone_otp_ready',
-        updated_at: new Date().toISOString()
+    if (existingUser?.id && existingUser?.tenant_id) {
+      const tenants = await selectRows('tenants', `select=id,name,account_name,plan_code,plan_status,account_status,tenant_role&id=${eq(existingUser.tenant_id)}&limit=1`);
+      const tenant = tenants?.[0];
+      if (!tenant?.id) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The existing account is incomplete. Please contact support.' });
+      return jsonResponse(200, {
+        ok: true,
+        connected: true,
+        provider: 'supabase',
+        version: APP_VERSION,
+        tenantId: tenant.id,
+        userId: existingUser.id,
+        phoneCountryCode: existingUser.phone_country_code || phoneCountryCode,
+        phoneNumber: existingUser.phone_number || phoneNumber,
+        phoneE164: existingUser.phone_e164 || phoneE164,
+        email: existingUser.email || email,
+        accountName: tenant.account_name || tenant.name || accountName,
+        planCode: tenant.plan_code || 'personal',
+        planStatus: tenant.plan_status || 'trial_pending',
+        accountStatus: tenant.account_status || 'active',
+        tenantRole: tenant.tenant_role || 'primary_owner',
+        reusedExistingTenant: true,
+        reusedExistingUser: true,
+        requiresOtpVerification: true,
+        message: 'Account found. Verify the one-time code to establish a secure session on this device.'
       });
     }
+
+    const finalTenantId = publicId('tenant');
+    const finalUserId = publicId('user');
+    const tenantNameRows = await selectRows('tenants', `select=id&name=${eq(accountName)}&limit=1`);
+    const uniqueTenantName = tenantNameRows?.[0]?.id ? `${accountName} ${finalTenantId.slice(-6)}` : accountName;
+
+    await insertRow('tenants', {
+      id: finalTenantId,
+      name: uniqueTenantName,
+      plan: selectedPlanCode,
+      status: 'pending_verification',
+      account_name: accountName,
+      plan_code: selectedPlanCode,
+      plan_status: 'signup_pending',
+      account_status: 'pending_verification',
+      tenant_role: 'primary_owner'
+    });
+
+    await insertRow('users', {
+      id: finalUserId,
+      tenant_id: finalTenantId,
+      email,
+      display_name: displayName,
+      role: 'administrator',
+      status: 'pending_verification',
+      phone_country_code: phoneCountryCode,
+      phone_number: phoneNumber,
+      phone_e164: phoneE164,
+      phone_verified: false,
+      email_verified: false,
+      account_login_method: 'email_otp_session'
+    });
 
     for (let i = 0; i < defaultCategories.length; i += 1) {
-      const existingCategories = await selectRows('categories', `select=id,name&tenant_id=${eq(finalTenantId)}&name=${eq(defaultCategories[i])}&limit=1`);
-      if (!existingCategories?.[0]?.id) {
-        await insertRow('categories', {
-          id: publicId('cat'),
-          tenant_id: finalTenantId,
-          name: defaultCategories[i],
-          icon: 'folder',
-          sort_order: i + 1
-        });
-      } else {
-        await updateRow('categories', `id=${eq(existingCategories[0].id)}`, {
-          icon: 'folder',
-          sort_order: i + 1
-        });
-      }
+      await insertRow('categories', {
+        id: publicId('cat'),
+        tenant_id: finalTenantId,
+        name: defaultCategories[i],
+        icon: 'folder',
+        sort_order: i + 1
+      });
     }
 
     await insertRow('audit_log', {
       id: publicId('audit'),
       tenant_id: finalTenantId,
       user_id: finalUserId,
-      action: existingUser ? 'saas_account_foundation_rechecked' : 'saas_account_foundation_created',
-      metadata: { version: APP_VERSION, provider: 'supabase', phone_e164: phoneE164, otp_ready: true, email_backup_present: Boolean(email), account_name: accountName, plan_code: requestedPlanCode, plan_status: requestedPlanStatus, tenant_role: requestedTenantRole }
+      action: 'saas_signup_pending_verification_created',
+      metadata: { version: APP_VERSION, selected_plan_code: selectedPlanCode, email_backup_present: Boolean(email) }
     });
 
     return jsonResponse(200, {
@@ -186,18 +150,14 @@ export async function handler(event) {
       phoneE164,
       email,
       accountName,
-      planCode: requestedPlanCode,
-      planStatus: requestedPlanStatus,
-      accountStatus: requestedAccountStatus,
-      tenantRole: requestedTenantRole,
-      reusedExistingTenant: !!existingTenant?.id || !!existingUser?.tenant_id,
-      reusedExistingUser: !!existingUser?.id,
-      otpReady: true,
-      otpProviderConnected: false,
-      user: { id: finalUserId, email, display_name: displayName, role: existingUser?.role || 'administrator', phone_e164: phoneE164 },
-      message: existingUser
-        ? 'SaaS account foundation already existed. Existing Supabase tenant/user IDs were rechecked and saved locally.'
-        : 'SaaS account foundation created in Supabase. Phone is stored in international SMS format.'
+      planCode: selectedPlanCode,
+      planStatus: 'signup_pending',
+      accountStatus: 'pending_verification',
+      tenantRole: 'primary_owner',
+      reusedExistingTenant: false,
+      reusedExistingUser: false,
+      requiresOtpVerification: true,
+      message: 'Account details reserved. Verify the email code to activate the account and establish a secure session.'
     });
   } catch (error) {
     return jsonResponse(500, {
@@ -205,7 +165,7 @@ export async function handler(event) {
       connected: true,
       provider: 'supabase',
       version: APP_VERSION,
-      message: 'Account login foundation failed. Supabase was reached, but the insert/update step failed.',
+      message: 'Account foundation failed. Supabase was reached, but the account step did not complete.',
       error: error.message,
       details: error.details || null
     });

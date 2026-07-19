@@ -1,4 +1,5 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, updateRow } from './_db.js';
+import { getActiveCustomerSession } from './_session.js';
 import { createHash, randomBytes } from 'node:crypto';
 
 function eq(value) {
@@ -234,12 +235,18 @@ export async function handler(event) {
   if (!requirePost(event)) return jsonResponse(405, { ok: false, message: 'POST required.' });
   const body = parseBody(event);
   const action = String(body.action || 'send').trim();
+  let session;
+  try { session = await getActiveCustomerSession(event); }
+  catch (error) { return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not validate the secure account session.', error: error.message }); }
+  if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify your account before managing Emergency Access.' });
+  const sessionTenantId = session.tenantId;
+  const sessionUserId = session.userId;
 
   try {
     if (action === 'save_package') {
       const invitationId = String(body.invitationId || '').trim();
-      const tenantId = String(body.tenantId || '').trim();
-      const userId = String(body.userId || '').trim();
+      const tenantId = sessionTenantId;
+      const userId = sessionUserId;
       const packageEnvelope = body.packageEnvelope || null;
       const packageSummary = body.packageSummary || {};
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
@@ -273,8 +280,8 @@ export async function handler(event) {
 
     if (action === 'status') {
       const invitationId = String(body.invitationId || '').trim();
-      const tenantId = String(body.tenantId || '').trim();
-      const userId = String(body.userId || '').trim();
+      const tenantId = sessionTenantId;
+      const userId = sessionUserId;
       const contactEmail = String(body.contactEmail || '').trim().toLowerCase();
       if (!tenantId || !userId || (!invitationId && !contactEmail)) {
         return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
@@ -374,8 +381,8 @@ export async function handler(event) {
 
     if (action === 'cancel') {
       const invitationId = String(body.invitationId || '').trim();
-      const tenantId = String(body.tenantId || '').trim();
-      const userId = String(body.userId || '').trim();
+      const tenantId = sessionTenantId;
+      const userId = sessionUserId;
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
       await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() });
       return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: 'cancelled', message: 'Emergency access invitation cancelled.' });
@@ -383,8 +390,8 @@ export async function handler(event) {
 
     if (action === 'reset') {
       const invitationId = String(body.invitationId || '').trim();
-      const tenantId = String(body.tenantId || '').trim();
-      const userId = String(body.userId || '').trim();
+      const tenantId = sessionTenantId;
+      const userId = sessionUserId;
       const bodyContactEmail = String(body.contactEmail || '').trim().toLowerCase();
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
 
@@ -428,8 +435,8 @@ export async function handler(event) {
 
     if (action === 'resend_request_link') {
       const invitationId = String(body.invitationId || '').trim();
-      const tenantId = String(body.tenantId || '').trim();
-      const userId = String(body.userId || '').trim();
+      const tenantId = sessionTenantId;
+      const userId = sessionUserId;
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
       const rows = await selectRows('emergency_access_invitations', `select=*&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
       const invitation = rows?.[0];
@@ -476,8 +483,8 @@ export async function handler(event) {
 
     if (action === 'resend') {
       const invitationId = String(body.invitationId || '').trim();
-      const tenantId = String(body.tenantId || '').trim();
-      const userId = String(body.userId || '').trim();
+      const tenantId = sessionTenantId;
+      const userId = sessionUserId;
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
       const rows = await selectRows('emergency_access_invitations', `select=*&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
       const invitation = rows?.[0];
@@ -506,8 +513,8 @@ export async function handler(event) {
       return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: nextStatus, emailSent: delivery.sent, sentAt: delivery.sent ? now : invitation.sent_at || '', inviteUrl, message: delivery.sent ? 'Emergency invitation resent.' : `Invite link is ready, but the email was not sent. ${delivery.reason || 'Use Copy invite link for testing.'}` });
     }
 
-    const tenantId = String(body.tenantId || '').trim();
-    const userId = String(body.userId || '').trim();
+    const tenantId = sessionTenantId;
+    const userId = sessionUserId;
     const ownerName = String(body.ownerName || 'My Passwords user').trim();
     const ownerEmail = String(body.ownerEmail || '').trim().toLowerCase();
     const contactName = String(body.contactName || '').trim();

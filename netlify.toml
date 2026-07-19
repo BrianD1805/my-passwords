@@ -11,6 +11,11 @@
   NPM_FLAGS = "--prefer-offline --no-audit --no-fund --progress=false"
 
 [[redirects]]
+  from = "/admin"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
   from = "/vault"
   to = "/index.html"
   status = 200

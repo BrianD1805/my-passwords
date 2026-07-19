@@ -18,6 +18,7 @@ export async function handler() {
 
   try {
     const rows = await selectRows('tenants', 'select=id&limit=1');
+    const plans = await selectRows('subscription_plans', 'select=id&limit=1');
     return jsonResponse(200, {
       ok: true,
       connected: true,
@@ -28,6 +29,7 @@ export async function handler() {
       environment: getEnvironmentFlags(),
       supabase,
       tenants_sample_count: Array.isArray(rows) ? rows.length : 0,
+      subscription_plans_sample_count: Array.isArray(plans) ? plans.length : 0,
       message: 'Supabase connection and schema check passed.'
     });
   } catch (error) {
@@ -44,7 +46,7 @@ export async function handler() {
       error: error.message,
       details: error.details || null,
       message: relationMissing
-        ? 'Supabase is reachable, but the My Passwords tables do not exist yet. Run db/schema.sql in Supabase SQL Editor.'
+        ? 'Supabase is reachable, but the Ver-0.039A SaaS tables are missing. Run the Ver-0.039/0.039A migrations in Supabase SQL Editor.'
         : 'Supabase connection failed. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
     });
   }

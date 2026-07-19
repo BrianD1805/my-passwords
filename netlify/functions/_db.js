@@ -1,11 +1,12 @@
-export const APP_VERSION = 'My Passwords Ver-0.038H';
+export const APP_VERSION = 'My Passwords Ver-0.039A';
 
-export function jsonResponse(statusCode, body) {
+export function jsonResponse(statusCode, body, extraHeaders = {}) {
   return {
     statusCode,
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store'
+      'cache-control': 'no-store',
+      ...extraHeaders
     },
     body: JSON.stringify(body, null, 2)
   };

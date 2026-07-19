@@ -1,4 +1,5 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, updateRow } from './_db.js';
+import { getActiveCustomerSession } from './_session.js';
 import { createHash } from 'node:crypto';
 
 function eq(value) {
@@ -204,9 +205,11 @@ export async function handler(event) {
   try {
     if (action === 'cancel_by_owner') {
       const requestId = String(body.requestId || '').trim();
-      const tenantId = String(body.tenantId || '').trim();
-      const userId = String(body.userId || '').trim();
-      if (!requestId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Request details are missing.' });
+      const session = await getActiveCustomerSession(event);
+      if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify your account before cancelling an Emergency Access request.' });
+      const tenantId = session.tenantId;
+      const userId = session.userId;
+      if (!requestId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Request details are missing.' });
       await updateRow('emergency_access_requests', `id=${eq(requestId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() });
       return jsonResponse(200, { ok: true, version: APP_VERSION, requestId, status: 'cancelled', message: 'Emergency access request cancelled. No vault access has been released.' });
     }
