@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, CircleHelp, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.039C';
+const VERSION = 'My Passwords Ver-0.039E';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -22,6 +22,80 @@ const FALLBACK_SAAS_PLANS = [
   { code: 'personal', displayName: 'Personal', description: 'A private vault for one person.', currency: 'GBP', monthlyPriceMinor: 0, trialDays: 14 },
   { code: 'family', displayName: 'Family', description: 'For household vault sharing when available.', currency: 'GBP', monthlyPriceMinor: 0, trialDays: 14 },
   { code: 'business', displayName: 'Business', description: 'For team and client vaults when available.', currency: 'GBP', monthlyPriceMinor: 0, trialDays: 14 }
+
+];
+
+const SETTINGS_FAQS = [
+  {
+    category: 'Master password',
+    question: 'Can My Passwords recover my master password?',
+    answer: 'No. Your master password is the encryption key for the vault and is not stored by My Passwords. If it is forgotten, the encrypted vault cannot be opened unless Emergency Access was already configured for an appropriate release package.'
+  },
+  {
+    category: 'Master password',
+    question: 'Should I save my master password in a browser or another password manager?',
+    answer: 'No. The master password protects everything in this vault. Type it yourself and keep any offline recovery record somewhere physically secure and separate from the devices that hold the vault.'
+  },
+  {
+    category: 'Security',
+    question: 'Can My Passwords staff read my saved passwords?',
+    answer: 'No. Vault records are encrypted before they are stored locally or backed up. The service stores encrypted data, not readable vault contents, and the master password is not sent to the server.'
+  },
+  {
+    category: 'Security',
+    question: 'What is Secure device unlock?',
+    answer: 'Secure device unlock lets a supported device use its PIN, fingerprint, face unlock, passkey or platform security to unlock the local vault more quickly. The master password remains the source of truth and is required again periodically.'
+  },
+  {
+    category: 'Devices',
+    question: 'How do I open my vault on another device?',
+    answer: 'Use your account email verification on the new device, restore the latest encrypted cloud backup, and enter the same master password. The account verification identifies the vault; only the master password can decrypt it.'
+  },
+  {
+    category: 'Devices',
+    question: 'What happens if I clear the local vault on this device?',
+    answer: 'The encrypted local copy is removed from that device. Your cloud backup is not deleted. To restore the vault later, verify the account, restore the latest backup and enter the correct master password.'
+  },
+  {
+    category: 'Backup',
+    question: 'What is the difference between the local vault and cloud backup?',
+    answer: 'The local vault is the encrypted copy used for everyday access on this device. Cloud backup stores an encrypted snapshot that can be restored after device loss, browser reset or installation on another device.'
+  },
+  {
+    category: 'Backup',
+    question: 'How can I confirm my latest backup?',
+    answer: 'Open Settings, choose Stats, and review the cloud backup status and backup history. You can also use Tools to run a manual backup or refresh the backup history.'
+  },
+  {
+    category: 'Documents',
+    question: 'Can I store documents in the vault?',
+    answer: 'Yes. Supported documents are encrypted before upload. The current upload limit is 10 MB per document.'
+  },
+  {
+    category: 'Emergency Access',
+    question: 'Does my trusted person need a My Passwords account?',
+    answer: 'No. The standard Emergency Access flow works through secure browser links. A trusted person can accept the invitation, request access and open the released package without installing the app or creating their own vault.'
+  },
+  {
+    category: 'Emergency Access',
+    question: 'What happens after an Emergency Access request?',
+    answer: 'A waiting period begins and the owner is notified. The owner can cancel during that period. If the waiting period ends without cancellation, only the selected emergency package or scope becomes available.'
+  },
+  {
+    category: 'Account',
+    question: 'Why might cloud backup ask me to verify my account again?',
+    answer: 'Cloud and account functions use a secure session tied to the verified account. If that session expires, is cleared, or the device changes, complete email OTP verification again. The local encrypted vault remains separate.'
+  },
+  {
+    category: 'Account',
+    question: 'Does changing my subscription plan change my encryption?',
+    answer: 'No. Subscription plans control account features and limits. They do not change the master password, encryption key or ownership of the encrypted vault.'
+  },
+  {
+    category: 'Support',
+    question: 'How do I contact support?',
+    answer: 'Email info@zippyweb.uk from the email address linked to your account. Never include your master password, vault contents, recovery information or secret keys in a support message.'
+  }
 ];
 
 function publicPlanPriceLabel(plan) {
@@ -1279,6 +1353,12 @@ function App() {
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
+  function openFaqSettings() {
+    setActivePage('settings');
+    setActiveSettingsSection('faq');
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  }
+
   function toastTypeFromMessage(text) {
     const value = String(text || '').toLowerCase();
     if (value.includes('failed') || value.includes('could not') || value.includes('wrong') || value.includes('error') || value.includes('not ready') || value.includes('nothing was saved') || value.includes('needs attention')) return 'error';
@@ -1327,10 +1407,8 @@ function App() {
   }
 
   function armMasterPasswordField(event) {
-    if (event?.currentTarget) {
-      event.currentTarget.value = '';
-      event.currentTarget.readOnly = false;
-    }
+    if (event?.currentTarget) event.currentTarget.readOnly = false;
+    if (masterPasswordFieldArmed) return;
     setMasterPassword('');
     setMasterPasswordFieldArmed(true);
   }
@@ -3529,7 +3607,7 @@ function App() {
                 <label htmlFor="master-password-input">Master vault password</label>
                 <div className="unlock-password-and-biometric-row">
                   <div className={`unlock-password-field ${hasLocalVault && !createMode && biometricStatus.supported ? 'has-secure-device-key' : ''}`}>
-                    <input ref={masterPasswordInputRef} id="master-password-input" name="vault-local-decryption-key" type={showUnlockPassword ? 'text' : 'password'} autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!masterPasswordFieldArmed} onPointerDown={armMasterPasswordField} onKeyDown={armMasterPasswordField} value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={masterPasswordFieldArmed ? 'Enter password' : 'Tap to enter master password'} />
+                    <input ref={masterPasswordInputRef} id="master-password-input" name="vault-local-decryption-key" type={showUnlockPassword ? 'text' : 'password'} autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!masterPasswordFieldArmed} onPointerDown={armMasterPasswordField} onFocus={armMasterPasswordField} value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter Password" />
                     <button type="button" className="unlock-password-toggle" onClick={() => setShowUnlockPassword((current) => !current)} aria-label={showUnlockPassword ? 'Hide master password' : 'Show master password'} title={showUnlockPassword ? 'Hide password' : 'Show password'}>{showUnlockPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
                     {hasLocalVault && !createMode && biometricStatus.supported && (
                       <button type="button" className={`unlock-biometric-icon-button ${biometricUnlock ? 'enabled' : 'setup'}`} onClick={handleBiometricIconAction} disabled={biometricStatus.state === 'setting-up'} aria-label={biometricUnlock ? 'Open with secure device unlock' : 'Set up secure device unlock'} title={biometricUnlock ? 'Open with secure device unlock' : 'Enter password, then tap the key to set up secure device unlock'}>
@@ -3539,7 +3617,6 @@ function App() {
                   </div>
                 </div>
                 <button type="button" onClick={unlockVault}><Unlock size={18} /> Unlock Local Vault</button>
-                <p className="master-password-manager-warning"><AlertTriangle size={16} /><span><strong>Do not save your master password</strong> in your browser or another password manager. It is the encryption key to your entire vault.</span></p>
               </div>
               <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
             </>
@@ -3678,6 +3755,7 @@ function App() {
         </div>
         <button className="lock-button mobile-top-lock" onClick={() => lockVault()} aria-label="Lock vault"><Lock size={18} /> <span>Lock</span></button>
         <div className="topbar-actions">
+          <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'topbar-help-button active' : 'topbar-help-button'} onClick={openFaqSettings} aria-label="Open frequently asked questions" title="Help and FAQs"><CircleHelp size={20} /></button>
           <button type="button" className={activePage === 'home' ? 'nav-pill active' : 'nav-pill'} onClick={() => setActivePage('home')}><KeyRound size={17} /> Vault</button>
           <button type="button" className={activePage === 'settings' ? 'nav-pill active' : 'nav-pill'} onClick={() => setActivePage('settings')}><Settings size={17} /> Settings</button>
           <button className="lock-button desktop-lock-button" onClick={() => lockVault()}><Lock size={18} /> Lock</button>
@@ -3919,6 +3997,7 @@ function App() {
             <button type="button" className={activeSettingsSection === 'emergency' ? 'active' : ''} onClick={() => setActiveSettingsSection('emergency')}><UsersRound size={18} /> Emergency Access</button>
             <button type="button" className={activeSettingsSection === 'tools' ? 'active' : ''} onClick={() => setActiveSettingsSection('tools')}><ShieldCheck size={18} /> Tools</button>
             <button type="button" className={activeSettingsSection === 'stats' ? 'active' : ''} onClick={() => setActiveSettingsSection('stats')}><Database size={18} /> Stats</button>
+            <button type="button" className={activeSettingsSection === 'faq' ? 'active' : ''} onClick={() => setActiveSettingsSection('faq')}><CircleHelp size={18} /> FAQs</button>
           </nav>
 
           {activeSettingsSection === 'account' && (
@@ -4180,6 +4259,43 @@ function App() {
               </div>
 
               {message && <p className="message sync-message">{message}</p>}
+            </section>
+          )}
+
+          {activeSettingsSection === 'faq' && (
+            <section className="settings-section-panel settings-faq-panel" aria-label="Frequently asked questions">
+              <div className="settings-faq-hero">
+                <div className="settings-faq-hero-icon"><CircleHelp size={28} /></div>
+                <div>
+                  <p className="eyebrow">Help centre</p>
+                  <h3>Frequently asked questions</h3>
+                  <p>Clear guidance for vault security, account verification, backups, devices, documents and Emergency Access.</p>
+                </div>
+                <Sparkles className="settings-faq-sparkle" size={24} aria-hidden="true" />
+              </div>
+
+              <div className="settings-faq-quick-grid" aria-label="Popular help topics">
+                <article><KeyRound size={20} /><strong>Vault access</strong><span>Master passwords and secure device unlock.</span></article>
+                <article><Cloud size={20} /><strong>Backup and restore</strong><span>Local vaults, cloud snapshots and new devices.</span></article>
+                <article><UsersRound size={20} /><strong>Emergency Access</strong><span>Invites, waiting periods and release scope.</span></article>
+              </div>
+
+              <div className="settings-faq-list">
+                {SETTINGS_FAQS.map((faq, index) => (
+                  <details className="settings-faq-item" key={`${faq.category}-${index}`}>
+                    <summary>
+                      <span><small>{faq.category}</small><strong>{faq.question}</strong></span>
+                      <Plus size={18} className="settings-faq-plus" aria-hidden="true" />
+                    </summary>
+                    <p>{faq.answer}</p>
+                  </details>
+                ))}
+              </div>
+
+              <div className="settings-faq-support-card">
+                <div><Mail size={20} /><span><strong>Still need help?</strong><small>Email support from the address linked to your account.</small></span></div>
+                <a href="mailto:info@zippyweb.uk">info@zippyweb.uk</a>
+              </div>
             </section>
           )}
 

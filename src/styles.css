@@ -6503,7 +6503,7 @@ a,
 .secure-session-card{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid #cbd9e5;border-radius:16px;padding:14px 16px;background:#f5f8fb}.secure-session-card>div{display:flex;align-items:flex-start;gap:10px}.secure-session-card span{display:grid;gap:3px}.secure-session-card small{color:#6c8093;line-height:1.4}.secure-session-card.active{background:#edf8f2;border-color:#b9dec9}.secure-session-card.active svg{color:#2f7b57}.secure-session-card.inactive svg{color:#a36c24}.account-managed-field{display:grid;gap:6px;background:#f4f8fb;border:1px solid #d5e1eb;border-radius:14px;padding:13px}.account-managed-field>span{font-weight:700;color:#31465d}.account-managed-field>strong{color:#14263b}.account-managed-field>small{color:#6c8093;line-height:1.4}@media(max-width:640px){.secure-session-card{align-items:stretch;flex-direction:column}.secure-session-card button{width:100%}}
 .landing-mini-plans article small,.plan-choice-grid button small{display:block;margin-top:7px;color:#1d5c91;font-weight:800}.landing-mini-plans article.featured{border-color:#78a9cf;background:#f0f7fc}
 
-/* My Passwords Ver-0.039C — master-password manager isolation */
+/* My Passwords Ver-0.039E — master-password manager isolation */
 .master-password-manager-warning {
   display: flex;
   align-items: flex-start;
@@ -6526,4 +6526,293 @@ a,
 
 .master-password-manager-warning.setup-warning {
   margin-top: 10px;
+}
+
+/* My Passwords Ver-0.039E — premium Settings FAQ and softer local-vault reset */
+.link-danger {
+  color: #718195;
+  font-weight: 720;
+  margin-top: 0.95rem;
+  padding-top: 4px;
+  text-decoration-color: rgba(113, 129, 149, 0.42);
+  text-underline-offset: 3px;
+}
+
+.link-danger:hover {
+  color: #536579;
+  text-decoration-color: rgba(83, 101, 121, 0.7);
+}
+
+.topbar-help-button {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(29, 53, 87, 0.14);
+  background: rgba(255, 255, 255, 0.82);
+  color: #315d7e;
+  display: inline-grid;
+  place-items: center;
+  box-shadow: 0 10px 26px rgba(29, 53, 87, 0.07);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.topbar-help-button:hover,
+.topbar-help-button.active {
+  background: #1d5f90;
+  color: #fff;
+  border-color: #1d5f90;
+  box-shadow: 0 13px 30px rgba(29, 95, 144, 0.2);
+}
+
+.settings-section-buttons {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.settings-faq-panel {
+  overflow: hidden;
+  gap: 16px;
+}
+
+.settings-faq-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 15px;
+  padding: 20px;
+  border: 1px solid rgba(29, 95, 144, 0.16);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 92% 12%, rgba(122, 169, 207, 0.2), transparent 34%),
+    linear-gradient(135deg, #f9fcff 0%, #edf6fc 100%);
+  box-shadow: 0 14px 32px rgba(29, 53, 87, 0.07);
+}
+
+.settings-faq-hero-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #1d5f90, #337ba9);
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(29, 95, 144, 0.22);
+}
+
+.settings-faq-hero h3 {
+  margin: 2px 0 5px;
+  color: #14263b;
+  font-size: clamp(1.25rem, 2vw, 1.55rem);
+}
+
+.settings-faq-hero p:last-child {
+  margin: 0;
+  color: #61758a;
+  line-height: 1.5;
+}
+
+.settings-faq-sparkle {
+  color: #5d91b6;
+  align-self: start;
+}
+
+.settings-faq-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-faq-quick-grid article {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: start;
+  padding: 15px;
+  border: 1px solid #d8e5ef;
+  border-radius: 19px;
+  background: linear-gradient(180deg, #fff 0%, #f5f9fc 100%);
+  box-shadow: 0 10px 24px rgba(29, 53, 87, 0.055);
+}
+
+.settings-faq-quick-grid svg {
+  grid-row: 1 / span 2;
+  color: #1d5f90;
+  margin-top: 1px;
+}
+
+.settings-faq-quick-grid strong {
+  color: #1a3047;
+}
+
+.settings-faq-quick-grid span {
+  color: #6b7e91;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.settings-faq-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.settings-faq-item {
+  min-width: 0;
+  border: 1px solid #d8e4ed;
+  border-radius: 18px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 10px 24px rgba(29, 53, 87, 0.05);
+}
+
+.settings-faq-item[open] {
+  border-color: #aac8dd;
+  box-shadow: 0 15px 30px rgba(29, 95, 144, 0.1);
+}
+
+.settings-faq-item summary {
+  min-height: 74px;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 16px;
+  cursor: pointer;
+  color: #20364d;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.settings-faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-faq-item summary span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.settings-faq-item summary small {
+  color: #1d5f90;
+  font-size: 0.71rem;
+  font-weight: 900;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.settings-faq-item summary strong {
+  line-height: 1.35;
+}
+
+.settings-faq-plus {
+  flex: 0 0 auto;
+  color: #497895;
+  transition: transform 160ms ease;
+}
+
+.settings-faq-item[open] .settings-faq-plus {
+  transform: rotate(45deg);
+}
+
+.settings-faq-item > p {
+  margin: 0;
+  padding: 0 16px 17px;
+  color: #61758a;
+  line-height: 1.58;
+}
+
+.settings-faq-support-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid rgba(29, 95, 144, 0.16);
+  border-radius: 20px;
+  background: #f2f8fc;
+}
+
+.settings-faq-support-card > div {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.settings-faq-support-card svg {
+  color: #1d5f90;
+}
+
+.settings-faq-support-card span {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-faq-support-card strong {
+  color: #193149;
+}
+
+.settings-faq-support-card small {
+  color: #6a7e92;
+}
+
+.settings-faq-support-card a {
+  color: #1d5f90;
+  font-weight: 850;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.settings-faq-support-card a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 1120px) and (min-width: 861px) {
+  .settings-section-buttons {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .settings-section-buttons {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-faq-list,
+  .settings-faq-quick-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-faq-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .settings-faq-sparkle {
+    display: none;
+  }
+
+  .settings-faq-support-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 430px) {
+  .topbar-help-button {
+    order: -1;
+  }
+
+  .settings-faq-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-faq-hero-icon {
+    width: 48px;
+    height: 48px;
+  }
 }
