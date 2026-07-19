@@ -46,7 +46,7 @@ export async function handler() {
       error: error.message,
       details: error.details || null,
       message: relationMissing
-        ? 'Supabase is reachable, but the Ver-0.039A SaaS tables are missing. Run the Ver-0.039/0.039A migrations in Supabase SQL Editor.'
+        ? 'Supabase is reachable, but the Ver-0.039 SaaS tables are missing. Run the Ver-0.039 and Ver-0.039A migrations in Supabase SQL Editor.'
         : 'Supabase connection failed. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
     });
   }

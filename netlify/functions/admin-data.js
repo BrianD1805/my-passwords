@@ -99,7 +99,7 @@ export async function handler(event) {
     try {
       return jsonResponse(200, { ok: true, version: APP_VERSION, ...(await loadDashboard()) });
     } catch (error) {
-      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run the Ver-0.039A Supabase SQL if the new tables are not present.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run the Ver-0.039 Supabase SQL if the new tables are not present.', error: error.message, details: error.details || null });
     }
   }
 

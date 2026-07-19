@@ -256,7 +256,7 @@ export default function AdminApp({ version }) {
 
           <div className="admin-plan-list">
             {sortedPlans.map((plan) => <button type="button" className="admin-plan-card" key={plan.id || plan.code} onClick={() => editPlan(plan)}><div><strong>{plan.display_name}</strong><code>{plan.code}</code></div><p>{plan.description}</p><div className="admin-plan-prices"><span><small>Monthly</small>{money(plan.monthly_price_minor)}</span><span><small>Quarterly</small>{money(plan.quarterly_price_minor)}</span><span><small>Annual</small>{money(plan.annual_price_minor)}</span></div><footer><span>{plan.trial_days || 0} trial days</span><span>{plan.is_public ? 'Published' : 'Hidden'}</span><span>{plan.is_active ? 'Active' : 'Inactive'}</span></footer></button>)}
-            {!sortedPlans.length && <div className="admin-empty">Run the Ver-0.039A Supabase SQL to create and seed the subscription plans.</div>}
+            {!sortedPlans.length && <div className="admin-empty">Run the Ver-0.039 Supabase SQL to create and seed the subscription plans.</div>}
           </div>
         </section>
       )}

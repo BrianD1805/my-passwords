@@ -4,7 +4,7 @@ import { AlertTriangle, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeO
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.039A';
+const VERSION = 'My Passwords Ver-0.039C';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1201,6 +1201,8 @@ function App() {
   const [masterPassword, setMasterPassword] = useState('');
   const [confirmMasterPassword, setConfirmMasterPassword] = useState('');
   const [showUnlockPassword, setShowUnlockPassword] = useState(true);
+  const [masterPasswordFieldArmed, setMasterPasswordFieldArmed] = useState(false);
+  const masterPasswordInputRef = useRef(null);
   const [hasLocalVault, setHasLocalVault] = useState(() => Boolean(readStoredVault()));
   const [createMode, setCreateMode] = useState(() => !Boolean(readStoredVault()));
   const [items, setItems] = useState([]);
@@ -1209,6 +1211,7 @@ function App() {
   const [category, setCategory] = useState('');
   const [showSecrets, setShowSecrets] = useState({});
   const [showFormSecret, setShowFormSecret] = useState(false);
+  const [itemCredentialFieldsArmed, setItemCredentialFieldsArmed] = useState({ username: false, password: false });
   const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '' });
   const [editingItemId, setEditingItemId] = useState('');
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
@@ -1312,14 +1315,37 @@ function App() {
   }
 
   function focusMasterPassword() {
+    setMasterPasswordFieldArmed(true);
     window.setTimeout(() => {
       const field = document.getElementById('master-password-input');
       if (field) {
+        field.readOnly = false;
         field.scrollIntoView({ behavior: 'smooth', block: 'center' });
         field.focus();
       }
     }, 80);
   }
+
+  function armMasterPasswordField(event) {
+    if (event?.currentTarget) {
+      event.currentTarget.value = '';
+      event.currentTarget.readOnly = false;
+    }
+    setMasterPassword('');
+    setMasterPasswordFieldArmed(true);
+  }
+
+  useEffect(() => {
+    if (!locked || !hasLocalVault || masterPasswordFieldArmed) return undefined;
+    setMasterPassword('');
+    const clearBackgroundAutofill = () => {
+      const field = masterPasswordInputRef.current;
+      if (field && field.value) field.value = '';
+    };
+    clearBackgroundAutofill();
+    const timer = window.setInterval(clearBackgroundAutofill, 200);
+    return () => window.clearInterval(timer);
+  }, [locked, hasLocalVault, masterPasswordFieldArmed]);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
@@ -1944,6 +1970,7 @@ function App() {
     setShowSecrets({});
     setMasterPassword('');
     setConfirmMasterPassword('');
+    setMasterPasswordFieldArmed(false);
     showMessage(note, 'success');
     window.setTimeout(() => {
       showVerifyOverlay('success', 'Vault locked', 'Your passwords are securely encrypted and locked.');
@@ -1966,6 +1993,7 @@ function App() {
     setCreateMode(true);
     setMasterPassword('');
     setConfirmMasterPassword('');
+    setMasterPasswordFieldArmed(false);
     showMessage('The local vault copy was cleared from this device only. Your cloud backup was not deleted.');
   }
 
@@ -2122,6 +2150,7 @@ function App() {
         setEditingItemId('');
         setForm(emptyForm(editedCategory));
         setShowFormSecret(false);
+        setItemCredentialFieldsArmed({ username: false, password: false });
         setIsItemPopupOpen(false);
         setViewItemId(itemIdBeingEdited);
         showMessage('Item updated successfully.', 'success');
@@ -2136,6 +2165,7 @@ function App() {
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       setForm(emptyForm(form.category));
       setShowFormSecret(false);
+      setItemCredentialFieldsArmed({ username: false, password: false });
       setIsItemPopupOpen(false);
       setViewItemId(newItem.id);
       showMessage('Item saved successfully.', 'success');
@@ -2164,6 +2194,7 @@ function App() {
       cardCcv: item.payload?.cardCcv || ''
     });
     setShowFormSecret(false);
+    setItemCredentialFieldsArmed({ username: true, password: true });
     setCategory(item.category || '');
     setViewItemId('');
     setIsItemPopupOpen(true);
@@ -2175,6 +2206,7 @@ function App() {
     setEditingItemId('');
     setForm(emptyForm(keepCategory));
     setShowFormSecret(false);
+    setItemCredentialFieldsArmed({ username: false, password: false });
     setIsItemPopupOpen(false);
   }
 
@@ -2510,6 +2542,7 @@ function App() {
     setEditingItemId('');
     setForm(emptyForm(preferredCategory));
     setShowFormSecret(false);
+    setItemCredentialFieldsArmed({ username: false, password: false });
     setIsItemPopupOpen(true);
   }
 
@@ -3088,6 +3121,7 @@ function App() {
     else {
       setForm(emptyForm(form.category));
       setShowFormSecret(false);
+      setItemCredentialFieldsArmed({ username: false, password: false });
       setIsItemPopupOpen(false);
     }
   }
@@ -3491,11 +3525,11 @@ function App() {
           {hasLocalVault ? (
             <>
               <p className="intro">Unlock your private vault with your master password.</p>
-              <form onSubmit={unlockVault} className="unlock-form">
-                <label>Master vault password</label>
+              <div className="unlock-form" role="form" onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); unlockVault(event); } }} autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other">
+                <label htmlFor="master-password-input">Master vault password</label>
                 <div className="unlock-password-and-biometric-row">
                   <div className={`unlock-password-field ${hasLocalVault && !createMode && biometricStatus.supported ? 'has-secure-device-key' : ''}`}>
-                    <input id="master-password-input" type={showUnlockPassword ? 'text' : 'password'} value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter password" autoFocus={hasLocalVault && !suppressUnlockAutofocus} />
+                    <input ref={masterPasswordInputRef} id="master-password-input" name="vault-local-decryption-key" type={showUnlockPassword ? 'text' : 'password'} autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!masterPasswordFieldArmed} onPointerDown={armMasterPasswordField} onKeyDown={armMasterPasswordField} value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder={masterPasswordFieldArmed ? 'Enter password' : 'Tap to enter master password'} />
                     <button type="button" className="unlock-password-toggle" onClick={() => setShowUnlockPassword((current) => !current)} aria-label={showUnlockPassword ? 'Hide master password' : 'Show master password'} title={showUnlockPassword ? 'Hide password' : 'Show password'}>{showUnlockPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
                     {hasLocalVault && !createMode && biometricStatus.supported && (
                       <button type="button" className={`unlock-biometric-icon-button ${biometricUnlock ? 'enabled' : 'setup'}`} onClick={handleBiometricIconAction} disabled={biometricStatus.state === 'setting-up'} aria-label={biometricUnlock ? 'Open with secure device unlock' : 'Set up secure device unlock'} title={biometricUnlock ? 'Open with secure device unlock' : 'Enter password, then tap the key to set up secure device unlock'}>
@@ -3504,8 +3538,9 @@ function App() {
                     )}
                   </div>
                 </div>
-                <button type="submit"><Unlock size={18} /> Unlock Local Vault</button>
-              </form>
+                <button type="button" onClick={unlockVault}><Unlock size={18} /> Unlock Local Vault</button>
+                <p className="master-password-manager-warning"><AlertTriangle size={16} /><span><strong>Do not save your master password</strong> in your browser or another password manager. It is the encryption key to your entire vault.</span></p>
+              </div>
               <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
             </>
           ) : (
@@ -3534,7 +3569,7 @@ function App() {
                 <button type="button" className="icon-button" onClick={() => setIsCreateVaultPopupOpen(false)} aria-label="Close create vault popup"><X size={18} /></button>
               </header>
 
-              <form onSubmit={unlockVault} className="item-popup-body create-account-popup-body create-vault-popup-body">
+              <div className="item-popup-body create-account-popup-body create-vault-popup-body" role="form" autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other">
                 <div className="create-account-step">
                   <h3>Account details</h3>
                   <p>Your email and mobile number help verify this device. Your master password is still the only key that opens the vault.</p>
@@ -3570,15 +3605,16 @@ function App() {
                 <div className="create-account-step">
                   <h3>Master password</h3>
                   <p>Choose a strong master password you can remember. It is not stored by the app and cannot be recovered if forgotten.</p>
-                  <label>Master vault password<input id="master-password-input" type="password" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" /></label>
+                  <label>Master vault password<input id="master-password-input" name="vault-setup-local-decryption-key" type="password" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" /></label>
                   {createMode && (
                     <>
-                      <label>Confirm master vault password<input type="password" value={confirmMasterPassword} onChange={(e) => setConfirmMasterPassword(e.target.value)} placeholder="Type the same password again" /></label>
+                      <label>Confirm master vault password<input name="vault-setup-local-decryption-key-confirmation" type="password" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" value={confirmMasterPassword} onChange={(e) => setConfirmMasterPassword(e.target.value)} placeholder="Type the same password again" /></label>
                       <p className="create-warning">New vault creation only continues when both password entries match.</p>
                     </>
                   )}
+                  <p className="master-password-manager-warning setup-warning"><AlertTriangle size={16} /><span><strong>Do not save this master password</strong> in your browser or another password manager. Memorise it and keep any offline recovery record somewhere physically secure.</span></p>
                 </div>
-              </form>
+              </div>
 
               <footer className="item-popup-footer create-account-popup-footer">
                 <button type="button" className="secondary-button" onClick={() => setIsCreateVaultPopupOpen(false)}>Cancel</button>
@@ -3761,7 +3797,7 @@ function App() {
           {isItemPopupOpen && (
             <div className="item-popup-layer" role="dialog" aria-modal="true" aria-label={editingItemId ? 'Edit item' : 'Add item'}>
               <button type="button" className="item-popup-backdrop" onClick={closeItemPopup} aria-label="Close add item popup" />
-              <form className={editingItemId ? "item-form item-popup-card edit-mode" : "item-form item-popup-card"} onSubmit={saveItem}>
+              <form className={editingItemId ? "item-form item-popup-card edit-mode" : "item-form item-popup-card"} onSubmit={saveItem} autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true">
                 <div className="item-popup-header">
                   <h2>{editingItemId ? <Pencil size={20} /> : <Plus size={20} />} {editingItemId ? 'Edit item' : 'Add item'}</h2>
                   <button type="button" className="icon-button" onClick={closeItemPopup} aria-label="Close"><X size={18} /></button>
@@ -3786,10 +3822,10 @@ function App() {
                     {!['Checklists', DOCUMENTS_CATEGORY].includes(form.category) && <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>}
                     {!['Notes', 'Checklists', DOCUMENTS_CATEGORY].includes(form.category) && (
                       <>
-                        <label>Username / Reference<input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder={activeHint.username} /></label>
+                        <label>Username / Reference<input name="vault-item-reference" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" readOnly={!editingItemId && !itemCredentialFieldsArmed.username} onPointerDown={() => setItemCredentialFieldsArmed((current) => ({ ...current, username: true }))} onFocus={() => setItemCredentialFieldsArmed((current) => ({ ...current, username: true }))} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder={activeHint.username} /></label>
                         <label>Password / Secret
                           <div className="secret-input-row">
-                            <input type={showFormSecret ? 'text' : 'password'} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={activeHint.secret} />
+                            <input name="vault-item-secret" type={showFormSecret ? 'text' : 'password'} autoComplete="new-password" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" readOnly={!editingItemId && !itemCredentialFieldsArmed.password} onPointerDown={() => setItemCredentialFieldsArmed((current) => ({ ...current, password: true }))} onFocus={() => setItemCredentialFieldsArmed((current) => ({ ...current, password: true }))} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={activeHint.secret} />
                             <button type="button" className="mini-button" onClick={() => setShowFormSecret(!showFormSecret)}>{showFormSecret ? <EyeOff size={15} /> : <Eye size={15} />}</button>
                           </div>
                         </label>
