@@ -5,6 +5,6 @@ export async function handler() {
     ok: true,
     app: 'My Passwords',
     version: APP_VERSION,
-    mode: 'customer-facing-recovery-wording'
+    mode: 'cross-device-sync-reliability'
   });
 }

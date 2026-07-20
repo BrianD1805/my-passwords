@@ -4,7 +4,7 @@ import { AlertTriangle, CircleHelp, Cloud, Copy, Database, Download, ExternalLin
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.039E';
+const VERSION = 'My Passwords Ver-0.039F';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -465,6 +465,7 @@ function readStoredVault() {
 }
 
 async function encryptVault(items, masterPassword) {
+  const previousEnvelope = getLocalEnvelope();
   let salt = localStorage.getItem(SALT_KEY) || localStorage.getItem(LEGACY_SALT_KEY);
   if (!salt) {
     salt = arrayBufferToBase64(crypto.getRandomValues(new Uint8Array(16)));
@@ -474,7 +475,15 @@ async function encryptVault(items, masterPassword) {
   const key = await deriveKey(masterPassword, salt);
   const encoded = new TextEncoder().encode(JSON.stringify(items));
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
-  const envelope = { version: VERSION, iv: arrayBufferToBase64(iv), salt, encrypted: arrayBufferToBase64(encrypted), updatedAt: new Date().toISOString() };
+  const envelope = {
+    version: VERSION,
+    iv: arrayBufferToBase64(iv),
+    salt,
+    encrypted: arrayBufferToBase64(encrypted),
+    updatedAt: new Date().toISOString(),
+    cloudSnapshotId: '',
+    baseCloudSnapshotId: previousEnvelope?.cloudSnapshotId || previousEnvelope?.baseCloudSnapshotId || ''
+  };
   localStorage.setItem(SALT_KEY, salt);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
   return envelope;
@@ -575,6 +584,23 @@ function getLocalEnvelope() {
   return raw ? JSON.parse(raw) : null;
 }
 
+function safeTimestamp(value) {
+  const timestamp = Date.parse(String(value || ''));
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function compareLocalAndCloudVault(localEnvelope, cloudSnapshot) {
+  if (!localEnvelope) return 'cloud-newer';
+  if (localEnvelope.cloudSnapshotId && localEnvelope.cloudSnapshotId === cloudSnapshot?.id) return 'same';
+  const localTime = safeTimestamp(localEnvelope.updatedAt);
+  const cloudTime = safeTimestamp(cloudSnapshot?.client_updated_at || cloudSnapshot?.created_at);
+  if (!localTime && cloudTime) return 'cloud-newer';
+  if (localTime && !cloudTime) return 'local-newer';
+  if (cloudTime > localTime + 1000) return 'cloud-newer';
+  if (localTime > cloudTime + 1000) return 'local-newer';
+  return localEnvelope.cloudSnapshotId ? 'cloud-newer' : 'same';
+}
+
 function storeCloudSnapshotLocally(snapshot) {
   const envelope = {
     version: VERSION,
@@ -582,7 +608,8 @@ function storeCloudSnapshotLocally(snapshot) {
     salt: snapshot.local_salt,
     encrypted: snapshot.encrypted_blob,
     updatedAt: snapshot.client_updated_at || snapshot.created_at || new Date().toISOString(),
-    cloudSnapshotId: snapshot.id || ''
+    cloudSnapshotId: snapshot.id || '',
+    baseCloudSnapshotId: snapshot.id || ''
   };
   localStorage.setItem(SALT_KEY, envelope.salt);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
@@ -1524,16 +1551,30 @@ function App() {
     return fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(account.tenantId)}&userId=${encodeURIComponent(account.userId)}`).then((res) => res.json());
   }
 
-  async function restoreLatestCloudVault(passwordToUse, { showSuccess = true, reason = 'manual', account = bootstrap } = {}) {
+  async function restoreLatestCloudVault(passwordToUse, { showSuccess = true, reason = 'manual', account = bootstrap, forceCloud = reason === 'manual' } = {}) {
     const checkedAt = new Date().toISOString();
     setDeviceStatus((current) => ({
       ...current,
       state: 'checking-cloud',
-      label: reason === 'unlock' ? 'Checking your cloud backup...' : 'Checking your cloud backup...',
+      label: 'Checking your latest encrypted cloud vault...',
       lastCloudCheckAt: checkedAt
     }));
     const latest = await fetchLatestCloudSnapshot(account);
-    if (!latest?.ok || !latest?.hasSnapshot || !latest.snapshot) {
+    if (!latest?.ok) {
+      const sessionRequired = latest?.code === 'SESSION_REQUIRED' || Number(latest?.httpStatus || 0) === 401;
+      setDeviceStatus((current) => ({
+        ...current,
+        state: sessionRequired ? 'session-needed' : 'cloud-check-failed',
+        label: latest?.message || 'The latest cloud vault could not be checked. This device kept its local encrypted copy.',
+        lastCloudCheckAt: checkedAt
+      }));
+      if (sessionRequired) {
+        setCustomerSession({ checked: true, authenticated: false, message: latest?.message || 'Verify your account to continue device sync.' });
+        setAccountStatus({ state: 'session-needed', message: latest?.message || 'Verify your account to continue device sync.' });
+      }
+      return { restored: false, latest, sessionRequired };
+    }
+    if (!latest?.hasSnapshot || !latest.snapshot) {
       setDeviceStatus((current) => ({
         ...current,
         state: 'no-cloud-snapshot',
@@ -1542,6 +1583,34 @@ function App() {
       }));
       return { restored: false, latest };
     }
+
+    const localEnvelope = getLocalEnvelope();
+    const freshness = forceCloud ? 'cloud-newer' : compareLocalAndCloudVault(localEnvelope, latest.snapshot);
+    if (freshness === 'same') {
+      setDeviceStatus({
+        state: 'up-to-date',
+        label: 'This device already has the latest encrypted cloud vault.',
+        lastCloudCheckAt: checkedAt,
+        lastRestoreAt: '',
+        latestSnapshotId: latest.snapshot.id || '',
+        latestCloudItemCount: Number(latest.snapshot.item_count || 0),
+        source: reason === 'unlock' ? 'checked-on-unlock' : 'cloud-check'
+      });
+      return { restored: false, upToDate: true, latest };
+    }
+    if (freshness === 'local-newer') {
+      setDeviceStatus({
+        state: 'local-newer',
+        label: 'This device has newer local changes. The older cloud copy was not allowed to overwrite them.',
+        lastCloudCheckAt: checkedAt,
+        lastRestoreAt: '',
+        latestSnapshotId: latest.snapshot.id || '',
+        latestCloudItemCount: Number(latest.snapshot.item_count || 0),
+        source: 'newer-local-vault-protected'
+      });
+      return { restored: false, localNewer: true, latest, localEnvelope };
+    }
+
     const restoredItems = await decryptEnvelope(latest.snapshot, passwordToUse);
     storeCloudSnapshotLocally(latest.snapshot);
     setHasLocalVault(true);
@@ -1552,7 +1621,7 @@ function App() {
     setSyncStatus((current) => ({
       ...current,
       state: 'success',
-      message: `Your cloud backup has been restored on this device. ${restoredItems.length} item(s) loaded.`,
+      message: `Your latest encrypted cloud vault is now on this device. ${restoredItems.length} item(s) loaded.`,
       lastSyncAt: latest.snapshot.created_at || latest.snapshot.client_updated_at || new Date().toISOString(),
       lastSnapshotId: latest.snapshot.id || current.lastSnapshotId,
       itemCount: Number(latest.snapshot.item_count ?? getVisibleVaultItems(restoredItems).length),
@@ -1560,14 +1629,14 @@ function App() {
     }));
     setDeviceStatus({
       state: 'cloud-restored',
-      label: `This device is now using your latest cloud backup. ${restoredItems.length} item(s) loaded.`,
+      label: `This device is now using your latest encrypted cloud vault. ${restoredItems.length} item(s) loaded.`,
       lastCloudCheckAt: new Date().toISOString(),
       lastRestoreAt: new Date().toISOString(),
       latestSnapshotId: latest.snapshot.id || '',
       latestCloudItemCount: Number(latest.snapshot.item_count ?? getVisibleVaultItems(restoredItems).length),
       source: reason === 'unlock' ? 'auto-pulled-on-unlock' : 'manual-pull'
     });
-    if (showSuccess) showMessage(`Your cloud backup has been restored on this device. ${restoredItems.length} item(s) loaded.`);
+    if (showSuccess) showMessage(`Your latest encrypted cloud vault is now on this device. ${restoredItems.length} item(s) loaded.`);
     return { restored: true, items: restoredItems, latest };
   }
 
@@ -1821,15 +1890,16 @@ function App() {
 
       const canCheckCloud = Boolean(activeAccount.tenantId && activeAccount.userId);
 
-      if (canCheckCloud && !fromBiometric) {
+      let cloudCheckResult = null;
+      if (canCheckCloud) {
         try {
-          const cloudRestore = await restoreLatestCloudVault(password, { showSuccess: false, reason: 'unlock', account: activeAccount });
-          if (cloudRestore.restored) {
+          cloudCheckResult = await restoreLatestCloudVault(password, { showSuccess: false, reason: 'unlock', account: activeAccount, forceCloud: false });
+          if (cloudCheckResult.restored) {
             setMasterPassword(password);
             setLocked(false);
             if (!fromBiometric) confirmSecureDevicePasswordCheck();
-            showVerifyOverlay('success', 'Vault restored', 'Your vault has been restored on this device.');
-            showMessage(`Vault restored from your latest cloud backup. ${cloudRestore.items.length} item(s) loaded on this device.`);
+            showVerifyOverlay('success', 'Vault updated', 'The latest encrypted cloud vault has been loaded on this device.');
+            showMessage(`Latest cloud changes loaded. ${cloudCheckResult.items.length} item(s) are now available on this device.`, 'success');
             if (options.setupBiometricAfterPassword) await setupBiometricUnlockForPassword(password, { fromLoginIcon: true });
             return;
           }
@@ -1854,14 +1924,33 @@ function App() {
         setItems(existing);
         setDeviceStatus((current) => ({
           ...current,
-          state: fromBiometric ? 'secure-device-unlock' : (canCheckCloud ? 'local-fallback' : 'local-only'),
-          label: fromBiometric ? 'This device opened your local vault after device verification.' : (canCheckCloud ? 'This device unlocked from its local vault. Your cloud backup was checked safely.' : 'This device unlocked locally. Save your account details to enable cloud restore.'),
-          source: fromBiometric ? 'secure-device-local-vault' : 'local-vault'
+          state: cloudCheckResult?.localNewer ? 'local-newer' : cloudCheckResult?.sessionRequired ? 'session-needed' : fromBiometric ? 'secure-device-unlock' : (canCheckCloud ? 'local-fallback' : 'local-only'),
+          label: cloudCheckResult?.localNewer
+            ? 'This device has newer local changes. The older cloud copy was not allowed to overwrite them.'
+            : cloudCheckResult?.sessionRequired
+              ? 'This device opened its local vault. Verify the account to check and update the encrypted cloud copy.'
+              : fromBiometric
+                ? 'Secure device unlock opened the local vault after checking for newer cloud changes.'
+                : (canCheckCloud ? 'This device unlocked from its local vault after checking the cloud safely.' : 'This device unlocked locally. Save your account details to enable cloud restore.'),
+          source: cloudCheckResult?.localNewer ? 'newer-local-vault-protected' : fromBiometric ? 'secure-device-local-vault' : 'local-vault'
         }));
         if (!fromBiometric) confirmSecureDevicePasswordCheck();
-        showMessage(fromBiometric ? 'Vault opened with secure device unlock.' : (canCheckCloud ? 'Vault unlocked locally. Your cloud backup was checked safely.' : 'Vault unlocked locally. Save your account details to enable cloud restore.'));
         setLocked(false);
-        showVerifyOverlay('success', 'Vault unlocked', fromBiometric ? 'Your device verified you and opened the encrypted vault.' : 'Your vault is open on this device.');
+        if (cloudCheckResult?.localNewer) {
+          const pendingSync = await syncEncryptedVault({ envelope: cloudCheckResult.localEnvelope || getLocalEnvelope(), nextItems: existing, silent: true });
+          if (pendingSync?.ok) {
+            showMessage('Vault opened. Newer changes from this device were backed up securely.', 'success');
+          } else {
+            showMessage('Vault opened with newer changes on this device, but cloud backup still needs attention. Verify the account session before using another device.', 'warning');
+          }
+        } else if (cloudCheckResult?.sessionRequired) {
+          showMessage('Vault opened from this device. Verify your account to check and update the encrypted cloud copy.', 'warning');
+        } else if (cloudCheckResult?.upToDate) {
+          showMessage(fromBiometric ? 'Vault opened with secure device unlock. This device is up to date.' : 'Vault unlocked. This device is up to date.', 'success');
+        } else {
+          showMessage(fromBiometric ? 'Vault opened with secure device unlock.' : (canCheckCloud ? 'Vault unlocked locally. Your cloud backup was checked safely.' : 'Vault unlocked locally. Save your account details to enable cloud restore.'));
+        }
+        showVerifyOverlay('success', 'Vault unlocked', fromBiometric ? 'Your device verified you and checked for newer encrypted cloud changes.' : 'Your vault is open on this device.');
         if (options.setupBiometricAfterPassword && !fromBiometric) await setupBiometricUnlockForPassword(password, { fromLoginIcon: true });
         return;
       }
@@ -2037,8 +2126,13 @@ function App() {
     setItems(nextItems);
     const envelope = await encryptVault(nextItems, masterPassword);
     if (options.autoSync) {
-      await syncEncryptedVault({ envelope, nextItems, silent: options.silentAutoSync === true });
+      const syncResult = await syncEncryptedVault({ envelope, nextItems, silent: options.silentAutoSync === true });
+      if (!syncResult?.ok && options.silentAutoSync === true && options.suppressSyncWarning !== true) {
+        showMessage('Changes were saved on this device, but cloud backup did not complete. Verify the account session before using another device.', 'warning');
+      }
+      return syncResult;
     }
+    return { ok: true, localOnly: true, envelope };
   }
 
   function lockVault(note = 'Vault locked.') {
@@ -2223,7 +2317,7 @@ function App() {
           return;
         }
         const next = items.map((item) => item.id === itemIdBeingEdited ? { ...item, ...itemPayload } : item);
-        await saveItems(next, { autoSync: true, silentAutoSync: true });
+        const syncResult = await saveItems(next, { autoSync: true, silentAutoSync: true, suppressSyncWarning: true });
         const editedCategory = form.category;
         setEditingItemId('');
         setForm(emptyForm(editedCategory));
@@ -2231,7 +2325,11 @@ function App() {
         setItemCredentialFieldsArmed({ username: false, password: false });
         setIsItemPopupOpen(false);
         setViewItemId(itemIdBeingEdited);
-        showMessage('Item updated successfully.', 'success');
+        if (syncResult?.ok) {
+          showMessage('Item updated and backed up securely.', 'success');
+        } else {
+          showMessage('Item updated on this device, but cloud backup did not complete. Verify the account session before using another device.', 'warning');
+        }
         return;
       }
 
@@ -2240,13 +2338,17 @@ function App() {
         ...itemPayload
       };
       const next = [newItem, ...items];
-      await saveItems(next, { autoSync: true, silentAutoSync: true });
+      const syncResult = await saveItems(next, { autoSync: true, silentAutoSync: true, suppressSyncWarning: true });
       setForm(emptyForm(form.category));
       setShowFormSecret(false);
       setItemCredentialFieldsArmed({ username: false, password: false });
       setIsItemPopupOpen(false);
       setViewItemId(newItem.id);
-      showMessage('Item saved successfully.', 'success');
+      if (syncResult?.ok) {
+        showMessage('Item saved and backed up securely.', 'success');
+      } else {
+        showMessage('Item saved on this device, but cloud backup did not complete. Verify the account session before using another device.', 'warning');
+      }
     } catch (error) {
       showMessage(error.message || 'Item could not be saved. Please try again.', 'error');
     } finally {
@@ -2306,8 +2408,14 @@ function App() {
 
   async function deleteItem(id) {
     if (viewItemId === id) setViewItemId('');
-    await saveItems(items.filter((item) => item.id !== id), { autoSync: true });
-    showMessage(bootstrap.tenantId && bootstrap.userId ? 'Item deleted and backup requested.' : 'Item deleted. Save your account details to enable cloud backup.');
+    const syncResult = await saveItems(items.filter((item) => item.id !== id), { autoSync: true });
+    if (!bootstrap.tenantId || !bootstrap.userId) {
+      showMessage('Item deleted on this device. Save your account details to enable cloud backup.', 'warning');
+    } else if (syncResult?.ok) {
+      showMessage('Item deleted and the updated vault was backed up securely.', 'success');
+    } else {
+      showMessage('Item deleted on this device, but cloud backup did not complete. Verify the account session before using another device.', 'warning');
+    }
   }
 
   async function toggleFavourite(id) {
@@ -2437,11 +2545,24 @@ function App() {
         clientUpdatedAt: envelope.updatedAt
       });
       if (!result.ok) {
-        const note = `${result.message || 'Encrypted vault did not sync.'}${result.error ? ` Error: ${result.error}` : ''}`;
-        setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
-        if (!silent) showMessage(note);
-        return result;
+        const sessionRequired = result.code === 'SESSION_REQUIRED' || Number(result.httpStatus || 0) === 401;
+        const note = sessionRequired
+          ? 'Cloud backup needs account verification on this device. Your changes remain encrypted and saved locally.'
+          : `${result.message || 'Encrypted vault did not sync.'}${result.error ? ` Error: ${result.error}` : ''}`;
+        setSyncStatus({ state: sessionRequired ? 'warning' : 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
+        if (sessionRequired) {
+          setCustomerSession({ checked: true, authenticated: false, message: note });
+          setAccountStatus({ state: 'session-needed', message: note });
+        }
+        if (!silent) showMessage(note, sessionRequired ? 'warning' : 'error');
+        return { ...result, sessionRequired, message: note };
       }
+      const savedEnvelope = {
+        ...envelope,
+        cloudSnapshotId: result.snapshotId || envelope.cloudSnapshotId || '',
+        baseCloudSnapshotId: result.snapshotId || envelope.baseCloudSnapshotId || envelope.cloudSnapshotId || ''
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedEnvelope));
       const verified = await fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(bootstrap.tenantId)}&userId=${encodeURIComponent(bootstrap.userId)}`).then((res) => res.json());
       const verifiedSnapshot = verified?.snapshot || null;
       const history = await loadSnapshotHistory(false);
