@@ -222,9 +222,9 @@ grant select, insert, update, delete on public.users to service_role;
 -- to add subscription_plans, tenant_subscriptions, billing_events and users.last_login_at.
 
 
--- My Passwords Ver-0.039F
+-- My Passwords Ver-0.039G
 -- Apply db/migrations/2026-07-19_founder_gbp_currency_fix_ver_0_039A.sql
 -- to restore the first tenant Founder Plan and make GBP the global subscription currency.
 
--- My Passwords Ver-0.039F
+-- My Passwords Ver-0.039G
 -- UI-only FAQ and vault login refinements. No database migration required.

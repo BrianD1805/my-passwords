@@ -4,7 +4,7 @@ import { AlertTriangle, CircleHelp, Cloud, Copy, Database, Download, ExternalLin
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.039F';
+const VERSION = 'My Passwords Ver-0.039G';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1269,7 +1269,7 @@ function VerificationOverlay({ state, onClose, onFocusMasterPassword }) {
                   onFocusMasterPassword();
                 }}
               >
-                Enter master password
+                Continue to master password
               </button>
             )}
             <button type="button" className="secondary-button" onClick={onClose}>
@@ -1422,15 +1422,37 @@ function App() {
   }
 
   function focusMasterPassword() {
+    const returnToLockedVault = !locked && hasLocalVault;
+
+    if (returnToLockedVault) {
+      setActivePage('vault');
+      setMasterPassword('');
+      setShowUnlockPassword(true);
+      setLocked(true);
+      showMessage('Account verified. Enter your master password to check for newer cloud changes.', 'success');
+    }
+
     setMasterPasswordFieldArmed(true);
-    window.setTimeout(() => {
+
+    const focusField = (attempt = 0) => {
       const field = document.getElementById('master-password-input');
+      if (!field && attempt < 8) {
+        window.setTimeout(() => focusField(attempt + 1), 80);
+        return;
+      }
       if (field) {
         field.readOnly = false;
         field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        field.focus();
+        try {
+          field.focus({ preventScroll: true });
+        } catch (error) {
+          field.focus();
+        }
+        field.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-    }, 80);
+    };
+
+    window.setTimeout(() => focusField(), returnToLockedVault ? 140 : 40);
   }
 
   function armMasterPasswordField(event) {
@@ -1832,11 +1854,11 @@ function App() {
         ...current,
         status: 'verified',
         verified: true,
-        message: 'Account verified. Enter your master password to complete login.'
+        message: 'Account verified. Continue to the master password screen to check for newer cloud changes.'
       }));
-      setAccountStatus({ state: 'ready', message: 'Account verified. Enter your master password to complete login or restore.' });
-      showVerifyOverlay('success', 'Account verified', 'Now enter your master password to complete login or restore your vault.', { focusMasterPassword: true });
-      showMessage('Account verified. Enter your master password to complete login.', 'success');
+      setAccountStatus({ state: 'ready', message: 'Account verified. Continue to the master password screen to check for newer cloud changes.' });
+      showVerifyOverlay('success', 'Account verified', 'Continue to the master password screen. Unlocking with your password will safely check for newer cloud changes.', { focusMasterPassword: true });
+      showMessage('Account verified. Continue to the master password screen to check for newer cloud changes.', 'success');
     } catch (error) {
       const note = `Code did not verify. ${error.message || ''}`.trim();
       setOtpTest((current) => ({ ...current, status: 'error', verified: false, message: note }));
@@ -4184,7 +4206,7 @@ function App() {
                   <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
                   <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
                 </div>
-                {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Enter your master password to complete login or restore.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Enter master password</button></div>}
+                {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Continue to the master password screen to check for newer cloud changes.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Continue to master password</button></div>}
               </div>
 
               <section className={`biometric-settings-card settings-inner-card ${biometricUnlock ? 'enabled' : ''}`}>
