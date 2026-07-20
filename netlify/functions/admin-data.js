@@ -43,11 +43,13 @@ async function audit(action, metadata = {}) {
 }
 
 async function loadDashboard() {
-  const [plans, tenants, users, subscriptions] = await Promise.all([
+  const [plans, tenants, users, subscriptions, snapshots, syncEvents] = await Promise.all([
     selectRows('subscription_plans', 'select=*&order=display_order.asc,display_name.asc'),
     selectRows('tenants', 'select=id,name,account_name,plan_code,plan_status,account_status,tenant_role,trial_ends_at,created_at,updated_at&order=created_at.desc&limit=250'),
     selectRows('users', 'select=id,tenant_id,email,phone_e164,display_name,role,status,email_verified,phone_verified,created_at&order=created_at.desc&limit=500'),
-    selectRows('tenant_subscriptions', 'select=id,tenant_id,plan_code,status,billing_interval,currency,price_minor,trial_ends_at,current_period_end,cancel_at_period_end,provider,updated_at&order=updated_at.desc&limit=250')
+    selectRows('tenant_subscriptions', 'select=id,tenant_id,plan_code,status,billing_interval,currency,price_minor,trial_ends_at,current_period_end,cancel_at_period_end,provider,updated_at&order=updated_at.desc&limit=250'),
+    selectRows('vault_sync_snapshots', 'select=id,tenant_id,user_id,item_count,client_updated_at,created_at&order=created_at.desc&limit=1000'),
+    selectRows('vault_sync_events', 'select=id,tenant_id,user_id,event_type,status,item_count,message,device_id,metadata,created_at&order=created_at.desc&limit=1000')
   ]);
 
   const usersByTenant = new Map();
@@ -66,6 +68,16 @@ async function loadDashboard() {
     });
   }
   const subscriptionsByTenant = new Map((subscriptions || []).map((subscription) => [subscription.tenant_id, subscription]));
+  const latestSnapshotByTenant = new Map();
+  for (const snapshot of snapshots || []) {
+    if (!latestSnapshotByTenant.has(snapshot.tenant_id)) latestSnapshotByTenant.set(snapshot.tenant_id, snapshot);
+  }
+  const latestSyncEventByTenant = new Map();
+  const syncEventCountsByTenant = new Map();
+  for (const syncEvent of syncEvents || []) {
+    if (!latestSyncEventByTenant.has(syncEvent.tenant_id)) latestSyncEventByTenant.set(syncEvent.tenant_id, syncEvent);
+    syncEventCountsByTenant.set(syncEvent.tenant_id, Number(syncEventCountsByTenant.get(syncEvent.tenant_id) || 0) + 1);
+  }
   const customerRows = (tenants || []).map((tenant) => ({
     id: tenant.id,
     accountName: tenant.account_name || tenant.name || '',
@@ -77,7 +89,12 @@ async function loadDashboard() {
     createdAt: tenant.created_at,
     updatedAt: tenant.updated_at,
     users: usersByTenant.get(tenant.id) || [],
-    subscription: subscriptionsByTenant.get(tenant.id) || null
+    subscription: subscriptionsByTenant.get(tenant.id) || null,
+    syncDiagnostics: {
+      latestSnapshot: latestSnapshotByTenant.get(tenant.id) || null,
+      latestEvent: latestSyncEventByTenant.get(tenant.id) || null,
+      eventCount: Number(syncEventCountsByTenant.get(tenant.id) || 0)
+    }
   }));
 
   return {
@@ -87,7 +104,8 @@ async function loadDashboard() {
       tenants: customerRows.length,
       activeAccounts: customerRows.filter((row) => row.accountStatus === 'active').length,
       trials: customerRows.filter((row) => String(row.planStatus).includes('trial')).length,
-      publishedPlans: (plans || []).filter((plan) => plan.is_public && plan.is_active).length
+      publishedPlans: (plans || []).filter((plan) => plan.is_public && plan.is_active).length,
+      syncIssues: customerRows.filter((row) => ['warning', 'error'].includes(String(row.syncDiagnostics?.latestEvent?.status || '').toLowerCase())).length
     }
   };
 }
@@ -99,7 +117,7 @@ export async function handler(event) {
     try {
       return jsonResponse(200, { ok: true, version: APP_VERSION, ...(await loadDashboard()) });
     } catch (error) {
-      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run the Ver-0.039 Supabase SQL if the new tables are not present.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run the Ver-0.039 and Ver-0.039H Supabase SQL migrations if the required tables are not present.', error: error.message, details: error.details || null });
     }
   }
 

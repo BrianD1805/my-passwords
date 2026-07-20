@@ -9,9 +9,9 @@ export async function handler(event) {
   try {
     session = await getActiveCustomerSession(event);
   } catch (error) {
-    return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not validate the secure account session.', error: error.message });
+    return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not check device verification.', error: error.message });
   }
-  if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify your account to use encrypted document storage on this device.' });
+  if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify this device to use secure document storage.' });
 
   const tenantId = session.tenantId;
   const userId = session.userId;

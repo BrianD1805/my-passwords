@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BadgePoundSterling, Check, Eye, EyeOff, LogOut, RefreshCw, Save, ShieldCheck, UserRoundCheck, UsersRound } from 'lucide-react';
+import { AlertTriangle, BadgePoundSterling, Check, Cloud, Eye, EyeOff, LogOut, RefreshCw, Save, ShieldCheck, UserRoundCheck, UsersRound } from 'lucide-react';
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', ...options });
@@ -215,6 +215,7 @@ export default function AdminApp({ version }) {
         <button type="button" className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>Overview</button>
         <button type="button" className={activeTab === 'plans' ? 'active' : ''} onClick={() => setActiveTab('plans')}>Subscription Plans</button>
         <button type="button" className={activeTab === 'customers' ? 'active' : ''} onClick={() => setActiveTab('customers')}>Customers</button>
+        <button type="button" className={activeTab === 'sync' ? 'active' : ''} onClick={() => setActiveTab('sync')}>Sync Health</button>
       </nav>
 
       {notice && <div className="admin-notice">{notice}</div>}
@@ -226,6 +227,7 @@ export default function AdminApp({ version }) {
             <article><UserRoundCheck /><strong>{data.summary?.activeAccounts || 0}</strong><span>Active accounts</span></article>
             <article><ShieldCheck /><strong>{data.summary?.trials || 0}</strong><span>Trials</span></article>
             <article><BadgePoundSterling /><strong>{data.summary?.publishedPlans || 0}</strong><span>Published plans</span></article>
+            <article><AlertTriangle /><strong>{data.summary?.syncIssues || 0}</strong><span>Sync issues</span></article>
           </div>
           <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow">Foundation status</p><h2>SaaS controls</h2></div></div><div className="admin-check-grid"><span><Check size={17} /> Secure customer sessions</span><span><Check size={17} /> Server-derived tenant identity</span><span><Check size={17} /> Protected cloud vault and documents</span><span><Check size={17} /> Editable plan catalogue</span><span><Check size={17} /> Customer suspension controls</span><span><Check size={17} /> One Netlify site</span></div></section>
         </section>
@@ -263,6 +265,36 @@ export default function AdminApp({ version }) {
 
       {activeTab === 'customers' && (
         <section className="admin-content"><section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow">Accounts</p><h2>Customer overview</h2></div><span>{data.customers?.length || 0} accounts</span></div><div className="admin-customer-list">{(data.customers || []).map((customer) => <article key={customer.id} className="admin-customer-card"><div className="admin-customer-main"><strong>{customer.accountName}</strong><span>{planDisplayName(customer.planCode)} · {planStatusDisplayName(customer.planStatus)}</span><small>{customer.users?.[0]?.displayName || 'Owner'} · {customer.users?.[0]?.emailMasked || 'No email'} · {customer.users?.[0]?.phoneMasked || 'No phone'}</small></div><div className="admin-customer-meta"><span className={`admin-status ${customer.accountStatus}`}>{customer.accountStatus}</span><small>Created {customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : '—'}</small></div><div className="admin-customer-actions">{customer.accountStatus === 'suspended' ? <button type="button" className="secondary-button" onClick={() => setAccountStatus(customer, 'active')} disabled={busy}>Activate</button> : <button type="button" className="secondary-button danger-soft" onClick={() => setAccountStatus(customer, 'suspended')} disabled={busy}>Suspend</button>}</div></article>)}{!data.customers?.length && <div className="admin-empty">No customer accounts were returned.</div>}</div></section></section>
+      )}
+
+
+      {activeTab === 'sync' && (
+        <section className="admin-content">
+          <section className="admin-panel">
+            <div className="admin-panel-heading"><div><p className="eyebrow">Vault operations</p><h2>Sync health</h2></div><span>Encrypted metadata only</span></div>
+            <p className="admin-panel-intro">Admin can see backup dates, item counts and operational errors. Vault contents and master passwords remain unreadable.</p>
+            <div className="admin-sync-list">
+              {(data.customers || []).map((customer) => {
+                const diagnostic = customer.syncDiagnostics || {};
+                const snapshot = diagnostic.latestSnapshot || null;
+                const event = diagnostic.latestEvent || null;
+                const eventStatus = String(event?.status || (snapshot ? 'success' : 'warning')).toLowerCase();
+                return (
+                  <article className={`admin-sync-card ${eventStatus}`} key={`sync-${customer.id}`}>
+                    <div className="admin-sync-icon">{eventStatus === 'success' ? <Cloud size={21} /> : <AlertTriangle size={21} />}</div>
+                    <div className="admin-sync-main">
+                      <strong>{customer.accountName}</strong>
+                      <span>{event?.message || (snapshot ? 'Latest encrypted backup is available.' : 'No encrypted backup has been recorded yet.')}</span>
+                      <small>{snapshot ? `Last backup ${new Date(snapshot.created_at).toLocaleString()} · ${snapshot.item_count || 0} item(s)` : 'No backup date'}{event?.created_at ? ` · Last event ${new Date(event.created_at).toLocaleString()}` : ''}</small>
+                    </div>
+                    <div className="admin-sync-meta"><span className={`admin-status ${eventStatus}`}>{eventStatus}</span><small>{diagnostic.eventCount || 0} event(s)</small></div>
+                  </article>
+                );
+              })}
+              {!data.customers?.length && <div className="admin-empty">No customer sync diagnostics were returned.</div>}
+            </div>
+          </section>
+        </section>
       )}
 
       <footer className="admin-footer">{version} · one-site admin foundation</footer>

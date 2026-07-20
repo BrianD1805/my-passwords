@@ -129,7 +129,7 @@ export async function handler(event) {
         tenantRole: tenant.tenant_role || 'primary_owner',
         trialEndsAt
       },
-      message: 'Account verified. A secure tenant-bound session is now active on this device. Enter your master password to continue.'
+      message: 'Account verified. Cloud backup and secure syncing are active on this device.'
     }, {
       'set-cookie': issueCustomerSession(event, { tenantId: tenant.id, userId: user.id, role: user.role || 'administrator' })
     });

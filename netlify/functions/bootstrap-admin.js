@@ -84,7 +84,7 @@ export async function handler(event) {
         reusedExistingTenant: true,
         reusedExistingUser: true,
         requiresOtpVerification: true,
-        message: 'Account found. Verify the one-time code to establish a secure session on this device.'
+        message: 'Account found. Verify the one-time code to enable secure backup and syncing on this device.'
       });
     }
 
@@ -157,7 +157,7 @@ export async function handler(event) {
       reusedExistingTenant: false,
       reusedExistingUser: false,
       requiresOtpVerification: true,
-      message: 'Account details reserved. Verify the email code to activate the account and establish a secure session.'
+      message: 'Account details saved. Verify the email code to activate the account and enable secure backup and syncing.'
     });
   } catch (error) {
     return jsonResponse(500, {

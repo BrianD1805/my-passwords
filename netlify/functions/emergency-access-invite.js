@@ -237,7 +237,7 @@ export async function handler(event) {
   const action = String(body.action || 'send').trim();
   let session;
   try { session = await getActiveCustomerSession(event); }
-  catch (error) { return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not validate the secure account session.', error: error.message }); }
+  catch (error) { return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not check device verification.', error: error.message }); }
   if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify your account before managing Emergency Access.' });
   const sessionTenantId = session.tenantId;
   const sessionUserId = session.userId;

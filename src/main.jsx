@@ -4,7 +4,7 @@ import { AlertTriangle, CircleHelp, Cloud, Copy, Database, Download, ExternalLin
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.039G';
+const VERSION = 'My Passwords Ver-0.039H';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -15,6 +15,8 @@ const BIOMETRIC_UNLOCK_KEY = 'my-passwords-v0.038-device-biometric-unlock';
 const BIOMETRIC_KEY_DB_NAME = 'my-passwords-device-biometric-key-v0.038';
 const BIOMETRIC_KEY_STORE = 'deviceKeys';
 const BIOMETRIC_KEY_ID = 'local-master-password-wrap-key';
+const SYNC_SAFETY_KEY = 'my-passwords-sync-safety-v1';
+const SYNC_DEVICE_ID_KEY = 'my-passwords-sync-device-id-v1';
 const SECURE_DEVICE_PASSWORD_CONFIRM_DAYS = 14;
 const SECURE_DEVICE_UNLOCK_COUNT_LIMIT = 10;
 
@@ -24,6 +26,45 @@ const FALLBACK_SAAS_PLANS = [
   { code: 'business', displayName: 'Business', description: 'For team and client vaults when available.', currency: 'GBP', monthlyPriceMinor: 0, trialDays: 14 }
 
 ];
+
+
+function readSyncSafetyState() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SYNC_SAFETY_KEY) || '{}');
+    return {
+      state: parsed.state || 'unknown',
+      pending: Boolean(parsed.pending),
+      conflict: Boolean(parsed.conflict),
+      sessionRequired: Boolean(parsed.sessionRequired),
+      message: parsed.message || '',
+      itemCount: Number(parsed.itemCount || 0),
+      lastFailureAt: parsed.lastFailureAt || '',
+      lastSuccessAt: parsed.lastSuccessAt || '',
+      lastSnapshotId: parsed.lastSnapshotId || '',
+      acknowledgedAt: parsed.acknowledgedAt || ''
+    };
+  } catch {
+    return { state: 'unknown', pending: false, conflict: false, sessionRequired: false, message: '', itemCount: 0, lastFailureAt: '', lastSuccessAt: '', lastSnapshotId: '', acknowledgedAt: '' };
+  }
+}
+
+function persistSyncSafetyState(next) {
+  localStorage.setItem(SYNC_SAFETY_KEY, JSON.stringify(next));
+  return next;
+}
+
+function getSyncDeviceId() {
+  let value = localStorage.getItem(SYNC_DEVICE_ID_KEY) || '';
+  if (!value) {
+    value = `device_${crypto.randomUUID()}`;
+    localStorage.setItem(SYNC_DEVICE_ID_KEY, value);
+  }
+  return value;
+}
+
+function friendlyDeviceType() {
+  return /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '') ? 'mobile' : 'desktop';
+}
 
 const SETTINGS_FAQS = [
   {
@@ -49,7 +90,7 @@ const SETTINGS_FAQS = [
   {
     category: 'Devices',
     question: 'How do I open my vault on another device?',
-    answer: 'Use your account email verification on the new device, restore the latest encrypted cloud backup, and enter the same master password. The account verification identifies the vault; only the master password can decrypt it.'
+    answer: 'Verify the new device by email, then enter the same master password. My Passwords will safely check for the latest protected vault copy without replacing different changes automatically.'
   },
   {
     category: 'Devices',
@@ -64,7 +105,7 @@ const SETTINGS_FAQS = [
   {
     category: 'Backup',
     question: 'How can I confirm my latest backup?',
-    answer: 'Open Settings, choose Stats, and review the cloud backup status and backup history. You can also use Tools to run a manual backup or refresh the backup history.'
+    answer: 'Open Settings and choose Vault Safety. It clearly shows whether your latest changes are protected, waiting for backup, or need review. Use Back up changes now when action is required.'
   },
   {
     category: 'Documents',
@@ -84,7 +125,7 @@ const SETTINGS_FAQS = [
   {
     category: 'Account',
     question: 'Why might cloud backup ask me to verify my account again?',
-    answer: 'Cloud and account functions use a secure session tied to the verified account. If that session expires, is cleared, or the device changes, complete email OTP verification again. The local encrypted vault remains separate.'
+    answer: 'Secure backup and syncing require this device to be verified. If verification expires or browser data is cleared, complete email OTP verification again. Your encrypted vault remains protected on the device.'
   },
   {
     category: 'Account',
@@ -590,15 +631,17 @@ function safeTimestamp(value) {
 }
 
 function compareLocalAndCloudVault(localEnvelope, cloudSnapshot) {
-  if (!localEnvelope) return 'cloud-newer';
-  if (localEnvelope.cloudSnapshotId && localEnvelope.cloudSnapshotId === cloudSnapshot?.id) return 'same';
-  const localTime = safeTimestamp(localEnvelope.updatedAt);
-  const cloudTime = safeTimestamp(cloudSnapshot?.client_updated_at || cloudSnapshot?.created_at);
-  if (!localTime && cloudTime) return 'cloud-newer';
-  if (localTime && !cloudTime) return 'local-newer';
-  if (cloudTime > localTime + 1000) return 'cloud-newer';
-  if (localTime > cloudTime + 1000) return 'local-newer';
-  return localEnvelope.cloudSnapshotId ? 'cloud-newer' : 'same';
+  if (!localEnvelope) return 'cloud-newer-clean';
+  const cloudId = String(cloudSnapshot?.id || '');
+  const localCloudId = String(localEnvelope.cloudSnapshotId || '');
+  const localBaseId = String(localEnvelope.baseCloudSnapshotId || '');
+
+  if (localCloudId && localCloudId === cloudId) return 'same';
+  if (localCloudId && localCloudId !== cloudId) return 'cloud-newer-clean';
+  if (!localCloudId && localBaseId && localBaseId === cloudId) return 'local-newer';
+  if (!localCloudId && localBaseId && localBaseId !== cloudId) return 'conflict';
+  if (!localCloudId && !localBaseId && cloudId) return 'conflict';
+  return 'local-newer';
 }
 
 function storeCloudSnapshotLocally(snapshot) {
@@ -1297,6 +1340,56 @@ function ToastViewport({ toasts, onDismiss }) {
   );
 }
 
+function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKeepDevice, onUseCloud, onConfirmDanger }) {
+  if (!state?.visible) return null;
+  const details = state.details || {};
+  const isConflict = state.mode === 'conflict';
+  const isConflictReminder = state.mode === 'conflict-reminder';
+  const isVerification = state.mode === 'verification-required';
+  const isDanger = state.mode === 'danger';
+  return (
+    <div className="item-popup-layer sync-safety-popup-layer" role="dialog" aria-modal="true" aria-labelledby="sync-safety-title">
+      <button type="button" className="item-popup-backdrop" onClick={onClose} aria-label="Close vault safety message" />
+      <section className="item-popup-card sync-safety-popup-card">
+        <header className="item-popup-header">
+          <h2 id="sync-safety-title">{isConflict ? <AlertTriangle size={21} /> : <ShieldCheck size={21} />} {state.title}</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </header>
+        <div className="item-popup-body sync-safety-popup-body">
+          <p className="sync-safety-main-message">{state.message}</p>
+          {(isConflict || isConflictReminder) && (
+            <div className="sync-conflict-summary">
+              {isConflict && <>
+                <span><strong>This device</strong>{details.localItemCount ?? 0} item(s)<small>{details.localEnvelope?.updatedAt ? `Changed ${new Date(details.localEnvelope.updatedAt).toLocaleString()}` : 'Change time unavailable'}</small></span>
+                <span><strong>Secure backup</strong>{details.cloudItemCount ?? 0} item(s)<small>{details.latest?.snapshot?.created_at || details.latest?.snapshot?.client_updated_at ? `Backed up ${new Date(details.latest.snapshot.created_at || details.latest.snapshot.client_updated_at).toLocaleString()}` : 'Backup time unavailable'}</small></span>
+              </>}
+              <p><AlertTriangle size={17} /> Nothing has been replaced automatically.</p>
+            </div>
+          )}
+          {(state.mode === 'backup-failed' || isVerification) && (
+            <div className="sync-safety-instructions">
+              <strong>Until this is fixed:</strong>
+              <span>Do not clear this device’s vault.</span>
+              <span>Do not replace it with another device’s copy.</span>
+              <span>Your latest changes will not appear on other devices yet.</span>
+            </div>
+          )}
+          {details.originalMessage && <details className="sync-technical-details"><summary>More information</summary><p>{details.originalMessage}</p></details>}
+          {isDanger && <div className="sync-danger-note"><AlertTriangle size={18} /><span>{details.warning || 'Unsaved backup changes may be lost if you continue.'}</span></div>}
+        </div>
+        <footer className="item-popup-footer sync-safety-popup-footer">
+          {state.mode === 'backup-failed' && <><button type="button" className="secondary-button" onClick={onClose}>Continue for now</button><button type="button" className="primary-button" onClick={onRetry}><RefreshCw size={17} /> Try backup again</button></>}
+          {isVerification && <><button type="button" className="secondary-button" onClick={onClose}>Continue for now</button><button type="button" className="primary-button" onClick={onVerify}><UserRoundCheck size={17} /> Verify this device</button></>}
+          {isConflict && <><button type="button" className="secondary-button" onClick={onClose}>Decide later</button><button type="button" className="secondary-button" onClick={onUseCloud}>Use secure backup</button><button type="button" className="primary-button" onClick={onKeepDevice}>Keep this device</button></>}
+          {isConflictReminder && <><button type="button" className="secondary-button" onClick={onClose}>Close</button><button type="button" className="primary-button" onClick={onOpenSafety}>Open Vault Safety</button></>}
+          {isDanger && <><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="button" className="danger-button" onClick={onConfirmDanger}>Continue anyway</button></>}
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+
 function App() {
   const [locked, setLocked] = useState(true);
   const [masterPassword, setMasterPassword] = useState('');
@@ -1318,11 +1411,15 @@ function App() {
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
   const [accountStatus, setAccountStatus] = useState({ state: 'local-first', message: 'Your account details help you recover your vault on a new device.' });
-  const [customerSession, setCustomerSession] = useState({ checked: false, authenticated: false, message: 'Secure session has not been checked yet.' });
+  const [customerSession, setCustomerSession] = useState({ checked: false, authenticated: false, message: 'Device verification has not been checked yet.' });
   const [publicPlans, setPublicPlans] = useState(FALLBACK_SAAS_PLANS);
   const [syncing, setSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'No cloud backup has run yet. Your vault is backed up when you save, delete, favourite or edit an item.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
-  const [snapshotHistory, setSnapshotHistory] = useState({ loaded: false, loading: false, total: 0, snapshots: [], message: 'Backup history has not been loaded yet.' });
+  const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'Your vault safety status will update after the first secure backup check.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
+  const [syncSafety, setSyncSafety] = useState(() => readSyncSafetyState());
+  const [syncSafetyModal, setSyncSafetyModal] = useState({ visible: false, mode: '', title: '', message: '', details: null });
+  const [syncPromptShown, setSyncPromptShown] = useState(false);
+  const syncRetryRef = useRef(false);
+  const [snapshotHistory, setSnapshotHistory] = useState({ loaded: false, loading: false, total: 0, snapshots: [], message: 'Recovery history has not been checked yet.' });
   const [deviceStatus, setDeviceStatus] = useState({
     state: 'not-checked',
     label: 'This device has not checked your cloud backup yet.',
@@ -1384,6 +1481,148 @@ function App() {
     setActivePage('settings');
     setActiveSettingsSection('faq');
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  }
+
+  function openVaultSafetySettings() {
+    setActivePage('settings');
+    setActiveSettingsSection('safety');
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  }
+
+  function saveSyncSafety(patch) {
+    setSyncSafety((current) => {
+      const next = persistSyncSafetyState({ ...current, ...patch });
+      return next;
+    });
+  }
+
+  function closeSyncSafetyModal() {
+    setSyncSafetyModal((current) => ({ ...current, visible: false }));
+  }
+
+  function showBackupFailurePopup(message, options = {}) {
+    setSyncPromptShown(true);
+    const sessionRequired = Boolean(options.sessionRequired);
+    const itemCount = Number(options.itemCount ?? getVisibleVaultItems(options.items || items).length);
+    saveSyncSafety({
+      state: sessionRequired ? 'verification-required' : 'backup-pending',
+      pending: true,
+      conflict: false,
+      sessionRequired,
+      message,
+      itemCount,
+      lastFailureAt: new Date().toISOString(),
+      acknowledgedAt: ''
+    });
+    setSyncSafetyModal({
+      visible: true,
+      mode: sessionRequired ? 'verification-required' : 'backup-failed',
+      title: sessionRequired ? 'Verify this device to protect your latest changes' : 'Your latest changes are saved on this device only',
+      message: sessionRequired
+        ? 'Your vault change is safe on this device, but secure backup cannot continue until this device is verified. Do not clear this device or replace its vault copy.'
+        : 'Your vault change is safe on this device, but it has not yet been backed up. It will not appear on your other devices until the backup succeeds.',
+      details: { originalMessage: message, itemCount }
+    });
+  }
+
+  function showConflictPopup(latest, localEnvelope, localItemCountOverride = null) {
+    setSyncPromptShown(true);
+    const localItemCount = Number(localItemCountOverride ?? getVisibleVaultItems(items).length);
+    const cloudItemCount = Number(latest?.snapshot?.item_count || 0);
+    saveSyncSafety({
+      state: 'conflict',
+      pending: true,
+      conflict: true,
+      sessionRequired: false,
+      message: 'Different vault changes were found on this device and in secure backup. Nothing was replaced.',
+      itemCount: localItemCount,
+      lastFailureAt: new Date().toISOString(),
+      acknowledgedAt: ''
+    });
+    setSyncSafetyModal({
+      visible: true,
+      mode: 'conflict',
+      title: 'Different vault changes were found',
+      message: 'Nothing has been replaced. Choose which copy should become the current vault only after checking the item counts below.',
+      details: { latest, localEnvelope, localItemCount, cloudItemCount }
+    });
+  }
+
+  async function recordSyncEvent(eventType, status, details = {}) {
+    try {
+      await postJson('/.netlify/functions/sync-vault', {
+        action: 'record_event',
+        eventType,
+        status,
+        itemCount: Number(details.itemCount ?? getVisibleVaultItems(items).length),
+        message: String(details.message || '').slice(0, 500),
+        deviceId: getSyncDeviceId(),
+        metadata: { deviceType: friendlyDeviceType(), source: details.source || 'vault-app', ...details.metadata }
+      });
+    } catch {
+      // Diagnostics must never block the encrypted vault.
+    }
+  }
+
+  async function retryPendingBackup() {
+    closeSyncSafetyModal();
+    if (!customerSession.authenticated) {
+      openVaultSafetySettings();
+      setActiveSettingsSection('account');
+      showMessage('Verify this device, then return to Vault Safety to retry the backup.', 'warning');
+      return;
+    }
+    const result = await syncEncryptedVault({ envelope: getLocalEnvelope(), nextItems: items, silent: false, retry: true });
+    if (result?.ok) showMessage('Your latest vault changes are now backed up and available on your devices.', 'success');
+  }
+
+  function acknowledgeBackupWarning() {
+    saveSyncSafety({ acknowledgedAt: new Date().toISOString() });
+    closeSyncSafetyModal();
+  }
+
+  function openDeviceVerification() {
+    closeSyncSafetyModal();
+    setActivePage('settings');
+    setActiveSettingsSection('account');
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  }
+
+  async function keepThisDeviceCopy() {
+    closeSyncSafetyModal();
+    const result = await syncEncryptedVault({ envelope: getLocalEnvelope(), nextItems: items, silent: false, explicitConflictChoice: true });
+    if (result?.ok) {
+      saveSyncSafety({ state: 'up-to-date', pending: false, conflict: false, sessionRequired: false, message: 'Your vault is up to date.', lastSuccessAt: new Date().toISOString(), acknowledgedAt: '' });
+      showMessage('This device’s vault is now backed up and available on your other devices.', 'success');
+    }
+  }
+
+  async function useSecureBackupCopy() {
+    const latest = syncSafetyModal.details?.latest;
+    closeSyncSafetyModal();
+    if (!masterPassword || !latest?.snapshot) {
+      openVaultSafetySettings();
+      showMessage('Unlock the vault with your master password before choosing the secure backup copy.', 'warning');
+      return;
+    }
+    try {
+      const result = await restoreLatestCloudVault(masterPassword, { showSuccess: false, reason: 'explicit-cloud-choice', forceCloud: true, latestOverride: latest });
+      if (result?.restored) {
+        saveSyncSafety({ state: 'up-to-date', pending: false, conflict: false, sessionRequired: false, message: 'Your vault is up to date.', lastSuccessAt: new Date().toISOString(), lastSnapshotId: result.latest?.snapshot?.id || '', acknowledgedAt: '' });
+        showMessage('The secure backup copy is now active on this device.', 'success');
+      }
+    } catch {
+      showBackupFailurePopup('The secure backup copy could not be opened. Nothing was changed.', { itemCount: getVisibleVaultItems(items).length });
+    }
+  }
+
+  async function confirmDangerAction() {
+    const action = syncSafetyModal.details?.action;
+    closeSyncSafetyModal();
+    if (action === 'end-session') await performEndCustomerSession();
+    if (action === 'clear-local') performClearLocalVault();
+    if (action === 'restore-cloud') await restoreCloudToThisDevice(true);
+    if (action === 'lock-vault') lockVault('Vault locked.', { force: true });
   }
 
   function toastTypeFromMessage(text) {
@@ -1536,17 +1775,17 @@ function App() {
             accountStatus: result.account?.accountStatus || bootstrap.accountStatus,
             tenantRole: result.account?.tenantRole || bootstrap.tenantRole,
             accountVerified: true,
-            otpStatus: 'Secure session active'
+            otpStatus: 'Device verified'
           };
           setBootstrap(next);
-          setCustomerSession({ checked: true, authenticated: true, message: result.message || 'Secure account session is active.' });
-          setAccountStatus({ state: 'ready', message: 'Secure account session is active on this device.' });
+          setCustomerSession({ checked: true, authenticated: true, message: result.message || 'This device is verified for secure backup and syncing.' });
+          setAccountStatus({ state: 'ready', message: 'Cloud backup and secure syncing are active on this device.' });
         } else {
-          setCustomerSession({ checked: true, authenticated: false, message: result?.message || 'Verify your account to establish a secure session.' });
-          setAccountStatus((current) => current.state === 'ready' ? current : { state: 'session-needed', message: result?.message || 'Verify your account to establish a secure session.' });
+          setCustomerSession({ checked: true, authenticated: false, message: result?.message || 'Verify this device to enable secure backup and syncing.' });
+          setAccountStatus((current) => current.state === 'ready' ? current : { state: 'session-needed', message: result?.message || 'Verify this device to enable secure backup and syncing.' });
         }
       } catch (error) {
-        if (!cancelled) setCustomerSession({ checked: true, authenticated: false, message: 'Secure session could not be checked.' });
+        if (!cancelled) setCustomerSession({ checked: true, authenticated: false, message: 'Device verification could not be checked.' });
       }
     }
     checkSecureSession();
@@ -1560,9 +1799,46 @@ function App() {
   }, [locked, items]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen);
+    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible);
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible]);
+
+  useEffect(() => {
+    if (locked || !syncSafety.pending || syncPromptShown || syncSafetyModal.visible) return;
+    setSyncPromptShown(true);
+    window.setTimeout(() => {
+      if (syncSafety.conflict) {
+        setSyncSafetyModal({ visible: true, mode: 'conflict-reminder', title: 'Vault sync needs your attention', message: 'Different vault changes were found earlier. Nothing will be replaced until you choose what to do in Vault Safety.', details: null });
+      } else {
+        setSyncSafetyModal({
+          visible: true,
+          mode: syncSafety.sessionRequired ? 'verification-required' : 'backup-failed',
+          title: syncSafety.sessionRequired ? 'Verify this device to finish backup' : 'Your latest changes still need backup',
+          message: syncSafety.message || 'Your latest changes are safe on this device but are not yet available on your other devices.',
+          details: { itemCount: syncSafety.itemCount }
+        });
+      }
+    }, 350);
+  }, [locked, syncSafety.pending, syncSafety.conflict, syncSafety.sessionRequired, syncSafety.message, syncSafety.itemCount, syncPromptShown, syncSafetyModal.visible]);
+
+  useEffect(() => {
+    async function tryAutomaticRetry() {
+      if (locked || !syncSafety.pending || syncSafety.conflict || !customerSession.authenticated || syncRetryRef.current || !navigator.onLine) return;
+      syncRetryRef.current = true;
+      try {
+        await syncEncryptedVault({ envelope: getLocalEnvelope(), nextItems: items, silent: true, retry: true, suppressFailureModal: true });
+      } finally {
+        syncRetryRef.current = false;
+      }
+    }
+    const onlineHandler = () => tryAutomaticRetry();
+    window.addEventListener('online', onlineHandler);
+    const timer = window.setTimeout(tryAutomaticRetry, 1200);
+    return () => {
+      window.removeEventListener('online', onlineHandler);
+      window.clearTimeout(timer);
+    };
+  }, [locked, syncSafety.pending, syncSafety.conflict, customerSession.authenticated, items]);
 
   useEffect(() => {
     if (!locked) setIsCreateVaultPopupOpen(false);
@@ -1573,64 +1849,66 @@ function App() {
     return fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(account.tenantId)}&userId=${encodeURIComponent(account.userId)}`).then((res) => res.json());
   }
 
-  async function restoreLatestCloudVault(passwordToUse, { showSuccess = true, reason = 'manual', account = bootstrap, forceCloud = reason === 'manual' } = {}) {
+  async function restoreLatestCloudVault(passwordToUse, { showSuccess = true, reason = 'manual', account = bootstrap, forceCloud = false, latestOverride = null } = {}) {
     const checkedAt = new Date().toISOString();
     setDeviceStatus((current) => ({
       ...current,
       state: 'checking-cloud',
-      label: 'Checking your latest encrypted cloud vault...',
+      label: 'Checking whether your vault is up to date...',
       lastCloudCheckAt: checkedAt
     }));
-    const latest = await fetchLatestCloudSnapshot(account);
+    const latest = latestOverride || await fetchLatestCloudSnapshot(account);
     if (!latest?.ok) {
       const sessionRequired = latest?.code === 'SESSION_REQUIRED' || Number(latest?.httpStatus || 0) === 401;
-      setDeviceStatus((current) => ({
-        ...current,
-        state: sessionRequired ? 'session-needed' : 'cloud-check-failed',
-        label: latest?.message || 'The latest cloud vault could not be checked. This device kept its local encrypted copy.',
-        lastCloudCheckAt: checkedAt
-      }));
+      const note = sessionRequired
+        ? 'Verify this device to continue secure backup and syncing.'
+        : (latest?.message || 'Secure backup could not be checked. This device kept its current vault copy.');
+      setDeviceStatus((current) => ({ ...current, state: sessionRequired ? 'session-needed' : 'cloud-check-failed', label: note, lastCloudCheckAt: checkedAt }));
       if (sessionRequired) {
-        setCustomerSession({ checked: true, authenticated: false, message: latest?.message || 'Verify your account to continue device sync.' });
-        setAccountStatus({ state: 'session-needed', message: latest?.message || 'Verify your account to continue device sync.' });
+        setCustomerSession({ checked: true, authenticated: false, message: 'Verify this device to enable secure backup and syncing.' });
+        setAccountStatus({ state: 'session-needed', message: 'Verify this device to enable secure backup and syncing.' });
+      }
+      const unsyncedEnvelope = getLocalEnvelope();
+      if (unsyncedEnvelope && !unsyncedEnvelope.cloudSnapshotId) {
+        saveSyncSafety({ state: sessionRequired ? 'verification-required' : 'backup-pending', pending: true, conflict: false, sessionRequired, message: sessionRequired ? 'Verify this device to finish backing up changes stored here.' : 'Changes stored on this device are still waiting for backup.', lastFailureAt: new Date().toISOString(), acknowledgedAt: '' });
       }
       return { restored: false, latest, sessionRequired };
     }
     if (!latest?.hasSnapshot || !latest.snapshot) {
-      setDeviceStatus((current) => ({
-        ...current,
-        state: 'no-cloud-snapshot',
-        label: latest?.message || 'No cloud backup was found for this account. Nothing was changed.',
-        lastCloudCheckAt: checkedAt
-      }));
+      const localEnvelope = getLocalEnvelope();
+      if (localEnvelope) {
+        saveSyncSafety({ state: 'backup-pending', pending: true, conflict: false, sessionRequired: false, message: 'This device has the only current vault copy. Back it up before using another device.', itemCount: getVisibleVaultItems(items).length, lastFailureAt: '', acknowledgedAt: '' });
+        setDeviceStatus((current) => ({ ...current, state: 'local-newer', label: 'This device has the only current vault copy. Nothing was replaced.', lastCloudCheckAt: checkedAt }));
+        return { restored: false, localNewer: true, latest, localEnvelope };
+      }
+      setDeviceStatus((current) => ({ ...current, state: 'no-cloud-snapshot', label: 'No secure backup exists yet. Nothing was changed.', lastCloudCheckAt: checkedAt }));
       return { restored: false, latest };
     }
 
     const localEnvelope = getLocalEnvelope();
-    const freshness = forceCloud ? 'cloud-newer' : compareLocalAndCloudVault(localEnvelope, latest.snapshot);
+    const freshness = forceCloud ? 'cloud-newer-clean' : compareLocalAndCloudVault(localEnvelope, latest.snapshot);
     if (freshness === 'same') {
-      setDeviceStatus({
-        state: 'up-to-date',
-        label: 'This device already has the latest encrypted cloud vault.',
-        lastCloudCheckAt: checkedAt,
-        lastRestoreAt: '',
-        latestSnapshotId: latest.snapshot.id || '',
-        latestCloudItemCount: Number(latest.snapshot.item_count || 0),
-        source: reason === 'unlock' ? 'checked-on-unlock' : 'cloud-check'
-      });
+      saveSyncSafety({ state: 'up-to-date', pending: false, conflict: false, sessionRequired: false, message: 'Your vault is up to date.', lastSuccessAt: latest.snapshot.created_at || latest.snapshot.client_updated_at || new Date().toISOString(), lastSnapshotId: latest.snapshot.id || '', acknowledgedAt: '' });
+      setDeviceStatus({ state: 'up-to-date', label: 'Your vault is up to date on this device.', lastCloudCheckAt: checkedAt, lastRestoreAt: '', latestSnapshotId: latest.snapshot.id || '', latestCloudItemCount: Number(latest.snapshot.item_count || 0), source: reason === 'unlock' ? 'checked-on-unlock' : 'cloud-check' });
       return { restored: false, upToDate: true, latest };
     }
     if (freshness === 'local-newer') {
-      setDeviceStatus({
-        state: 'local-newer',
-        label: 'This device has newer local changes. The older cloud copy was not allowed to overwrite them.',
-        lastCloudCheckAt: checkedAt,
-        lastRestoreAt: '',
-        latestSnapshotId: latest.snapshot.id || '',
-        latestCloudItemCount: Number(latest.snapshot.item_count || 0),
-        source: 'newer-local-vault-protected'
-      });
+      saveSyncSafety({ state: 'backup-pending', pending: true, conflict: false, sessionRequired: false, message: 'Changes from this device are waiting to be backed up.', itemCount: getVisibleVaultItems(items).length, lastFailureAt: new Date().toISOString(), acknowledgedAt: '' });
+      setDeviceStatus({ state: 'local-newer', label: 'This device has changes that are waiting to be backed up. Nothing was replaced.', lastCloudCheckAt: checkedAt, lastRestoreAt: '', latestSnapshotId: latest.snapshot.id || '', latestCloudItemCount: Number(latest.snapshot.item_count || 0), source: 'newer-local-vault-protected' });
       return { restored: false, localNewer: true, latest, localEnvelope };
+    }
+    if (freshness === 'conflict') {
+      setDeviceStatus({ state: 'conflict', label: 'Different changes were found on this device and in secure backup. Nothing was replaced.', lastCloudCheckAt: checkedAt, lastRestoreAt: '', latestSnapshotId: latest.snapshot.id || '', latestCloudItemCount: Number(latest.snapshot.item_count || 0), source: 'conflict-protected' });
+      let localItemCount = getVisibleVaultItems(items).length;
+      try {
+        const localItemsForCount = localEnvelope ? await decryptEnvelope(localEnvelope, passwordToUse) : [];
+        localItemCount = getVisibleVaultItems(localItemsForCount).length;
+      } catch {
+        // The normal unlock path will show a password error if the local copy cannot be opened.
+      }
+      showConflictPopup(latest, localEnvelope, localItemCount);
+      await recordSyncEvent('vault_conflict_detected', 'warning', { itemCount: localItemCount, message: 'Different local and cloud vault branches detected.', source: reason });
+      return { restored: false, conflict: true, latest, localEnvelope };
     }
 
     const restoredItems = await decryptEnvelope(latest.snapshot, passwordToUse);
@@ -1640,25 +1918,11 @@ function App() {
     setConfirmMasterPassword('');
     setItems(restoredItems);
     const snapshotCount = Number(latest.snapshotCount || snapshotHistory.total || 1);
-    setSyncStatus((current) => ({
-      ...current,
-      state: 'success',
-      message: `Your latest encrypted cloud vault is now on this device. ${restoredItems.length} item(s) loaded.`,
-      lastSyncAt: latest.snapshot.created_at || latest.snapshot.client_updated_at || new Date().toISOString(),
-      lastSnapshotId: latest.snapshot.id || current.lastSnapshotId,
-      itemCount: Number(latest.snapshot.item_count ?? getVisibleVaultItems(restoredItems).length),
-      snapshotCount
-    }));
-    setDeviceStatus({
-      state: 'cloud-restored',
-      label: `This device is now using your latest encrypted cloud vault. ${restoredItems.length} item(s) loaded.`,
-      lastCloudCheckAt: new Date().toISOString(),
-      lastRestoreAt: new Date().toISOString(),
-      latestSnapshotId: latest.snapshot.id || '',
-      latestCloudItemCount: Number(latest.snapshot.item_count ?? getVisibleVaultItems(restoredItems).length),
-      source: reason === 'unlock' ? 'auto-pulled-on-unlock' : 'manual-pull'
-    });
-    if (showSuccess) showMessage(`Your latest encrypted cloud vault is now on this device. ${restoredItems.length} item(s) loaded.`);
+    setSyncStatus((current) => ({ ...current, state: 'success', message: `Your vault is up to date. ${restoredItems.length} item(s) are available on this device.`, lastSyncAt: latest.snapshot.created_at || latest.snapshot.client_updated_at || new Date().toISOString(), lastSnapshotId: latest.snapshot.id || current.lastSnapshotId, itemCount: Number(latest.snapshot.item_count ?? getVisibleVaultItems(restoredItems).length), snapshotCount }));
+    saveSyncSafety({ state: 'up-to-date', pending: false, conflict: false, sessionRequired: false, message: 'Your vault is up to date.', itemCount: Number(latest.snapshot.item_count ?? getVisibleVaultItems(restoredItems).length), lastSuccessAt: latest.snapshot.created_at || latest.snapshot.client_updated_at || new Date().toISOString(), lastSnapshotId: latest.snapshot.id || '', acknowledgedAt: '' });
+    setDeviceStatus({ state: 'cloud-restored', label: `This device is now using the latest secure vault copy. ${restoredItems.length} item(s) loaded.`, lastCloudCheckAt: new Date().toISOString(), lastRestoreAt: new Date().toISOString(), latestSnapshotId: latest.snapshot.id || '', latestCloudItemCount: Number(latest.snapshot.item_count ?? getVisibleVaultItems(restoredItems).length), source: reason === 'unlock' ? 'auto-pulled-on-unlock' : 'explicit-cloud-copy' });
+    await recordSyncEvent('cloud_copy_loaded', 'success', { itemCount: restoredItems.length, source: reason, metadata: { snapshotId: latest.snapshot.id || '' } });
+    if (showSuccess) showMessage(`Your vault is up to date. ${restoredItems.length} item(s) are available on this device.`, 'success');
     return { restored: true, items: restoredItems, latest };
   }
 
@@ -1715,8 +1979,8 @@ function App() {
         tenantRole: result.tenantRole || payload.tenantRole || 'primary_owner'
       };
       setBootstrap(next);
-      setAccountStatus({ state: 'verification-required', message: result.message || 'Verify the one-time code to establish a secure session.' });
-      if (!silent) showMessage(result.message || 'Verify the one-time code to establish a secure session.');
+      setAccountStatus({ state: 'verification-required', message: result.message || 'Verify the one-time code to enable secure backup and syncing.' });
+      if (!silent) showMessage(result.message || 'Verify the one-time code to enable secure backup and syncing.');
       return { ok: true, account: next, result };
     } catch (error) {
       const note = `Could not save account details. ${error.message || 'Please try again.'}`;
@@ -1846,19 +2110,19 @@ function App() {
         accountStatus: result.account?.accountStatus || bootstrap.accountStatus,
         tenantRole: result.account?.tenantRole || bootstrap.tenantRole,
         accountVerified: true,
-        otpStatus: 'Secure session active'
+        otpStatus: 'Device verified'
       };
       setBootstrap(nextAccount);
-      setCustomerSession({ checked: true, authenticated: true, message: result.message || 'Secure account session is active.' });
+      setCustomerSession({ checked: true, authenticated: true, message: result.message || 'This device is verified for secure backup and syncing.' });
       setOtpTest((current) => ({
         ...current,
         status: 'verified',
         verified: true,
-        message: 'Account verified. Continue to the master password screen to check for newer cloud changes.'
+        message: 'Account verified. Cloud backup and secure syncing are active on this device.'
       }));
-      setAccountStatus({ state: 'ready', message: 'Account verified. Continue to the master password screen to check for newer cloud changes.' });
-      showVerifyOverlay('success', 'Account verified', 'Continue to the master password screen. Unlocking with your password will safely check for newer cloud changes.', { focusMasterPassword: true });
-      showMessage('Account verified. Continue to the master password screen to check for newer cloud changes.', 'success');
+      setAccountStatus({ state: 'ready', message: 'Account verified. Cloud backup and secure syncing are active on this device.' });
+      showVerifyOverlay('success', 'Account verified', 'Cloud backup and secure syncing are now active on this device.');
+      showMessage('Account verified. Cloud backup and secure syncing are active on this device.', 'success');
     } catch (error) {
       const note = `Code did not verify. ${error.message || ''}`.trim();
       setOtpTest((current) => ({ ...current, status: 'error', verified: false, message: note }));
@@ -1867,15 +2131,23 @@ function App() {
     }
   }
 
-  async function endCustomerSession() {
+  async function performEndCustomerSession() {
     try {
       const result = await postJson('/.netlify/functions/session-status', { action: 'logout' });
-      setCustomerSession({ checked: true, authenticated: false, message: result.message || 'Secure account session ended.' });
-      setAccountStatus({ state: 'session-needed', message: 'Secure session ended. Verify your account before the next cloud backup or restore.' });
-      showMessage('Secure account session ended on this device.');
-    } catch (error) {
-      showMessage('Secure session could not be ended. Please try again.', 'error');
+      setCustomerSession({ checked: true, authenticated: false, message: result.message || 'This device is no longer verified.' });
+      setAccountStatus({ state: 'session-needed', message: 'Verify this device again before secure backup or syncing can continue.' });
+      showMessage('Device verification ended on this device.', 'success');
+    } catch {
+      showMessage('Device verification could not be ended. Please try again.', 'error');
     }
+  }
+
+  async function endCustomerSession() {
+    if (syncSafety.pending) {
+      setSyncSafetyModal({ visible: true, mode: 'danger', title: 'Back up your changes before ending verification', message: 'This device has vault changes that are not safely backed up yet.', details: { action: 'end-session', warning: 'Ending verification now will prevent this device from finishing the backup until you verify it again.' } });
+      return;
+    }
+    await performEndCustomerSession();
   }
 
   function confirmSecureDevicePasswordCheck() {
@@ -1920,7 +2192,7 @@ function App() {
             setMasterPassword(password);
             setLocked(false);
             if (!fromBiometric) confirmSecureDevicePasswordCheck();
-            showVerifyOverlay('success', 'Vault updated', 'The latest encrypted cloud vault has been loaded on this device.');
+            showVerifyOverlay('success', 'Vault updated', 'The latest protected vault copy has been loaded on this device.');
             showMessage(`Latest cloud changes loaded. ${cloudCheckResult.items.length} item(s) are now available on this device.`, 'success');
             if (options.setupBiometricAfterPassword) await setupBiometricUnlockForPassword(password, { fromLoginIcon: true });
             return;
@@ -1946,33 +2218,38 @@ function App() {
         setItems(existing);
         setDeviceStatus((current) => ({
           ...current,
-          state: cloudCheckResult?.localNewer ? 'local-newer' : cloudCheckResult?.sessionRequired ? 'session-needed' : fromBiometric ? 'secure-device-unlock' : (canCheckCloud ? 'local-fallback' : 'local-only'),
-          label: cloudCheckResult?.localNewer
-            ? 'This device has newer local changes. The older cloud copy was not allowed to overwrite them.'
-            : cloudCheckResult?.sessionRequired
-              ? 'This device opened its local vault. Verify the account to check and update the encrypted cloud copy.'
-              : fromBiometric
-                ? 'Secure device unlock opened the local vault after checking for newer cloud changes.'
-                : (canCheckCloud ? 'This device unlocked from its local vault after checking the cloud safely.' : 'This device unlocked locally. Save your account details to enable cloud restore.'),
-          source: cloudCheckResult?.localNewer ? 'newer-local-vault-protected' : fromBiometric ? 'secure-device-local-vault' : 'local-vault'
+          state: cloudCheckResult?.conflict ? 'conflict' : cloudCheckResult?.localNewer ? 'local-newer' : cloudCheckResult?.sessionRequired ? 'session-needed' : fromBiometric ? 'secure-device-unlock' : (canCheckCloud ? 'local-fallback' : 'local-only'),
+          label: cloudCheckResult?.conflict
+            ? 'Different changes were found on this device and in secure backup. Nothing was replaced.'
+            : cloudCheckResult?.localNewer
+              ? 'This device has changes waiting to be backed up. Nothing was replaced.'
+              : cloudCheckResult?.sessionRequired
+                ? 'This device opened its local vault. Verify this device to continue secure backup and syncing.'
+                : fromBiometric
+                  ? 'Secure device unlock opened the local vault after checking for newer secure changes.'
+                  : (canCheckCloud ? 'This device unlocked from its local vault after a safe backup check.' : 'This device unlocked locally. Add and verify your account details to enable secure backup.'),
+          source: cloudCheckResult?.conflict ? 'conflict-protected' : cloudCheckResult?.localNewer ? 'newer-local-vault-protected' : fromBiometric ? 'secure-device-local-vault' : 'local-vault'
         }));
         if (!fromBiometric) confirmSecureDevicePasswordCheck();
         setLocked(false);
-        if (cloudCheckResult?.localNewer) {
+        if (cloudCheckResult?.conflict) {
+          hideVerifyOverlay();
+          showMessage('Vault opened from this device. Different changes were found elsewhere, so nothing was replaced.', 'warning');
+        } else if (cloudCheckResult?.localNewer) {
           const pendingSync = await syncEncryptedVault({ envelope: cloudCheckResult.localEnvelope || getLocalEnvelope(), nextItems: existing, silent: true });
           if (pendingSync?.ok) {
-            showMessage('Vault opened. Newer changes from this device were backed up securely.', 'success');
+            showMessage('Vault opened. Your latest changes are backed up and available on your devices.', 'success');
           } else {
-            showMessage('Vault opened with newer changes on this device, but cloud backup still needs attention. Verify the account session before using another device.', 'warning');
+            showMessage('Vault opened. Your latest changes are safe on this device, but backup still needs attention.', 'warning');
           }
         } else if (cloudCheckResult?.sessionRequired) {
-          showMessage('Vault opened from this device. Verify your account to check and update the encrypted cloud copy.', 'warning');
+          showMessage('Vault opened from this device. Verify this device to continue secure backup and syncing.', 'warning');
         } else if (cloudCheckResult?.upToDate) {
           showMessage(fromBiometric ? 'Vault opened with secure device unlock. This device is up to date.' : 'Vault unlocked. This device is up to date.', 'success');
         } else {
           showMessage(fromBiometric ? 'Vault opened with secure device unlock.' : (canCheckCloud ? 'Vault unlocked locally. Your cloud backup was checked safely.' : 'Vault unlocked locally. Save your account details to enable cloud restore.'));
         }
-        showVerifyOverlay('success', 'Vault unlocked', fromBiometric ? 'Your device verified you and checked for newer encrypted cloud changes.' : 'Your vault is open on this device.');
+        if (!cloudCheckResult?.conflict) showVerifyOverlay('success', 'Vault unlocked', fromBiometric ? 'Your device verified you and checked for newer secure changes.' : 'Your vault is open on this device.');
         if (options.setupBiometricAfterPassword && !fromBiometric) await setupBiometricUnlockForPassword(password, { fromLoginIcon: true });
         return;
       }
@@ -1988,16 +2265,19 @@ function App() {
         return;
       }
 
-      await encryptVault(starterItems, password);
+      const newVaultEnvelope = await encryptVault(starterItems, password);
       setMasterPassword(password);
       setHasLocalVault(true);
       setCreateMode(false);
       setConfirmMasterPassword('');
       setItems(starterItems);
+      saveSyncSafety({ state: 'backup-pending', pending: true, conflict: false, sessionRequired: !customerSession.authenticated, message: 'Your new vault is saved on this device and is waiting to be backed up.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' });
       if (!fromBiometric) confirmSecureDevicePasswordCheck();
-      showMessage('New secure vault created on this device. No existing cloud backup was overwritten.');
       setLocked(false);
       showVerifyOverlay('success', 'Vault created', 'Your encrypted vault has been created on this device.');
+      const initialBackup = await syncEncryptedVault({ envelope: newVaultEnvelope, nextItems: starterItems, silent: true });
+      if (initialBackup?.ok) showMessage('New secure vault created and backed up.', 'success');
+      else showMessage('New secure vault created on this device. Backup needs attention.', 'warning');
       if (options.setupBiometricAfterPassword) await setupBiometricUnlockForPassword(password, { fromLoginIcon: true });
     } catch (error) {
       showVerifyOverlay('error', 'Something went wrong', 'We could not unlock your vault. Please check your master password and try again.');
@@ -2147,17 +2427,28 @@ function App() {
   async function saveItems(nextItems, options = {}) {
     setItems(nextItems);
     const envelope = await encryptVault(nextItems, masterPassword);
+    const itemCount = getVisibleVaultItems(nextItems).length;
+    saveSyncSafety({
+      state: 'backup-pending',
+      pending: true,
+      conflict: false,
+      sessionRequired: false,
+      message: 'Your latest changes are saved on this device and are waiting to be backed up.',
+      itemCount,
+      lastFailureAt: '',
+      acknowledgedAt: ''
+    });
     if (options.autoSync) {
-      const syncResult = await syncEncryptedVault({ envelope, nextItems, silent: options.silentAutoSync === true });
-      if (!syncResult?.ok && options.silentAutoSync === true && options.suppressSyncWarning !== true) {
-        showMessage('Changes were saved on this device, but cloud backup did not complete. Verify the account session before using another device.', 'warning');
-      }
-      return syncResult;
+      return syncEncryptedVault({ envelope, nextItems, silent: options.silentAutoSync === true });
     }
     return { ok: true, localOnly: true, envelope };
   }
 
-  function lockVault(note = 'Vault locked.') {
+  function lockVault(note = 'Vault locked.', options = {}) {
+    if (syncSafety.pending && note === 'Vault locked.' && options.force !== true) {
+      setSyncSafetyModal({ visible: true, mode: 'danger', title: 'Your latest changes are not backed up yet', message: 'The vault can be locked safely, but backup cannot retry until you unlock it again.', details: { action: 'lock-vault', warning: 'Your changes will remain encrypted on this device only until backup succeeds.' } });
+      return;
+    }
     setSuppressUnlockAutofocus(true);
     setLocked(true);
     setItems([]);
@@ -2173,22 +2464,32 @@ function App() {
 
 
 
-  function resetLocalVaultOnDevice() {
-    const confirmed = window.confirm('This clears only the vault copy saved on this device. It does not delete your cloud backup. Continue?');
-    if (!confirmed) return;
+  function performClearLocalVault() {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
     localStorage.removeItem(SALT_KEY);
     localStorage.removeItem(LEGACY_SALT_KEY);
     localStorage.removeItem(BIOMETRIC_UNLOCK_KEY);
+    localStorage.removeItem(SYNC_SAFETY_KEY);
     deleteBiometricDeviceKey();
     setBiometricUnlock(null);
+    setSyncSafety(readSyncSafetyState());
     setHasLocalVault(false);
     setCreateMode(true);
     setMasterPassword('');
     setConfirmMasterPassword('');
     setMasterPasswordFieldArmed(false);
-    showMessage('The local vault copy was cleared from this device only. Your cloud backup was not deleted.');
+    showMessage('The vault copy on this device was cleared. Your secure backup was not deleted.', 'success');
+  }
+
+  function resetLocalVaultOnDevice() {
+    setSyncSafetyModal({
+      visible: true,
+      mode: 'danger',
+      title: syncSafety.pending ? 'Unprotected changes may be lost' : 'Clear this device’s vault copy?',
+      message: syncSafety.pending ? 'This device has changes that have not been backed up.' : 'This removes the encrypted vault copy from this device only.',
+      details: { action: 'clear-local', warning: syncSafety.pending ? 'Continuing will permanently remove the changes that exist only on this device.' : 'You will need to verify this device and enter the master password to use the vault here again.' }
+    });
   }
 
   function emptyForm(categoryToKeep = form.category) {
@@ -2350,7 +2651,7 @@ function App() {
         if (syncResult?.ok) {
           showMessage('Item updated and backed up securely.', 'success');
         } else {
-          showMessage('Item updated on this device, but cloud backup did not complete. Verify the account session before using another device.', 'warning');
+          showMessage('Item updated on this device. Backup needs attention.', 'warning');
         }
         return;
       }
@@ -2369,7 +2670,7 @@ function App() {
       if (syncResult?.ok) {
         showMessage('Item saved and backed up securely.', 'success');
       } else {
-        showMessage('Item saved on this device, but cloud backup did not complete. Verify the account session before using another device.', 'warning');
+        showMessage('Item saved on this device. Backup needs attention.', 'warning');
       }
     } catch (error) {
       showMessage(error.message || 'Item could not be saved. Please try again.', 'error');
@@ -2436,7 +2737,7 @@ function App() {
     } else if (syncResult?.ok) {
       showMessage('Item deleted and the updated vault was backed up securely.', 'success');
     } else {
-      showMessage('Item deleted on this device, but cloud backup did not complete. Verify the account session before using another device.', 'warning');
+      showMessage('Item deleted on this device. Backup needs attention.', 'warning');
     }
   }
 
@@ -2484,9 +2785,9 @@ function App() {
       const profilePayload = { ...bootstrap, email, displayName: bootstrap.displayName, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: checked.phoneE164, accountName: bootstrap.accountName || bootstrap.tenantName || 'Private Vault' };
       const result = await postJson(customerSession.authenticated ? '/.netlify/functions/account-profile' : '/.netlify/functions/bootstrap-admin', profilePayload);
       if (result.ok) {
-        const next = { ...bootstrap, email, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: result.phoneE164 || checked.phoneE164, tenantId: result.tenantId || bootstrap.tenantId, userId: result.userId || bootstrap.userId, accountVerified: customerSession.authenticated, otpStatus: customerSession.authenticated ? 'Secure session active' : 'OTP verification required', accountName: result.accountName || bootstrap.accountName || bootstrap.tenantName, planCode: result.planCode || bootstrap.planCode || 'personal', planStatus: result.planStatus || bootstrap.planStatus || 'trial_pending', accountStatus: result.accountStatus || bootstrap.accountStatus || 'active', tenantRole: result.tenantRole || bootstrap.tenantRole || 'primary_owner' };
+        const next = { ...bootstrap, email, phoneCountryCode: checked.phoneCountryCode, phoneNumber: checked.phoneNumber, phoneE164: result.phoneE164 || checked.phoneE164, tenantId: result.tenantId || bootstrap.tenantId, userId: result.userId || bootstrap.userId, accountVerified: customerSession.authenticated, otpStatus: customerSession.authenticated ? 'Device verified' : 'OTP verification required', accountName: result.accountName || bootstrap.accountName || bootstrap.tenantName, planCode: result.planCode || bootstrap.planCode || 'personal', planStatus: result.planStatus || bootstrap.planStatus || 'trial_pending', accountStatus: result.accountStatus || bootstrap.accountStatus || 'active', tenantRole: result.tenantRole || bootstrap.tenantRole || 'primary_owner' };
         setBootstrap(next);
-        if (!customerSession.authenticated) setAccountStatus({ state: 'verification-required', message: result.message || 'Verify the one-time code to establish a secure session.' });
+        if (!customerSession.authenticated) setAccountStatus({ state: 'verification-required', message: result.message || 'Verify the one-time code to enable secure backup and syncing.' });
         showMessage(result.message || 'Account details saved.');
         if (masterPassword && customerSession.authenticated) {
           window.setTimeout(async () => {
@@ -2542,20 +2843,24 @@ function App() {
     const effectiveItems = options.nextItems || items;
     const envelope = options.envelope || getLocalEnvelope();
     const silent = Boolean(options.silent);
+    const itemCount = getVisibleVaultItems(effectiveItems).length;
     if (!envelope) {
-      const note = 'No local encrypted vault envelope found yet.';
-      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
-      if (!silent) showMessage(note);
+      const note = 'No encrypted vault copy was found on this device.';
+      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount, snapshotCount: snapshotHistory.total });
+      if (!options.suppressFailureModal) showBackupFailurePopup(note, { itemCount, items: effectiveItems });
+      if (!silent) showMessage(note, 'error');
       return { ok: false, message: note };
     }
-    if (!bootstrap.tenantId || !bootstrap.userId) {
-      const note = 'Save your account details first so cloud backup can run.';
-      setSyncStatus({ state: 'warning', message: note, lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
-      if (!silent) showMessage(note);
-      return { ok: false, message: note };
+    if (!bootstrap.tenantId || !bootstrap.userId || !customerSession.authenticated) {
+      const note = 'Verify this device to back up your latest vault changes.';
+      setSyncStatus({ state: 'warning', message: note, lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount, snapshotCount: snapshotHistory.total });
+      if (!options.suppressFailureModal) showBackupFailurePopup(note, { sessionRequired: true, itemCount, items: effectiveItems });
+      if (!silent) showMessage('Changes are safe on this device, but device verification is required before backup can continue.', 'warning');
+      await recordSyncEvent('backup_waiting_for_verification', 'warning', { itemCount, message: note });
+      return { ok: false, sessionRequired: true, message: note };
     }
     setSyncing(true);
-    setSyncStatus({ state: 'syncing', message: silent ? 'Saving your cloud backup...' : 'Saving your cloud backup...', lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
+    setSyncStatus({ state: 'syncing', message: 'Protecting your latest vault changes...', lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount, snapshotCount: snapshotHistory.total });
     try {
       const result = await postJson('/.netlify/functions/sync-vault', {
         tenantId: bootstrap.tenantId,
@@ -2563,67 +2868,84 @@ function App() {
         encryptedBlob: envelope.encrypted,
         localSalt: envelope.salt,
         localIv: envelope.iv,
-        itemCount: getVisibleVaultItems(effectiveItems).length,
-        clientUpdatedAt: envelope.updatedAt
+        itemCount,
+        clientUpdatedAt: envelope.updatedAt,
+        baseSnapshotId: envelope.baseCloudSnapshotId || '',
+        deviceId: getSyncDeviceId(),
+        deviceType: friendlyDeviceType(),
+        explicitConflictChoice: Boolean(options.explicitConflictChoice)
       });
       if (!result.ok) {
+        const conflictBlocked = result.code === 'VAULT_CONFLICT' || Number(result.httpStatus || 0) === 409;
+        if (conflictBlocked) {
+          const latest = await fetchLatestCloudSnapshot(bootstrap);
+          const localEnvelope = getLocalEnvelope();
+          setSyncStatus({ state: 'warning', message: 'Different vault changes were found. Nothing was replaced.', lastSyncAt: '', lastSnapshotId: latest?.snapshot?.id || '', itemCount, snapshotCount: snapshotHistory.total });
+          if (latest?.hasSnapshot && latest.snapshot) showConflictPopup(latest, localEnvelope, itemCount);
+          else showBackupFailurePopup('A possible vault conflict was detected. Nothing was replaced. Open Vault Safety before continuing.', { itemCount, items: effectiveItems });
+          return { ...result, conflict: true, message: result.message || 'Different vault changes were found. Nothing was replaced.' };
+        }
         const sessionRequired = result.code === 'SESSION_REQUIRED' || Number(result.httpStatus || 0) === 401;
         const note = sessionRequired
-          ? 'Cloud backup needs account verification on this device. Your changes remain encrypted and saved locally.'
-          : `${result.message || 'Encrypted vault did not sync.'}${result.error ? ` Error: ${result.error}` : ''}`;
-        setSyncStatus({ state: sessionRequired ? 'warning' : 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
+          ? 'Verify this device to finish backing up your latest changes.'
+          : (result.message || 'Secure backup did not complete.');
+        setSyncStatus({ state: sessionRequired ? 'warning' : 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount, snapshotCount: snapshotHistory.total });
         if (sessionRequired) {
-          setCustomerSession({ checked: true, authenticated: false, message: note });
-          setAccountStatus({ state: 'session-needed', message: note });
+          setCustomerSession({ checked: true, authenticated: false, message: 'Verify this device to enable secure backup and syncing.' });
+          setAccountStatus({ state: 'session-needed', message: 'Verify this device to enable secure backup and syncing.' });
         }
-        if (!silent) showMessage(note, sessionRequired ? 'warning' : 'error');
+        if (!options.suppressFailureModal) showBackupFailurePopup(note, { sessionRequired, itemCount, items: effectiveItems });
+        if (!silent) showMessage('Your changes are safe on this device, but secure backup needs attention.', sessionRequired ? 'warning' : 'error');
+        await recordSyncEvent('backup_failed', sessionRequired ? 'warning' : 'error', { itemCount, message: note });
         return { ...result, sessionRequired, message: note };
       }
-      const savedEnvelope = {
-        ...envelope,
-        cloudSnapshotId: result.snapshotId || envelope.cloudSnapshotId || '',
-        baseCloudSnapshotId: result.snapshotId || envelope.baseCloudSnapshotId || envelope.cloudSnapshotId || ''
-      };
+      const savedEnvelope = { ...envelope, cloudSnapshotId: result.snapshotId || envelope.cloudSnapshotId || '', baseCloudSnapshotId: result.snapshotId || envelope.baseCloudSnapshotId || envelope.cloudSnapshotId || '' };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(savedEnvelope));
-      const verified = await fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(bootstrap.tenantId)}&userId=${encodeURIComponent(bootstrap.userId)}`).then((res) => res.json());
+      const verified = await fetchLatestCloudSnapshot(bootstrap);
       const verifiedSnapshot = verified?.snapshot || null;
       const history = await loadSnapshotHistory(false);
       const lastSyncAt = new Date().toISOString();
       const snapshotCount = history?.total || snapshotHistory.total || (verified?.hasSnapshot ? 1 : 0);
       const note = verified?.hasSnapshot
-        ? `${silent ? 'Backup complete.' : 'Vault backup saved.'} ${snapshotCount} backup(s) saved. Latest backup contains ${verifiedSnapshot?.item_count ?? getVisibleVaultItems(effectiveItems).length} item(s).`
-        : 'Vault backup was saved. Latest backup details are still updating.';
-      setSyncStatus({
-        state: verified?.hasSnapshot ? 'success' : 'warning',
-        message: note,
-        lastSyncAt,
-        lastSnapshotId: verifiedSnapshot?.id || result.snapshotId || '',
-        itemCount: Number(verifiedSnapshot?.item_count ?? getVisibleVaultItems(effectiveItems).length),
-        snapshotCount
-      });
-      if (!silent) showMessage(note);
+        ? `Your vault is up to date. ${verifiedSnapshot?.item_count ?? itemCount} item(s) are protected and available on your devices.`
+        : 'Your latest changes were backed up. Backup details are still updating.';
+      setSyncStatus({ state: 'success', message: note, lastSyncAt, lastSnapshotId: verifiedSnapshot?.id || result.snapshotId || '', itemCount: Number(verifiedSnapshot?.item_count ?? itemCount), snapshotCount });
+      saveSyncSafety({ state: 'up-to-date', pending: false, conflict: false, sessionRequired: false, message: 'Your vault is up to date.', itemCount: Number(verifiedSnapshot?.item_count ?? itemCount), lastSuccessAt: lastSyncAt, lastSnapshotId: verifiedSnapshot?.id || result.snapshotId || '', acknowledgedAt: '' });
+      if (syncSafetyModal.mode === 'backup-failed' || syncSafetyModal.mode === 'verification-required') closeSyncSafetyModal();
+      if (!silent) showMessage(note, 'success');
       return { ...result, verified };
     } catch (error) {
-      const note = `Could not complete cloud backup. ${error.message || 'Please try again.'}`;
-      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount: getVisibleVaultItems(effectiveItems).length, snapshotCount: snapshotHistory.total });
-      if (!silent) showMessage(note);
+      const note = `Secure backup did not complete. ${error.message || 'Please try again.'}`;
+      setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount, snapshotCount: snapshotHistory.total });
+      if (!options.suppressFailureModal) showBackupFailurePopup(note, { itemCount, items: effectiveItems });
+      if (!silent) showMessage('Your changes are safe on this device, but secure backup needs attention.', 'error');
+      await recordSyncEvent('backup_failed', 'error', { itemCount, message: note });
       return { ok: false, message: note };
     } finally {
       setSyncing(false);
     }
   }
 
-  async function restoreCloudToThisDevice() {
-    if (!masterPassword) return showMessage('Unlock the vault first so the app can restore your cloud backup.');
-    const confirmed = window.confirm('This will restore your latest cloud backup to this device. If your master password cannot open it, your current vault will not be changed. Continue?');
-    if (!confirmed) return;
+  async function restoreCloudToThisDevice(confirmed = false) {
+    if (!masterPassword) return showMessage('Unlock the vault first, then check for the latest secure copy.', 'warning');
+    if (syncSafety.pending && !confirmed) {
+      setSyncSafetyModal({
+        visible: true,
+        mode: 'danger',
+        title: 'This device has changes waiting for backup',
+        message: 'Checking another copy while this device has unprotected changes could put those changes at risk.',
+        details: { action: 'restore-cloud', warning: 'Back up this device first unless you deliberately want to discard its pending changes.' }
+      });
+      return;
+    }
     try {
-      const result = await restoreLatestCloudVault(masterPassword, { showSuccess: true, reason: 'manual' });
-      if (!result.restored) showMessage(result.latest?.message || 'No cloud backup found yet. Your local vault was not changed.');
-    } catch (error) {
-      showMessage('That master password could not open your cloud backup. Your local vault was not changed.');
+      const result = await restoreLatestCloudVault(masterPassword, { showSuccess: true, reason: 'manual-check', forceCloud: false });
+      if (!result.restored && !result.upToDate && !result.localNewer && !result.conflict) showMessage(result.latest?.message || 'No secure backup was found. This device was not changed.', 'warning');
+    } catch {
+      showMessage('The secure backup could not be opened with this master password. This device was not changed.', 'error');
     }
   }
+
 
   const visibleItems = useMemo(() => getVisibleVaultItems(items), [items]);
   const customFolders = useMemo(() => getCustomFolders(items), [items]);
@@ -3731,7 +4053,8 @@ function App() {
             </section>
           </div>
         )}
-        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+        <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
     );
   }
@@ -3844,7 +4167,8 @@ function App() {
           </div>
         )}
         <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={focusMasterPassword} />
-        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+        <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
     );
   }
@@ -3898,12 +4222,23 @@ function App() {
         </div>
         <button className="lock-button mobile-top-lock" onClick={() => lockVault()} aria-label="Lock vault"><Lock size={18} /> <span>Lock</span></button>
         <div className="topbar-actions">
+          <button type="button" className={`topbar-sync-button ${syncSafety.conflict ? 'conflict' : syncSafety.pending ? 'pending' : syncSafety.state === 'unknown' ? 'unknown' : 'safe'}`} onClick={openVaultSafetySettings} aria-label="Open Vault Safety" title="Vault Safety">
+            {syncSafety.pending ? <AlertTriangle size={18} /> : <Cloud size={18} />}
+            <span>{syncSafety.conflict ? 'Review vault' : syncSafety.pending ? 'Backup pending' : syncSafety.state === 'unknown' ? 'Not checked' : 'Up to date'}</span>
+          </button>
           <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'topbar-help-button active' : 'topbar-help-button'} onClick={openFaqSettings} aria-label="Open frequently asked questions" title="Help and FAQs"><CircleHelp size={20} /></button>
           <button type="button" className={activePage === 'home' ? 'nav-pill active' : 'nav-pill'} onClick={() => setActivePage('home')}><KeyRound size={17} /> Vault</button>
           <button type="button" className={activePage === 'settings' ? 'nav-pill active' : 'nav-pill'} onClick={() => setActivePage('settings')}><Settings size={17} /> Settings</button>
           <button className="lock-button desktop-lock-button" onClick={() => lockVault()}><Lock size={18} /> Lock</button>
         </div>
       </header>
+
+      {syncSafety.pending && (
+        <section className={`sync-warning-banner ${syncSafety.conflict ? 'conflict' : syncSafety.sessionRequired ? 'verification' : 'pending'}`} role="alert">
+          <div>{syncSafety.conflict ? <AlertTriangle size={21} /> : <Cloud size={21} />}<span><strong>{syncSafety.conflict ? 'Different vault changes need review' : syncSafety.sessionRequired ? 'Verify this device to finish backup' : 'Your latest changes are saved on this device only'}</strong><small>{syncSafety.message || 'Open Vault Safety to protect the latest changes.'}</small></span></div>
+          <button type="button" className="secondary-button" onClick={() => syncSafety.conflict ? openVaultSafetySettings() : setSyncSafetyModal({ visible: true, mode: syncSafety.sessionRequired ? 'verification-required' : 'backup-failed', title: syncSafety.sessionRequired ? 'Verify this device to finish backup' : 'Your latest changes still need backup', message: syncSafety.message || 'Your latest changes are safe on this device but not yet available elsewhere.', details: { itemCount: syncSafety.itemCount } })}>Fix now</button>
+        </section>
+      )}
 
       {activePage === 'home' ? (
         <>
@@ -4124,22 +4459,21 @@ function App() {
         <section className="settings-page settings-page-v028">
           <div className="settings-header-card">
             <p className="eyebrow">Settings</p>
-            <h2><Settings size={22} /> Vault and account information</h2>
-            <p>Manage your account, safety tools and backup status from one clearer place.</p>
+            <h2><Settings size={22} /> Your vault settings</h2>
+            <p>Manage your account, Vault Safety, Emergency Access and help.</p>
           </div>
 
           <section className="status-grid settings-status-grid">
-            <article><KeyRound /><strong>{visibleItems.length}</strong><span>Items</span></article>
-            <article><Database /><strong>{dbStatus.connected ? 'Ready' : 'Checking'}</strong><span>Cloud backup</span></article>
-            <article><Cloud /><strong>{snapshotHistory.total || syncStatus.snapshotCount || 0}</strong><span>Backups</span></article>
+            <article><KeyRound /><strong>{visibleItems.length}</strong><span>Vault items</span></article>
+            <article><Cloud /><strong>{syncSafety.conflict ? 'Review' : syncSafety.pending ? 'Pending' : syncSafety.state === 'unknown' ? 'Check' : 'Safe'}</strong><span>Vault Safety</span></article>
+            <article><MonitorSmartphone /><strong>{customerSession.authenticated ? 'Verified' : 'Action'}</strong><span>This device</span></article>
             <article><UserRoundCheck /><strong>{bootstrap.userId ? 'Ready' : 'Setup'}</strong><span>Account</span></article>
           </section>
 
           <nav className="settings-section-buttons" aria-label="Settings sections">
             <button type="button" className={activeSettingsSection === 'account' ? 'active' : ''} onClick={() => setActiveSettingsSection('account')}><UserRoundCheck size={18} /> My Account</button>
+            <button type="button" className={activeSettingsSection === 'safety' ? 'active' : ''} onClick={() => setActiveSettingsSection('safety')}><ShieldCheck size={18} /> Vault Safety</button>
             <button type="button" className={activeSettingsSection === 'emergency' ? 'active' : ''} onClick={() => setActiveSettingsSection('emergency')}><UsersRound size={18} /> Emergency Access</button>
-            <button type="button" className={activeSettingsSection === 'tools' ? 'active' : ''} onClick={() => setActiveSettingsSection('tools')}><ShieldCheck size={18} /> Tools</button>
-            <button type="button" className={activeSettingsSection === 'stats' ? 'active' : ''} onClick={() => setActiveSettingsSection('stats')}><Database size={18} /> Stats</button>
             <button type="button" className={activeSettingsSection === 'faq' ? 'active' : ''} onClick={() => setActiveSettingsSection('faq')}><CircleHelp size={18} /> FAQs</button>
           </nav>
 
@@ -4172,8 +4506,8 @@ function App() {
               </div>
 
               <div className={`secure-session-card ${customerSession.authenticated ? 'active' : 'inactive'}`}>
-                <div><ShieldCheck size={19} /><span><strong>{customerSession.authenticated ? 'Secure session active' : 'Secure session required'}</strong><small>{customerSession.message}</small></span></div>
-                {customerSession.authenticated && <button type="button" className="secondary-button" onClick={endCustomerSession}>End session</button>}
+                <div><ShieldCheck size={19} /><span><strong>{customerSession.authenticated ? 'Device verified' : 'Device verification required'}</strong><small>{customerSession.message}</small></span></div>
+                {customerSession.authenticated && <button type="button" className="secondary-button" onClick={endCustomerSession}>Remove verification</button>}
               </div>
 
               <form className="bootstrap-grid settings-inner-card" onSubmit={bootstrapAdmin}>
@@ -4206,7 +4540,7 @@ function App() {
                   <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
                   <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
                 </div>
-                {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Continue to the master password screen to check for newer cloud changes.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Continue to master password</button></div>}
+                {otpTest.verified && <div className="otp-next-step verified-only"><ShieldCheck size={16} /><span>Account verified. Cloud backup and secure syncing are active on this device.</span></div>}
               </div>
 
               <section className={`biometric-settings-card settings-inner-card ${biometricUnlock ? 'enabled' : ''}`}>
@@ -4374,34 +4708,47 @@ function App() {
             </section>
           )}
 
-          {activeSettingsSection === 'tools' && (
-            <section className="settings-section-panel settings-tools-panel" aria-label="Tools">
+          {activeSettingsSection === 'safety' && (
+            <section className="settings-section-panel vault-safety-panel" aria-label="Vault Safety">
               <div className="settings-section-heading">
-                <p className="eyebrow">Tools</p>
-                <h3><ShieldCheck size={20} /> Checks and balances</h3>
-                <p>Run safe checks, backup actions and restore tools when you need them.</p>
+                <p className="eyebrow">Vault Safety</p>
+                <h3><ShieldCheck size={20} /> Keep every change protected</h3>
+                <p>See at a glance whether your latest vault changes are safely backed up and available on your devices.</p>
               </div>
 
-              <div className="settings-tool-grid">
-                <button type="button" className="settings-tool-card" onClick={checkDbHealth}><RefreshCw size={20} /><strong>Check connection</strong><span>Confirm the cloud backup connection is ready.</span></button>
-                <button type="button" className="settings-tool-card" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={20} /><strong>Load backup history</strong><span>Refresh the list of encrypted cloud backups.</span></button>
-                <button type="button" className="settings-tool-card" disabled={syncing} onClick={syncEncryptedVault}><Cloud size={20} /><strong>{syncing ? 'Backing up...' : 'Back up vault'}</strong><span>Save the latest encrypted vault backup.</span></button>
-                <button type="button" className="settings-tool-card" disabled={syncing} onClick={restoreCloudToThisDevice}><RefreshCw size={20} /><strong>Restore backup</strong><span>Restore the latest cloud backup to this device.</span></button>
-              </div>
-
-              <p className={dbStatus.connected ? 'db-ok' : 'db-wait'}>{dbStatus.message}</p>
-
-              <div className="vault-security-info-card">
-                <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>Vault security and recovery</strong></div>
-                <div className="security-points">
-                  <span>Local vault: secure copy saved on this device for fast daily unlock.</span>
-                  <span>Cloud backup: secure backup for restore and device sync.</span>
-                  <span>Phone/email: verifies your account on a new device.</span>
-                  <span>Master password: opens your vault and is not saved by the app.</span>
+              <div className={`vault-safety-status-card ${syncSafety.conflict ? 'conflict' : syncSafety.pending ? 'pending' : syncSafety.state === 'unknown' ? 'unknown' : 'safe'}`}>
+                <div className="vault-safety-status-icon">{syncSafety.conflict || syncSafety.pending ? <AlertTriangle size={27} /> : <ShieldCheck size={27} />}</div>
+                <div>
+                  <strong>{syncSafety.conflict ? 'Different vault changes need review' : syncSafety.pending ? 'Changes are waiting to be backed up' : syncSafety.state === 'unknown' ? 'Vault safety has not been checked yet' : 'Your vault is up to date'}</strong>
+                  <span>{syncSafety.message || (syncSafety.pending ? 'Your latest changes are currently stored on this device only.' : syncSafety.state === 'unknown' ? 'Use Check and back up now to confirm this device is protected.' : 'Your latest changes are protected and available on your verified devices.')}</span>
+                  <small>{syncSafety.lastSuccessAt ? `Last successful backup: ${new Date(syncSafety.lastSuccessAt).toLocaleString()}` : 'No successful backup recorded on this device yet.'}{syncSafety.itemCount ? ` · ${syncSafety.itemCount} item(s)` : ''}</small>
                 </div>
               </div>
 
-              {message && <p className="message sync-message">{message}</p>}
+              <div className="vault-safety-action-grid">
+                <button type="button" className="settings-tool-card primary-safety-action" disabled={syncing || syncSafety.conflict} onClick={retryPendingBackup}><Cloud size={20} /><strong>{syncing ? 'Protecting changes...' : syncSafety.pending ? 'Back up changes now' : 'Check and back up now'}</strong><span>Securely protect the latest vault copy from this device.</span></button>
+                <button type="button" className="settings-tool-card" onClick={restoreCloudToThisDevice} disabled={syncing}><RefreshCw size={20} /><strong>Check for changes from another device</strong><span>Nothing is replaced if different changes are found.</span></button>
+              </div>
+
+              {!customerSession.authenticated && (
+                <div className="vault-safety-verification-card"><UserRoundCheck size={21} /><span><strong>Device verification required</strong><small>Verify this device before secure backup and syncing can continue.</small></span><button type="button" className="secondary-button" onClick={openDeviceVerification}>Verify device</button></div>
+              )}
+
+              <div className="vault-safety-explainer-grid">
+                <article><MonitorSmartphone size={20} /><strong>This device</strong><span>Your encrypted working copy stays on this device for daily access.</span></article>
+                <article><Cloud size={20} /><strong>Secure backup</strong><span>Your encrypted backup makes the latest protected copy available to your other verified devices.</span></article>
+                <article><AlertTriangle size={20} /><strong>Conflict protection</strong><span>If different changes exist in two places, neither copy is replaced automatically.</span></article>
+              </div>
+
+              <details className="advanced-recovery-card">
+                <summary><ShieldCheck size={18} /> Advanced recovery tools</summary>
+                <div>
+                  <p>These controls are only needed when changing devices or recovering an earlier secure copy.</p>
+                  <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={17} /> Check available recovery points</button>
+                  {!!snapshotHistory.snapshots.length && <p className="recovery-summary">{snapshotHistory.total} encrypted recovery point(s) are available. The latest contains {snapshotHistory.snapshots[0]?.item_count || 0} item(s) from {new Date(snapshotHistory.snapshots[0]?.created_at).toLocaleString()}.</p>}
+                  <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear vault copy from this device</button>
+                </div>
+              </details>
             </section>
           )}
 
@@ -4442,41 +4789,7 @@ function App() {
             </section>
           )}
 
-          {activeSettingsSection === 'stats' && (
-            <section className="settings-section-panel settings-stats-panel" aria-label="Stats">
-              <div className="settings-section-heading">
-                <p className="eyebrow">Stats</p>
-                <h3><Database size={20} /> Backup and sync information</h3>
-                <p>Review your backup status, device state and recent cloud snapshot history.</p>
-              </div>
 
-              <div className={`sync-status-card ${syncStatus.state}`}> 
-                <strong>{syncStatus.state === 'success' ? 'Cloud backup saved' : syncStatus.state === 'syncing' ? 'Backup in progress' : syncStatus.state === 'error' ? 'Backup needs attention' : syncStatus.state === 'warning' ? 'Backup warning' : 'Cloud backup status'}</strong>
-                <span>{syncStatus.message}</span>
-                {(syncStatus.lastSyncAt || syncStatus.snapshotCount) && <small>Last backup: {syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : 'Not backed up in this session'} · Items: {syncStatus.itemCount}</small>}
-              </div>
-
-              <div className={`device-status-card ${deviceStatus.state}`}>
-                <div className="device-status-heading"><MonitorSmartphone size={18} /><strong>This device</strong></div>
-                <span>{deviceStatus.label}</span>
-                <small>{deviceStatus.lastCloudCheckAt ? `Last checked: ${new Date(deviceStatus.lastCloudCheckAt).toLocaleString()}` : 'Not checked yet'}{deviceStatus.lastRestoreAt ? ` · Restored: ${new Date(deviceStatus.lastRestoreAt).toLocaleString()}` : ''}</small>
-              </div>
-
-              <div className="snapshot-history-card">
-                <div className="snapshot-history-title"><strong>Backup history</strong><span>{snapshotHistory.loading ? 'Loading...' : snapshotHistory.message}</span></div>
-                {!!snapshotHistory.snapshots.length && (
-                  <div className="snapshot-list">
-                    {snapshotHistory.snapshots.map((snap) => (
-                      <div className="snapshot-row" key={snap.id}>
-                        <span>{snap.item_count} item(s)</span>
-                        <small>{new Date(snap.created_at).toLocaleString()}</small>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
         </section>
       )}
 
@@ -4652,7 +4965,7 @@ function App() {
                 <div className="delete-confirm-icon"><AlertTriangle size={28} /></div>
                 <p className="delete-confirm-lead">Please confirm you want to delete this saved item from your vault.</p>
                 <div className="delete-confirm-item-name">{itemToDelete.title || 'Untitled item'}</div>
-                <p className="delete-confirm-copy">This removes the item from this device and then requests a fresh encrypted cloud backup. This action cannot be undone from the app screen.</p>
+                <p className="delete-confirm-copy">This removes the item from this device and then protects the updated vault. This action cannot be undone from the app screen.</p>
               </div>
               <footer className="item-popup-footer delete-confirm-footer">
                 <button type="button" className="secondary-button" onClick={cancelDeleteItem}><X size={16} /> Cancel</button>
@@ -4663,6 +4976,7 @@ function App() {
         );
       })()}
 
+      <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <footer>{VERSION} · secure private vault</footer>
     </main>

@@ -1,8 +1,22 @@
-import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows } from './_db.js';
+import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, supabaseRequest } from './_db.js';
 import { getActiveCustomerSession } from './_session.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
+}
+
+async function recordSyncEvent({ tenantId, userId, eventType, status = 'info', itemCount = 0, message = '', deviceId = '', metadata = {} }) {
+  return insertRow('vault_sync_events', {
+    id: publicId('sync_event'),
+    tenant_id: tenantId,
+    user_id: userId,
+    event_type: String(eventType || 'sync_event').slice(0, 80),
+    status: String(status || 'info').slice(0, 30),
+    item_count: Number(itemCount || 0),
+    message: String(message || '').slice(0, 500),
+    device_id: String(deviceId || '').slice(0, 120),
+    metadata: { version: APP_VERSION, ...metadata }
+  }).catch(() => null);
 }
 
 export async function handler(event) {
@@ -10,9 +24,9 @@ export async function handler(event) {
   try {
     session = await getActiveCustomerSession(event);
   } catch (error) {
-    return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not validate the secure account session.', error: error.message });
+    return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not check device verification.', error: error.message });
   }
-  if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify your account to use encrypted cloud backup on this device.' });
+  if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify this device to use secure backup and syncing.' });
 
   const tenantId = session.tenantId;
   const userId = session.userId;
@@ -35,6 +49,10 @@ export async function handler(event) {
 
   if (event.httpMethod !== 'POST') return jsonResponse(405, { ok: false, version: APP_VERSION, message: 'GET or POST required.' });
   const body = parseBody(event);
+  if (String(body.action || '') === 'record_event') {
+    await recordSyncEvent({ tenantId, userId, eventType: body.eventType, status: body.status, itemCount: body.itemCount, message: body.message, deviceId: body.deviceId, metadata: body.metadata || {} });
+    return jsonResponse(200, { ok: true, version: APP_VERSION, message: 'Sync diagnostic recorded.' });
+  }
   const encryptedBlob = String(body.encryptedBlob || '').trim();
   const localSalt = String(body.localSalt || '').trim();
   const localIv = String(body.localIv || '').trim();
@@ -44,8 +62,54 @@ export async function handler(event) {
 
   try {
     const snapshotId = publicId('snap');
-    await insertRow('vault_sync_snapshots', { id: snapshotId, tenant_id: tenantId, user_id: userId, encrypted_blob: encryptedBlob, local_salt: localSalt, local_iv: localIv, item_count: itemCount, client_updated_at: clientUpdatedAt });
-    await insertRow('audit_log', { id: publicId('audit'), tenant_id: tenantId, user_id: userId, action: 'encrypted_snapshot_uploaded', metadata: { version: APP_VERSION, itemCount, provider: 'supabase', tenant_identity_source: 'secure_session' } });
+    const rpcResult = await supabaseRequest('rpc/save_vault_snapshot_if_current', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_id: snapshotId,
+        p_tenant_id: tenantId,
+        p_user_id: userId,
+        p_encrypted_blob: encryptedBlob,
+        p_local_salt: localSalt,
+        p_local_iv: localIv,
+        p_item_count: itemCount,
+        p_client_updated_at: clientUpdatedAt,
+        p_base_snapshot_id: String(body.baseSnapshotId || ''),
+        p_device_id: String(body.deviceId || ''),
+        p_device_type: String(body.deviceType || ''),
+        p_force: Boolean(body.explicitConflictChoice)
+      })
+    });
+    const saved = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
+    if (!saved?.ok && saved?.conflict) {
+      await recordSyncEvent({
+        tenantId,
+        userId,
+        eventType: 'backup_conflict_blocked',
+        status: 'warning',
+        itemCount,
+        message: 'A stale device backup was blocked before it could replace the latest cloud copy.',
+        deviceId: body.deviceId,
+        metadata: { deviceType: body.deviceType || '', latestSnapshotId: saved.latestSnapshotId || '', baseSnapshotId: body.baseSnapshotId || '' }
+      });
+      return jsonResponse(409, {
+        ok: false,
+        connected: true,
+        provider: 'supabase',
+        version: APP_VERSION,
+        code: 'VAULT_CONFLICT',
+        message: 'Different vault changes were found. Nothing was replaced.',
+        latest: {
+          id: saved.latestSnapshotId || '',
+          item_count: Number(saved.latestItemCount || 0),
+          client_updated_at: saved.latestClientUpdatedAt || null,
+          created_at: saved.latestCreatedAt || null
+        }
+      });
+    }
+    if (!saved?.ok) throw new Error(saved?.message || 'Secure backup could not be saved.');
+
+    await insertRow('audit_log', { id: publicId('audit'), tenant_id: tenantId, user_id: userId, action: 'encrypted_snapshot_uploaded', metadata: { version: APP_VERSION, itemCount, provider: 'supabase', tenant_identity_source: 'secure_session', base_snapshot_id: body.baseSnapshotId || '', forced_conflict_choice: Boolean(body.explicitConflictChoice) } });
+    await recordSyncEvent({ tenantId, userId, eventType: 'backup_success', status: 'success', itemCount, message: 'Encrypted vault backup saved.', deviceId: body.deviceId, metadata: { deviceType: body.deviceType || '', snapshotId, baseSnapshotId: body.baseSnapshotId || '', forcedConflictChoice: Boolean(body.explicitConflictChoice) } });
     return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', version: APP_VERSION, snapshotId, itemCount, clientUpdatedAt, message: 'Cloud backup saved for the authenticated account.' });
   } catch (error) {
     return jsonResponse(500, { ok: false, connected: true, provider: 'supabase', version: APP_VERSION, message: 'Cloud backup failed.', error: error.message, details: error.details || null });

@@ -1,4 +1,4 @@
-# My Passwords Ver-0.039G
+# My Passwords Ver-0.039H
 
 ## Verified-session master-password handoff fix
 
@@ -10,6 +10,6 @@
 - Preserves all encrypted local and cloud vault data.
 - Preserves Ver-0.039F newest-copy protection and explicit device-only backup warnings.
 
-Expected package build version: `my-passwords@0.0.39-g`.
+Expected package build version: `my-passwords@0.0.39-h`.
 
 No Supabase SQL changes are required for Ver-0.039G.
