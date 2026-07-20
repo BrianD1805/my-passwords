@@ -4,7 +4,7 @@ import { AlertTriangle, CircleHelp, Cloud, Copy, Database, Download, ExternalLin
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.039H';
+const VERSION = 'My Passwords Ver-0.039I';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -642,6 +642,13 @@ function compareLocalAndCloudVault(localEnvelope, cloudSnapshot) {
   if (!localCloudId && localBaseId && localBaseId !== cloudId) return 'conflict';
   if (!localCloudId && !localBaseId && cloudId) return 'conflict';
   return 'local-newer';
+}
+
+function cloudSnapshotMatchesEnvelope(snapshot, envelope) {
+  if (!snapshot || !envelope) return false;
+  return String(snapshot.encrypted_blob || '') === String(envelope.encrypted || '')
+    && String(snapshot.local_salt || '') === String(envelope.salt || '')
+    && String(snapshot.local_iv || '') === String(envelope.iv || '');
 }
 
 function storeCloudSnapshotLocally(snapshot) {
@@ -1419,6 +1426,7 @@ function App() {
   const [syncSafetyModal, setSyncSafetyModal] = useState({ visible: false, mode: '', title: '', message: '', details: null });
   const [syncPromptShown, setSyncPromptShown] = useState(false);
   const syncRetryRef = useRef(false);
+  const syncOperationRef = useRef(false);
   const [snapshotHistory, setSnapshotHistory] = useState({ loaded: false, loading: false, total: 0, snapshots: [], message: 'Recovery history has not been checked yet.' });
   const [deviceStatus, setDeviceStatus] = useState({
     state: 'not-checked',
@@ -1567,9 +1575,7 @@ function App() {
   async function retryPendingBackup() {
     closeSyncSafetyModal();
     if (!customerSession.authenticated) {
-      openVaultSafetySettings();
-      setActiveSettingsSection('account');
-      showMessage('Verify this device, then return to Vault Safety to retry the backup.', 'warning');
+      await openDeviceVerification();
       return;
     }
     const result = await syncEncryptedVault({ envelope: getLocalEnvelope(), nextItems: items, silent: false, retry: true });
@@ -1581,11 +1587,12 @@ function App() {
     closeSyncSafetyModal();
   }
 
-  function openDeviceVerification() {
+  async function openDeviceVerification() {
     closeSyncSafetyModal();
     setActivePage('settings');
     setActiveSettingsSection('account');
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    await requestEmailOtp();
   }
 
   async function keepThisDeviceCopy() {
@@ -1823,7 +1830,7 @@ function App() {
 
   useEffect(() => {
     async function tryAutomaticRetry() {
-      if (locked || !syncSafety.pending || syncSafety.conflict || !customerSession.authenticated || syncRetryRef.current || !navigator.onLine) return;
+      if (locked || !syncSafety.pending || syncSafety.conflict || !customerSession.authenticated || syncing || syncOperationRef.current || syncRetryRef.current || !navigator.onLine) return;
       syncRetryRef.current = true;
       try {
         await syncEncryptedVault({ envelope: getLocalEnvelope(), nextItems: items, silent: true, retry: true, suppressFailureModal: true });
@@ -1838,7 +1845,7 @@ function App() {
       window.removeEventListener('online', onlineHandler);
       window.clearTimeout(timer);
     };
-  }, [locked, syncSafety.pending, syncSafety.conflict, customerSession.authenticated, items]);
+  }, [locked, syncSafety.pending, syncSafety.conflict, customerSession.authenticated, syncing, items]);
 
   useEffect(() => {
     if (!locked) setIsCreateVaultPopupOpen(false);
@@ -2118,11 +2125,34 @@ function App() {
         ...current,
         status: 'verified',
         verified: true,
-        message: 'Account verified. Cloud backup and secure syncing are active on this device.'
+        message: 'Device verified. Secure backup and syncing are active.'
       }));
-      setAccountStatus({ state: 'ready', message: 'Account verified. Cloud backup and secure syncing are active on this device.' });
-      showVerifyOverlay('success', 'Account verified', 'Cloud backup and secure syncing are now active on this device.');
-      showMessage('Account verified. Cloud backup and secure syncing are active on this device.', 'success');
+      setAccountStatus({ state: 'ready', message: 'Device verified. Secure backup and syncing are active.' });
+
+      const shouldFinishPendingBackup = syncSafety.pending && !syncSafety.conflict && Boolean(getLocalEnvelope());
+      if (shouldFinishPendingBackup) {
+        showVerifyOverlay('working', 'Finishing secure backup', 'Your device is verified. We are now backing up the latest vault changes.');
+        const backupResult = await syncEncryptedVault({
+          envelope: getLocalEnvelope(),
+          nextItems: items,
+          account: nextAccount,
+          sessionVerified: true,
+          silent: true,
+          retry: true
+        });
+        if (backupResult?.ok) {
+          closeSyncSafetyModal();
+          showVerifyOverlay('success', 'Backup complete', 'Your latest vault changes are securely backed up and available on your verified devices.');
+          showMessage('Device verified and backup completed.', 'success');
+        } else if (backupResult?.conflict) {
+          hideVerifyOverlay();
+        } else {
+          showVerifyOverlay('error', 'Backup still needs attention', 'Your device was verified, but the latest backup did not complete. Follow the Vault Safety message to try again.');
+        }
+      } else {
+        showVerifyOverlay('success', 'Device verified', 'Secure backup and syncing are now active on this device.');
+        showMessage('Device verified. Secure backup and syncing are active.', 'success');
+      }
     } catch (error) {
       const note = `Code did not verify. ${error.message || ''}`.trim();
       setOtpTest((current) => ({ ...current, status: 'error', verified: false, message: note }));
@@ -2843,6 +2873,8 @@ function App() {
     const effectiveItems = options.nextItems || items;
     const envelope = options.envelope || getLocalEnvelope();
     const silent = Boolean(options.silent);
+    const activeAccount = options.account || bootstrap;
+    const hasVerifiedSession = customerSession.authenticated || options.sessionVerified === true;
     const itemCount = getVisibleVaultItems(effectiveItems).length;
     if (!envelope) {
       const note = 'No encrypted vault copy was found on this device.';
@@ -2851,7 +2883,7 @@ function App() {
       if (!silent) showMessage(note, 'error');
       return { ok: false, message: note };
     }
-    if (!bootstrap.tenantId || !bootstrap.userId || !customerSession.authenticated) {
+    if (!activeAccount.tenantId || !activeAccount.userId || !hasVerifiedSession) {
       const note = 'Verify this device to back up your latest vault changes.';
       setSyncStatus({ state: 'warning', message: note, lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount, snapshotCount: snapshotHistory.total });
       if (!options.suppressFailureModal) showBackupFailurePopup(note, { sessionRequired: true, itemCount, items: effectiveItems });
@@ -2859,12 +2891,16 @@ function App() {
       await recordSyncEvent('backup_waiting_for_verification', 'warning', { itemCount, message: note });
       return { ok: false, sessionRequired: true, message: note };
     }
+    if (syncOperationRef.current) {
+      return { ok: false, inProgress: true, message: 'A secure backup is already in progress.' };
+    }
+    syncOperationRef.current = true;
     setSyncing(true);
     setSyncStatus({ state: 'syncing', message: 'Protecting your latest vault changes...', lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount, snapshotCount: snapshotHistory.total });
     try {
       const result = await postJson('/.netlify/functions/sync-vault', {
-        tenantId: bootstrap.tenantId,
-        userId: bootstrap.userId,
+        tenantId: activeAccount.tenantId,
+        userId: activeAccount.userId,
         encryptedBlob: envelope.encrypted,
         localSalt: envelope.salt,
         localIv: envelope.iv,
@@ -2878,8 +2914,21 @@ function App() {
       if (!result.ok) {
         const conflictBlocked = result.code === 'VAULT_CONFLICT' || Number(result.httpStatus || 0) === 409;
         if (conflictBlocked) {
-          const latest = await fetchLatestCloudSnapshot(bootstrap);
-          const localEnvelope = getLocalEnvelope();
+          const latest = await fetchLatestCloudSnapshot(activeAccount);
+          const localEnvelope = getLocalEnvelope() || envelope;
+          if (latest?.hasSnapshot && latest.snapshot && cloudSnapshotMatchesEnvelope(latest.snapshot, localEnvelope)) {
+            const matchedEnvelope = {
+              ...localEnvelope,
+              cloudSnapshotId: latest.snapshot.id || '',
+              baseCloudSnapshotId: latest.snapshot.id || ''
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(matchedEnvelope));
+            const lastSyncAt = latest.snapshot.created_at || latest.snapshot.client_updated_at || new Date().toISOString();
+            setSyncStatus({ state: 'success', message: `Your vault is up to date. ${latest.snapshot.item_count ?? itemCount} item(s) are protected and available on your devices.`, lastSyncAt, lastSnapshotId: latest.snapshot.id || '', itemCount: Number(latest.snapshot.item_count ?? itemCount), snapshotCount: snapshotHistory.total || 1 });
+            saveSyncSafety({ state: 'up-to-date', pending: false, conflict: false, sessionRequired: false, message: 'Your vault is up to date.', itemCount: Number(latest.snapshot.item_count ?? itemCount), lastSuccessAt: lastSyncAt, lastSnapshotId: latest.snapshot.id || '', acknowledgedAt: '' });
+            closeSyncSafetyModal();
+            return { ok: true, reusedExistingBackup: true, snapshotId: latest.snapshot.id || '', verified: latest };
+          }
           setSyncStatus({ state: 'warning', message: 'Different vault changes were found. Nothing was replaced.', lastSyncAt: '', lastSnapshotId: latest?.snapshot?.id || '', itemCount, snapshotCount: snapshotHistory.total });
           if (latest?.hasSnapshot && latest.snapshot) showConflictPopup(latest, localEnvelope, itemCount);
           else showBackupFailurePopup('A possible vault conflict was detected. Nothing was replaced. Open Vault Safety before continuing.', { itemCount, items: effectiveItems });
@@ -2899,10 +2948,18 @@ function App() {
         await recordSyncEvent('backup_failed', sessionRequired ? 'warning' : 'error', { itemCount, message: note });
         return { ...result, sessionRequired, message: note };
       }
-      const savedEnvelope = { ...envelope, cloudSnapshotId: result.snapshotId || envelope.cloudSnapshotId || '', baseCloudSnapshotId: result.snapshotId || envelope.baseCloudSnapshotId || envelope.cloudSnapshotId || '' };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedEnvelope));
-      const verified = await fetchLatestCloudSnapshot(bootstrap);
+      const verified = await fetchLatestCloudSnapshot(activeAccount);
       const verifiedSnapshot = verified?.snapshot || null;
+      const verifiedMatchesThisDevice = cloudSnapshotMatchesEnvelope(verifiedSnapshot, envelope);
+      const finalSnapshotId = verifiedMatchesThisDevice
+        ? (verifiedSnapshot?.id || result.snapshotId || '')
+        : (result.snapshotId || envelope.cloudSnapshotId || '');
+      const savedEnvelope = {
+        ...envelope,
+        cloudSnapshotId: finalSnapshotId,
+        baseCloudSnapshotId: finalSnapshotId || envelope.baseCloudSnapshotId || envelope.cloudSnapshotId || ''
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedEnvelope));
       const history = await loadSnapshotHistory(false);
       const lastSyncAt = new Date().toISOString();
       const snapshotCount = history?.total || snapshotHistory.total || (verified?.hasSnapshot ? 1 : 0);
@@ -2922,6 +2979,7 @@ function App() {
       await recordSyncEvent('backup_failed', 'error', { itemCount, message: note });
       return { ok: false, message: note };
     } finally {
+      syncOperationRef.current = false;
       setSyncing(false);
     }
   }
@@ -4236,7 +4294,11 @@ function App() {
       {syncSafety.pending && (
         <section className={`sync-warning-banner ${syncSafety.conflict ? 'conflict' : syncSafety.sessionRequired ? 'verification' : 'pending'}`} role="alert">
           <div>{syncSafety.conflict ? <AlertTriangle size={21} /> : <Cloud size={21} />}<span><strong>{syncSafety.conflict ? 'Different vault changes need review' : syncSafety.sessionRequired ? 'Verify this device to finish backup' : 'Your latest changes are saved on this device only'}</strong><small>{syncSafety.message || 'Open Vault Safety to protect the latest changes.'}</small></span></div>
-          <button type="button" className="secondary-button" onClick={() => syncSafety.conflict ? openVaultSafetySettings() : setSyncSafetyModal({ visible: true, mode: syncSafety.sessionRequired ? 'verification-required' : 'backup-failed', title: syncSafety.sessionRequired ? 'Verify this device to finish backup' : 'Your latest changes still need backup', message: syncSafety.message || 'Your latest changes are safe on this device but not yet available elsewhere.', details: { itemCount: syncSafety.itemCount } })}>Fix now</button>
+          <button type="button" className="secondary-button" onClick={() => {
+            if (syncSafety.conflict) return openVaultSafetySettings();
+            if (syncSafety.sessionRequired) return openDeviceVerification();
+            setSyncSafetyModal({ visible: true, mode: 'backup-failed', title: 'Your latest changes still need backup', message: syncSafety.message || 'Your latest changes are safe on this device but not yet available elsewhere.', details: { itemCount: syncSafety.itemCount } });
+          }}>Fix now</button>
         </section>
       )}
 

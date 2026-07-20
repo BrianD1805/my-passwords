@@ -7223,3 +7223,54 @@ a,
   font-size: 0.8rem;
   line-height: 1.35;
 }
+
+/* My Passwords Ver-0.039I — verification flow, false conflict and spacing fixes */
+.sync-safety-popup-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 20px 30px 26px;
+}
+
+.sync-safety-popup-footer > button {
+  flex: 0 0 auto;
+  min-width: 150px;
+  padding-left: 22px;
+  padding-right: 22px;
+}
+
+.sync-warning-banner {
+  padding: 18px 22px;
+}
+
+.sync-warning-banner > .secondary-button {
+  flex: 0 0 auto;
+  min-width: 126px;
+  padding-left: 22px;
+  padding-right: 22px;
+}
+
+@media (max-width: 640px) {
+  .sync-safety-popup-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 18px 20px 24px;
+  }
+
+  .sync-safety-popup-footer > button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sync-warning-banner {
+    padding: 18px;
+    gap: 16px;
+  }
+
+  .sync-warning-banner > .secondary-button {
+    width: 100%;
+    min-width: 0;
+  }
+}

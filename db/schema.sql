@@ -274,6 +274,17 @@ begin
   if found
      and not coalesce(p_force, false)
      and coalesce(p_base_snapshot_id, '') <> coalesce(v_latest.id, '') then
+    if coalesce(v_latest.encrypted_blob, '') = coalesce(p_encrypted_blob, '')
+       and coalesce(v_latest.local_salt, '') = coalesce(p_local_salt, '')
+       and coalesce(v_latest.local_iv, '') = coalesce(p_local_iv, '') then
+      return jsonb_build_object(
+        'ok', true,
+        'conflict', false,
+        'snapshotId', v_latest.id,
+        'reusedExistingBackup', true
+      );
+    end if;
+
     return jsonb_build_object(
       'ok', false,
       'conflict', true,
@@ -294,7 +305,7 @@ begin
     nullif(p_base_snapshot_id, ''), nullif(p_device_id, ''), nullif(p_device_type, '')
   );
 
-  return jsonb_build_object('ok', true, 'conflict', false, 'snapshotId', p_id);
+  return jsonb_build_object('ok', true, 'conflict', false, 'snapshotId', p_id, 'reusedExistingBackup', false);
 end;
 $$;
 
@@ -326,3 +337,7 @@ grant select, insert, update, delete on public.vault_sync_events to service_role
 grant execute on function public.save_vault_snapshot_if_current(
   text, text, text, text, text, text, integer, timestamptz, text, text, text, boolean
 ) to service_role;
+
+
+-- My Passwords Ver-0.039I
+-- Identical encrypted retry requests reuse the existing latest snapshot instead of creating a false conflict.

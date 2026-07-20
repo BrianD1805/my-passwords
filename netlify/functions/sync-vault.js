@@ -108,9 +108,11 @@ export async function handler(event) {
     }
     if (!saved?.ok) throw new Error(saved?.message || 'Secure backup could not be saved.');
 
-    await insertRow('audit_log', { id: publicId('audit'), tenant_id: tenantId, user_id: userId, action: 'encrypted_snapshot_uploaded', metadata: { version: APP_VERSION, itemCount, provider: 'supabase', tenant_identity_source: 'secure_session', base_snapshot_id: body.baseSnapshotId || '', forced_conflict_choice: Boolean(body.explicitConflictChoice) } });
-    await recordSyncEvent({ tenantId, userId, eventType: 'backup_success', status: 'success', itemCount, message: 'Encrypted vault backup saved.', deviceId: body.deviceId, metadata: { deviceType: body.deviceType || '', snapshotId, baseSnapshotId: body.baseSnapshotId || '', forcedConflictChoice: Boolean(body.explicitConflictChoice) } });
-    return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', version: APP_VERSION, snapshotId, itemCount, clientUpdatedAt, message: 'Cloud backup saved for the authenticated account.' });
+    const effectiveSnapshotId = saved.snapshotId || snapshotId;
+    const reusedExistingBackup = Boolean(saved.reusedExistingBackup || saved.reused);
+    await insertRow('audit_log', { id: publicId('audit'), tenant_id: tenantId, user_id: userId, action: reusedExistingBackup ? 'encrypted_snapshot_reused' : 'encrypted_snapshot_uploaded', metadata: { version: APP_VERSION, itemCount, provider: 'supabase', tenant_identity_source: 'secure_session', base_snapshot_id: body.baseSnapshotId || '', snapshot_id: effectiveSnapshotId, reused_existing_backup: reusedExistingBackup, forced_conflict_choice: Boolean(body.explicitConflictChoice) } });
+    await recordSyncEvent({ tenantId, userId, eventType: reusedExistingBackup ? 'backup_duplicate_reused' : 'backup_success', status: 'success', itemCount, message: reusedExistingBackup ? 'Matching encrypted vault backup already existed and was reused.' : 'Encrypted vault backup saved.', deviceId: body.deviceId, metadata: { deviceType: body.deviceType || '', snapshotId: effectiveSnapshotId, baseSnapshotId: body.baseSnapshotId || '', reusedExistingBackup, forcedConflictChoice: Boolean(body.explicitConflictChoice) } });
+    return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', version: APP_VERSION, snapshotId: effectiveSnapshotId, reusedExistingBackup, itemCount, clientUpdatedAt, message: reusedExistingBackup ? 'Matching secure backup already exists and is now linked to this device.' : 'Cloud backup saved for the authenticated account.' });
   } catch (error) {
     return jsonResponse(500, { ok: false, connected: true, provider: 'supabase', version: APP_VERSION, message: 'Cloud backup failed.', error: error.message, details: error.details || null });
   }
