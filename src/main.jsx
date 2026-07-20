@@ -4,7 +4,7 @@ import { AlertTriangle, CircleHelp, Cloud, Copy, Database, Download, ExternalLin
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.039I';
+const VERSION = 'My Passwords Ver-0.039J';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1347,6 +1347,55 @@ function ToastViewport({ toasts, onDismiss }) {
   );
 }
 
+
+function DeviceVerificationModal({ state, email, otp, onClose, onSend, onChange, onVerify }) {
+  if (!state?.visible) return null;
+  const hasChallenge = Boolean(otp?.challengeId);
+  const isSending = otp?.status === 'requesting';
+  const isVerifying = otp?.status === 'verifying';
+  const isBusy = isSending || isVerifying;
+  return (
+    <div className="item-popup-layer device-verification-popup-layer" role="dialog" aria-modal="true" aria-labelledby="device-verification-title">
+      <button type="button" className="item-popup-backdrop" onClick={isBusy ? undefined : onClose} aria-label="Close device verification" />
+      <section className="item-popup-card device-verification-popup-card">
+        <header className="item-popup-header">
+          <h2 id="device-verification-title"><ShieldCheck size={21} /> Verify this device</h2>
+          <button type="button" className="icon-button" onClick={onClose} disabled={isBusy} aria-label="Close"><X size={18} /></button>
+        </header>
+        <div className="item-popup-body device-verification-popup-body">
+          <p>Verify this device before secure backup and syncing can continue.</p>
+          <div className="device-verification-email-card"><Mail size={19} /><span><strong>Email code</strong><small>{email ? `The code will be sent to ${maskEmail(email)}.` : 'Add an email address in My Account before continuing.'}</small></span></div>
+          {!hasChallenge ? (
+            <div className="device-verification-step-card">
+              <strong>Request your one-time code</strong>
+              <span>Tap the button below when you are ready. No email is sent automatically.</span>
+            </div>
+          ) : (
+            <div className="device-verification-code-step">
+              <label htmlFor="device-verification-otp">Enter the six-digit code</label>
+              <input id="device-verification-otp" inputMode="numeric" autoComplete="one-time-code" value={otp?.input || ''} onChange={(event) => onChange(event.target.value)} placeholder="000000" maxLength={6} />
+              <small>Check your inbox and spam folder. The code expires after a short time.</small>
+            </div>
+          )}
+          {otp?.code && <div className="test-code-box"><span>Local test code</span><code>{otp.code}</code></div>}
+          {otp?.message && <div className={`device-verification-status ${otp?.status === 'error' || otp?.status === 'needs-code' || otp?.status === 'needs-details' ? 'error' : hasChallenge ? 'ready' : ''}`}>{otp.message}</div>}
+        </div>
+        <footer className="item-popup-footer device-verification-popup-footer">
+          <button type="button" className="secondary-button" onClick={onClose} disabled={isBusy}>Not now</button>
+          {!hasChallenge ? (
+            <button type="button" className="primary-button" onClick={onSend} disabled={isBusy || !email}><Mail size={17} /> {isSending ? 'Sending...' : 'Send email code'}</button>
+          ) : (
+            <>
+              <button type="button" className="secondary-button" onClick={onSend} disabled={isBusy}><RefreshCw size={17} /> Resend code</button>
+              <button type="button" className="primary-button" onClick={onVerify} disabled={isBusy}><ShieldCheck size={17} /> {isVerifying ? 'Verifying...' : 'Verify device'}</button>
+            </>
+          )}
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKeepDevice, onUseCloud, onConfirmDanger }) {
   if (!state?.visible) return null;
   const details = state.details || {};
@@ -1403,6 +1452,7 @@ function App() {
   const [confirmMasterPassword, setConfirmMasterPassword] = useState('');
   const [showUnlockPassword, setShowUnlockPassword] = useState(true);
   const [masterPasswordFieldArmed, setMasterPasswordFieldArmed] = useState(false);
+  const [passwordCheckNotice, setPasswordCheckNotice] = useState('');
   const masterPasswordInputRef = useRef(null);
   const [hasLocalVault, setHasLocalVault] = useState(() => Boolean(readStoredVault()));
   const [createMode, setCreateMode] = useState(() => !Boolean(readStoredVault()));
@@ -1441,6 +1491,7 @@ function App() {
   const [otpTest, setOtpTest] = useState({ status: 'not-requested', challengeId: '', code: '', input: '', message: 'Choose how you would like to receive your one-time code.', verified: false, expiresAt: '' });
   const [otpChannel, setOtpChannel] = useState('email');
   const [verifyOverlay, setVerifyOverlay] = useState({ visible: false, status: 'idle', title: '', message: '', focusMasterPassword: false });
+  const [deviceVerificationModal, setDeviceVerificationModal] = useState({ visible: false, purpose: '' });
   const [suppressUnlockAutofocus, setSuppressUnlockAutofocus] = useState(false);
   const [biometricUnlock, setBiometricUnlock] = useState(() => readBiometricUnlockRecord());
   const [biometricStatus, setBiometricStatus] = useState(() => ({ supported: isBiometricUnlockSupported(), label: isBiometricUnlockSupported() ? friendlyBiometricName() : 'Not supported on this browser/device', state: readBiometricUnlockRecord() ? 'enabled' : 'available' }));
@@ -1578,6 +1629,8 @@ function App() {
       await openDeviceVerification();
       return;
     }
+    setSyncPromptShown(false);
+    saveSyncSafety({ state: 'backing-up', pending: false, conflict: false, sessionRequired: false, message: 'Protecting your latest changes...' });
     const result = await syncEncryptedVault({ envelope: getLocalEnvelope(), nextItems: items, silent: false, retry: true });
     if (result?.ok) showMessage('Your latest vault changes are now backed up and available on your devices.', 'success');
   }
@@ -1587,12 +1640,19 @@ function App() {
     closeSyncSafetyModal();
   }
 
-  async function openDeviceVerification() {
+  function openDeviceVerification() {
     closeSyncSafetyModal();
-    setActivePage('settings');
-    setActiveSettingsSection('account');
-    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
-    await requestEmailOtp();
+    setOtpChannel('email');
+    setOtpTest({
+      status: 'not-requested',
+      challengeId: '',
+      code: '',
+      input: '',
+      message: 'Tap Send email code when you are ready.',
+      verified: false,
+      expiresAt: ''
+    });
+    setDeviceVerificationModal({ visible: true, purpose: syncSafety.pending ? 'finish-backup' : 'verify-device' });
   }
 
   async function keepThisDeviceCopy() {
@@ -1643,10 +1703,11 @@ function App() {
 
   function showToast(text, type = 'info') {
     const id = crypto.randomUUID();
-    setToasts((current) => [...current.slice(-3), { id, text, type }]);
+    const visualType = type === 'error' || type === 'warning' ? 'error' : 'success';
+    setToasts((current) => [...current.slice(-3), { id, text, type: visualType }]);
     window.setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
-    }, type === 'error' ? 6400 : 4200);
+    }, visualType === 'error' ? 5200 : 3600);
   }
 
   function showMessage(text, type) {
@@ -1806,14 +1867,13 @@ function App() {
   }, [locked, items]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible);
+    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible);
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible]);
 
   useEffect(() => {
-    if (locked || !syncSafety.pending || syncPromptShown || syncSafetyModal.visible) return;
-    setSyncPromptShown(true);
-    window.setTimeout(() => {
+    if (locked || !syncSafety.pending || syncing || syncPromptShown || syncSafetyModal.visible || deviceVerificationModal.visible) return undefined;
+    const timer = window.setTimeout(() => {
       if (syncSafety.conflict) {
         setSyncSafetyModal({ visible: true, mode: 'conflict-reminder', title: 'Vault sync needs your attention', message: 'Different vault changes were found earlier. Nothing will be replaced until you choose what to do in Vault Safety.', details: null });
       } else {
@@ -1825,8 +1885,10 @@ function App() {
           details: { itemCount: syncSafety.itemCount }
         });
       }
-    }, 350);
-  }, [locked, syncSafety.pending, syncSafety.conflict, syncSafety.sessionRequired, syncSafety.message, syncSafety.itemCount, syncPromptShown, syncSafetyModal.visible]);
+      setSyncPromptShown(true);
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [locked, syncSafety.pending, syncSafety.conflict, syncSafety.sessionRequired, syncSafety.message, syncSafety.itemCount, syncing, syncPromptShown, syncSafetyModal.visible, deviceVerificationModal.visible]);
 
   useEffect(() => {
     async function tryAutomaticRetry() {
@@ -1840,7 +1902,7 @@ function App() {
     }
     const onlineHandler = () => tryAutomaticRetry();
     window.addEventListener('online', onlineHandler);
-    const timer = window.setTimeout(tryAutomaticRetry, 1200);
+    const timer = window.setTimeout(tryAutomaticRetry, 2600);
     return () => {
       window.removeEventListener('online', onlineHandler);
       window.clearTimeout(timer);
@@ -2042,21 +2104,22 @@ function App() {
     await requestEmailOtp();
   }
 
-  async function requestEmailOtp() {
+  async function requestEmailOtp(options = {}) {
+    const popupFlow = Boolean(options.popupFlow || deviceVerificationModal.visible);
     const checked = validateAccountIdentity(bootstrap);
     if (!checked.ok) {
       setOtpTest((current) => ({ ...current, status: 'needs-details', message: checked.message, verified: false }));
-      showMessage(checked.message, 'warning');
+      if (!popupFlow) showMessage(checked.message, 'warning');
       return;
     }
     if (!checked.email) {
       const note = 'Add your backup email before requesting a code.';
       setOtpTest((current) => ({ ...current, status: 'needs-details', message: note, verified: false }));
-      showMessage(note, 'warning');
+      if (!popupFlow) showMessage(note, 'warning');
       return;
     }
     setOtpTest((current) => ({ ...current, status: 'requesting', code: '', message: 'Sending your email code...', verified: false }));
-    showVerifyOverlay('working', 'Sending your code', 'We are sending a one-time code to your email address.');
+    if (!popupFlow) showVerifyOverlay('working', 'Sending your code', 'We are sending a one-time code to your email address.');
     try {
       const accountCheck = await ensureAccountIdentity({ silent: true });
       if (!accountCheck.ok) throw new Error(accountCheck.message || 'Account identity is not ready yet.');
@@ -2074,32 +2137,37 @@ function App() {
         verified: false,
         expiresAt: result.expiresAt || ''
       });
-      showVerifyOverlay('success', 'Code sent', result.emailSent ? 'Check your email and enter the six-digit code.' : 'Your code is ready. Enter the code shown on screen.');
-      showMessage(result.emailSent ? 'Email code sent. Please check your inbox.' : 'Email code created. Enter the code shown to continue.', result.emailSent ? 'success' : 'warning');
+      if (!popupFlow) {
+        showVerifyOverlay('success', 'Code sent', result.emailSent ? 'Check your email and enter the six-digit code.' : 'Your code is ready. Enter the code shown on screen.');
+        showMessage(result.emailSent ? 'Email code sent. Please check your inbox.' : 'Email code created. Enter the code shown to continue.', result.emailSent ? 'success' : 'warning');
+      }
     } catch (error) {
       const note = `Could not send email code. ${error.message || 'Please try again.'}`;
       setOtpTest((current) => ({ ...current, status: 'error', message: note, verified: false }));
-      showVerifyOverlay('error', 'Something went wrong', 'We could not send the code. Please check your details and try again.');
-      showMessage(note, 'error');
+      if (!popupFlow) {
+        showVerifyOverlay('error', 'Something went wrong', 'We could not send the code. Please check your details and try again.');
+        showMessage(note, 'error');
+      }
     }
   }
 
   async function verifyTestOtp() {
+    const popupFlow = Boolean(deviceVerificationModal.visible);
     if (!otpTest.challengeId) {
       const note = 'Request a one-time code first.';
       setOtpTest((current) => ({ ...current, status: 'needs-code', message: note, verified: false }));
-      showMessage(note, 'warning');
+      if (!popupFlow) showMessage(note, 'warning');
       return;
     }
     const code = String(otpTest.input || '').replace(/\D/g, '');
     if (code.length !== 6) {
       const note = 'Enter the six-digit code.';
       setOtpTest((current) => ({ ...current, status: 'needs-code', message: note, verified: false }));
-      showMessage(note, 'warning');
+      if (!popupFlow) showMessage(note, 'warning');
       return;
     }
     setOtpTest((current) => ({ ...current, status: 'verifying', message: 'Checking your code...' }));
-    showVerifyOverlay('working', 'Verifying your account', 'Please wait while we check your one-time code.');
+    if (!popupFlow) showVerifyOverlay('working', 'Verifying your account', 'Please wait while we check your one-time code.');
     try {
       const result = await postJson('/.netlify/functions/verify-otp-test', {
         challengeId: otpTest.challengeId,
@@ -2128,6 +2196,7 @@ function App() {
         message: 'Device verified. Secure backup and syncing are active.'
       }));
       setAccountStatus({ state: 'ready', message: 'Device verified. Secure backup and syncing are active.' });
+      if (popupFlow) setDeviceVerificationModal({ visible: false, purpose: '' });
 
       const shouldFinishPendingBackup = syncSafety.pending && !syncSafety.conflict && Boolean(getLocalEnvelope());
       if (shouldFinishPendingBackup) {
@@ -2143,7 +2212,7 @@ function App() {
         if (backupResult?.ok) {
           closeSyncSafetyModal();
           showVerifyOverlay('success', 'Backup complete', 'Your latest vault changes are securely backed up and available on your verified devices.');
-          showMessage('Device verified and backup completed.', 'success');
+          if (!popupFlow) showMessage('Device verified and backup completed.', 'success');
         } else if (backupResult?.conflict) {
           hideVerifyOverlay();
         } else {
@@ -2151,13 +2220,15 @@ function App() {
         }
       } else {
         showVerifyOverlay('success', 'Device verified', 'Secure backup and syncing are now active on this device.');
-        showMessage('Device verified. Secure backup and syncing are active.', 'success');
+        if (!popupFlow) showMessage('Device verified. Secure backup and syncing are active.', 'success');
       }
     } catch (error) {
       const note = `Code did not verify. ${error.message || ''}`.trim();
       setOtpTest((current) => ({ ...current, status: 'error', verified: false, message: note }));
-      showVerifyOverlay('error', 'Something went wrong', 'The code did not verify. Please check the code and try again.');
-      showMessage(note, 'error');
+      if (!popupFlow) {
+        showVerifyOverlay('error', 'Something went wrong', 'The code did not verify. Please check the code and try again.');
+        showMessage(note, 'error');
+      }
     }
   }
 
@@ -2181,6 +2252,7 @@ function App() {
   }
 
   function confirmSecureDevicePasswordCheck() {
+    setPasswordCheckNotice('');
     const confirmedRecord = markSecureDevicePasswordConfirmed();
     if (confirmedRecord) {
       setBiometricUnlock(confirmedRecord);
@@ -2427,8 +2499,10 @@ function App() {
     }
     const reminderReason = getSecureDevicePasswordReminderReason(record);
     if (reminderReason) {
-      showVerifyOverlay('error', 'Password check required', `${reminderReason} Please use the password field and tap Unlock Local Vault. After the password opens the vault successfully, the secure device unlock counter will restart from 0.`, { focusMasterPassword: false });
-      showMessage('Password check required. Type your password and tap Unlock Local Vault. The 10-use counter will restart after a successful password unlock.', 'warning');
+      const passwordCheckMessage = `${reminderReason} Type your master password and tap Unlock Local Vault. After a successful password unlock, the secure device counter will restart.`;
+      setPasswordCheckNotice(passwordCheckMessage);
+      showVerifyOverlay('error', 'Password check required', passwordCheckMessage, { focusMasterPassword: false });
+      showMessage('Password check required.', 'warning');
       return;
     }
     try {
@@ -2458,6 +2532,20 @@ function App() {
     setItems(nextItems);
     const envelope = await encryptVault(nextItems, masterPassword);
     const itemCount = getVisibleVaultItems(nextItems).length;
+    if (options.autoSync) {
+      setSyncPromptShown(false);
+      saveSyncSafety({
+        state: 'backing-up',
+        pending: false,
+        conflict: false,
+        sessionRequired: false,
+        message: 'Protecting your latest changes...',
+        itemCount,
+        lastFailureAt: '',
+        acknowledgedAt: ''
+      });
+      return syncEncryptedVault({ envelope, nextItems, silent: options.silentAutoSync === true });
+    }
     saveSyncSafety({
       state: 'backup-pending',
       pending: true,
@@ -2468,9 +2556,6 @@ function App() {
       lastFailureAt: '',
       acknowledgedAt: ''
     });
-    if (options.autoSync) {
-      return syncEncryptedVault({ envelope, nextItems, silent: options.silentAutoSync === true });
-    }
     return { ok: true, localOnly: true, envelope };
   }
 
@@ -2679,7 +2764,7 @@ function App() {
         setIsItemPopupOpen(false);
         setViewItemId(itemIdBeingEdited);
         if (syncResult?.ok) {
-          showMessage('Item updated and backed up securely.', 'success');
+          showMessage('Item updated.', 'success');
         } else {
           showMessage('Item updated on this device. Backup needs attention.', 'warning');
         }
@@ -2698,9 +2783,7 @@ function App() {
       setIsItemPopupOpen(false);
       setViewItemId(newItem.id);
       if (syncResult?.ok) {
-        showMessage('Item saved and backed up securely.', 'success');
-      } else {
-        showMessage('Item saved on this device. Backup needs attention.', 'warning');
+        showMessage('Item saved.', 'success');
       }
     } catch (error) {
       showMessage(error.message || 'Item could not be saved. Please try again.', 'error');
@@ -2761,13 +2844,11 @@ function App() {
 
   async function deleteItem(id) {
     if (viewItemId === id) setViewItemId('');
-    const syncResult = await saveItems(items.filter((item) => item.id !== id), { autoSync: true });
+    const syncResult = await saveItems(items.filter((item) => item.id !== id), { autoSync: true, silentAutoSync: true });
     if (!bootstrap.tenantId || !bootstrap.userId) {
       showMessage('Item deleted on this device. Save your account details to enable cloud backup.', 'warning');
     } else if (syncResult?.ok) {
-      showMessage('Item deleted and the updated vault was backed up securely.', 'success');
-    } else {
-      showMessage('Item deleted on this device. Backup needs attention.', 'warning');
+      showMessage('Item deleted.', 'success');
     }
   }
 
@@ -2927,6 +3008,7 @@ function App() {
             setSyncStatus({ state: 'success', message: `Your vault is up to date. ${latest.snapshot.item_count ?? itemCount} item(s) are protected and available on your devices.`, lastSyncAt, lastSnapshotId: latest.snapshot.id || '', itemCount: Number(latest.snapshot.item_count ?? itemCount), snapshotCount: snapshotHistory.total || 1 });
             saveSyncSafety({ state: 'up-to-date', pending: false, conflict: false, sessionRequired: false, message: 'Your vault is up to date.', itemCount: Number(latest.snapshot.item_count ?? itemCount), lastSuccessAt: lastSyncAt, lastSnapshotId: latest.snapshot.id || '', acknowledgedAt: '' });
             closeSyncSafetyModal();
+            setSyncPromptShown(false);
             return { ok: true, reusedExistingBackup: true, snapshotId: latest.snapshot.id || '', verified: latest };
           }
           setSyncStatus({ state: 'warning', message: 'Different vault changes were found. Nothing was replaced.', lastSyncAt: '', lastSnapshotId: latest?.snapshot?.id || '', itemCount, snapshotCount: snapshotHistory.total });
@@ -2969,6 +3051,7 @@ function App() {
       setSyncStatus({ state: 'success', message: note, lastSyncAt, lastSnapshotId: verifiedSnapshot?.id || result.snapshotId || '', itemCount: Number(verifiedSnapshot?.item_count ?? itemCount), snapshotCount });
       saveSyncSafety({ state: 'up-to-date', pending: false, conflict: false, sessionRequired: false, message: 'Your vault is up to date.', itemCount: Number(verifiedSnapshot?.item_count ?? itemCount), lastSuccessAt: lastSyncAt, lastSnapshotId: verifiedSnapshot?.id || result.snapshotId || '', acknowledgedAt: '' });
       if (syncSafetyModal.mode === 'backup-failed' || syncSafetyModal.mode === 'verification-required') closeSyncSafetyModal();
+      setSyncPromptShown(false);
       if (!silent) showMessage(note, 'success');
       return { ...result, verified };
     } catch (error) {
@@ -4111,7 +4194,8 @@ function App() {
             </section>
           </div>
         )}
-        <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
+      <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
+      <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
     );
@@ -4142,6 +4226,7 @@ function App() {
                 </div>
                 <button type="button" onClick={unlockVault}><Unlock size={18} /> Unlock Local Vault</button>
               </div>
+              {passwordCheckNotice && <div className="password-check-login-notice" role="status"><AlertTriangle size={18} /><span><strong>Password check required</strong><small>{passwordCheckNotice}</small></span></div>}
               <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
             </>
           ) : (
@@ -4225,6 +4310,7 @@ function App() {
           </div>
         )}
         <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={focusMasterPassword} />
+        <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
         <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
@@ -4280,9 +4366,9 @@ function App() {
         </div>
         <button className="lock-button mobile-top-lock" onClick={() => lockVault()} aria-label="Lock vault"><Lock size={18} /> <span>Lock</span></button>
         <div className="topbar-actions">
-          <button type="button" className={`topbar-sync-button ${syncSafety.conflict ? 'conflict' : syncSafety.pending ? 'pending' : syncSafety.state === 'unknown' ? 'unknown' : 'safe'}`} onClick={openVaultSafetySettings} aria-label="Open Vault Safety" title="Vault Safety">
-            {syncSafety.pending ? <AlertTriangle size={18} /> : <Cloud size={18} />}
-            <span>{syncSafety.conflict ? 'Review vault' : syncSafety.pending ? 'Backup pending' : syncSafety.state === 'unknown' ? 'Not checked' : 'Up to date'}</span>
+          <button type="button" className={`topbar-sync-button ${syncing || syncSafety.state === 'backing-up' ? 'syncing' : syncSafety.conflict ? 'conflict' : syncSafety.pending ? 'pending' : syncSafety.state === 'unknown' ? 'unknown' : 'safe'}`} onClick={openVaultSafetySettings} aria-label="Open Vault Safety" title="Vault Safety">
+            {syncing || syncSafety.state === 'backing-up' ? <RefreshCw size={18} className="sync-button-spinner" /> : syncSafety.pending ? <AlertTriangle size={18} /> : <Cloud size={18} />}
+            <span>{syncing || syncSafety.state === 'backing-up' ? 'Saving...' : syncSafety.conflict ? 'Review vault' : syncSafety.pending ? 'Backup pending' : syncSafety.state === 'unknown' ? 'Not checked' : 'Up to date'}</span>
           </button>
           <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'topbar-help-button active' : 'topbar-help-button'} onClick={openFaqSettings} aria-label="Open frequently asked questions" title="Help and FAQs"><CircleHelp size={20} /></button>
           <button type="button" className={activePage === 'home' ? 'nav-pill active' : 'nav-pill'} onClick={() => setActivePage('home')}><KeyRound size={17} /> Vault</button>
@@ -4569,7 +4655,9 @@ function App() {
 
               <div className={`secure-session-card ${customerSession.authenticated ? 'active' : 'inactive'}`}>
                 <div><ShieldCheck size={19} /><span><strong>{customerSession.authenticated ? 'Device verified' : 'Device verification required'}</strong><small>{customerSession.message}</small></span></div>
-                {customerSession.authenticated && <button type="button" className="secondary-button" onClick={endCustomerSession}>Remove verification</button>}
+                {customerSession.authenticated
+                  ? <button type="button" className="secondary-button" onClick={endCustomerSession}>Remove verification</button>
+                  : <button type="button" className="secondary-button" onClick={openDeviceVerification}>Verify this device</button>}
               </div>
 
               <form className="bootstrap-grid settings-inner-card" onSubmit={bootstrapAdmin}>
@@ -4587,23 +4675,6 @@ function App() {
                   <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Save account details</button>
                 </div>
               </form>
-
-              <div className={`otp-foundation-card settings-otp-card ${otpTest.status}`}>
-                <div className="vault-security-info-heading"><ShieldCheck size={18} /><strong>One-time code</strong></div>
-                <p className="otp-guidance-note">{otpChannel === 'email' ? 'Choose how you would like to receive your one-time code. We will send a one-time code to your email.' : 'Choose how you would like to receive your one-time code. SMS verification is coming soon.'}</p>
-                <div className={`otp-channel-toggle premium-toggle ${otpChannel}`} role="tablist" aria-label="Choose OTP delivery method">
-                  <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => setOtpChannel('email')}><Mail size={15} /> Email</button>
-                  <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => setOtpChannel('sms')}><Phone size={15} /> SMS</button>
-                </div>
-                {otpTest.message && <div className={`otp-status-line ${otpTest.verified ? 'verified' : ''}`}>{otpTest.message}</div>}
-                {otpTest.code && <div className="test-code-box"><span>Recovery code</span><code>{otpTest.code}</code></div>}
-                <div className="otp-flow-row">
-                  <button type="button" className="secondary-button otp-send-button" onClick={requestSelectedOtp} disabled={otpTest.status === 'requesting' || otpChannel === 'sms'}>{otpTest.status === 'requesting' ? 'Sending...' : (otpChannel === 'email' ? 'Send email OTP' : 'SMS coming soon')}</button>
-                  <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
-                  <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
-                </div>
-                {otpTest.verified && <div className="otp-next-step verified-only"><ShieldCheck size={16} /><span>Account verified. Cloud backup and secure syncing are active on this device.</span></div>}
-              </div>
 
               <section className={`biometric-settings-card settings-inner-card ${biometricUnlock ? 'enabled' : ''}`}>
                 <div className="vault-security-info-heading"><KeyRound size={19} /><strong>Secure device unlock on this device</strong></div>
@@ -5038,6 +5109,7 @@ function App() {
         );
       })()}
 
+      <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <footer>{VERSION} · secure private vault</footer>
