@@ -7563,7 +7563,7 @@ a,
   }
 }
 
-/* My Passwords Ver-0.040 — Settings directory UX */
+/* My Passwords Ver-0.041 — Settings directory UX retained */
 .settings-page-v040 {
   display: grid;
   gap: 16px;
@@ -7761,5 +7761,234 @@ a,
   .settings-subpage-nav button {
     width: 100%;
     justify-content: flex-start;
+  }
+}
+
+/* My Passwords Ver-0.041 — production onboarding and trial lifecycle */
+.onboarding-progress-four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.onboarding-verification-step,
+.onboarding-complete-step {
+  gap: 18px;
+}
+
+.onboarding-account-summary,
+.onboarding-final-summary {
+  margin-top: 2px;
+}
+
+.onboarding-status-message,
+.landing-otp-card,
+.trial-ready-card,
+.no-public-plans,
+.trial-expired-card {
+  border: 1px solid #d7e4ef;
+  border-radius: 18px;
+  background: #f7fafc;
+}
+
+.onboarding-status-message {
+  padding: 14px 16px;
+  color: #52677d;
+  line-height: 1.5;
+}
+
+.onboarding-status-message.error,
+.landing-otp-message.error {
+  color: #9a3d45;
+  background: #fff3f3;
+  border-color: #edc8cb;
+}
+
+.landing-otp-card {
+  display: grid;
+  gap: 15px;
+  padding: 18px;
+}
+
+.landing-otp-heading,
+.trial-ready-card,
+.welcome-email-note,
+.no-public-plans,
+.trial-expired-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.landing-otp-heading span,
+.trial-ready-card span,
+.no-public-plans span,
+.trial-expired-card span {
+  display: grid;
+  gap: 4px;
+}
+
+.landing-otp-heading small,
+.trial-ready-card small,
+.no-public-plans small,
+.trial-expired-card small {
+  color: #6e8195;
+  line-height: 1.45;
+}
+
+.landing-otp-message {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #edf7f1;
+  color: #2f6f4b;
+  line-height: 1.45;
+}
+
+.landing-otp-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.landing-otp-entry input {
+  min-width: 0;
+  letter-spacing: .2em;
+  text-align: center;
+  font-weight: 800;
+}
+
+.onboarding-complete-step {
+  text-align: left;
+}
+
+.onboarding-complete-icon {
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #2f8057;
+  background: #eaf7ef;
+  border: 1px solid #bfe3ce;
+}
+
+.trial-ready-card {
+  padding: 16px 18px;
+  background: #eef8f2;
+  border-color: #c7e6d2;
+  color: #245e40;
+}
+
+.welcome-email-note {
+  margin: 0;
+  color: #3f617f;
+}
+
+.no-public-plans {
+  grid-column: 1 / -1;
+  padding: 17px;
+  background: #fff8eb;
+  border-color: #efd5a5;
+  color: #805716;
+}
+
+.trial-expired-card {
+  margin-top: 14px;
+  padding: 15px 17px;
+  color: #8e3f47;
+  background: #fff3f3;
+  border-color: #edc8cb;
+}
+
+.admin-customer-trial-card {
+  grid-template-columns: minmax(220px, 1.2fr) auto;
+}
+
+.admin-trial-summary {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid #e2eaf1;
+}
+
+.admin-trial-summary span {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid #dce6ef;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #53697e;
+}
+
+.admin-trial-summary strong {
+  color: #1f3650;
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.admin-trial-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.admin-trial-controls label {
+  display: grid;
+  gap: 5px;
+  font-weight: 700;
+  color: #425a72;
+}
+
+.admin-trial-controls input {
+  width: 88px;
+  min-height: 44px;
+}
+
+.admin-customer-actions {
+  grid-column: 1 / -1;
+}
+
+.admin-status.trial_expired,
+.admin-status.cancelled {
+  color: #923e47;
+  background: #fff0f1;
+  border-color: #efc8cc;
+}
+
+@media (max-width: 820px) {
+  .landing-otp-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-otp-entry .primary-button {
+    width: 100%;
+  }
+
+  .admin-trial-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-trial-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-trial-controls label,
+  .admin-trial-controls input,
+  .admin-trial-controls button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-trial-summary,
+  .admin-trial-controls {
+    grid-template-columns: 1fr;
   }
 }

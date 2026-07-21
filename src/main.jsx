@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, ArrowLeft, ChevronRight, CircleHelp, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, ChevronRight, CircleHelp, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.040';
+const VERSION = 'My Passwords Ver-0.041';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -166,7 +166,30 @@ function planStatusDisplayName(planStatus, accountStatus = '') {
   if (status === 'trial_active' || status === 'trialing') return 'Trial Active';
   if (status === 'active') return 'Active';
   if (status === 'suspended') return 'Suspended';
+  if (status === 'trial_expired') return 'Trial Expired';
+  if (status === 'trial_cancelled') return 'Trial Cancelled';
   return status ? status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Active';
+}
+
+
+function formatAccountDate(value, includeTime = false) {
+  if (!value) return '—';
+  const options = includeTime
+    ? { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+    : { day: 'numeric', month: 'short', year: 'numeric' };
+  return new Intl.DateTimeFormat('en-GB', options).format(new Date(value));
+}
+
+function accountTrialDaysRemaining(value) {
+  if (!value) return null;
+  return Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+}
+
+function isFounderPlan(account = {}) {
+  const planCode = String(account.planCode || '').toLowerCase();
+  const planStatus = String(account.planStatus || '').toLowerCase();
+  const tenantRole = String(account.tenantRole || '').toLowerCase();
+  return ['founder_private', 'private_founder'].includes(planCode) || planStatus === 'founder_active' || tenantRole === 'founder_first_tenant';
 }
 
 function tenantRoleDisplayName(tenantRole) {
@@ -1468,7 +1491,7 @@ function App() {
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
   const [accountStatus, setAccountStatus] = useState({ state: 'local-first', message: 'Your account details help you recover your vault on a new device.' });
-  const [customerSession, setCustomerSession] = useState({ checked: false, authenticated: false, message: 'Device verification has not been checked yet.' });
+  const [customerSession, setCustomerSession] = useState({ checked: false, authenticated: false, cloudAccess: false, accessCode: '', message: 'Device verification has not been checked yet.' });
   const [publicPlans, setPublicPlans] = useState(FALLBACK_SAAS_PLANS);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'Your vault safety status will update after the first secure backup check.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
@@ -1532,6 +1555,8 @@ function App() {
       planCode: ['personal', 'family', 'business'].includes(saved.planCode) ? saved.planCode : 'personal'
     };
   });
+  const [landingSignup, setLandingSignup] = useState({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
+  const [landingOtp, setLandingOtp] = useState({ status: 'idle', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
   const touchReorderRef = useRef({ timer: null, source: '', active: false });
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
@@ -1818,7 +1843,7 @@ function App() {
     fetch('/.netlify/functions/public-plans')
       .then((response) => response.json())
       .then((result) => {
-        if (cancelled || !result?.ok || !Array.isArray(result.plans) || !result.plans.length) return;
+        if (cancelled || !result?.ok || !Array.isArray(result.plans)) return;
         setPublicPlans(result.plans.map((plan) => ({
           code: plan.code,
           displayName: plan.display_name,
@@ -1856,18 +1881,23 @@ function App() {
             planStatus: result.account?.planStatus || bootstrap.planStatus,
             accountStatus: result.account?.accountStatus || bootstrap.accountStatus,
             tenantRole: result.account?.tenantRole || bootstrap.tenantRole,
+            trialStartedAt: result.account?.trialStartedAt || bootstrap.trialStartedAt || '',
+            trialEndsAt: result.account?.trialEndsAt || bootstrap.trialEndsAt || '',
+            trialDaysRemaining: result.account?.trialDaysRemaining ?? bootstrap.trialDaysRemaining ?? null,
+            onboardingCompletedAt: result.account?.onboardingCompletedAt || bootstrap.onboardingCompletedAt || '',
             accountVerified: true,
             otpStatus: 'Device verified'
           };
           setBootstrap(next);
-          setCustomerSession({ checked: true, authenticated: true, message: result.message || 'This device is verified for secure backup and syncing.' });
-          setAccountStatus({ state: 'ready', message: 'Cloud backup and secure syncing are active on this device.' });
+          const cloudAccess = result.cloudAccess !== false;
+          setCustomerSession({ checked: true, authenticated: true, cloudAccess, accessCode: result.accessCode || '', message: result.message || (cloudAccess ? 'This device is verified for secure backup and syncing.' : 'Cloud features are paused for this account.') });
+          setAccountStatus({ state: cloudAccess ? 'ready' : 'access-paused', message: result.message || (cloudAccess ? 'Cloud backup and secure syncing are active on this device.' : 'Cloud backup and syncing are currently paused.') });
         } else {
-          setCustomerSession({ checked: true, authenticated: false, message: result?.message || 'Verify this device to enable secure backup and syncing.' });
+          setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: result?.code || 'SESSION_REQUIRED', message: result?.message || 'Verify this device to enable secure backup and syncing.' });
           setAccountStatus((current) => current.state === 'ready' ? current : { state: 'session-needed', message: result?.message || 'Verify this device to enable secure backup and syncing.' });
         }
       } catch (error) {
-        if (!cancelled) setCustomerSession({ checked: true, authenticated: false, message: 'Device verification could not be checked.' });
+        if (!cancelled) setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_CHECK_FAILED', message: 'Device verification could not be checked.' });
       }
     }
     checkSecureSession();
@@ -1906,7 +1936,7 @@ function App() {
 
   useEffect(() => {
     async function tryAutomaticRetry() {
-      if (locked || !syncSafety.pending || syncSafety.conflict || !customerSession.authenticated || syncing || syncOperationRef.current || syncRetryRef.current || !navigator.onLine) return;
+      if (locked || !syncSafety.pending || syncSafety.conflict || !customerSession.authenticated || customerSession.cloudAccess === false || syncing || syncOperationRef.current || syncRetryRef.current || !navigator.onLine) return;
       syncRetryRef.current = true;
       try {
         await syncEncryptedVault({ envelope: getLocalEnvelope(), nextItems: items, silent: true, retry: true, suppressFailureModal: true });
@@ -1921,7 +1951,7 @@ function App() {
       window.removeEventListener('online', onlineHandler);
       window.clearTimeout(timer);
     };
-  }, [locked, syncSafety.pending, syncSafety.conflict, customerSession.authenticated, syncing, items]);
+  }, [locked, syncSafety.pending, syncSafety.conflict, customerSession.authenticated, customerSession.cloudAccess, syncing, items]);
 
   useEffect(() => {
     if (!locked) setIsCreateVaultPopupOpen(false);
@@ -1948,7 +1978,7 @@ function App() {
         : (latest?.message || 'Secure backup could not be checked. This device kept its current vault copy.');
       setDeviceStatus((current) => ({ ...current, state: sessionRequired ? 'session-needed' : 'cloud-check-failed', label: note, lastCloudCheckAt: checkedAt }));
       if (sessionRequired) {
-        setCustomerSession({ checked: true, authenticated: false, message: 'Verify this device to enable secure backup and syncing.' });
+        setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', message: 'Verify this device to enable secure backup and syncing.' });
         setAccountStatus({ state: 'session-needed', message: 'Verify this device to enable secure backup and syncing.' });
       }
       const unsyncedEnvelope = getLocalEnvelope();
@@ -2198,11 +2228,15 @@ function App() {
         planStatus: result.account?.planStatus || bootstrap.planStatus,
         accountStatus: result.account?.accountStatus || bootstrap.accountStatus,
         tenantRole: result.account?.tenantRole || bootstrap.tenantRole,
+        trialDays: Number(result.account?.trialDays || bootstrap.trialDays || 0),
+        trialStartedAt: result.account?.trialStartedAt || bootstrap.trialStartedAt || '',
+        trialEndsAt: result.account?.trialEndsAt || bootstrap.trialEndsAt || '',
+        onboardingCompletedAt: result.onboardingCompleted ? new Date().toISOString() : bootstrap.onboardingCompletedAt || '',
         accountVerified: true,
         otpStatus: 'Device verified'
       };
       setBootstrap(nextAccount);
-      setCustomerSession({ checked: true, authenticated: true, message: result.message || 'This device is verified for secure backup and syncing.' });
+      setCustomerSession({ checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: result.accessCode || '', message: result.message || 'This device is verified for secure backup and syncing.' });
       setOtpTest((current) => ({
         ...current,
         status: 'verified',
@@ -2212,7 +2246,7 @@ function App() {
       setAccountStatus({ state: 'ready', message: 'Device verified. Secure backup and syncing are active.' });
       if (popupFlow) setDeviceVerificationModal({ visible: false, purpose: '' });
 
-      const shouldFinishPendingBackup = syncSafety.pending && !syncSafety.conflict && Boolean(getLocalEnvelope());
+      const shouldFinishPendingBackup = result.cloudAccess !== false && syncSafety.pending && !syncSafety.conflict && Boolean(getLocalEnvelope());
       if (shouldFinishPendingBackup) {
         showVerifyOverlay('working', 'Finishing secure backup', 'Your device is verified. We are now backing up the latest vault changes.');
         const backupResult = await syncEncryptedVault({
@@ -2249,7 +2283,7 @@ function App() {
   async function performEndCustomerSession() {
     try {
       const result = await postJson('/.netlify/functions/session-status', { action: 'logout' });
-      setCustomerSession({ checked: true, authenticated: false, message: result.message || 'This device is no longer verified.' });
+      setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', message: result.message || 'This device is no longer verified.' });
       setAccountStatus({ state: 'session-needed', message: 'Verify this device again before secure backup or syncing can continue.' });
       showMessage('Device verification ended on this device.', 'success');
     } catch {
@@ -2969,7 +3003,7 @@ function App() {
     const envelope = options.envelope || getLocalEnvelope();
     const silent = Boolean(options.silent);
     const activeAccount = options.account || bootstrap;
-    const hasVerifiedSession = customerSession.authenticated || options.sessionVerified === true;
+    const hasVerifiedSession = (customerSession.authenticated && customerSession.cloudAccess !== false) || options.sessionVerified === true;
     const itemCount = getVisibleVaultItems(effectiveItems).length;
     if (!envelope) {
       const note = 'No encrypted vault copy was found on this device.';
@@ -3031,13 +3065,17 @@ function App() {
           return { ...result, conflict: true, message: result.message || 'Different vault changes were found. Nothing was replaced.' };
         }
         const sessionRequired = result.code === 'SESSION_REQUIRED' || Number(result.httpStatus || 0) === 401;
+        const accessPaused = ['TRIAL_EXPIRED', 'TRIAL_CANCELLED', 'ACCOUNT_SUSPENDED', 'ACCOUNT_VERIFICATION_REQUIRED'].includes(String(result.code || ''));
         const note = sessionRequired
           ? 'Verify this device to finish backing up your latest changes.'
           : (result.message || 'Secure backup did not complete.');
         setSyncStatus({ state: sessionRequired ? 'warning' : 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount, snapshotCount: snapshotHistory.total });
         if (sessionRequired) {
-          setCustomerSession({ checked: true, authenticated: false, message: 'Verify this device to enable secure backup and syncing.' });
+          setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', message: 'Verify this device to enable secure backup and syncing.' });
           setAccountStatus({ state: 'session-needed', message: 'Verify this device to enable secure backup and syncing.' });
+        } else if (accessPaused) {
+          setCustomerSession((current) => ({ ...current, checked: true, authenticated: true, cloudAccess: false, accessCode: result.code || 'ACCOUNT_ACCESS_PAUSED', message: note }));
+          setAccountStatus({ state: 'access-paused', message: note });
         }
         if (!options.suppressFailureModal) showBackupFailurePopup(note, { sessionRequired, itemCount, items: effectiveItems });
         if (!silent) showMessage('Your changes are safe on this device, but secure backup needs attention.', sessionRequired ? 'warning' : 'error');
@@ -3160,6 +3198,8 @@ function App() {
 
   function openCreateAccountPopup() {
     setLandingOnboardingStep(1);
+    setLandingSignup({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
+    setLandingOtp({ status: 'idle', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
     setLandingAccountDraft((current) => ({
       ...current,
       displayName: current.displayName || bootstrap.displayName || '',
@@ -3177,6 +3217,7 @@ function App() {
   function closeCreateAccountPopup() {
     setIsCreateAccountPopupOpen(false);
     setLandingOnboardingStep(1);
+    setLandingOtp({ status: 'idle', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
   }
 
   function updateLandingDraft(patch) {
@@ -3187,8 +3228,8 @@ function App() {
     });
   }
 
-  function continueLandingOnboarding() {
-    const draft = {
+  function cleanLandingDraft() {
+    return {
       ...landingAccountDraft,
       phoneCountryCode: normaliseCountryCode(landingAccountDraft.phoneCountryCode || '+254') || '+254',
       phoneNumber: String(landingAccountDraft.phoneNumber || '').trim(),
@@ -3197,33 +3238,144 @@ function App() {
       displayName: String(landingAccountDraft.displayName || '').trim(),
       accountName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
       tenantName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
-      planCode: landingAccountDraft.planCode || 'personal',
-      planStatus: landingAccountDraft.planCode === 'founder_private' ? 'founder_active' : 'trial_pending',
-      accountStatus: 'active',
-      tenantRole: 'primary_owner',
-      onboardingStatus: 'landing_onboarding_started'
+      planCode: landingAccountDraft.planCode || 'personal'
     };
+  }
 
-    if (!draft.phoneE164) {
-      setLandingOnboardingStep(1);
-      showMessage('Please enter a mobile number so the secure setup can continue.', 'warning');
-      return;
-    }
-    if (!draft.email || !draft.email.includes('@')) {
-      setLandingOnboardingStep(1);
-      showMessage('Please enter a valid email address for OTP recovery.', 'warning');
-      return;
-    }
-    if (!draft.accountName) {
-      setLandingOnboardingStep(1);
-      showMessage('Please enter an account or vault name.', 'warning');
-      return;
-    }
+  function validateLandingDraft(draft) {
+    if (!draft.displayName) return 'Please enter your name.';
+    if (!draft.email || !draft.email.includes('@')) return 'Please enter a valid email address for account verification.';
+    if (!draft.phoneE164) return 'Please enter a mobile number with country code.';
+    if (!draft.accountName) return 'Please enter an account or vault name.';
+    if (!draft.planCode) return 'Please choose a subscription plan.';
+    return '';
+  }
 
-    const nextAccount = { ...bootstrap, ...draft };
-    localStorage.setItem(BOOTSTRAP_KEY, JSON.stringify(nextAccount));
-    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(nextAccount));
-    setBootstrap(nextAccount);
+  async function prepareLandingOnboarding() {
+    const draft = cleanLandingDraft();
+    const validationMessage = validateLandingDraft(draft);
+    if (validationMessage) {
+      showMessage(validationMessage, 'warning');
+      setLandingOnboardingStep(validationMessage.includes('plan') ? 2 : 1);
+      return;
+    }
+    setLandingSignup((current) => ({ ...current, status: 'preparing', message: 'Preparing your secure account...' }));
+    try {
+      const result = await postJson('/.netlify/functions/bootstrap-admin', draft);
+      if (!result.ok) throw new Error(result.message || 'Account setup could not continue.');
+      const nextAccount = {
+        ...bootstrap,
+        ...draft,
+        tenantId: result.tenantId || '',
+        userId: result.userId || '',
+        accountName: result.accountName || draft.accountName,
+        tenantName: result.accountName || draft.accountName,
+        planCode: result.planCode || draft.planCode,
+        planStatus: result.planStatus || 'signup_pending',
+        accountStatus: result.accountStatus || 'pending_verification',
+        tenantRole: result.tenantRole || 'primary_owner',
+        trialStartedAt: result.trialStartedAt || '',
+        trialEndsAt: result.trialEndsAt || '',
+        accountVerified: false,
+        otpStatus: 'Email verification required',
+        onboardingStatus: result.existingAccount ? 'existing_account_verification' : 'new_account_verification'
+      };
+      setBootstrap(nextAccount);
+      setLandingAccountDraft((current) => ({ ...current, ...draft, planCode: nextAccount.planCode }));
+      setLandingSignup({
+        status: 'ready-for-otp',
+        message: result.message || 'Request the email code to continue.',
+        existingAccount: Boolean(result.existingAccount),
+        tenantId: result.tenantId || '',
+        userId: result.userId || '',
+        planName: result.planName || planDisplayName(result.planCode || draft.planCode),
+        trialDays: Number(result.trialDays || 0),
+        trialStartedAt: result.trialStartedAt || '',
+        trialEndsAt: result.trialEndsAt || '',
+        welcomeEmailSent: false
+      });
+      setLandingOtp({ status: 'idle', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
+      setLandingOnboardingStep(3);
+    } catch (error) {
+      setLandingSignup((current) => ({ ...current, status: 'error', message: error.message || 'Account setup could not continue.' }));
+      showMessage(error.message || 'Account setup could not continue.', 'error');
+    }
+  }
+
+  async function sendLandingOnboardingOtp() {
+    const email = String(landingAccountDraft.email || '').trim().toLowerCase();
+    if (!email) return;
+    setLandingOtp((current) => ({ ...current, status: 'sending', message: 'Sending your verification code...' }));
+    try {
+      const result = await postJson('/.netlify/functions/request-email-otp-test', { email, purpose: 'production_onboarding' });
+      if (!result.ok) throw new Error(result.message || 'The email code could not be sent.');
+      setLandingOtp({
+        status: 'sent',
+        challengeId: result.challengeId || '',
+        input: '',
+        message: result.message || 'Enter the code sent to your email.',
+        testCode: result.testOtpCode || '',
+        expiresAt: result.expiresAt || ''
+      });
+    } catch (error) {
+      setLandingOtp((current) => ({ ...current, status: 'error', message: error.message || 'The email code could not be sent.' }));
+    }
+  }
+
+  async function verifyLandingOnboardingOtp() {
+    const code = String(landingOtp.input || '').replace(/\D/g, '');
+    if (!landingOtp.challengeId) {
+      setLandingOtp((current) => ({ ...current, status: 'error', message: 'Request an email code first.' }));
+      return;
+    }
+    if (code.length !== 6) {
+      setLandingOtp((current) => ({ ...current, status: 'error', message: 'Enter the six-digit code.' }));
+      return;
+    }
+    setLandingOtp((current) => ({ ...current, status: 'verifying', message: 'Verifying your account...' }));
+    try {
+      const result = await postJson('/.netlify/functions/verify-otp-test', { challengeId: landingOtp.challengeId, code });
+      if (!result.ok) throw new Error(result.message || 'The code could not be verified.');
+      const nextAccount = {
+        ...bootstrap,
+        tenantId: result.tenantId || bootstrap.tenantId,
+        userId: result.userId || bootstrap.userId,
+        accountName: result.account?.accountName || bootstrap.accountName,
+        tenantName: result.account?.accountName || bootstrap.tenantName,
+        planCode: result.account?.planCode || bootstrap.planCode,
+        planName: result.account?.planName || planDisplayName(result.account?.planCode || bootstrap.planCode),
+        planStatus: result.account?.planStatus || bootstrap.planStatus,
+        accountStatus: result.account?.accountStatus || bootstrap.accountStatus,
+        tenantRole: result.account?.tenantRole || bootstrap.tenantRole,
+        trialDays: Number(result.account?.trialDays || 0),
+        trialStartedAt: result.account?.trialStartedAt || '',
+        trialEndsAt: result.account?.trialEndsAt || '',
+        onboardingCompletedAt: result.onboardingCompleted ? new Date().toISOString() : bootstrap.onboardingCompletedAt || '',
+        accountVerified: true,
+        otpStatus: 'Device verified',
+        onboardingStatus: 'complete'
+      };
+      setBootstrap(nextAccount);
+      setCustomerSession({ checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: result.accessCode || '', message: result.message || 'This device is verified.' });
+      setLandingSignup((current) => ({
+        ...current,
+        status: 'complete',
+        message: result.message || 'Your account is ready.',
+        planName: result.account?.planName || current.planName || planDisplayName(nextAccount.planCode),
+        trialDays: Number(result.account?.trialDays || current.trialDays || 0),
+        trialStartedAt: result.account?.trialStartedAt || current.trialStartedAt || '',
+        trialEndsAt: result.account?.trialEndsAt || current.trialEndsAt || '',
+        welcomeEmailSent: Boolean(result.welcomeEmailSent)
+      }));
+      setLandingOtp((current) => ({ ...current, status: 'verified', message: result.message || 'Account verified.' }));
+      setLandingOnboardingStep(4);
+    } catch (error) {
+      setLandingOtp((current) => ({ ...current, status: 'error', message: error.message || 'The code could not be verified.' }));
+    }
+  }
+
+  function finishLandingOnboarding() {
+    setIsCreateAccountPopupOpen(false);
     window.location.assign('/vault');
   }
 
@@ -4149,16 +4301,16 @@ function App() {
                 <button type="button" className="icon-button" onClick={closeCreateAccountPopup} aria-label="Close create account popup"><X size={18} /></button>
               </header>
               <div className="item-popup-body create-account-popup-body">
-                <div className="onboarding-progress" aria-label="Onboarding progress">
-                  {[1, 2, 3].map((step) => <span key={step} className={landingOnboardingStep === step ? 'active' : landingOnboardingStep > step ? 'complete' : ''}>{step}</span>)}
+                <div className="onboarding-progress onboarding-progress-four" aria-label="Onboarding progress">
+                  {[1, 2, 3, 4].map((step) => <span key={step} className={landingOnboardingStep === step ? 'active' : landingOnboardingStep > step ? 'complete' : ''}>{step}</span>)}
                 </div>
 
                 {landingOnboardingStep === 1 && (
                   <div className="create-account-step">
                     <h3>Your account details</h3>
-                    <p>These details prepare your SaaS account record and help you recover your vault on a new device. They do not replace your master vault password.</p>
+                    <p>These details identify your account and allow secure email verification on this and future devices. They do not replace your master vault password.</p>
                     <label>Display name<input value={landingAccountDraft.displayName} onChange={(e) => updateLandingDraft({ displayName: e.target.value })} placeholder="Your name" /></label>
-                    <label>Email for OTP recovery<input type="email" value={landingAccountDraft.email} onChange={(e) => updateLandingDraft({ email: e.target.value })} placeholder="you@example.com" /></label>
+                    <label>Email for account verification<input type="email" value={landingAccountDraft.email} onChange={(e) => updateLandingDraft({ email: e.target.value })} placeholder="you@example.com" /></label>
                     <label>Mobile number</label>
                     <div className="phone-combo-field">
                       <CountryPicker countryCode={landingAccountDraft.phoneCountryCode || '+254'} countryIso={landingAccountDraft.phoneCountryIso || 'ke'} onChange={(country) => updateLandingDraft({ phoneCountryCode: country.code, phoneCountryIso: country.iso })} />
@@ -4171,39 +4323,66 @@ function App() {
                 {landingOnboardingStep === 2 && (
                   <div className="create-account-step">
                     <h3>Choose your starting plan</h3>
-                    <p>Choose the option that best matches how you expect to use My Passwords.</p>
+                    <p>The trial period comes directly from the plan configured in My Passwords Admin.</p>
                     <div className="plan-choice-grid">
                       {publicPlans.map((plan) => <button type="button" key={plan.code} className={landingAccountDraft.planCode === plan.code ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: plan.code })}><strong>{plan.displayName}</strong><span>{plan.description}</span><small>{publicPlanPriceLabel(plan)}</small></button>)}
+                      {!publicPlans.length && <div className="no-public-plans"><AlertTriangle size={18} /><span><strong>No plans are published yet.</strong><small>Publish at least one active plan in My Passwords Admin before opening new customer onboarding.</small></span></div>}
                     </div>
-                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>Your existing vault remains protected. This step does not change your saved passwords, documents or encrypted backups.</span></div>
+                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>No payment is taken during this onboarding build. The selected trial starts only after successful email verification.</span></div>
                   </div>
                 )}
 
                 {landingOnboardingStep === 3 && (
-                  <div className="create-account-step">
-                    <h3>Security confirmation</h3>
-                    <p>Next you will continue to the private vault setup page, where email OTP and the master vault password are handled securely.</p>
-                    <div className="security-check-list">
-                      <span><ShieldCheck size={17} /> Your master vault password is never stored by the app.</span>
-                      <span><ShieldCheck size={17} /> If the master password is forgotten, the encrypted vault cannot be recovered.</span>
-                      <span><ShieldCheck size={17} /> Existing vault data is not overwritten by this landing-page flow.</span>
-                    </div>
-                    <div className="account-summary-card">
+                  <div className="create-account-step onboarding-verification-step">
+                    <h3>Verify your email</h3>
+                    <p>{landingSignup.existingAccount ? 'An existing account was found. Verification will open that account on this device without starting a second trial.' : 'Request the code when you are ready. Your account remains pending and the trial does not start until the code is verified.'}</p>
+                    <div className="account-summary-card onboarding-account-summary">
                       <span><strong>Account</strong>{landingAccountDraft.accountName || 'My Private Vault'}</span>
                       <span><strong>Email</strong>{landingAccountDraft.email || 'not set'}</span>
                       <span><strong>Phone</strong>{landingAccountDraft.phoneE164 || buildPhoneE164(landingAccountDraft.phoneCountryCode, landingAccountDraft.phoneNumber) || 'not set'}</span>
-                      <span><strong>Plan</strong>{landingAccountDraft.planCode || 'personal'}</span>
+                      <span><strong>Plan</strong>{landingSignup.planName || planDisplayName(landingAccountDraft.planCode)}</span>
                     </div>
+                    {landingSignup.message && <div className={`onboarding-status-message ${landingSignup.status}`}>{landingSignup.message}</div>}
+                    <div className={`landing-otp-card ${landingOtp.status}`}>
+                      <div className="landing-otp-heading"><Mail size={19} /><span><strong>Email verification code</strong><small>The code expires after 10 minutes.</small></span></div>
+                      {landingOtp.status === 'idle' || landingOtp.status === 'error' ? (
+                        <button type="button" className="primary-button" onClick={sendLandingOnboardingOtp} disabled={landingOtp.status === 'sending'}><Mail size={17} /> Send email code</button>
+                      ) : null}
+                      {landingOtp.status !== 'idle' && <p className={`landing-otp-message ${landingOtp.status}`}>{landingOtp.message}</p>}
+                      {landingOtp.testCode && <div className="test-code-box"><span>Local test code</span><code>{landingOtp.testCode}</code></div>}
+                      {['sent', 'verifying', 'error'].includes(landingOtp.status) && landingOtp.challengeId && (
+                        <div className="landing-otp-entry">
+                          <input inputMode="numeric" maxLength="6" value={landingOtp.input} onChange={(event) => setLandingOtp((current) => ({ ...current, input: event.target.value.replace(/\D/g, '').slice(0, 6) }))} placeholder="Enter 6-digit code" />
+                          <button type="button" className="primary-button" onClick={verifyLandingOnboardingOtp} disabled={landingOtp.status === 'verifying'}><ShieldCheck size={17} /> {landingOtp.status === 'verifying' ? 'Verifying...' : 'Verify account'}</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {landingOnboardingStep === 4 && (
+                  <div className="create-account-step onboarding-complete-step">
+                    <div className="onboarding-complete-icon"><ShieldCheck size={30} /></div>
+                    <h3>{landingSignup.existingAccount ? 'Account verified on this device' : 'Your account is ready'}</h3>
+                    <p>{landingSignup.message || 'Email verification completed successfully.'}</p>
+                    <div className="account-summary-card onboarding-final-summary">
+                      <span><strong>Account</strong>{bootstrap.accountName || landingAccountDraft.accountName}</span>
+                      <span><strong>Plan</strong>{landingSignup.planName || planDisplayName(bootstrap.planCode)}</span>
+                      <span><strong>Status</strong>{planStatusDisplayName(bootstrap.planStatus, bootstrap.accountStatus)}</span>
+                      <span><strong>Trial ends</strong>{isFounderPlan(bootstrap) ? 'No expiry' : formatAccountDate(landingSignup.trialEndsAt || bootstrap.trialEndsAt, true)}</span>
+                    </div>
+                    {!landingSignup.existingAccount && Number(landingSignup.trialDays || 0) > 0 && <div className="trial-ready-card"><CalendarClock size={20} /><span><strong>{landingSignup.trialDays}-day trial active</strong><small>Ends {formatAccountDate(landingSignup.trialEndsAt, true)}.</small></span></div>}
+                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>Next, create your local encrypted vault and choose the master password that only you know.</span></div>
+                    {landingSignup.welcomeEmailSent && <p className="welcome-email-note"><Mail size={16} /> A welcome email has been sent.</p>}
                   </div>
                 )}
               </div>
               <footer className="item-popup-footer create-account-popup-footer">
-                <button type="button" className="secondary-button" onClick={landingOnboardingStep === 1 ? closeCreateAccountPopup : () => setLandingOnboardingStep((step) => Math.max(1, step - 1))}>{landingOnboardingStep === 1 ? 'Cancel' : 'Back'}</button>
-                {landingOnboardingStep < 3 ? (
-                  <button type="button" className="primary-button" onClick={() => setLandingOnboardingStep((step) => Math.min(3, step + 1))}>Continue</button>
-                ) : (
-                  <button type="button" className="primary-button" onClick={continueLandingOnboarding}><Unlock size={18} /> Continue to secure setup</button>
-                )}
+                {landingOnboardingStep <= 2 && <button type="button" className="secondary-button" onClick={landingOnboardingStep === 1 ? closeCreateAccountPopup : () => setLandingOnboardingStep(1)}>{landingOnboardingStep === 1 ? 'Cancel' : 'Back'}</button>}
+                {landingOnboardingStep === 1 && <button type="button" className="primary-button" onClick={() => { const draft = cleanLandingDraft(); const error = validateLandingDraft(draft); if (error && !error.includes('plan')) return showMessage(error, 'warning'); updateLandingDraft(draft); setLandingOnboardingStep(2); }}>Continue</button>}
+                {landingOnboardingStep === 2 && <button type="button" className="primary-button" onClick={prepareLandingOnboarding} disabled={landingSignup.status === 'preparing' || !publicPlans.length}>{landingSignup.status === 'preparing' ? <RefreshCw size={17} className="spin-icon" /> : <ShieldCheck size={17} />} {landingSignup.status === 'preparing' ? 'Preparing...' : 'Continue to verification'}</button>}
+                {landingOnboardingStep === 3 && <button type="button" className="secondary-button" onClick={closeCreateAccountPopup}>Finish later</button>}
+                {landingOnboardingStep === 4 && <button type="button" className="primary-button" onClick={finishLandingOnboarding}><Unlock size={18} /> Continue to secure vault setup</button>}
               </footer>
             </section>
           </div>
@@ -4690,7 +4869,12 @@ function App() {
                   <span><strong>Plan</strong>{planDisplayName(bootstrap.planCode)}</span>
                   <span><strong>Status</strong>{planStatusDisplayName(bootstrap.planStatus, bootstrap.accountStatus)}</span>
                   <span><strong>Role</strong>{tenantRoleDisplayName(bootstrap.tenantRole)}</span>
+                  {!isFounderPlan(bootstrap) && <span><strong>Trial started</strong>{formatAccountDate(bootstrap.trialStartedAt, true)}</span>}
+                  {!isFounderPlan(bootstrap) && <span><strong>Trial ends</strong>{formatAccountDate(bootstrap.trialEndsAt, true)}</span>}
+                  {!isFounderPlan(bootstrap) && <span><strong>Time remaining</strong>{bootstrap.trialEndsAt ? `${accountTrialDaysRemaining(bootstrap.trialEndsAt)} day${accountTrialDaysRemaining(bootstrap.trialEndsAt) === 1 ? '' : 's'}` : 'No active trial'}</span>}
+                  {isFounderPlan(bootstrap) && <span><strong>Access</strong>Permanent Founder access</span>}
                 </div>
+                {!isFounderPlan(bootstrap) && bootstrap.accountStatus === 'trial_expired' && <div className="trial-expired-card"><AlertTriangle size={18} /><span><strong>Your free trial has ended</strong><small>Your local encrypted vault remains available. Cloud backup, syncing and encrypted document storage are paused until the account is activated.</small></span></div>}
               </section>
 
               <div className={`account-status-card ${accountStatus.state}`}>

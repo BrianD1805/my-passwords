@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BadgePoundSterling, Check, Cloud, Eye, EyeOff, LogOut, RefreshCw, Save, ShieldCheck, UserRoundCheck, UsersRound } from 'lucide-react';
+import { AlertTriangle, BadgePoundSterling, Ban, CalendarClock, Check, Cloud, Eye, EyeOff, LogOut, Play, RefreshCw, Save, ShieldCheck, UserRoundCheck, UsersRound } from 'lucide-react';
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', ...options });
@@ -54,6 +54,25 @@ function planDisplayName(planCode) {
   return code ? code.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Personal';
 }
 
+
+function dateLabel(value, includeTime = false) {
+  if (!value) return '—';
+  const options = includeTime
+    ? { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+    : { day: 'numeric', month: 'short', year: 'numeric' };
+  return new Intl.DateTimeFormat('en-GB', options).format(new Date(value));
+}
+
+function trialDaysLeft(value) {
+  if (!value) return null;
+  return Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 86400000));
+}
+
+function isFounder(customer) {
+  return ['founder_private', 'private_founder'].includes(String(customer?.planCode || '').toLowerCase())
+    || String(customer?.planStatus || '').toLowerCase() === 'founder_active';
+}
+
 function planStatusDisplayName(planStatus) {
   const status = String(planStatus || '').trim().toLowerCase();
   if (status === 'founder_active') return 'Founder Active';
@@ -61,6 +80,8 @@ function planStatusDisplayName(planStatus) {
   if (status === 'signup_pending') return 'Signup Pending';
   if (status === 'trial_active' || status === 'trialing') return 'Trial Active';
   if (status === 'active') return 'Active';
+  if (status === 'trial_expired') return 'Trial Expired';
+  if (status === 'trial_cancelled') return 'Trial Cancelled';
   return status ? status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Active';
 }
 
@@ -73,6 +94,7 @@ export default function AdminApp({ version }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [editor, setEditor] = useState(emptyPlan());
   const [notice, setNotice] = useState('');
+  const [trialDays, setTrialDays] = useState({});
 
   const sortedPlans = useMemo(() => [...(data.plans || [])].sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0)), [data.plans]);
 
@@ -178,6 +200,18 @@ export default function AdminApp({ version }) {
     if (result.ok) await loadData();
   }
 
+  async function manageTrial(customer, action, extra = {}) {
+    setBusy(true);
+    const result = await requestJson('/.netlify/functions/admin-data', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action, tenantId: customer.id, ...extra })
+    });
+    setBusy(false);
+    setNotice(result.message || (result.ok ? 'Trial updated.' : 'Trial update failed.'));
+    if (result.ok) await loadData();
+  }
+
   if (auth.checking) {
     return <main className="admin-shell admin-centred"><section className="admin-login-card"><RefreshCw className="spin-icon" /><h1>Checking admin access</h1><p>{version}</p></section></main>;
   }
@@ -225,11 +259,11 @@ export default function AdminApp({ version }) {
           <div className="admin-stat-grid">
             <article><UsersRound /><strong>{data.summary?.tenants || 0}</strong><span>Total accounts</span></article>
             <article><UserRoundCheck /><strong>{data.summary?.activeAccounts || 0}</strong><span>Active accounts</span></article>
-            <article><ShieldCheck /><strong>{data.summary?.trials || 0}</strong><span>Trials</span></article>
+            <article><ShieldCheck /><strong>{data.summary?.trials || 0}</strong><span>Active trials</span></article><article><CalendarClock /><strong>{data.summary?.pendingSignups || 0}</strong><span>Pending signups</span></article><article><AlertTriangle /><strong>{data.summary?.expiredTrials || 0}</strong><span>Expired trials</span></article>
             <article><BadgePoundSterling /><strong>{data.summary?.publishedPlans || 0}</strong><span>Published plans</span></article>
             <article><AlertTriangle /><strong>{data.summary?.syncIssues || 0}</strong><span>Sync issues</span></article>
           </div>
-          <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow">Foundation status</p><h2>SaaS controls</h2></div></div><div className="admin-check-grid"><span><Check size={17} /> Secure customer sessions</span><span><Check size={17} /> Server-derived tenant identity</span><span><Check size={17} /> Protected cloud vault and documents</span><span><Check size={17} /> Editable plan catalogue</span><span><Check size={17} /> Customer suspension controls</span><span><Check size={17} /> One Netlify site</span></div></section>
+          <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow">Foundation status</p><h2>SaaS controls</h2></div></div><div className="admin-check-grid"><span><Check size={17} /> Secure customer sessions</span><span><Check size={17} /> Server-derived tenant identity</span><span><Check size={17} /> Protected cloud vault and documents</span><span><Check size={17} /> Editable plan catalogue</span><span><Check size={17} /> Trial start, extension and cancellation</span><span><Check size={17} /> Expired-trial cloud enforcement</span><span><Check size={17} /> Customer suspension controls</span><span><Check size={17} /> One Netlify site</span></div></section>
         </section>
       )}
 
@@ -264,8 +298,54 @@ export default function AdminApp({ version }) {
       )}
 
       {activeTab === 'customers' && (
-        <section className="admin-content"><section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow">Accounts</p><h2>Customer overview</h2></div><span>{data.customers?.length || 0} accounts</span></div><div className="admin-customer-list">{(data.customers || []).map((customer) => <article key={customer.id} className="admin-customer-card"><div className="admin-customer-main"><strong>{customer.accountName}</strong><span>{planDisplayName(customer.planCode)} · {planStatusDisplayName(customer.planStatus)}</span><small>{customer.users?.[0]?.displayName || 'Owner'} · {customer.users?.[0]?.emailMasked || 'No email'} · {customer.users?.[0]?.phoneMasked || 'No phone'}</small></div><div className="admin-customer-meta"><span className={`admin-status ${customer.accountStatus}`}>{customer.accountStatus}</span><small>Created {customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : '—'}</small></div><div className="admin-customer-actions">{customer.accountStatus === 'suspended' ? <button type="button" className="secondary-button" onClick={() => setAccountStatus(customer, 'active')} disabled={busy}>Activate</button> : <button type="button" className="secondary-button danger-soft" onClick={() => setAccountStatus(customer, 'suspended')} disabled={busy}>Suspend</button>}</div></article>)}{!data.customers?.length && <div className="admin-empty">No customer accounts were returned.</div>}</div></section></section>
+        <section className="admin-content">
+          <section className="admin-panel">
+            <div className="admin-panel-heading"><div><p className="eyebrow">Accounts</p><h2>Customer overview</h2></div><span>{data.customers?.length || 0} accounts</span></div>
+            <div className="admin-customer-list">
+              {(data.customers || []).map((customer) => {
+                const founder = isFounder(customer);
+                const daysLeft = trialDaysLeft(customer.trialEndsAt);
+                const extensionDays = Number(trialDays[customer.id] || 7);
+                return (
+                  <article key={customer.id} className="admin-customer-card admin-customer-trial-card">
+                    <div className="admin-customer-main">
+                      <strong>{customer.accountName}</strong>
+                      <span>{planDisplayName(customer.planCode)} · {planStatusDisplayName(customer.planStatus)}</span>
+                      <small>{customer.users?.[0]?.displayName || 'Owner'} · {customer.users?.[0]?.emailMasked || 'No email'} · {customer.users?.[0]?.phoneMasked || 'No phone'}</small>
+                    </div>
+                    <div className="admin-customer-meta">
+                      <span className={`admin-status ${customer.accountStatus}`}>{customer.accountStatus}</span>
+                      <small>Created {dateLabel(customer.createdAt)}</small>
+                    </div>
+                    <div className="admin-trial-summary">
+                      <span><strong>Trial started</strong>{dateLabel(customer.trialStartedAt, true)}</span>
+                      <span><strong>Trial ends</strong>{founder ? 'No expiry' : dateLabel(customer.trialEndsAt, true)}</span>
+                      <span><strong>Time remaining</strong>{founder ? 'Founder access' : daysLeft === null ? 'No active trial' : `${daysLeft} day${daysLeft === 1 ? '' : 's'}`}</span>
+                      <span><strong>Onboarding</strong>{customer.onboardingCompletedAt ? `Completed ${dateLabel(customer.onboardingCompletedAt)}` : 'Pending verification'}</span>
+                    </div>
+                    {!founder && (
+                      <div className="admin-trial-controls">
+                        <label>Days<input type="number" min="1" max="365" value={extensionDays} onChange={(event) => setTrialDays((current) => ({ ...current, [customer.id]: event.target.value }))} /></label>
+                        <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'start_trial', { days: extensionDays })} disabled={busy}><Play size={16} /> Start trial</button>
+                        <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'extend_trial', { days: extensionDays })} disabled={busy}><CalendarClock size={16} /> Extend</button>
+                        <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'activate_account')} disabled={busy}><UserRoundCheck size={16} /> Activate</button>
+                        <button type="button" className="secondary-button danger-soft" onClick={() => manageTrial(customer, 'cancel_trial')} disabled={busy}><Ban size={16} /> Cancel trial</button>
+                      </div>
+                    )}
+                    <div className="admin-customer-actions">
+                      {customer.accountStatus === 'suspended'
+                        ? <button type="button" className="secondary-button" onClick={() => setAccountStatus(customer, 'active')} disabled={busy}>Remove suspension</button>
+                        : !founder && <button type="button" className="secondary-button danger-soft" onClick={() => setAccountStatus(customer, 'suspended')} disabled={busy}>Suspend</button>}
+                    </div>
+                  </article>
+                );
+              })}
+              {!data.customers?.length && <div className="admin-empty">No customer accounts were returned.</div>}
+            </div>
+          </section>
+        </section>
       )}
+
 
 
       {activeTab === 'sync' && (

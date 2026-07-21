@@ -341,3 +341,9 @@ grant execute on function public.save_vault_snapshot_if_current(
 
 -- My Passwords Ver-0.039I
 -- Identical encrypted retry requests reuse the existing latest snapshot instead of creating a false conflict.
+
+-- My Passwords Ver-0.041
+-- Production onboarding and trial lifecycle foundation.
+-- Apply db/migrations/2026-07-21_production_onboarding_trial_lifecycle_ver_0_041.sql
+-- to add onboarding completion dates, trial start dates, welcome-email tracking,
+-- lifecycle indexes and Founder-account protection.

@@ -1,20 +1,23 @@
 import { APP_VERSION, jsonResponse, parseBody, requirePost, selectRows, upsertRow } from './_db.js';
-import { getActiveCustomerSession } from './_session.js';
+import { getCustomerAccess } from './_session.js';
 
 function safeEq(value) { return encodeURIComponent(String(value || '')); }
 function toInt(value) { const n = Number(value || 0); return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0; }
 
 export async function handler(event) {
-  let session;
+  let access;
   try {
-    session = await getActiveCustomerSession(event);
+    access = await getCustomerAccess(event);
   } catch (error) {
-    return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not check device verification.', error: error.message });
+    return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not check account access.', error: error.message });
   }
-  if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify this device to use secure document storage.' });
+  if (!access.ok) {
+    const statusCode = access.code === 'SESSION_REQUIRED' ? 401 : 403;
+    return jsonResponse(statusCode, { ok: false, version: APP_VERSION, code: access.code, message: access.message });
+  }
 
-  const tenantId = session.tenantId;
-  const userId = session.userId;
+  const tenantId = access.session.tenantId;
+  const userId = access.session.userId;
 
   if (event.httpMethod === 'GET') {
     const params = event.queryStringParameters || Object.fromEntries(new URLSearchParams(event.rawQuery || ''));

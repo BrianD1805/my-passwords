@@ -29,11 +29,29 @@ async function checkRateLimit(userId) {
   return (rows || []).length >= 3;
 }
 
-function buildEmailHtml(code, maskedEmail) {
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;"><div style="max-width:520px;margin:0 auto;padding:28px 18px;"><div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);"><h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">My Passwords verification code</h1><p style="margin:0 0 18px;line-height:1.55;color:#536579;">Use this one-time code to verify this device for secure backup and syncing. You will still need your master password to decrypt your vault.</p><div style="font-size:34px;letter-spacing:8px;font-weight:800;color:#1d3557;background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:18px;text-align:center;">${code}</div><p style="margin:18px 0 0;line-height:1.55;color:#536579;">This code expires in 10 minutes. Sent to ${maskedEmail || 'your backup email'}.</p><p style="margin:14px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">If you did not request this, ignore this email. Your master password is never sent by email.</p></div></div></body></html>`;
+function otpEmailCopy(purpose) {
+  const onboarding = String(purpose || '').includes('production_onboarding');
+  return onboarding
+    ? {
+        subject: 'Verify your new My Passwords account',
+        heading: 'Verify your My Passwords account',
+        intro: 'Use this one-time code to confirm your email address and activate your selected free trial. You will create your separate master vault password after verification.',
+        text: 'Use this one-time code to verify your new My Passwords account and start the selected free trial.'
+      }
+    : {
+        subject: 'Your My Passwords verification code',
+        heading: 'My Passwords verification code',
+        intro: 'Use this one-time code to verify this device for secure backup and syncing. You will still need your master password to decrypt your vault.',
+        text: 'Use this one-time code to verify this device for secure backup and syncing.'
+      };
 }
 
-async function sendWithResend({ to, code, maskedEmail }) {
+function buildEmailHtml(code, maskedEmail, purpose) {
+  const copy = otpEmailCopy(purpose);
+  return `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;"><div style="max-width:520px;margin:0 auto;padding:28px 18px;"><div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;"><h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">${copy.heading}</h1><p style="margin:0 0 18px;line-height:1.55;color:#536579;">${copy.intro}</p><div style="font-size:34px;letter-spacing:8px;font-weight:800;color:#1d3557;background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:18px;text-align:center;">${code}</div><p style="margin:18px 0 0;line-height:1.55;color:#536579;">This code expires in 10 minutes. Sent to ${maskedEmail || 'your email address'}.</p><p style="margin:14px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">If you did not request this, ignore this email. Your master password is never sent by email.</p></div></div></body></html>`;
+}
+
+async function sendWithResend({ to, code, maskedEmail, purpose }) {
   const apiKey = process.env.RESEND_API_KEY || '';
   const from = process.env.OTP_EMAIL_FROM || '';
   if (!apiKey || !from) return { sent: false, provider: 'resend', reason: 'Email delivery is not configured.' };
@@ -43,9 +61,9 @@ async function sendWithResend({ to, code, maskedEmail }) {
     body: JSON.stringify({
       from,
       to,
-      subject: 'Your My Passwords verification code',
-      html: buildEmailHtml(code, maskedEmail),
-      text: `Your My Passwords verification code is ${code}. It expires in 10 minutes. Your master password is still required to decrypt the vault.`
+      subject: otpEmailCopy(purpose).subject,
+      html: buildEmailHtml(code, maskedEmail, purpose),
+      text: `${otpEmailCopy(purpose).text} Your code is ${code}. It expires in 10 minutes. Your master password is never sent by email.`
     })
   });
   const data = await response.json().catch(() => ({}));
@@ -71,7 +89,7 @@ export async function handler(event) {
     const code = String(randomInt(0, 1000000)).padStart(6, '0');
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
     const destinationMasked = maskEmail(email);
-    const delivery = await sendWithResend({ to: email, code, maskedEmail: destinationMasked });
+    const delivery = await sendWithResend({ to: email, code, maskedEmail: destinationMasked, purpose });
 
     await insertRow('otp_challenges', {
       id: challengeId,
