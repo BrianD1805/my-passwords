@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, CircleHelp, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ChevronRight, CircleHelp, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.039J';
+const VERSION = 'My Passwords Ver-0.040';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1496,7 +1496,7 @@ function App() {
   const [biometricUnlock, setBiometricUnlock] = useState(() => readBiometricUnlockRecord());
   const [biometricStatus, setBiometricStatus] = useState(() => ({ supported: isBiometricUnlockSupported(), label: isBiometricUnlockSupported() ? friendlyBiometricName() : 'Not supported on this browser/device', state: readBiometricUnlockRecord() ? 'enabled' : 'available' }));
   const [activePage, setActivePage] = useState('home');
-  const [activeSettingsSection, setActiveSettingsSection] = useState('account');
+  const [activeSettingsSection, setActiveSettingsSection] = useState('overview');
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
@@ -1536,16 +1536,30 @@ function App() {
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
-  function openFaqSettings() {
+  function scrollSettingsToTop() {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    });
+  }
+
+  function openSettingsHome() {
     setActivePage('settings');
-    setActiveSettingsSection('faq');
-    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    setActiveSettingsSection('overview');
+    scrollSettingsToTop();
+  }
+
+  function openSettingsSection(section) {
+    setActivePage('settings');
+    setActiveSettingsSection(section);
+    scrollSettingsToTop();
+  }
+
+  function openFaqSettings() {
+    openSettingsSection('faq');
   }
 
   function openVaultSafetySettings() {
-    setActivePage('settings');
-    setActiveSettingsSection('safety');
-    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    openSettingsSection('safety');
   }
 
   function saveSyncSafety(patch) {
@@ -4371,8 +4385,8 @@ function App() {
             <span>{syncing || syncSafety.state === 'backing-up' ? 'Saving...' : syncSafety.conflict ? 'Review vault' : syncSafety.pending ? 'Backup pending' : syncSafety.state === 'unknown' ? 'Not checked' : 'Up to date'}</span>
           </button>
           <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'topbar-help-button active' : 'topbar-help-button'} onClick={openFaqSettings} aria-label="Open frequently asked questions" title="Help and FAQs"><CircleHelp size={20} /></button>
-          <button type="button" className={activePage === 'home' ? 'nav-pill active' : 'nav-pill'} onClick={() => setActivePage('home')}><KeyRound size={17} /> Vault</button>
-          <button type="button" className={activePage === 'settings' ? 'nav-pill active' : 'nav-pill'} onClick={() => setActivePage('settings')}><Settings size={17} /> Settings</button>
+          <button type="button" className={activePage === 'home' ? 'nav-pill vault-nav-pill active' : 'nav-pill vault-nav-pill'} onClick={() => setActivePage('home')}><KeyRound size={17} /> Vault</button>
+          <button type="button" className={activePage === 'settings' ? 'nav-pill settings-nav-pill active' : 'nav-pill settings-nav-pill'} onClick={openSettingsHome}><Settings size={17} /> Settings</button>
           <button className="lock-button desktop-lock-button" onClick={() => lockVault()}><Lock size={18} /> Lock</button>
         </div>
       </header>
@@ -4604,26 +4618,58 @@ function App() {
           </section>
         </>
       ) : (
-        <section className="settings-page settings-page-v028">
-          <div className="settings-header-card">
-            <p className="eyebrow">Settings</p>
-            <h2><Settings size={22} /> Your vault settings</h2>
-            <p>Manage your account, Vault Safety, Emergency Access and help.</p>
-          </div>
+        <section className="settings-page settings-page-v040">
+          {activeSettingsSection === 'overview' && (
+            <>
+              <div className="settings-header-card settings-directory-header">
+                <p className="eyebrow">Settings</p>
+                <h2><Settings size={22} /> Your vault settings</h2>
+                <p>Choose a section to manage your account, protection, Emergency Access or help.</p>
+              </div>
 
-          <section className="status-grid settings-status-grid">
-            <article><KeyRound /><strong>{visibleItems.length}</strong><span>Vault items</span></article>
-            <article><Cloud /><strong>{syncSafety.conflict ? 'Review' : syncSafety.pending ? 'Pending' : syncSafety.state === 'unknown' ? 'Check' : 'Safe'}</strong><span>Vault Safety</span></article>
-            <article><MonitorSmartphone /><strong>{customerSession.authenticated ? 'Verified' : 'Action'}</strong><span>This device</span></article>
-            <article><UserRoundCheck /><strong>{bootstrap.userId ? 'Ready' : 'Setup'}</strong><span>Account</span></article>
-          </section>
+              <nav className="settings-directory" aria-label="Settings sections">
+                <section className="settings-directory-group" aria-labelledby="settings-account-group">
+                  <p className="settings-directory-label" id="settings-account-group">Account and device</p>
+                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('account')}>
+                    <span className="settings-directory-icon"><UserRoundCheck size={22} /></span>
+                    <span className="settings-directory-copy"><strong>My Account</strong><small>Contact details, plan and device verification.</small></span>
+                    <span className="settings-directory-meta">{planDisplayName(bootstrap.planCode)}</span>
+                    <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
+                  </button>
+                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('safety')}>
+                    <span className="settings-directory-icon"><ShieldCheck size={22} /></span>
+                    <span className="settings-directory-copy"><strong>Vault Safety</strong><small>Backup, syncing, device protection and recovery.</small></span>
+                    <span className={`settings-directory-state ${syncSafety.conflict || syncSafety.pending ? 'attention' : 'safe'}`}>{syncSafety.conflict ? 'Review' : syncSafety.pending ? 'Action needed' : syncSafety.state === 'unknown' ? 'Check' : 'Up to date'}</span>
+                    <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
+                  </button>
+                </section>
 
-          <nav className="settings-section-buttons" aria-label="Settings sections">
-            <button type="button" className={activeSettingsSection === 'account' ? 'active' : ''} onClick={() => setActiveSettingsSection('account')}><UserRoundCheck size={18} /> My Account</button>
-            <button type="button" className={activeSettingsSection === 'safety' ? 'active' : ''} onClick={() => setActiveSettingsSection('safety')}><ShieldCheck size={18} /> Vault Safety</button>
-            <button type="button" className={activeSettingsSection === 'emergency' ? 'active' : ''} onClick={() => setActiveSettingsSection('emergency')}><UsersRound size={18} /> Emergency Access</button>
-            <button type="button" className={activeSettingsSection === 'faq' ? 'active' : ''} onClick={() => setActiveSettingsSection('faq')}><CircleHelp size={18} /> FAQs</button>
-          </nav>
+                <section className="settings-directory-group" aria-labelledby="settings-protection-group">
+                  <p className="settings-directory-label" id="settings-protection-group">Protection and recovery</p>
+                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('emergency')}>
+                    <span className="settings-directory-icon"><UsersRound size={22} /></span>
+                    <span className="settings-directory-copy"><strong>Emergency Access</strong><small>Trusted contact, waiting period and release plan.</small></span>
+                    <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
+                  </button>
+                </section>
+
+                <section className="settings-directory-group" aria-labelledby="settings-help-group">
+                  <p className="settings-directory-label" id="settings-help-group">Help and support</p>
+                  <button type="button" className="settings-directory-row" onClick={openFaqSettings}>
+                    <span className="settings-directory-icon"><CircleHelp size={22} /></span>
+                    <span className="settings-directory-copy"><strong>Help & FAQs</strong><small>Guidance for vault access, backups, devices and support.</small></span>
+                    <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
+                  </button>
+                </section>
+              </nav>
+            </>
+          )}
+
+          {activeSettingsSection !== 'overview' && (
+            <div className="settings-subpage-nav">
+              <button type="button" onClick={openSettingsHome}><ArrowLeft size={18} /> Back to Settings</button>
+            </div>
+          )}
 
           {activeSettingsSection === 'account' && (
             <section className="settings-section-panel settings-account-panel" aria-label="My Account">
@@ -5112,7 +5158,7 @@ function App() {
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
-      <footer>{VERSION} · secure private vault</footer>
+      <footer className="app-version-footer"><span>{VERSION}</span><span className="app-version-footer-separator"> · </span><span>secure private vault</span></footer>
     </main>
   );
 }
