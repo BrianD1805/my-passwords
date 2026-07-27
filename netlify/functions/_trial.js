@@ -79,6 +79,8 @@ export async function evaluateTenantAccess(tenant) {
 
   const accountStatus = String(tenant.account_status || '').toLowerCase();
   const planStatus = String(tenant.plan_status || '').toLowerCase();
+  const subscription = await loadTenantSubscription(tenant.id);
+  const subscriptionStatus = String(subscription?.status || '').toLowerCase();
 
   if (['pending_verification', 'signup_pending'].includes(accountStatus) || planStatus === 'signup_pending') {
     return { allowed: false, code: 'ACCOUNT_VERIFICATION_REQUIRED', message: 'Verify your email before secure cloud features can be used.' };
@@ -86,6 +88,39 @@ export async function evaluateTenantAccess(tenant) {
   if (accountStatus === 'suspended') {
     return { allowed: false, code: 'ACCOUNT_SUSPENDED', message: 'This account has been suspended. Please contact support.' };
   }
+
+  if (subscription?.provider === 'stripe') {
+    if (['active', 'trialing'].includes(subscriptionStatus)) {
+      return {
+        allowed: true,
+        founder: false,
+        paid: true,
+        tenant,
+        subscription,
+        trialStartedAt: subscription.trial_started_at || tenant.trial_started_at || null,
+        trialEndsAt: subscription.trial_ends_at || tenant.trial_ends_at || null,
+        trialDaysRemaining: trialDaysRemaining(subscription.trial_ends_at || tenant.trial_ends_at)
+      };
+    }
+    if (['past_due', 'unpaid'].includes(subscriptionStatus)) {
+      const graceEndsAt = subscription.grace_period_ends_at || null;
+      if (graceEndsAt && new Date(graceEndsAt).getTime() > Date.now()) {
+        return { allowed: true, founder: false, paid: true, paymentProblem: true, tenant, subscription, gracePeriodEndsAt: graceEndsAt };
+      }
+      return { allowed: false, code: 'PAYMENT_REQUIRED', message: 'Your subscription payment needs attention. Open My Subscription to update your payment details.' };
+    }
+    if (['checkout_pending', 'checkout_cancelled', 'checkout_expired', 'incomplete'].includes(subscriptionStatus)) {
+      const trialEndsAt = subscription.trial_ends_at || tenant.trial_ends_at || null;
+      if (trialEndsAt && new Date(trialEndsAt).getTime() > Date.now()) {
+        return { allowed: true, founder: false, paid: false, checkoutPending: subscriptionStatus === 'checkout_pending' || subscriptionStatus === 'incomplete', tenant, subscription, trialEndsAt, trialDaysRemaining: trialDaysRemaining(trialEndsAt) };
+      }
+      return { allowed: false, code: 'PAYMENT_REQUIRED', message: 'Complete your subscription to continue secure cloud backup and syncing. Your local encrypted vault remains available.' };
+    }
+    if (['paused', 'cancelled', 'canceled', 'incomplete_expired'].includes(subscriptionStatus)) {
+      return { allowed: false, code: 'SUBSCRIPTION_INACTIVE', message: 'Your subscription is not active. Your local encrypted vault remains available; open My Subscription to manage billing.' };
+    }
+  }
+
   if (['cancelled', 'closed'].includes(accountStatus) || planStatus === 'trial_cancelled') {
     return { allowed: false, code: 'TRIAL_CANCELLED', message: 'This trial has been cancelled. Please contact support to reactivate the account.' };
   }
@@ -103,7 +138,6 @@ export async function evaluateTenantAccess(tenant) {
       plan_status: 'trial_expired',
       updated_at: now
     }).catch(() => null);
-    const subscription = await loadTenantSubscription(tenant.id);
     if (subscription?.id) {
       await updateRow('tenant_subscriptions', `id=${eq(subscription.id)}`, { status: 'expired', updated_at: now }).catch(() => null);
     }
@@ -115,6 +149,7 @@ export async function evaluateTenantAccess(tenant) {
     allowed: accountStatus === 'active' || !accountStatus,
     founder: false,
     tenant,
+    subscription,
     trialStartedAt: tenant.trial_started_at || null,
     trialEndsAt,
     trialDaysRemaining: trialDaysRemaining(trialEndsAt)

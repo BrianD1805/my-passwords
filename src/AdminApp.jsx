@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BadgePoundSterling, Ban, CalendarClock, Check, Cloud, Eye, EyeOff, LogOut, Play, RefreshCw, Save, ShieldCheck, UserRoundCheck, UsersRound } from 'lucide-react';
+import { AlertTriangle, BadgePoundSterling, Ban, CalendarClock, Check, Cloud, CreditCard, Eye, EyeOff, LogOut, Play, RefreshCw, Save, ShieldCheck, UserRoundCheck, UsersRound } from 'lucide-react';
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', ...options });
@@ -11,7 +11,7 @@ async function requestJson(url, options = {}) {
 function emptyPlan() {
   return {
     code: '', displayName: '', description: '', currency: 'GBP', monthlyPrice: '0.00', quarterlyPrice: '0.00', annualPrice: '0.00',
-    trialDays: 14, maxUsers: 1, storageLimitMb: 0, documentLimit: 0, features: '', isFeatured: false, isPublic: false, isActive: true, displayOrder: 10
+    trialDays: 14, maxUsers: 1, storageLimitMb: 0, documentLimit: 0, features: '', isFeatured: false, isPublic: false, isActive: true, displayOrder: 10, stripeSyncStatus: 'not_synced', stripeSyncMessage: '', stripeSyncedAt: ''
   };
 }
 
@@ -32,7 +32,10 @@ function toEditorPlan(plan) {
     isFeatured: Boolean(plan.is_featured),
     isPublic: Boolean(plan.is_public),
     isActive: plan.is_active !== false,
-    displayOrder: Number(plan.display_order || 0)
+    displayOrder: Number(plan.display_order || 0),
+    stripeSyncStatus: plan.stripe_sync_status || 'not_synced',
+    stripeSyncMessage: plan.stripe_sync_message || '',
+    stripeSyncedAt: plan.stripe_synced_at || ''
   };
 }
 
@@ -90,7 +93,7 @@ export default function AdminApp({ version }) {
   const [accessKey, setAccessKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [data, setData] = useState({ plans: [], customers: [], summary: {} });
+  const [data, setData] = useState({ plans: [], customers: [], billingEvents: [], summary: {}, stripeConfigured: false });
   const [activeTab, setActiveTab] = useState('overview');
   const [editor, setEditor] = useState(emptyPlan());
   const [notice, setNotice] = useState('');
@@ -131,7 +134,7 @@ export default function AdminApp({ version }) {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'logout' })
     });
     setAuth({ checking: false, authenticated: false, message: 'Admin session ended.' });
-    setData({ plans: [], customers: [], summary: {} });
+    setData({ plans: [], customers: [], billingEvents: [], summary: {}, stripeConfigured: false });
   }
 
   async function loadData() {
@@ -143,7 +146,7 @@ export default function AdminApp({ version }) {
       setNotice(result.message || 'Could not load admin data.');
       return;
     }
-    setData({ plans: result.plans || [], customers: result.customers || [], summary: result.summary || {} });
+    setData({ plans: result.plans || [], customers: result.customers || [], billingEvents: result.billingEvents || [], summary: result.summary || {}, stripeConfigured: Boolean(result.stripeConfigured) });
     setNotice('');
   }
 
@@ -185,8 +188,21 @@ export default function AdminApp({ version }) {
       setNotice(result.message || 'Plan could not be saved.');
       return;
     }
-    setNotice('Subscription plan saved.');
-    setEditor(emptyPlan());
+    setNotice(result.message || 'Subscription plan saved.');
+    setEditor(result.plan ? toEditorPlan(result.plan) : emptyPlan());
+    await loadData();
+  }
+
+  async function syncPlanToStripe(planCode = editor.code) {
+    if (!planCode) return;
+    setBusy(true);
+    setNotice('Syncing plan to Stripe Billing...');
+    const result = await requestJson('/.netlify/functions/admin-data', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'sync_stripe_plan', planCode })
+    });
+    setBusy(false);
+    setNotice(result.message || (result.ok ? 'Stripe Billing sync complete.' : 'Stripe Billing sync failed.'));
+    if (result.plan) setEditor(toEditorPlan(result.plan));
     await loadData();
   }
 
@@ -249,6 +265,7 @@ export default function AdminApp({ version }) {
         <button type="button" className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>Overview</button>
         <button type="button" className={activeTab === 'plans' ? 'active' : ''} onClick={() => setActiveTab('plans')}>Subscription Plans</button>
         <button type="button" className={activeTab === 'customers' ? 'active' : ''} onClick={() => setActiveTab('customers')}>Customers</button>
+        <button type="button" className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>Billing Events</button>
         <button type="button" className={activeTab === 'sync' ? 'active' : ''} onClick={() => setActiveTab('sync')}>Sync Health</button>
       </nav>
 
@@ -261,9 +278,11 @@ export default function AdminApp({ version }) {
             <article><UserRoundCheck /><strong>{data.summary?.activeAccounts || 0}</strong><span>Active accounts</span></article>
             <article><ShieldCheck /><strong>{data.summary?.trials || 0}</strong><span>Active trials</span></article><article><CalendarClock /><strong>{data.summary?.pendingSignups || 0}</strong><span>Pending signups</span></article><article><AlertTriangle /><strong>{data.summary?.expiredTrials || 0}</strong><span>Expired trials</span></article>
             <article><BadgePoundSterling /><strong>{data.summary?.publishedPlans || 0}</strong><span>Published plans</span></article>
+            <article><CreditCard /><strong>{data.summary?.paidSubscriptions || 0}</strong><span>Paid subscriptions</span></article>
+            <article><AlertTriangle /><strong>{data.summary?.paymentProblems || 0}</strong><span>Payment problems</span></article>
             <article><AlertTriangle /><strong>{data.summary?.syncIssues || 0}</strong><span>Sync issues</span></article>
           </div>
-          <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow">Foundation status</p><h2>SaaS controls</h2></div></div><div className="admin-check-grid"><span><Check size={17} /> Secure customer sessions</span><span><Check size={17} /> Server-derived tenant identity</span><span><Check size={17} /> Protected cloud vault and documents</span><span><Check size={17} /> Editable plan catalogue</span><span><Check size={17} /> Trial start, extension and cancellation</span><span><Check size={17} /> Expired-trial cloud enforcement</span><span><Check size={17} /> Customer suspension controls</span><span><Check size={17} /> One Netlify site</span></div></section>
+          <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow">Foundation status</p><h2>SaaS controls</h2></div></div><div className="admin-check-grid"><span><Check size={17} /> Secure customer sessions</span><span><Check size={17} /> Server-derived tenant identity</span><span><Check size={17} /> Protected cloud vault and documents</span><span><Check size={17} /> Editable plan catalogue</span><span><Check size={17} /> Trial start, extension and cancellation</span><span><Check size={17} /> Expired-trial cloud enforcement</span><span><Check size={17} /> Customer suspension controls</span><span><Check size={17} /> Stripe-hosted recurring checkout</span><span><Check size={17} /> Verified Stripe webhooks</span><span><Check size={17} /> Stripe Customer Portal</span><span><Check size={17} /> One Netlify site</span></div></section>
         </section>
       )}
 
@@ -287,11 +306,12 @@ export default function AdminApp({ version }) {
               <label className="admin-full">Features, one per line<textarea rows="6" value={editor.features} onChange={(e) => setEditor({ ...editor, features: e.target.value })} /></label>
             </div>
             <div className="admin-toggle-grid"><label><input type="checkbox" checked={editor.isActive} onChange={(e) => setEditor({ ...editor, isActive: e.target.checked })} /> Active</label><label><input type="checkbox" checked={editor.isPublic} onChange={(e) => setEditor({ ...editor, isPublic: e.target.checked })} /> Publish on website</label><label><input type="checkbox" checked={editor.isFeatured} onChange={(e) => setEditor({ ...editor, isFeatured: e.target.checked })} /> Featured plan</label></div>
-            <button type="submit" className="primary-button" disabled={busy}><Save size={18} /> {busy ? 'Saving...' : 'Save plan'}</button>
+            <div className="admin-plan-save-actions"><button type="submit" className="primary-button" disabled={busy}><Save size={18} /> {busy ? 'Saving...' : 'Save and sync plan'}</button>{editor.code && <button type="button" className="secondary-button" onClick={() => syncPlanToStripe(editor.code)} disabled={busy}><RefreshCw size={17} /> Sync Stripe</button>}</div>
+            <div className={`admin-stripe-status ${editor.stripeSyncStatus || 'not_synced'}`}><CreditCard size={18} /><span><strong>Stripe Billing: {data.stripeConfigured ? (editor.stripeSyncStatus || 'Not synced').replace(/_/g, ' ') : 'Not configured'}</strong><small>{editor.stripeSyncMessage || (data.stripeConfigured ? 'Save the plan to create or update its Stripe Product and recurring Prices.' : 'Add STRIPE_SECRET_KEY to the existing My Passwords Netlify site.')}</small></span></div>
           </form>
 
           <div className="admin-plan-list">
-            {sortedPlans.map((plan) => <button type="button" className="admin-plan-card" key={plan.id || plan.code} onClick={() => editPlan(plan)}><div><strong>{plan.display_name}</strong><code>{plan.code}</code></div><p>{plan.description}</p><div className="admin-plan-prices"><span><small>Monthly</small>{money(plan.monthly_price_minor)}</span><span><small>Quarterly</small>{money(plan.quarterly_price_minor)}</span><span><small>Annual</small>{money(plan.annual_price_minor)}</span></div><footer><span>{plan.trial_days || 0} trial days</span><span>{plan.is_public ? 'Published' : 'Hidden'}</span><span>{plan.is_active ? 'Active' : 'Inactive'}</span></footer></button>)}
+            {sortedPlans.map((plan) => <button type="button" className="admin-plan-card" key={plan.id || plan.code} onClick={() => editPlan(plan)}><div><strong>{plan.display_name}</strong><code>{plan.code}</code></div><p>{plan.description}</p><div className="admin-plan-prices"><span><small>Monthly</small>{money(plan.monthly_price_minor)}</span><span><small>Quarterly</small>{money(plan.quarterly_price_minor)}</span><span><small>Annual</small>{money(plan.annual_price_minor)}</span></div><footer><span>{plan.trial_days || 0} trial days</span><span>{plan.is_public ? 'Published' : 'Hidden'}</span><span>{plan.is_active ? 'Active' : 'Inactive'}</span><span className={`stripe-plan-state ${plan.stripe_sync_status || 'not_synced'}`}>Stripe: {(plan.stripe_sync_status || 'not synced').replace(/_/g, ' ')}</span></footer></button>)}
             {!sortedPlans.length && <div className="admin-empty">Run the Ver-0.039 Supabase SQL to create and seed the subscription plans.</div>}
           </div>
         </section>
@@ -306,6 +326,7 @@ export default function AdminApp({ version }) {
                 const founder = isFounder(customer);
                 const daysLeft = trialDaysLeft(customer.trialEndsAt);
                 const extensionDays = Number(trialDays[customer.id] || 7);
+                const stripeManaged = customer.subscription?.provider === 'stripe' && Boolean(customer.subscription?.provider_subscription_id);
                 return (
                   <article key={customer.id} className="admin-customer-card admin-customer-trial-card">
                     <div className="admin-customer-main">
@@ -323,7 +344,8 @@ export default function AdminApp({ version }) {
                       <span><strong>Time remaining</strong>{founder ? 'Founder access' : daysLeft === null ? 'No active trial' : `${daysLeft} day${daysLeft === 1 ? '' : 's'}`}</span>
                       <span><strong>Onboarding</strong>{customer.onboardingCompletedAt ? `Completed ${dateLabel(customer.onboardingCompletedAt)}` : 'Pending verification'}</span>
                     </div>
-                    {!founder && (
+                    {!founder && customer.subscription?.provider === 'stripe' && <div className="admin-billing-summary"><CreditCard size={17} /><span><strong>Stripe subscription</strong><small>{String(customer.subscription.status || 'pending').replace(/_/g, ' ')} · {customer.subscription.billing_interval || 'interval pending'} · {money(customer.subscription.price_minor || 0)}{customer.subscription.current_period_end ? ` · renews/ends ${dateLabel(customer.subscription.current_period_end)}` : ''}</small></span></div>}
+                    {!founder && !stripeManaged && (
                       <div className="admin-trial-controls">
                         <label>Days<input type="number" min="1" max="365" value={extensionDays} onChange={(event) => setTrialDays((current) => ({ ...current, [customer.id]: event.target.value }))} /></label>
                         <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'start_trial', { days: extensionDays })} disabled={busy}><Play size={16} /> Start trial</button>
@@ -332,6 +354,7 @@ export default function AdminApp({ version }) {
                         <button type="button" className="secondary-button danger-soft" onClick={() => manageTrial(customer, 'cancel_trial')} disabled={busy}><Ban size={16} /> Cancel trial</button>
                       </div>
                     )}
+                    {!founder && stripeManaged && <div className="admin-stripe-managed-note"><CreditCard size={17} /><span><strong>Managed by Stripe Billing</strong><small>Use Stripe Dashboard or the customer billing portal for subscription changes. Suspending the My Passwords account only pauses app access; it does not stop Stripe billing.</small></span></div>}
                     <div className="admin-customer-actions">
                       {customer.accountStatus === 'suspended'
                         ? <button type="button" className="secondary-button" onClick={() => setAccountStatus(customer, 'active')} disabled={busy}>Remove suspension</button>
@@ -347,6 +370,19 @@ export default function AdminApp({ version }) {
       )}
 
 
+
+      {activeTab === 'billing' && (
+        <section className="admin-content">
+          <section className="admin-panel">
+            <div className="admin-panel-heading"><div><p className="eyebrow">Stripe Billing</p><h2>Billing events</h2></div><span>{data.billingEvents?.length || 0} recent events</span></div>
+            <p className="admin-panel-intro">Verified Stripe webhooks update subscriptions, renewals, failed payments and cancellations. No card details are stored in My Passwords.</p>
+            <div className="admin-billing-event-list">
+              {(data.billingEvents || []).map((event) => <article className={`admin-billing-event ${event.status || 'recorded'}`} key={event.id}><div className="admin-sync-icon"><CreditCard size={20} /></div><div><strong>{String(event.event_type || 'billing event').replace(/_/g, ' ')}</strong><span>{event.tenant_id || 'Unmatched account'}{event.amount_minor ? ` · ${money(event.amount_minor)}` : ''}</span><small>{dateLabel(event.occurred_at || event.created_at, true)} · {event.provider || 'internal'} · {event.status || 'recorded'}</small></div></article>)}
+              {!data.billingEvents?.length && <div className="admin-empty">No billing events have been recorded yet.</div>}
+            </div>
+          </section>
+        </section>
+      )}
 
       {activeTab === 'sync' && (
         <section className="admin-content">

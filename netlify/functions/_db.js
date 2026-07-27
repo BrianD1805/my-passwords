@@ -1,4 +1,4 @@
-export const APP_VERSION = 'My Passwords Ver-0.041';
+export const APP_VERSION = 'My Passwords Ver-0.042';
 
 export function jsonResponse(statusCode, body, extraHeaders = {}) {
   return {

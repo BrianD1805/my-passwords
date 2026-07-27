@@ -347,3 +347,10 @@ grant execute on function public.save_vault_snapshot_if_current(
 -- Apply db/migrations/2026-07-21_production_onboarding_trial_lifecycle_ver_0_041.sql
 -- to add onboarding completion dates, trial start dates, welcome-email tracking,
 -- lifecycle indexes and Founder-account protection.
+
+-- My Passwords Ver-0.042
+-- Stripe Billing recurring subscription checkout foundation.
+-- Apply db/migrations/2026-07-22_stripe_billing_recurring_checkout_ver_0_042.sql
+-- to add Stripe Product/Price references, checkout and invoice references,
+-- Stripe sync indexes and service-role grants. Stripe webhooks remain the
+-- source of truth for paid subscription activation and lifecycle changes.

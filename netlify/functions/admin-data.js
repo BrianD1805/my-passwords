@@ -1,6 +1,7 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow } from './_db.js';
 import { readAdminSession } from './_auth.js';
 import { isFounderTenant, loadTenantSubscription, recordLifecycleEvent, upsertTrialSubscription } from './_trial.js';
+import { stripeConfigured, syncStripePlan } from './_stripe.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -60,13 +61,14 @@ async function ensureNonFounder(tenant) {
 }
 
 async function loadDashboard() {
-  const [plans, tenants, users, subscriptions, snapshots, syncEvents] = await Promise.all([
+  const [plans, tenants, users, subscriptions, snapshots, syncEvents, billingEvents] = await Promise.all([
     selectRows('subscription_plans', 'select=*&order=display_order.asc,display_name.asc'),
     selectRows('tenants', 'select=id,name,account_name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at,onboarding_completed_at,created_at,updated_at&order=created_at.desc&limit=250'),
     selectRows('users', 'select=id,tenant_id,email,phone_e164,display_name,role,status,email_verified,phone_verified,onboarding_status,onboarding_completed_at,welcome_email_sent_at,created_at&order=created_at.desc&limit=500'),
-    selectRows('tenant_subscriptions', 'select=id,tenant_id,plan_code,status,billing_interval,currency,price_minor,trial_started_at,trial_ends_at,current_period_end,cancel_at_period_end,cancelled_at,admin_override,provider,updated_at&order=updated_at.desc&limit=250'),
+    selectRows('tenant_subscriptions', 'select=id,tenant_id,plan_code,status,billing_interval,currency,price_minor,trial_started_at,trial_ends_at,current_period_start,current_period_end,cancel_at_period_end,cancelled_at,grace_period_ends_at,admin_override,provider,provider_customer_id,provider_subscription_id,provider_price_id,checkout_session_id,latest_invoice_id,last_payment_at,last_payment_failed_at,updated_at&order=updated_at.desc&limit=250'),
     selectRows('vault_sync_snapshots', 'select=id,tenant_id,user_id,item_count,client_updated_at,created_at&order=created_at.desc&limit=1000'),
-    selectRows('vault_sync_events', 'select=id,tenant_id,user_id,event_type,status,item_count,message,device_id,metadata,created_at&order=created_at.desc&limit=1000')
+    selectRows('vault_sync_events', 'select=id,tenant_id,user_id,event_type,status,item_count,message,device_id,metadata,created_at&order=created_at.desc&limit=1000'),
+    selectRows('billing_events', 'select=id,tenant_id,subscription_id,provider,provider_event_id,event_type,status,amount_minor,currency,metadata,occurred_at,created_at&order=created_at.desc&limit=500')
   ]);
 
   const usersByTenant = new Map();
@@ -112,6 +114,7 @@ async function loadDashboard() {
       updatedAt: tenant.updated_at,
       users: usersByTenant.get(tenant.id) || [],
       subscription,
+      billingEvents: (billingEvents || []).filter((event) => event.tenant_id === tenant.id).slice(0, 20),
       syncDiagnostics: {
         latestSnapshot: latestSnapshotByTenant.get(tenant.id) || null,
         latestEvent: latestSyncEventByTenant.get(tenant.id) || null,
@@ -123,6 +126,8 @@ async function loadDashboard() {
   return {
     plans: plans || [],
     customers: customerRows,
+    billingEvents: billingEvents || [],
+    stripeConfigured: stripeConfigured(),
     summary: {
       tenants: customerRows.length,
       activeAccounts: customerRows.filter((row) => row.accountStatus === 'active').length,
@@ -130,7 +135,9 @@ async function loadDashboard() {
       expiredTrials: customerRows.filter((row) => row.planStatus === 'trial_expired').length,
       pendingSignups: customerRows.filter((row) => row.planStatus === 'signup_pending').length,
       publishedPlans: (plans || []).filter((plan) => plan.is_public && plan.is_active).length,
-      syncIssues: customerRows.filter((row) => ['warning', 'error'].includes(String(row.syncDiagnostics?.latestEvent?.status || '').toLowerCase())).length
+      syncIssues: customerRows.filter((row) => ['warning', 'error'].includes(String(row.syncDiagnostics?.latestEvent?.status || '').toLowerCase())).length,
+      paidSubscriptions: customerRows.filter((row) => row.subscription?.provider === 'stripe' && ['active', 'trialing'].includes(String(row.subscription?.status || '').toLowerCase())).length,
+      paymentProblems: customerRows.filter((row) => ['past_due', 'unpaid'].includes(String(row.subscription?.status || '').toLowerCase())).length
     }
   };
 }
@@ -142,7 +149,7 @@ export async function handler(event) {
     try {
       return jsonResponse(200, { ok: true, version: APP_VERSION, ...(await loadDashboard()) });
     } catch (error) {
-      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.041.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.042.', error: error.message, details: error.details || null });
     }
   }
 
@@ -179,8 +186,19 @@ export async function handler(event) {
       let saved;
       if (existing?.[0]?.id) saved = await updateRow('subscription_plans', `id=${eq(existing[0].id)}`, row);
       else saved = await insertRow('subscription_plans', { id: publicId('plan'), ...row });
-      await audit('subscription_plan_saved', { plan_code: code });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, plan: saved, message: 'Subscription plan saved.' });
+      const stripeSync = await syncStripePlan(saved);
+      await audit('subscription_plan_saved', { plan_code: code, stripe_sync_status: stripeSync.plan?.stripe_sync_status || '' });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, plan: stripeSync.plan || saved, stripeConfigured: stripeSync.configured, stripeSynced: Boolean(stripeSync.ok), message: stripeSync.message || 'Subscription plan saved.' });
+    }
+
+
+    if (action === 'sync_stripe_plan') {
+      const code = cleanPlanCode(body.planCode);
+      const plan = await loadPlan(code);
+      if (!plan?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Subscription plan was not found.' });
+      const stripeSync = await syncStripePlan(plan);
+      await audit('subscription_plan_stripe_sync_requested', { plan_code: code, stripe_sync_status: stripeSync.plan?.stripe_sync_status || '' });
+      return jsonResponse(stripeSync.ok ? 200 : 409, { ok: Boolean(stripeSync.ok), version: APP_VERSION, plan: stripeSync.plan || plan, stripeConfigured: stripeSync.configured, message: stripeSync.message });
     }
 
     if (action === 'set_account_status') {
@@ -199,6 +217,10 @@ export async function handler(event) {
       const tenant = await loadTenant(tenantId);
       const allowed = await ensureNonFounder(tenant);
       if (!allowed.ok) return jsonResponse(409, { ok: false, version: APP_VERSION, message: allowed.message });
+      const currentSubscription = await loadTenantSubscription(tenantId);
+      if (currentSubscription?.provider === 'stripe' && currentSubscription?.provider_subscription_id) {
+        return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'This account is managed by Stripe Billing. Use Stripe Dashboard or the customer billing portal for subscription changes.' });
+      }
       const plan = await loadPlan(tenant.plan_code || 'personal');
       if (!plan?.code) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The customer plan could not be found.' });
       const now = new Date();

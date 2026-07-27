@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, ArrowLeft, CalendarClock, ChevronRight, CircleHelp, Cloud, Copy, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.041';
+const VERSION = 'My Passwords Ver-0.042';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -149,6 +149,46 @@ function publicPlanPriceLabel(plan) {
   }
 }
 
+function planIntervalAmount(plan, interval) {
+  if (interval === 'quarterly') return Number(plan?.quarterlyPriceMinor || 0);
+  if (interval === 'annual') return Number(plan?.annualPriceMinor || 0);
+  return Number(plan?.monthlyPriceMinor || 0);
+}
+
+function planIntervalReady(plan, interval) {
+  if (interval === 'quarterly') return Boolean(plan?.stripeQuarterlyReady);
+  if (interval === 'annual') return Boolean(plan?.stripeAnnualReady);
+  return Boolean(plan?.stripeMonthlyReady);
+}
+
+function billingIntervalLabel(interval) {
+  if (interval === 'quarterly') return 'Quarterly';
+  if (interval === 'annual') return 'Annual';
+  return 'Monthly';
+}
+
+function billingPriceLabel(plan, interval) {
+  const amount = planIntervalAmount(plan, interval);
+  if (!amount) return 'Not available';
+  const suffix = interval === 'annual' ? ' / year' : interval === 'quarterly' ? ' / 3 months' : ' / month';
+  try { return `${new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(amount / 100)}${suffix}`; }
+  catch { return `${(amount / 100).toFixed(2)} GBP${suffix}`; }
+}
+
+function subscriptionStatusLabel(status) {
+  const value = String(status || '').toLowerCase();
+  if (value === 'active') return 'Active';
+  if (value === 'trialing') return 'Trial active';
+  if (value === 'checkout_pending' || value === 'incomplete') return 'Checkout pending';
+  if (value === 'checkout_cancelled') return 'Checkout cancelled';
+  if (value === 'checkout_expired' || value === 'incomplete_expired') return 'Checkout expired';
+  if (value === 'past_due' || value === 'unpaid') return 'Payment needs attention';
+  if (value === 'paused') return 'Paused';
+  if (value === 'cancelled' || value === 'canceled') return 'Cancelled';
+  if (value === 'expired') return 'Trial expired';
+  return value ? value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'No paid subscription';
+}
+
 function planDisplayName(planCode) {
   const code = String(planCode || '').trim().toLowerCase();
   if (code === 'founder_private' || code === 'private_founder') return 'Founder Plan';
@@ -168,6 +208,10 @@ function planStatusDisplayName(planStatus, accountStatus = '') {
   if (status === 'suspended') return 'Suspended';
   if (status === 'trial_expired') return 'Trial Expired';
   if (status === 'trial_cancelled') return 'Trial Cancelled';
+  if (status === 'payment_problem' || status === 'past_due' || status === 'unpaid') return 'Payment Needs Attention';
+  if (status === 'payment_paused' || status === 'paused') return 'Subscription Paused';
+  if (status === 'subscription_cancelled' || status === 'cancelled') return 'Subscription Cancelled';
+  if (status === 'checkout_pending' || status === 'incomplete') return 'Checkout Pending';
   return status ? status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Active';
 }
 
@@ -1493,6 +1537,7 @@ function App() {
   const [accountStatus, setAccountStatus] = useState({ state: 'local-first', message: 'Your account details help you recover your vault on a new device.' });
   const [customerSession, setCustomerSession] = useState({ checked: false, authenticated: false, cloudAccess: false, accessCode: '', message: 'Device verification has not been checked yet.' });
   const [publicPlans, setPublicPlans] = useState(FALLBACK_SAAS_PLANS);
+  const [billing, setBilling] = useState({ status: 'idle', message: '', planCode: '', interval: 'monthly', subscription: null, stripeConfigured: false, returnState: '' });
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'Your vault safety status will update after the first secure backup check.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
   const [syncSafety, setSyncSafety] = useState(() => readSyncSafetyState());
@@ -1585,6 +1630,84 @@ function App() {
 
   function openVaultSafetySettings() {
     openSettingsSection('safety');
+  }
+
+  function openSubscriptionSettings() {
+    openSettingsSection('subscription');
+  }
+
+  async function refreshCustomerSubscription(options = {}) {
+    try {
+      const response = await fetch('/.netlify/functions/session-status', { credentials: 'same-origin' });
+      const result = await response.json();
+      if (!result?.authenticated) {
+        setBilling((current) => ({ ...current, status: 'verification-required', message: result?.message || 'Verify this device before managing billing.', subscription: null, stripeConfigured: Boolean(result?.stripeConfigured) }));
+        return result;
+      }
+      const next = {
+        ...bootstrap,
+        tenantId: result.tenantId || bootstrap.tenantId,
+        userId: result.userId || bootstrap.userId,
+        displayName: result.account?.displayName || bootstrap.displayName,
+        email: result.account?.email || bootstrap.email,
+        phoneE164: result.account?.phoneE164 || bootstrap.phoneE164,
+        accountName: result.account?.accountName || bootstrap.accountName,
+        tenantName: result.account?.accountName || bootstrap.tenantName,
+        planCode: result.account?.planCode || bootstrap.planCode,
+        planStatus: result.account?.planStatus || bootstrap.planStatus,
+        accountStatus: result.account?.accountStatus || bootstrap.accountStatus,
+        tenantRole: result.account?.tenantRole || bootstrap.tenantRole,
+        trialStartedAt: result.account?.trialStartedAt || bootstrap.trialStartedAt || '',
+        trialEndsAt: result.account?.trialEndsAt || bootstrap.trialEndsAt || '',
+        trialDaysRemaining: result.account?.trialDaysRemaining ?? bootstrap.trialDaysRemaining ?? null,
+        accountVerified: true,
+        otpStatus: 'Device verified'
+      };
+      setBootstrap(next);
+      setCustomerSession((current) => ({ ...current, checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: result.accessCode || '', message: result.message || current.message, subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured) }));
+      setBilling((current) => ({ ...current, status: 'ready', message: options.message || '', subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), planCode: result.subscription?.planCode || result.account?.planCode || current.planCode || 'personal' }));
+      return result;
+    } catch (error) {
+      setBilling((current) => ({ ...current, status: 'error', message: 'Subscription status could not be refreshed.' }));
+      return { ok: false, message: error.message };
+    }
+  }
+
+  async function startStripeCheckout() {
+    if (!customerSession.authenticated) {
+      setDeviceVerificationModal({ visible: true, purpose: 'billing' });
+      return;
+    }
+    const selectedPlan = publicPlans.find((plan) => plan.code === (billing.planCode || bootstrap.planCode)) || null;
+    if (!selectedPlan || !planIntervalAmount(selectedPlan, billing.interval)) {
+      setBilling((current) => ({ ...current, status: 'error', message: `${billingIntervalLabel(billing.interval)} billing is not available for this plan.` }));
+      return;
+    }
+    setBilling((current) => ({ ...current, status: 'opening-checkout', message: 'Opening secure Stripe Checkout...' }));
+    const result = await postJson('/.netlify/functions/stripe-checkout', {
+      planCode: selectedPlan.code,
+      billingInterval: billing.interval,
+      requestId: crypto.randomUUID()
+    });
+    if (!result.ok || !result.checkoutUrl) {
+      setBilling((current) => ({ ...current, status: 'error', message: result.message || 'Stripe Checkout could not be opened.' }));
+      return;
+    }
+    window.location.assign(result.checkoutUrl);
+  }
+
+  async function openStripePortal() {
+    if (!customerSession.authenticated) {
+      setDeviceVerificationModal({ visible: true, purpose: 'billing' });
+      return;
+    }
+    setBilling((current) => ({ ...current, status: 'opening-portal', message: 'Opening Stripe Customer Portal...' }));
+    const result = await postJson('/.netlify/functions/stripe-portal', {});
+    if (!result.ok || !result.portalUrl) {
+      setBilling((current) => ({ ...current, status: 'error', message: result.message || 'The billing portal could not be opened.' }));
+      return;
+    }
+    window.location.assign(result.portalUrl);
   }
 
   function saveSyncSafety(patch) {
@@ -1853,7 +1976,11 @@ function App() {
           quarterlyPriceMinor: Number(plan.quarterly_price_minor || 0),
           annualPriceMinor: Number(plan.annual_price_minor || 0),
           trialDays: Number(plan.trial_days || 0),
-          isFeatured: Boolean(plan.is_featured)
+          isFeatured: Boolean(plan.is_featured),
+          stripeSyncStatus: plan.stripe_sync_status || '',
+          stripeMonthlyReady: Boolean(plan.stripe_monthly_price_id),
+          stripeQuarterlyReady: Boolean(plan.stripe_quarterly_price_id),
+          stripeAnnualReady: Boolean(plan.stripe_annual_price_id)
         })));
       })
       .catch(() => null);
@@ -1890,10 +2017,11 @@ function App() {
           };
           setBootstrap(next);
           const cloudAccess = result.cloudAccess !== false;
-          setCustomerSession({ checked: true, authenticated: true, cloudAccess, accessCode: result.accessCode || '', message: result.message || (cloudAccess ? 'This device is verified for secure backup and syncing.' : 'Cloud features are paused for this account.') });
+          setCustomerSession({ checked: true, authenticated: true, cloudAccess, accessCode: result.accessCode || '', message: result.message || (cloudAccess ? 'This device is verified for secure backup and syncing.' : 'Cloud features are paused for this account.'), subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured) });
+          setBilling((current) => ({ ...current, subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), planCode: result.subscription?.planCode || result.account?.planCode || current.planCode || 'personal' }));
           setAccountStatus({ state: cloudAccess ? 'ready' : 'access-paused', message: result.message || (cloudAccess ? 'Cloud backup and secure syncing are active on this device.' : 'Cloud backup and syncing are currently paused.') });
         } else {
-          setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: result?.code || 'SESSION_REQUIRED', message: result?.message || 'Verify this device to enable secure backup and syncing.' });
+          setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: result?.code || 'SESSION_REQUIRED', message: result?.message || 'Verify this device to enable secure backup and syncing.', subscription: null, stripeConfigured: Boolean(result?.stripeConfigured) });
           setAccountStatus((current) => current.state === 'ready' ? current : { state: 'session-needed', message: result?.message || 'Verify this device to enable secure backup and syncing.' });
         }
       } catch (error) {
@@ -1905,6 +2033,39 @@ function App() {
     // Session check intentionally runs once when this app instance starts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (locked || billing.returnState) return;
+    const params = new URLSearchParams(window.location.search);
+    const returnState = params.get('billing') || '';
+    if (!returnState) return;
+    const sessionId = params.get('session_id') || '';
+    setBilling((current) => ({ ...current, returnState, status: returnState === 'success' ? 'processing' : 'ready', message: returnState === 'success' ? 'Stripe is confirming your subscription...' : returnState === 'cancelled' ? 'Checkout was cancelled. No subscription change was made.' : 'Billing details were updated.' }));
+    openSubscriptionSettings();
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    if (returnState === 'success' && sessionId) {
+      let cancelled = false;
+      (async () => {
+        await fetch(`/.netlify/functions/stripe-checkout-status?session_id=${encodeURIComponent(sessionId)}`, { credentials: 'same-origin' }).catch(() => null);
+        for (let attempt = 0; attempt < 6 && !cancelled; attempt += 1) {
+          const result = await refreshCustomerSubscription({ message: 'Stripe is confirming your subscription...' });
+          if (['active', 'trialing'].includes(String(result?.subscription?.status || '').toLowerCase())) {
+            setBilling((current) => ({ ...current, status: 'success', message: 'Your subscription is active.' }));
+            showMessage('Subscription active.', 'success');
+            break;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 1800));
+        }
+      })();
+      return () => { cancelled = true; };
+    }
+    if (returnState === 'cancelled') {
+      postJson('/.netlify/functions/stripe-checkout-cancel', {}).then(() => refreshCustomerSubscription({ message: 'Checkout was cancelled. No subscription change was made.' })).catch(() => null);
+      showMessage('Checkout cancelled. No payment was taken.', 'error');
+    }
+    if (returnState === 'portal-return') refreshCustomerSubscription();
+  }, [locked, billing.returnState]);
 
   useEffect(() => {
     if (!locked) setEmergencyDraft(getEmergencyAccessPlan(items));
@@ -2197,6 +2358,7 @@ function App() {
 
   async function verifyTestOtp() {
     const popupFlow = Boolean(deviceVerificationModal.visible);
+    const verificationPurpose = deviceVerificationModal.purpose || '';
     if (!otpTest.challengeId) {
       const note = 'Request a one-time code first.';
       setOtpTest((current) => ({ ...current, status: 'needs-code', message: note, verified: false }));
@@ -2245,6 +2407,10 @@ function App() {
       }));
       setAccountStatus({ state: 'ready', message: 'Device verified. Secure backup and syncing are active.' });
       if (popupFlow) setDeviceVerificationModal({ visible: false, purpose: '' });
+      if (verificationPurpose === 'billing') {
+        openSubscriptionSettings();
+        await refreshCustomerSubscription();
+      }
 
       const shouldFinishPendingBackup = result.cloudAccess !== false && syncSafety.pending && !syncSafety.conflict && Boolean(getLocalEnvelope());
       if (shouldFinishPendingBackup) {
@@ -4815,6 +4981,12 @@ function App() {
                     <span className="settings-directory-meta">{planDisplayName(bootstrap.planCode)}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
+                  <button type="button" className="settings-directory-row" onClick={openSubscriptionSettings}>
+                    <span className="settings-directory-icon"><CreditCard size={22} /></span>
+                    <span className="settings-directory-copy"><strong>My Subscription</strong><small>Choose billing, manage payments and view renewal status.</small></span>
+                    <span className={`settings-directory-state ${['past_due', 'unpaid'].includes(String(billing.subscription?.status || '').toLowerCase()) ? 'attention' : 'safe'}`}>{isFounderPlan(bootstrap) ? 'Founder' : subscriptionStatusLabel(billing.subscription?.status || bootstrap.planStatus)}</span>
+                    <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
+                  </button>
                   <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('safety')}>
                     <span className="settings-directory-icon"><ShieldCheck size={22} /></span>
                     <span className="settings-directory-copy"><strong>Vault Safety</strong><small>Backup, syncing, device protection and recovery.</small></span>
@@ -4920,6 +5092,56 @@ function App() {
                 </div>
                 <p className="biometric-note"><strong>Security note:</strong> this is a trusted-device convenience feature, not a password replacement. Your browser may offer PIN, fingerprint, face unlock, passkey or device lock. My Passwords will pause quick unlock every 14 days or after 10 quick unlocks and ask you to type your master password, so you do not forget it.</p>
               </section>
+            </section>
+          )}
+
+          {activeSettingsSection === 'subscription' && (
+            <section className="settings-section-panel subscription-settings-panel" aria-label="My Subscription">
+              <div className="settings-section-heading">
+                <p className="eyebrow">My Subscription</p>
+                <h3><CreditCard size={20} /> Plan and billing</h3>
+                <p>Choose a billing period and complete payment securely through Stripe. My Passwords never receives or stores your full card details.</p>
+              </div>
+
+              {isFounderPlan(bootstrap) ? (
+                <section className="subscription-founder-card settings-inner-card"><ShieldCheck size={24} /><div><strong>Permanent Founder access</strong><p>Your Founder Plan does not expire and does not require Stripe Billing.</p></div></section>
+              ) : (() => {
+                const currentSubscription = billing.subscription || customerSession.subscription || null;
+                const selectedPlan = publicPlans.find((plan) => plan.code === (billing.planCode || bootstrap.planCode)) || publicPlans[0] || null;
+                const stripeSubscriptionExists = currentSubscription?.provider === 'stripe' && Boolean(currentSubscription?.providerSubscriptionIdPresent);
+                const paidActive = currentSubscription?.provider === 'stripe' && (stripeSubscriptionExists || ['active', 'trialing', 'past_due', 'unpaid', 'paused', 'incomplete'].includes(String(currentSubscription.status || '').toLowerCase()));
+                return <>
+                  <section className={`subscription-status-card settings-inner-card ${String(currentSubscription?.status || bootstrap.planStatus || '').toLowerCase()}`}>
+                    <div><CreditCard size={22} /><span><strong>{subscriptionStatusLabel(currentSubscription?.status || bootstrap.planStatus)}</strong><small>{currentSubscription?.provider === 'stripe' ? `${planDisplayName(currentSubscription.planCode || bootstrap.planCode)} · ${billingIntervalLabel(currentSubscription.billingInterval)} billing` : `${planDisplayName(bootstrap.planCode)} · free trial`}</small></span></div>
+                    <div className="subscription-status-grid">
+                      <span><strong>Plan</strong>{planDisplayName(currentSubscription?.planCode || bootstrap.planCode)}</span>
+                      <span><strong>Price</strong>{currentSubscription?.priceMinor ? billingPriceLabel({ monthlyPriceMinor: currentSubscription.priceMinor, quarterlyPriceMinor: currentSubscription.priceMinor, annualPriceMinor: currentSubscription.priceMinor }, currentSubscription.billingInterval || 'monthly') : 'Trial / not billed'}</span>
+                      <span><strong>Trial ends</strong>{formatAccountDate(currentSubscription?.trialEndsAt || bootstrap.trialEndsAt, true)}</span>
+                      <span><strong>Next renewal</strong>{formatAccountDate(currentSubscription?.currentPeriodEnd, true)}</span>
+                      <span><strong>Cancellation</strong>{currentSubscription?.cancelAtPeriodEnd ? 'Ends after current period' : 'Not scheduled'}</span>
+                      <span><strong>Last payment</strong>{formatAccountDate(currentSubscription?.lastPaymentAt, true)}</span>
+                    </div>
+                    {['past_due', 'unpaid'].includes(String(currentSubscription?.status || '').toLowerCase()) && <div className="subscription-payment-warning"><AlertTriangle size={19} /><span><strong>Payment needs attention</strong><small>Open the Stripe billing portal to update the payment method. Cloud access may pause after the grace period.</small></span></div>}
+                  </section>
+
+                  {!paidActive && <section className="subscription-chooser settings-inner-card">
+                    <div className="subscription-card-heading"><div><p className="eyebrow">Choose your plan</p><h3>Start recurring billing</h3></div><span>GBP (£)</span></div>
+                    <div className="subscription-plan-options">
+                      {publicPlans.map((plan) => <button type="button" key={`billing-${plan.code}`} className={(billing.planCode || bootstrap.planCode) === plan.code ? 'active' : ''} onClick={() => setBilling((current) => ({ ...current, planCode: plan.code, message: '' }))}><strong>{plan.displayName}</strong><small>{plan.description}</small><span>{billingPriceLabel(plan, billing.interval)}</span></button>)}
+                    </div>
+                    <div className="subscription-interval-options" role="group" aria-label="Billing period">
+                      {['monthly', 'quarterly', 'annual'].map((interval) => <button type="button" key={interval} className={billing.interval === interval ? 'active' : ''} onClick={() => setBilling((current) => ({ ...current, interval, message: '' }))}>{billingIntervalLabel(interval)}<small>{selectedPlan ? billingPriceLabel(selectedPlan, interval) : 'Not available'}</small></button>)}
+                    </div>
+                    {selectedPlan && !planIntervalReady(selectedPlan, billing.interval) && <div className="subscription-inline-note"><AlertTriangle size={17} /><span>This price has not yet been synced to Stripe by Admin.</span></div>}
+                    <button type="button" className="primary-button subscription-checkout-button" onClick={startStripeCheckout} disabled={billing.status === 'opening-checkout' || !selectedPlan || !planIntervalAmount(selectedPlan, billing.interval) || !planIntervalReady(selectedPlan, billing.interval)}><CreditCard size={18} /> {billing.status === 'opening-checkout' ? 'Opening Stripe Checkout...' : `Continue with ${billingIntervalLabel(billing.interval)} billing`}</button>
+                  </section>}
+
+                  {currentSubscription?.providerCustomerIdPresent && <section className="subscription-manage-card settings-inner-card"><div><ExternalLink size={20} /><span><strong>Manage billing securely</strong><small>Update payment details, view invoices or cancel through Stripe Customer Portal.</small></span></div><button type="button" className="secondary-button" onClick={openStripePortal} disabled={billing.status === 'opening-portal'}>{billing.status === 'opening-portal' ? 'Opening...' : 'Open billing portal'}</button></section>}
+                  {!customerSession.authenticated && <section className="subscription-verify-card settings-inner-card"><ShieldCheck size={20} /><span><strong>Verify this device first</strong><small>Device verification protects access to subscription and billing actions.</small></span><button type="button" className="secondary-button" onClick={openDeviceVerification}>Verify this device</button></section>}
+                  {billing.message && <div className={`subscription-message ${billing.status}`}>{billing.message}</div>}
+                  <button type="button" className="secondary-button subscription-refresh-button" onClick={() => refreshCustomerSubscription()}><RefreshCw size={17} /> Refresh subscription status</button>
+                </>;
+              })()}
             </section>
           )}
 

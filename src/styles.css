@@ -7992,3 +7992,277 @@ a,
     grid-template-columns: 1fr;
   }
 }
+
+/* Ver-0.042 Stripe Billing */
+.subscription-settings-panel {
+  display: grid;
+  gap: 18px;
+}
+.subscription-founder-card,
+.subscription-manage-card,
+.subscription-verify-card,
+.subscription-status-card {
+  display: grid;
+  gap: 16px;
+}
+.subscription-founder-card,
+.subscription-manage-card > div,
+.subscription-verify-card {
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+}
+.subscription-founder-card {
+  grid-template-columns: auto 1fr;
+  background: #edf8f1;
+  border-color: #c9e7d3;
+}
+.subscription-founder-card svg,
+.subscription-status-card > div:first-child svg {
+  color: #2f7d4d;
+}
+.subscription-founder-card p,
+.subscription-manage-card small,
+.subscription-verify-card small,
+.subscription-status-card small {
+  margin: 4px 0 0;
+  color: #66788c;
+  line-height: 1.45;
+}
+.subscription-status-card > div:first-child {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.subscription-status-card > div:first-child span,
+.subscription-manage-card span,
+.subscription-verify-card span {
+  display: grid;
+  gap: 2px;
+}
+.subscription-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.subscription-status-grid span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #dbe5ee;
+  border-radius: 14px;
+  background: #f8fbfd;
+  overflow-wrap: anywhere;
+}
+.subscription-status-grid strong {
+  color: #50657a;
+  font-size: 0.77rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.subscription-payment-warning,
+.subscription-inline-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 13px 14px;
+  border: 1px solid #efc8c8;
+  border-radius: 14px;
+  background: #fff1f1;
+  color: #8d3030;
+}
+.subscription-payment-warning span {
+  display: grid;
+  gap: 3px;
+}
+.subscription-chooser {
+  display: grid;
+  gap: 16px;
+}
+.subscription-card-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+.subscription-card-heading h3,
+.subscription-card-heading p {
+  margin: 0;
+}
+.subscription-card-heading > span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #e8f1f8;
+  color: #315f86;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.subscription-plan-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.subscription-plan-options button,
+.subscription-interval-options button {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  padding: 14px;
+  border: 1px solid #cedbe6;
+  border-radius: 15px;
+  background: #fff;
+  color: #24394f;
+}
+.subscription-plan-options button:hover,
+.subscription-interval-options button:hover {
+  border-color: #7fa9cc;
+  background: #f4f9fd;
+}
+.subscription-plan-options button.active,
+.subscription-interval-options button.active {
+  border-color: #4c89b8;
+  background: #eaf4fb;
+  box-shadow: inset 0 0 0 1px #4c89b8;
+}
+.subscription-plan-options small,
+.subscription-interval-options small {
+  color: #6b7e91;
+  line-height: 1.35;
+}
+.subscription-plan-options span {
+  color: #2f6d4a;
+  font-weight: 800;
+}
+.subscription-interval-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.subscription-interval-options button {
+  text-align: center;
+}
+.subscription-checkout-button {
+  width: 100%;
+  justify-content: center;
+}
+.subscription-manage-card {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+.subscription-manage-card > div {
+  grid-template-columns: auto 1fr;
+}
+.subscription-verify-card {
+  grid-template-columns: auto 1fr auto;
+}
+.subscription-message {
+  padding: 13px 15px;
+  border: 1px solid #c9dfce;
+  border-radius: 14px;
+  background: #edf8f0;
+  color: #306143;
+}
+.subscription-message.error {
+  border-color: #efc8c8;
+  background: #fff1f1;
+  color: #8d3030;
+}
+.subscription-refresh-button {
+  justify-self: start;
+}
+.admin-plan-save-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.admin-stripe-status,
+.admin-billing-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #d6e2ec;
+  border-radius: 14px;
+  background: #f7fafc;
+  color: #3b5369;
+}
+.admin-stripe-status span,
+.admin-billing-summary span {
+  display: grid;
+  gap: 3px;
+}
+.admin-stripe-status small,
+.admin-billing-summary small {
+  color: #6c7f91;
+}
+.admin-stripe-status.ready {
+  background: #edf8f0;
+  border-color: #c8e3cf;
+  color: #2d6744;
+}
+.admin-stripe-status.error,
+.admin-stripe-status.not_configured {
+  background: #fff1f1;
+  border-color: #efcaca;
+  color: #8c3333;
+}
+.stripe-plan-state {
+  text-transform: capitalize;
+}
+.admin-billing-event-list {
+  display: grid;
+  gap: 10px;
+}
+.admin-billing-event {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d7e2ec;
+  border-radius: 15px;
+  background: #fff;
+}
+.admin-billing-event > div:last-child {
+  display: grid;
+  gap: 4px;
+}
+.admin-billing-event span,
+.admin-billing-event small {
+  color: #687c90;
+}
+
+@media (max-width: 760px) {
+  .subscription-status-grid,
+  .subscription-plan-options,
+  .subscription-interval-options {
+    grid-template-columns: 1fr;
+  }
+  .subscription-manage-card,
+  .subscription-verify-card,
+  .subscription-founder-card {
+    grid-template-columns: auto 1fr;
+  }
+  .subscription-manage-card > button,
+  .subscription-verify-card > button {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: center;
+  }
+  .admin-plan-save-actions > button {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}
+
+/* Ver-0.042 Stripe Billing admin/customer refinements */
+.admin-stripe-managed-note {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(51, 102, 153, 0.18);
+  border-radius: 12px;
+  background: rgba(51, 102, 153, 0.07);
+  color: #294f72;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
