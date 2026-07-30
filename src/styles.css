@@ -8266,3 +8266,69 @@ a,
   font-size: 0.9rem;
   line-height: 1.45;
 }
+
+/* Ver-0.042A Stripe customer references and managed-panel spacing */
+.admin-stripe-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 9px;
+}
+
+.admin-stripe-reference-grid > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #d8e3ec;
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.admin-stripe-reference-grid small {
+  color: #61778c;
+  font-weight: 700;
+}
+
+.admin-stripe-reference-grid code {
+  display: block;
+  min-width: 0;
+  color: #1f4f78;
+  font-size: .82rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.admin-stripe-managed-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.admin-stripe-managed-note > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.admin-stripe-managed-note > span {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-stripe-managed-note strong,
+.admin-stripe-managed-note small {
+  display: block;
+}
+
+.admin-stripe-managed-note small {
+  color: #435f79;
+  line-height: 1.55;
+}
+
+@media (max-width: 640px) {
+  .admin-stripe-reference-grid {
+    grid-template-columns: 1fr;
+  }
+}

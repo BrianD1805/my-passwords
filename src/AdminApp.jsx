@@ -344,7 +344,19 @@ export default function AdminApp({ version }) {
                       <span><strong>Time remaining</strong>{founder ? 'Founder access' : daysLeft === null ? 'No active trial' : `${daysLeft} day${daysLeft === 1 ? '' : 's'}`}</span>
                       <span><strong>Onboarding</strong>{customer.onboardingCompletedAt ? `Completed ${dateLabel(customer.onboardingCompletedAt)}` : 'Pending verification'}</span>
                     </div>
-                    {!founder && customer.subscription?.provider === 'stripe' && <div className="admin-billing-summary"><CreditCard size={17} /><span><strong>Stripe subscription</strong><small>{String(customer.subscription.status || 'pending').replace(/_/g, ' ')} · {customer.subscription.billing_interval || 'interval pending'} · {money(customer.subscription.price_minor || 0)}{customer.subscription.current_period_end ? ` · renews/ends ${dateLabel(customer.subscription.current_period_end)}` : ''}</small></span></div>}
+                    {!founder && customer.subscription?.provider === 'stripe' && (
+                      <div className="admin-billing-summary">
+                        <CreditCard size={17} />
+                        <span>
+                          <strong>Stripe subscription</strong>
+                          <small>{String(customer.subscription.status || 'pending').replace(/_/g, ' ')} · {customer.subscription.billing_interval || 'interval pending'} · {money(customer.subscription.price_minor || 0)}{customer.subscription.current_period_end ? ` · renews/ends ${dateLabel(customer.subscription.current_period_end)}` : ''}</small>
+                          <span className="admin-stripe-reference-grid">
+                            <span><small>Stripe customer reference</small><code>{customer.subscription.provider_customer_id || 'Pending'}</code></span>
+                            <span><small>Stripe subscription reference</small><code>{customer.subscription.provider_subscription_id || 'Pending'}</code></span>
+                          </span>
+                        </span>
+                      </div>
+                    )}
                     {!founder && !stripeManaged && (
                       <div className="admin-trial-controls">
                         <label>Days<input type="number" min="1" max="365" value={extensionDays} onChange={(event) => setTrialDays((current) => ({ ...current, [customer.id]: event.target.value }))} /></label>

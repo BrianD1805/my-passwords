@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowLeft, CalendarClock, ChevronRight, CircleHelp, Clou
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.042';
+const VERSION = 'My Passwords Ver-0.042A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
