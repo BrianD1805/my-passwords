@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleH
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.042J';
+const VERSION = 'My Passwords Ver-0.042K';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1467,6 +1467,7 @@ function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKe
   const isConflictReminder = state.mode === 'conflict-reminder';
   const isVerification = state.mode === 'verification-required';
   const isDanger = state.mode === 'danger';
+  const isOffline = state.mode === 'offline';
   return (
     <div className="item-popup-layer sync-safety-popup-layer" role="dialog" aria-modal="true" aria-labelledby="sync-safety-title">
       <button type="button" className="item-popup-backdrop" onClick={onClose} aria-label="Close vault safety message" />
@@ -1503,6 +1504,7 @@ function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKe
           {isConflict && <><button type="button" className="secondary-button" onClick={onClose}>Decide later</button><button type="button" className="secondary-button" onClick={onUseCloud}>Use secure backup</button><button type="button" className="primary-button" onClick={onKeepDevice}>Keep this device</button></>}
           {isConflictReminder && <><button type="button" className="secondary-button" onClick={onClose}>Close</button><button type="button" className="primary-button" onClick={onOpenSafety}>Open Vault Safety</button></>}
           {isDanger && <><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="button" className="danger-button" onClick={onConfirmDanger}>Continue anyway</button></>}
+          {isOffline && <button type="button" className="primary-button" onClick={onClose}>Close</button>}
         </footer>
       </section>
     </div>
@@ -1510,8 +1512,60 @@ function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKe
 }
 
 
+function NetworkStatusNotice({ context = 'vault', hasLocalVault = false }) {
+  const message = context === 'admin'
+    ? 'Admin needs an internet connection. Reconnect to manage plans, customers and billing.'
+    : context === 'public'
+      ? (hasLocalVault
+        ? 'You are offline. Public plan details and account setup need the internet, but you can still open the encrypted vault saved on this device.'
+        : 'You are offline. Reconnect to view current plans, create an account or verify a device.')
+      : (hasLocalVault
+        ? 'You are offline. You can open and use the encrypted vault saved on this device. Backup and syncing will resume automatically when the internet returns.'
+        : 'You are offline. Reconnect to verify your account or restore an existing secure vault on this device.');
+
+  return (
+    <section className="network-status-notice" role="status" aria-live="polite">
+      <Cloud size={20} />
+      <span><strong>No internet connection</strong><small>{message}</small></span>
+    </section>
+  );
+}
+
+class AppStartupBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error) {
+    console.error('My Passwords startup error', error);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    return (
+      <main className="startup-error-screen">
+        <section className="startup-error-card">
+          <div className="brand-mark"><Lock size={34} /></div>
+          <h1>{offline ? 'No internet connection' : 'My Passwords could not start'}</h1>
+          <p>{offline
+            ? 'Your encrypted vault data has not been changed. Reconnect and try again.'
+            : 'Refresh the app to try again. Your encrypted vault data has not been changed.'}</p>
+          <button type="button" className="primary-button" onClick={() => window.location.reload()}><RefreshCw size={18} /> Try again</button>
+        </section>
+      </main>
+    );
+  }
+}
+
 function App() {
   const [locked, setLocked] = useState(true);
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
   const [masterPassword, setMasterPassword] = useState('');
   const [confirmMasterPassword, setConfirmMasterPassword] = useState('');
   const [showUnlockPassword, setShowUnlockPassword] = useState(true);
@@ -1949,7 +2003,22 @@ function App() {
   }, [locked, hasLocalVault, masterPasswordFieldArmed]);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return undefined;
+    const registerWorker = () => navigator.serviceWorker.register('/sw.js').then((registration) => registration.update().catch(() => null)).catch(() => null);
+    registerWorker();
+    window.addEventListener('online', registerWorker);
+    return () => window.removeEventListener('online', registerWorker);
   }, []);
 
   useEffect(() => {
@@ -1968,32 +2037,39 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/.netlify/functions/public-plans')
-      .then((response) => response.json())
-      .then((result) => {
-        if (cancelled || !result?.ok || !Array.isArray(result.plans)) return;
-        setPublicPlans(result.plans.map((plan) => ({
-          code: plan.code,
-          displayName: plan.display_name,
-          description: plan.description,
-          currency: plan.currency,
-          monthlyPriceMinor: Number(plan.monthly_price_minor || 0),
-          quarterlyPriceMinor: Number(plan.quarterly_price_minor || 0),
-          annualPriceMinor: Number(plan.annual_price_minor || 0),
-          trialDays: Number(plan.trial_days || 0),
-          maxUsers: Number(plan.max_users || 1),
-          storageLimitMb: Number(plan.storage_limit_mb || 0),
-          documentLimit: Number(plan.document_limit || 0),
-          features: Array.isArray(plan.features) ? plan.features.filter(Boolean) : [],
-          isFeatured: Boolean(plan.is_featured),
-          stripeSyncStatus: plan.stripe_sync_status || '',
-          stripeMonthlyReady: Boolean(plan.stripe_monthly_price_id),
-          stripeQuarterlyReady: Boolean(plan.stripe_quarterly_price_id),
-          stripeAnnualReady: Boolean(plan.stripe_annual_price_id)
-        })));
-      })
-      .catch(() => null);
-    return () => { cancelled = true; };
+    const loadPublicPlans = () => {
+      fetch('/.netlify/functions/public-plans')
+        .then((response) => response.json())
+        .then((result) => {
+          if (cancelled || !result?.ok || !Array.isArray(result.plans)) return;
+          setPublicPlans(result.plans.map((plan) => ({
+            code: plan.code,
+            displayName: plan.display_name,
+            description: plan.description,
+            currency: plan.currency,
+            monthlyPriceMinor: Number(plan.monthly_price_minor || 0),
+            quarterlyPriceMinor: Number(plan.quarterly_price_minor || 0),
+            annualPriceMinor: Number(plan.annual_price_minor || 0),
+            trialDays: Number(plan.trial_days || 0),
+            maxUsers: Number(plan.max_users || 1),
+            storageLimitMb: Number(plan.storage_limit_mb || 0),
+            documentLimit: Number(plan.document_limit || 0),
+            features: Array.isArray(plan.features) ? plan.features.filter(Boolean) : [],
+            isFeatured: Boolean(plan.is_featured),
+            stripeSyncStatus: plan.stripe_sync_status || '',
+            stripeMonthlyReady: Boolean(plan.stripe_monthly_price_id),
+            stripeQuarterlyReady: Boolean(plan.stripe_quarterly_price_id),
+            stripeAnnualReady: Boolean(plan.stripe_annual_price_id)
+          })));
+        })
+        .catch(() => null);
+    };
+    loadPublicPlans();
+    window.addEventListener('online', loadPublicPlans);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', loadPublicPlans);
+    };
   }, []);
 
   useEffect(() => {
@@ -2038,8 +2114,13 @@ function App() {
       }
     }
     checkSecureSession();
-    return () => { cancelled = true; };
-    // Session check intentionally runs once when this app instance starts.
+    window.addEventListener('online', checkSecureSession);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', checkSecureSession);
+    };
+    // The saved local account identity is used only to refresh this device's
+    // signed session when connectivity returns.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -3317,6 +3398,16 @@ function App() {
 
   async function refreshVaultAndBackup() {
     if (syncing || syncOperationRef.current) return;
+    if (!navigator.onLine) {
+      setSyncSafetyModal({
+        visible: true,
+        mode: 'offline',
+        title: 'No internet connection',
+        message: 'The vault saved on this device is still available. Reconnect before checking secure backup or syncing changes.',
+        details: null
+      });
+      return;
+    }
     if (!masterPassword) {
       showMessage('Unlock the vault with your master password before refreshing.', 'warning');
       return;
@@ -4431,6 +4522,8 @@ function App() {
           <button type="button" className="secondary-button public-open-button" onClick={openVaultApp}><Unlock size={17} /> Open My Vault</button>
         </header>
 
+        {!isOnline && <NetworkStatusNotice context="public" hasLocalVault={hasLocalVault} />}
+
         <section className="landing-hero-shell" aria-label="My Passwords introduction">
           <div className="landing-hero-copy">
             <div className="landing-pill"><Sparkles size={16} /> Encrypted password vault for everyday life</div>
@@ -4705,6 +4798,7 @@ function App() {
           <div className="brand-mark"><Lock size={38} /></div>
           <p className="eyebrow">Secure private vault</p>
           <h1>My Passwords</h1>
+          {!isOnline && <NetworkStatusNotice context="vault" hasLocalVault={hasLocalVault} />}
           {hasLocalVault ? (
             <>
               <p className="intro">Unlock your private vault with your master password.</p>
@@ -4854,6 +4948,38 @@ function App() {
       ? 'The emergency access request has been cancelled. No vault contents were released.'
       : emergencyDraft.requestMessage || '';
 
+  const vaultSafetyLabel = !isOnline
+    ? 'Offline'
+    : syncing || syncSafety.state === 'backing-up'
+      ? 'Saving...'
+      : syncSafety.conflict
+        ? 'Review vault'
+        : syncSafety.pending
+          ? 'Backup pending'
+          : syncSafety.state === 'unknown'
+            ? 'Not checked'
+            : 'Up to date';
+  const vaultSafetyClass = !isOnline
+    ? 'offline'
+    : syncing || syncSafety.state === 'backing-up'
+      ? 'syncing'
+      : syncSafety.conflict
+        ? 'conflict'
+        : syncSafety.pending
+          ? 'pending'
+          : syncSafety.state === 'unknown'
+            ? 'unknown'
+            : 'safe';
+  const vaultSafetyIcon = !isOnline
+    ? <Cloud size={19} />
+    : syncing || syncSafety.state === 'backing-up'
+      ? <RefreshCw size={19} className="sync-button-spinner" />
+      : syncSafety.conflict || syncSafety.pending
+        ? <AlertTriangle size={19} />
+        : syncSafety.state === 'unknown'
+          ? <Cloud size={19} />
+          : <ShieldCheck size={19} />;
+
   return (
     <main className="app-shell">
       <header className="topbar app-home-topbar">
@@ -4863,9 +4989,9 @@ function App() {
         </div>
         <button type="button" className="mobile-top-menu-button" onClick={() => setMobileHeaderMenuOpen((open) => !open)} aria-label="Open vault menu" aria-expanded={mobileHeaderMenuOpen ? 'true' : 'false'}><MoreHorizontal size={22} /></button>
         <div className="topbar-actions">
-          <button type="button" className={`topbar-sync-button ${syncing || syncSafety.state === 'backing-up' ? 'syncing' : syncSafety.conflict ? 'conflict' : syncSafety.pending ? 'pending' : syncSafety.state === 'unknown' ? 'unknown' : 'safe'}`} onClick={openVaultSafetySettings} aria-label={`Vault Safety: ${syncing || syncSafety.state === 'backing-up' ? 'Saving' : syncSafety.conflict ? 'Review vault' : syncSafety.pending ? 'Backup pending' : syncSafety.state === 'unknown' ? 'Not checked' : 'Up to date'}`} title="Vault Safety">
-            {syncing || syncSafety.state === 'backing-up' ? <RefreshCw size={19} className="sync-button-spinner" /> : syncSafety.conflict ? <AlertTriangle size={19} /> : syncSafety.pending ? <AlertTriangle size={19} /> : syncSafety.state === 'unknown' ? <Cloud size={19} /> : <ShieldCheck size={19} />}
-            <span>{syncing || syncSafety.state === 'backing-up' ? 'Saving...' : syncSafety.conflict ? 'Review vault' : syncSafety.pending ? 'Backup pending' : syncSafety.state === 'unknown' ? 'Not checked' : 'Up to date'}</span>
+          <button type="button" className={`topbar-sync-button ${vaultSafetyClass}`} onClick={openVaultSafetySettings} aria-label={`Vault Safety: ${vaultSafetyLabel}`} title="Vault Safety">
+            {vaultSafetyIcon}
+            <span>{vaultSafetyLabel}</span>
           </button>
           <button type="button" className="mobile-vault-refresh-button" onClick={refreshVaultAndBackup} disabled={syncing} aria-label="Refresh vault and back up changes" title="Refresh vault and back up changes"><RefreshCw size={20} className={syncing ? 'sync-button-spinner' : ''} /></button>
           <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'topbar-help-button active' : 'topbar-help-button'} onClick={openFaqSettings} aria-label="Open frequently asked questions" title="Help and FAQs"><CircleHelp size={20} /></button>
@@ -4883,6 +5009,8 @@ function App() {
           </nav>
         </>}
       </header>
+
+      {!isOnline && <NetworkStatusNotice context="vault" hasLocalVault />}
 
       {syncSafety.pending && (
         <section className={`sync-warning-banner ${syncSafety.conflict ? 'conflict' : syncSafety.sessionRequired ? 'verification' : 'pending'}`} role="alert">
@@ -5717,4 +5845,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(window.location.pathname.startsWith('/admin') ? <AdminApp version={VERSION} /> : <App />);
+createRoot(document.getElementById('root')).render(<AppStartupBoundary>{window.location.pathname.startsWith('/admin') ? <AdminApp version={VERSION} /> : <App />}</AppStartupBoundary>);

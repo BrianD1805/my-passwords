@@ -9662,3 +9662,116 @@ body,
     min-width: 48px;
   }
 }
+
+/* Ver-0.042K — offline startup and connectivity guidance */
+.network-status-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: min(100%, 1180px);
+  margin: 14px auto 0;
+  padding: 15px 18px;
+  border: 1px solid #c7d8e4;
+  border-radius: 16px;
+  background: #f4f9fc;
+  color: #24435d;
+}
+
+.network-status-notice > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #56778f;
+}
+
+.network-status-notice > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.network-status-notice strong {
+  font-size: .94rem;
+  line-height: 1.2;
+}
+
+.network-status-notice small {
+  color: #5f7484;
+  font-size: .82rem;
+  line-height: 1.45;
+}
+
+.lock-card > .network-status-notice {
+  margin: 18px 0 4px;
+  text-align: left;
+}
+
+.app-shell > .network-status-notice {
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.public-landing-page > .network-status-notice {
+  width: min(calc(100% - 40px), 1180px);
+}
+
+.topbar-sync-button.offline {
+  border-color: #c3d3de;
+  background: #eef4f8;
+  color: #536f82;
+}
+
+.startup-error-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: #eaf4fb;
+}
+
+.startup-error-card {
+  width: min(100%, 480px);
+  padding: 32px;
+  border: 1px solid #cbddea;
+  border-radius: 22px;
+  background: #fff;
+  color: #1d3557;
+  text-align: center;
+}
+
+.startup-error-card h1 {
+  margin: 16px 0 10px;
+}
+
+.startup-error-card p {
+  margin: 0 0 22px;
+  color: #5f7484;
+  line-height: 1.55;
+}
+
+.startup-error-card .primary-button {
+  margin-inline: auto;
+}
+
+.admin-offline-card .admin-mark {
+  background: #e3eef5;
+  color: #536f82;
+}
+
+@media (max-width: 720px) {
+  .network-status-notice {
+    width: calc(100% - 24px);
+    margin-top: 10px;
+    padding: 14px 15px;
+    border-radius: 14px;
+  }
+
+  .lock-card > .network-status-notice {
+    width: 100%;
+    margin-inline: 0;
+  }
+
+  .app-shell > .network-status-notice,
+  .public-landing-page > .network-status-notice {
+    width: calc(100% - 24px);
+  }
+}

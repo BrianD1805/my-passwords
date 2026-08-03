@@ -13,7 +13,41 @@
     <title>My Passwords | Encrypted Password Vault</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="startup-fallback" style="min-height:100vh;display:grid;place-items:center;padding:28px;background:#eaf4fb;color:#1d3557;font-family:Ubuntu,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        <section style="width:min(100%,480px);padding:32px;border:1px solid #cbddea;border-radius:22px;background:#fff;text-align:center;">
+          <div style="display:grid;width:54px;height:54px;margin:0 auto 18px;place-items:center;border-radius:16px;background:#dcecf7;font-size:26px;" aria-hidden="true">MP</div>
+          <h1 id="startup-fallback-title" style="margin:0 0 12px;font-size:26px;">Starting My Passwords</h1>
+          <p id="startup-fallback-message" style="margin:0;color:#526b7d;line-height:1.55;">Loading your secure vault…</p>
+          <button id="startup-fallback-retry" type="button" style="display:none;min-height:46px;margin:20px auto 0;padding:0 22px;border:0;border-radius:12px;background:#1d5f91;color:#fff;font:inherit;font-weight:700;cursor:pointer;">Try again</button>
+        </section>
+      </div>
+    </div>
+    <script>
+      (() => {
+        const fallback = () => document.getElementById('startup-fallback');
+        const retry = document.getElementById('startup-fallback-retry');
+        if (retry) retry.addEventListener('click', () => window.location.reload());
+
+        const showStartupProblem = () => {
+          if (!fallback()) return;
+          const offline = navigator.onLine === false;
+          const title = document.getElementById('startup-fallback-title');
+          const message = document.getElementById('startup-fallback-message');
+          if (title) title.textContent = offline ? 'No internet connection' : 'My Passwords could not finish loading';
+          if (message) message.textContent = offline
+            ? 'A vault already saved on this device remains encrypted and unchanged. Reconnect and try again if the app files have not yet been saved for offline use.'
+            : 'Refresh the page to try again. Your encrypted vault data has not been changed.';
+          if (retry) retry.style.display = 'inline-flex';
+        };
+
+        window.setTimeout(showStartupProblem, 3500);
+        window.addEventListener('offline', showStartupProblem);
+        window.addEventListener('online', () => {
+          if (fallback()) window.location.reload();
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -2,10 +2,20 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BadgePoundSterling, Ban, CalendarClock, ChevronDown, ChevronUp, Cloud, CreditCard, Eye, EyeOff, LogOut, Plus, Play, RefreshCw, Save, ShieldCheck, Trash2, UserRoundCheck, UsersRound, X } from 'lucide-react';
 
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, { credentials: 'same-origin', ...options });
-  const data = await response.json().catch(() => ({ ok: false, message: 'The server returned an invalid response.' }));
-  if (!response.ok) return { ...data, ok: false, httpStatus: response.status };
-  return data;
+  try {
+    const response = await fetch(url, { credentials: 'same-origin', ...options });
+    const data = await response.json().catch(() => ({ ok: false, message: 'The server returned an invalid response.' }));
+    if (!response.ok) return { ...data, ok: false, httpStatus: response.status };
+    return data;
+  } catch {
+    return {
+      ok: false,
+      offline: typeof navigator !== 'undefined' && navigator.onLine === false,
+      message: typeof navigator !== 'undefined' && navigator.onLine === false
+        ? 'No internet connection. Admin will be available when you are back online.'
+        : 'The Admin service could not be reached. Please try again.'
+    };
+  }
 }
 
 function emptyPlan() {
@@ -90,6 +100,7 @@ function planStatusDisplayName(planStatus) {
 
 export default function AdminApp({ version }) {
   const [auth, setAuth] = useState({ checking: true, authenticated: false, message: '' });
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
   const [accessKey, setAccessKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -111,7 +122,18 @@ export default function AdminApp({ version }) {
   const visiblePlans = planVisibility === 'active' ? activePublishedPlans : hiddenPlans;
 
   useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      checkAuth();
+    };
+    const handleOffline = () => setIsOnline(false);
     checkAuth();
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   useEffect(() => {
@@ -283,6 +305,22 @@ export default function AdminApp({ version }) {
     setBusy(false);
     setNotice(result.message || (result.ok ? 'Trial updated.' : 'Trial update failed.'));
     if (result.ok) await loadData();
+  }
+
+  if (!isOnline) {
+    return (
+      <main className="admin-shell admin-centred">
+        <section className="admin-login-card admin-offline-card">
+          <div className="admin-mark"><Cloud size={28} /></div>
+          <p className="eyebrow">My Passwords Admin</p>
+          <h1>No internet connection</h1>
+          <p>Admin needs an internet connection to load plans, customers, billing and sync information. Reconnect, then try again.</p>
+          <button type="button" className="primary-button" onClick={() => window.location.reload()}><RefreshCw size={18} /> Try again</button>
+          <a className="admin-back-link" href="/vault">Return to My Vault</a>
+          <small>{version}</small>
+        </section>
+      </main>
+    );
   }
 
   if (auth.checking) {
