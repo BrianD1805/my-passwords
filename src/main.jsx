@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleH
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.042I';
+const VERSION = 'My Passwords Ver-0.042J';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -3315,6 +3315,57 @@ function App() {
   }
 
 
+  async function refreshVaultAndBackup() {
+    if (syncing || syncOperationRef.current) return;
+    if (!masterPassword) {
+      showMessage('Unlock the vault with your master password before refreshing.', 'warning');
+      return;
+    }
+    if (!customerSession.authenticated || customerSession.cloudAccess === false) {
+      openDeviceVerification();
+      return;
+    }
+
+    setSyncing(true);
+    try {
+      const check = await restoreLatestCloudVault(masterPassword, { showSuccess: false, reason: 'manual-refresh', forceCloud: false });
+      if (check?.sessionRequired) {
+        openDeviceVerification();
+        return;
+      }
+      if (check?.conflict) return;
+
+      if (check?.localNewer) {
+        const backup = await syncEncryptedVault({ envelope: check.localEnvelope || getLocalEnvelope(), nextItems: items, silent: true, retry: true });
+        if (backup?.ok) showMessage('Vault refreshed and your latest changes were backed up.', 'success');
+        return;
+      }
+
+      if (check?.restored) {
+        showMessage('Vault refreshed. Newer changes from secure backup are now on this device.', 'success');
+        return;
+      }
+
+      if (check?.upToDate) {
+        showMessage('Vault refreshed. Everything is up to date.', 'success');
+        return;
+      }
+
+      if (!check?.latest?.hasSnapshot && getLocalEnvelope()) {
+        const backup = await syncEncryptedVault({ envelope: getLocalEnvelope(), nextItems: items, silent: true, retry: true });
+        if (backup?.ok) showMessage('Vault refreshed and backed up securely.', 'success');
+        return;
+      }
+
+      showMessage(check?.latest?.message || 'Vault refresh completed. Nothing was changed.', 'success');
+    } catch (error) {
+      showMessage(`Vault refresh did not complete. ${error.message || 'Please try again.'}`, 'error');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+
   const visibleItems = useMemo(() => getVisibleVaultItems(items), [items]);
   const customFolders = useMemo(() => getCustomFolders(items), [items]);
   const savedFolderOrder = useMemo(() => getFolderOrder(items), [items]);
@@ -3361,6 +3412,28 @@ function App() {
   const isVaultRoute = ['/vault', '/app', '/login'].includes(routePath);
   const isEmergencyInviteRoute = routePath === '/emergency-invite';
   const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute;
+
+  useEffect(() => {
+    if (!isVaultRoute) return undefined;
+    let touchStartY = 0;
+
+    const rememberTouchStart = (event) => {
+      if (event.touches?.length === 1) touchStartY = event.touches[0].clientY;
+    };
+    const stopPullToRefresh = (event) => {
+      if (event.touches?.length !== 1 || document.body.classList.contains('app-popup-open')) return;
+      const scrollTop = document.scrollingElement?.scrollTop || window.scrollY || 0;
+      const movingDown = event.touches[0].clientY > touchStartY;
+      if (scrollTop <= 0 && movingDown && event.cancelable) event.preventDefault();
+    };
+
+    document.addEventListener('touchstart', rememberTouchStart, { passive: true });
+    document.addEventListener('touchmove', stopPullToRefresh, { passive: false });
+    return () => {
+      document.removeEventListener('touchstart', rememberTouchStart);
+      document.removeEventListener('touchmove', stopPullToRefresh);
+    };
+  }, [isVaultRoute]);
 
   useEffect(() => {
     if (!isPublicLandingRoute) {
@@ -4794,6 +4867,7 @@ function App() {
             {syncing || syncSafety.state === 'backing-up' ? <RefreshCw size={19} className="sync-button-spinner" /> : syncSafety.conflict ? <AlertTriangle size={19} /> : syncSafety.pending ? <AlertTriangle size={19} /> : syncSafety.state === 'unknown' ? <Cloud size={19} /> : <ShieldCheck size={19} />}
             <span>{syncing || syncSafety.state === 'backing-up' ? 'Saving...' : syncSafety.conflict ? 'Review vault' : syncSafety.pending ? 'Backup pending' : syncSafety.state === 'unknown' ? 'Not checked' : 'Up to date'}</span>
           </button>
+          <button type="button" className="mobile-vault-refresh-button" onClick={refreshVaultAndBackup} disabled={syncing} aria-label="Refresh vault and back up changes" title="Refresh vault and back up changes"><RefreshCw size={20} className={syncing ? 'sync-button-spinner' : ''} /></button>
           <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'topbar-help-button active' : 'topbar-help-button'} onClick={openFaqSettings} aria-label="Open frequently asked questions" title="Help and FAQs"><CircleHelp size={20} /></button>
           <button type="button" className={activePage === 'home' ? 'nav-pill vault-nav-pill active' : 'nav-pill vault-nav-pill'} onClick={() => setActivePage('home')}><KeyRound size={17} /> Vault</button>
           <button type="button" className={activePage === 'settings' ? 'nav-pill settings-nav-pill active' : 'nav-pill settings-nav-pill'} onClick={openSettingsHome}><Settings size={17} /> Settings</button>
