@@ -9343,3 +9343,179 @@ a,
   color: #fff;
   outline: none;
 }
+
+/* My Passwords Ver-0.042I — neutral selected states, mobile menu and larger Vault Safety status */
+
+/* Selected navigation and folders return to a calm neutral blue-grey. */
+.nav-pill.active,
+.topbar-help-button.active {
+  background: #e9f0f6;
+  color: #203a52;
+  border-color: #bfd0de;
+  box-shadow: 0 8px 20px rgba(29, 53, 87, 0.08);
+}
+
+.nav-pill.active:hover,
+.nav-pill.active:focus-visible,
+.topbar-help-button.active:hover,
+.topbar-help-button.active:focus-visible {
+  background: #dfe9f1;
+  color: #172f45;
+  border-color: #aebfcd;
+  box-shadow: 0 9px 22px rgba(29, 53, 87, 0.1);
+}
+
+.vault-folder-row .chip.active,
+.folder-home-button.active {
+  background: #e6edf4;
+  color: #203a52;
+  border-color: #b8c9d7;
+  box-shadow: 0 8px 20px rgba(29, 53, 87, 0.07);
+}
+
+.vault-folder-row .chip.active .chip-count {
+  color: #315d7e;
+  background: #fff;
+}
+
+.topbar-sync-button {
+  min-width: 146px;
+  min-height: 46px;
+  padding-left: 18px;
+  padding-right: 18px;
+  gap: 9px;
+}
+
+.mobile-top-menu-button,
+.mobile-header-menu,
+.mobile-header-menu-backdrop {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .mobile-top-lock {
+    display: none !important;
+  }
+
+  .mobile-top-menu-button {
+    display: inline-grid;
+    place-items: center;
+    justify-self: end;
+    width: 46px;
+    height: 46px;
+    min-width: 46px;
+    padding: 0;
+    border: 1px solid rgba(29, 53, 87, 0.14);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.88);
+    color: #233b52;
+    box-shadow: 0 10px 24px rgba(29, 53, 87, 0.07);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+    z-index: 92;
+  }
+
+  .mobile-top-menu-button:hover,
+  .mobile-top-menu-button:focus-visible {
+    background: #e9f0f6;
+    border-color: #bfd0de;
+    outline: none;
+  }
+
+  .topbar-actions {
+    grid-template-areas: "status";
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .topbar-actions .topbar-help-button,
+  .topbar-actions .nav-pill {
+    display: none;
+  }
+
+  .topbar-sync-button {
+    grid-area: status;
+    width: 100%;
+    min-width: 0;
+    min-height: 50px;
+    padding: 0 18px;
+    gap: 10px;
+    font-size: 0.9rem;
+  }
+
+  .topbar-sync-button svg {
+    display: block !important;
+    width: 19px;
+    height: 19px;
+    flex: 0 0 auto;
+  }
+
+  .mobile-header-menu-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 88;
+    border: 0;
+    background: rgba(17, 34, 50, 0.18);
+    backdrop-filter: blur(2px);
+  }
+
+  .mobile-header-menu {
+    display: grid;
+    position: absolute;
+    top: 54px;
+    right: 0;
+    z-index: 94;
+    width: min(270px, calc(100vw - 34px));
+    overflow: hidden;
+    border: 1px solid #d4e0e9;
+    border-radius: 20px;
+    background: #fff;
+    box-shadow: 0 22px 54px rgba(20, 38, 59, 0.2);
+    padding: 8px;
+  }
+
+  .mobile-header-menu button {
+    width: 100%;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 0;
+    border-radius: 14px;
+    padding: 0 14px;
+    background: transparent;
+    color: #243b52;
+    font: inherit;
+    font-weight: 780;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-header-menu button:hover,
+  .mobile-header-menu button:focus-visible,
+  .mobile-header-menu button.active {
+    background: #e9f0f6;
+    color: #172f45;
+    outline: none;
+  }
+
+  .mobile-header-menu .lock-menu-item {
+    margin-top: 4px;
+    border-top: 1px solid #e4ebf1;
+    border-radius: 0 0 14px 14px;
+  }
+}
+
+.vault-folder-row .chip.active:hover,
+.vault-folder-row .chip.active:focus-visible,
+.folder-home-button.active:hover,
+.folder-home-button.active:focus-visible {
+  background: #dce6ee;
+  color: #172f45;
+  border-color: #aebfcd;
+  box-shadow: 0 9px 22px rgba(29, 53, 87, 0.09);
+  outline: none;
+}

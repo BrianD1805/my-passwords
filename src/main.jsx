@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleH
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.042H';
+const VERSION = 'My Passwords Ver-0.042I';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1562,6 +1562,7 @@ function App() {
   const [biometricStatus, setBiometricStatus] = useState(() => ({ supported: isBiometricUnlockSupported(), label: isBiometricUnlockSupported() ? friendlyBiometricName() : 'Not supported on this browser/device', state: readBiometricUnlockRecord() ? 'enabled' : 'available' }));
   const [activePage, setActivePage] = useState('home');
   const [activeSettingsSection, setActiveSettingsSection] = useState('overview');
+  const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = useState(false);
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
@@ -1630,6 +1631,15 @@ function App() {
   function openSubscriptionSettings() {
     openSettingsSection('subscription');
   }
+
+  useEffect(() => {
+    if (!mobileHeaderMenuOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setMobileHeaderMenuOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobileHeaderMenuOpen]);
 
   async function refreshCustomerSubscription(options = {}) {
     try {
@@ -4778,10 +4788,10 @@ function App() {
           <p className="eyebrow">Secure private vault</p>
           <h1>My Passwords</h1>
         </div>
-        <button className="lock-button mobile-top-lock" onClick={() => lockVault()} aria-label="Lock vault"><Lock size={18} /> <span>Lock</span></button>
+        <button type="button" className="mobile-top-menu-button" onClick={() => setMobileHeaderMenuOpen((open) => !open)} aria-label="Open vault menu" aria-expanded={mobileHeaderMenuOpen ? 'true' : 'false'}><MoreHorizontal size={22} /></button>
         <div className="topbar-actions">
-          <button type="button" className={`topbar-sync-button ${syncing || syncSafety.state === 'backing-up' ? 'syncing' : syncSafety.conflict ? 'conflict' : syncSafety.pending ? 'pending' : syncSafety.state === 'unknown' ? 'unknown' : 'safe'}`} onClick={openVaultSafetySettings} aria-label="Open Vault Safety" title="Vault Safety">
-            {syncing || syncSafety.state === 'backing-up' ? <RefreshCw size={18} className="sync-button-spinner" /> : syncSafety.pending ? <AlertTriangle size={18} /> : <Cloud size={18} />}
+          <button type="button" className={`topbar-sync-button ${syncing || syncSafety.state === 'backing-up' ? 'syncing' : syncSafety.conflict ? 'conflict' : syncSafety.pending ? 'pending' : syncSafety.state === 'unknown' ? 'unknown' : 'safe'}`} onClick={openVaultSafetySettings} aria-label={`Vault Safety: ${syncing || syncSafety.state === 'backing-up' ? 'Saving' : syncSafety.conflict ? 'Review vault' : syncSafety.pending ? 'Backup pending' : syncSafety.state === 'unknown' ? 'Not checked' : 'Up to date'}`} title="Vault Safety">
+            {syncing || syncSafety.state === 'backing-up' ? <RefreshCw size={19} className="sync-button-spinner" /> : syncSafety.conflict ? <AlertTriangle size={19} /> : syncSafety.pending ? <AlertTriangle size={19} /> : syncSafety.state === 'unknown' ? <Cloud size={19} /> : <ShieldCheck size={19} />}
             <span>{syncing || syncSafety.state === 'backing-up' ? 'Saving...' : syncSafety.conflict ? 'Review vault' : syncSafety.pending ? 'Backup pending' : syncSafety.state === 'unknown' ? 'Not checked' : 'Up to date'}</span>
           </button>
           <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'topbar-help-button active' : 'topbar-help-button'} onClick={openFaqSettings} aria-label="Open frequently asked questions" title="Help and FAQs"><CircleHelp size={20} /></button>
@@ -4789,6 +4799,15 @@ function App() {
           <button type="button" className={activePage === 'settings' ? 'nav-pill settings-nav-pill active' : 'nav-pill settings-nav-pill'} onClick={openSettingsHome}><Settings size={17} /> Settings</button>
           <button className="lock-button desktop-lock-button" onClick={() => lockVault()}><Lock size={18} /> Lock</button>
         </div>
+        {mobileHeaderMenuOpen && <>
+          <button type="button" className="mobile-header-menu-backdrop" onClick={() => setMobileHeaderMenuOpen(false)} aria-label="Close vault menu" />
+          <nav className="mobile-header-menu" aria-label="Vault menu">
+            <button type="button" className={activePage === 'home' ? 'active' : ''} onClick={() => { setMobileHeaderMenuOpen(false); setActivePage('home'); }}><KeyRound size={19} /><span>Vault home</span></button>
+            <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'active' : ''} onClick={() => { setMobileHeaderMenuOpen(false); openFaqSettings(); }}><CircleHelp size={19} /><span>Help & FAQs</span></button>
+            <button type="button" className={activePage === 'settings' && activeSettingsSection !== 'faq' ? 'active' : ''} onClick={() => { setMobileHeaderMenuOpen(false); openSettingsHome(); }}><Settings size={19} /><span>Settings</span></button>
+            <button type="button" className="lock-menu-item" onClick={() => { setMobileHeaderMenuOpen(false); lockVault(); }}><Lock size={19} /><span>Lock vault</span></button>
+          </nav>
+        </>}
       </header>
 
       {syncSafety.pending && (
