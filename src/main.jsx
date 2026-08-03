@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleH
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.042K';
+const VERSION = 'My Passwords Ver-0.042L';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1468,6 +1468,7 @@ function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKe
   const isVerification = state.mode === 'verification-required';
   const isDanger = state.mode === 'danger';
   const isOffline = state.mode === 'offline';
+  const isOfflineSaved = state.mode === 'offline-saved';
   return (
     <div className="item-popup-layer sync-safety-popup-layer" role="dialog" aria-modal="true" aria-labelledby="sync-safety-title">
       <button type="button" className="item-popup-backdrop" onClick={onClose} aria-label="Close vault safety message" />
@@ -1504,7 +1505,7 @@ function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKe
           {isConflict && <><button type="button" className="secondary-button" onClick={onClose}>Decide later</button><button type="button" className="secondary-button" onClick={onUseCloud}>Use secure backup</button><button type="button" className="primary-button" onClick={onKeepDevice}>Keep this device</button></>}
           {isConflictReminder && <><button type="button" className="secondary-button" onClick={onClose}>Close</button><button type="button" className="primary-button" onClick={onOpenSafety}>Open Vault Safety</button></>}
           {isDanger && <><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="button" className="danger-button" onClick={onConfirmDanger}>Continue anyway</button></>}
-          {isOffline && <button type="button" className="primary-button" onClick={onClose}>Close</button>}
+          {(isOffline || isOfflineSaved) && <button type="button" className="primary-button" onClick={onClose}>Close</button>}
         </footer>
       </section>
     </div>
@@ -1594,6 +1595,7 @@ function App() {
   const [syncSafety, setSyncSafety] = useState(() => readSyncSafetyState());
   const [syncSafetyModal, setSyncSafetyModal] = useState({ visible: false, mode: '', title: '', message: '', details: null });
   const [syncPromptShown, setSyncPromptShown] = useState(false);
+  const offlineSaveNoticeShownRef = useRef(false);
   const syncRetryRef = useRef(false);
   const syncOperationRef = useRef(false);
   const [snapshotHistory, setSnapshotHistory] = useState({ loaded: false, loading: false, total: 0, snapshots: [], message: 'Recovery history has not been checked yet.' });
@@ -2836,6 +2838,44 @@ function App() {
     setItems(nextItems);
     const envelope = await encryptVault(nextItems, masterPassword);
     const itemCount = getVisibleVaultItems(nextItems).length;
+
+    if (options.autoSync && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      const note = 'Your latest changes are encrypted and saved on this device. They will be backed up automatically when your internet connection returns.';
+      const showOfflinePopup = !offlineSaveNoticeShownRef.current;
+      offlineSaveNoticeShownRef.current = true;
+      setSyncPromptShown(true);
+      setSyncStatus({
+        state: 'warning',
+        message: 'Saved offline. Backup pending.',
+        lastSyncAt: syncStatus.lastSyncAt,
+        lastSnapshotId: syncStatus.lastSnapshotId,
+        itemCount,
+        snapshotCount: snapshotHistory.total
+      });
+      saveSyncSafety({
+        state: 'backup-pending',
+        pending: true,
+        conflict: false,
+        sessionRequired: false,
+        message: note,
+        itemCount,
+        lastFailureAt: '',
+        acknowledgedAt: ''
+      });
+      if (showOfflinePopup) {
+        setSyncSafetyModal({
+          visible: true,
+          mode: 'offline-saved',
+          title: 'Saved offline',
+          message: note,
+          details: { itemCount }
+        });
+      } else {
+        showMessage('Saved offline. Backup pending.', 'success');
+      }
+      return { ok: true, localOnly: true, offline: true, offlineNoticeShown: showOfflinePopup, envelope };
+    }
+
     if (options.autoSync) {
       setSyncPromptShown(false);
       saveSyncSafety({
@@ -3067,7 +3107,9 @@ function App() {
         setItemCredentialFieldsArmed({ username: false, password: false });
         setIsItemPopupOpen(false);
         setViewItemId(itemIdBeingEdited);
-        if (syncResult?.ok) {
+        if (syncResult?.offline) {
+          // The one-time offline popup or compact offline toast already confirms the local save.
+        } else if (syncResult?.ok) {
           showMessage('Item updated.', 'success');
         } else {
           showMessage('Item updated on this device. Backup needs attention.', 'warning');
@@ -3086,7 +3128,9 @@ function App() {
       setItemCredentialFieldsArmed({ username: false, password: false });
       setIsItemPopupOpen(false);
       setViewItemId(newItem.id);
-      if (syncResult?.ok) {
+      if (syncResult?.offline) {
+        // The one-time offline popup or compact offline toast already confirms the local save.
+      } else if (syncResult?.ok) {
         showMessage('Item saved.', 'success');
       }
     } catch (error) {
@@ -3151,6 +3195,8 @@ function App() {
     const syncResult = await saveItems(items.filter((item) => item.id !== id), { autoSync: true, silentAutoSync: true });
     if (!bootstrap.tenantId || !bootstrap.userId) {
       showMessage('Item deleted on this device. Save your account details to enable cloud backup.', 'warning');
+    } else if (syncResult?.offline) {
+      // The offline save confirmation already covers this local change.
     } else if (syncResult?.ok) {
       showMessage('Item deleted.', 'success');
     }
