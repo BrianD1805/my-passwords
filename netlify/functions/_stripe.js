@@ -147,6 +147,21 @@ async function ensureStripePrice(plan, productId, definition) {
   return price.id;
 }
 
+export async function archiveStripePlan(plan) {
+  if (!plan) return { ok: true, configured: stripeConfigured(), message: 'Plan has no Stripe objects to archive.' };
+  const ids = [plan.stripe_monthly_price_id, plan.stripe_quarterly_price_id, plan.stripe_annual_price_id].filter(Boolean);
+  const hasStripeObjects = Boolean(plan.stripe_product_id || ids.length);
+  if (!hasStripeObjects) return { ok: true, configured: stripeConfigured(), message: 'Plan deleted. No Stripe objects required archiving.' };
+  if (!stripeConfigured()) return { ok: false, configured: false, message: 'Stripe Billing must be configured before a synced plan can be deleted safely.' };
+  for (const priceId of ids) {
+    await stripeRequest(`prices/${encodeURIComponent(priceId)}`, { params: { active: false } });
+  }
+  if (plan.stripe_product_id) {
+    await stripeRequest(`products/${encodeURIComponent(plan.stripe_product_id)}`, { params: { active: false } });
+  }
+  return { ok: true, configured: true, message: 'Stripe Product and Prices were archived.' };
+}
+
 export async function syncStripePlan(plan) {
   if (!stripeConfigured()) {
     const updated = await updateRow('subscription_plans', `id=eq.${encodeURIComponent(plan.id)}`, {

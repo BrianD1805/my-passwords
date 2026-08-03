@@ -1,7 +1,7 @@
-import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow } from './_db.js';
+import { APP_VERSION, deleteRow, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow } from './_db.js';
 import { readAdminSession } from './_auth.js';
 import { isFounderTenant, loadTenantSubscription, recordLifecycleEvent, upsertTrialSubscription } from './_trial.js';
-import { stripeConfigured, syncStripePlan } from './_stripe.js';
+import { archiveStripePlan, stripeConfigured, syncStripePlan } from './_stripe.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -77,6 +77,8 @@ async function loadDashboard() {
     usersByTenant.get(user.tenant_id).push({
       id: user.id,
       displayName: user.display_name || '',
+      email: user.email || '',
+      phone: user.phone_e164 || '',
       emailMasked: maskEmail(user.email),
       phoneMasked: maskPhone(user.phone_e164),
       role: user.role || 'member',
@@ -149,7 +151,7 @@ export async function handler(event) {
     try {
       return jsonResponse(200, { ok: true, version: APP_VERSION, ...(await loadDashboard()) });
     } catch (error) {
-      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.042A.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.042.', error: error.message, details: error.details || null });
     }
   }
 
@@ -199,6 +201,24 @@ export async function handler(event) {
       const stripeSync = await syncStripePlan(plan);
       await audit('subscription_plan_stripe_sync_requested', { plan_code: code, stripe_sync_status: stripeSync.plan?.stripe_sync_status || '' });
       return jsonResponse(stripeSync.ok ? 200 : 409, { ok: Boolean(stripeSync.ok), version: APP_VERSION, plan: stripeSync.plan || plan, stripeConfigured: stripeSync.configured, message: stripeSync.message });
+    }
+
+    if (action === 'delete_plan') {
+      const code = cleanPlanCode(body.planCode);
+      const plan = await loadPlan(code);
+      if (!plan?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Subscription plan was not found.' });
+      const [tenantUsers, subscriptionUsers] = await Promise.all([
+        selectRows('tenants', `select=id&plan_code=${eq(code)}&limit=1`),
+        selectRows('tenant_subscriptions', `select=id&plan_code=${eq(code)}&limit=1`)
+      ]);
+      if (tenantUsers?.length || subscriptionUsers?.length) {
+        return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'This plan cannot be deleted because one or more customer accounts or subscriptions still use it. Hide or deactivate it instead.' });
+      }
+      const archived = await archiveStripePlan(plan);
+      if (!archived.ok) return jsonResponse(409, { ok: false, version: APP_VERSION, message: archived.message });
+      await deleteRow('subscription_plans', `id=${eq(plan.id)}`);
+      await audit('subscription_plan_deleted', { plan_code: code, stripe_archived: Boolean(archived.configured) });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, message: 'Subscription plan deleted. Any Stripe Product and Prices were archived.' });
     }
 
     if (action === 'set_account_status') {

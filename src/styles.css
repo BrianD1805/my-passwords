@@ -8332,3 +8332,386 @@ a,
     grid-template-columns: 1fr;
   }
 }
+
+/* Ver-0.042B Admin plan directory, customer accordions and billing layout */
+.admin-plan-directory-heading {
+  align-items: center;
+}
+
+.admin-plan-directory {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-plan-directory .admin-plan-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 100%;
+}
+
+.admin-plan-directory .admin-plan-card p {
+  margin: 0;
+}
+
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  place-items: center;
+  padding: 60px 25px;
+  background: rgba(20, 38, 59, .48);
+  backdrop-filter: blur(7px);
+}
+
+.admin-plan-window {
+  width: min(1040px, 100%);
+  max-height: calc(100dvh - 150px);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid #d5e1eb;
+  border-radius: 28px;
+  background: #fff;
+}
+
+.admin-plan-window-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px 20px;
+  border-top: 3px solid #2e79ac;
+  border-bottom: 1px solid #e2eaf1;
+  background: #fff;
+}
+
+.admin-plan-window-header h2,
+.admin-plan-window-header p {
+  margin: 0;
+}
+
+.admin-window-close {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: #edf3f8;
+  color: #29445e;
+}
+
+.admin-plan-window-form {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.admin-plan-window-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 24px 30px;
+}
+
+.admin-plan-window-form label {
+  display: grid;
+  gap: 7px;
+  font-weight: 700;
+  color: #31465d;
+}
+
+.admin-plan-window-form input,
+.admin-plan-window-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #c8d6e3;
+  border-radius: 13px;
+  padding: 12px 13px;
+  background: #fff;
+  color: #172b3f;
+  font: inherit;
+}
+
+.admin-plan-window-form input:disabled {
+  color: #6b7e91;
+  background: #f2f6f9;
+}
+
+.admin-plan-window-body .admin-toggle-grid {
+  margin: 20px 0;
+}
+
+.admin-plan-window-body .admin-stripe-status {
+  margin-top: 18px;
+  padding: 16px 18px;
+}
+
+.admin-plan-window-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 24px 22px;
+  border-top: 1px solid #e2eaf1;
+  background: #fff;
+}
+
+.admin-plan-window-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-customer-accordion-list {
+  gap: 12px;
+}
+
+.admin-customer-accordion {
+  overflow: hidden;
+  border: 1px solid #d8e4ed;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.admin-customer-accordion.open {
+  border-color: #a9c7dd;
+}
+
+.admin-customer-summary {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 18px;
+  align-items: center;
+  padding: 17px 18px;
+  text-align: left;
+  background: #fff;
+  color: inherit;
+}
+
+.admin-customer-summary:hover {
+  background: #f7fafc;
+}
+
+.admin-accordion-chevron {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: #315d82;
+  background: #edf4f9;
+}
+
+.admin-customer-details {
+  display: grid;
+  gap: 16px;
+  padding: 0 18px 18px;
+  border-top: 1px solid #e3ebf1;
+}
+
+.admin-customer-details .admin-trial-summary {
+  padding-top: 18px;
+  border-top: 0;
+}
+
+.admin-billing-summary-wide {
+  grid-column: 1 / -1;
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(260px, .8fr) minmax(0, 1.2fr);
+  align-items: stretch;
+  gap: 16px;
+  padding: 18px;
+}
+
+.admin-billing-summary-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.admin-billing-summary-heading > span {
+  display: grid;
+  gap: 5px;
+}
+
+.admin-billing-summary-wide .admin-stripe-reference-grid {
+  margin-top: 0;
+}
+
+.admin-stripe-account-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-trial-controls {
+  flex-wrap: nowrap;
+}
+
+.admin-trial-controls button {
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .admin-plan-directory {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-trial-controls {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-plan-directory {
+    grid-template-columns: 1fr;
+  }
+  .admin-plan-directory-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .admin-plan-directory-heading button {
+    width: 100%;
+    justify-content: center;
+  }
+  .admin-customer-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .admin-customer-summary .admin-customer-meta {
+    grid-column: 1 / 2;
+    justify-items: start;
+  }
+  .admin-accordion-chevron {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .admin-billing-summary-wide {
+    grid-template-columns: 1fr;
+  }
+  .admin-plan-window-footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+  .admin-plan-window-footer > div,
+  .admin-plan-window-actions,
+  .admin-plan-window-footer button {
+    width: 100%;
+  }
+  .admin-plan-window-actions {
+    display: grid;
+  }
+  .admin-plan-window-footer button {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-modal-overlay {
+    padding: 60px 25px;
+  }
+  .admin-plan-window-header,
+  .admin-plan-window-body,
+  .admin-plan-window-footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .admin-customer-summary,
+  .admin-customer-details {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .admin-trial-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Ver-0.042C Admin contact visibility and plan filtering */
+.admin-plan-directory-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-plan-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #cad9e5;
+  border-radius: 999px;
+  background: #edf3f8;
+}
+
+.admin-plan-filter button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 9px 15px;
+  border-radius: 999px;
+  background: transparent;
+  color: #35536e;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.admin-plan-filter button span {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(51, 102, 153, .10);
+  color: #315d82;
+  font-size: .78rem;
+}
+
+.admin-plan-filter button.active {
+  background: #23699e;
+  color: #fff;
+}
+
+.admin-plan-filter button.active span {
+  background: rgba(255, 255, 255, .20);
+  color: #fff;
+}
+
+.admin-customer-summary .admin-customer-main small {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 760px) {
+  .admin-plan-directory-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .admin-plan-filter {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .admin-plan-filter button {
+    flex: 1 1 50%;
+  }
+  .admin-plan-directory-actions > .primary-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+

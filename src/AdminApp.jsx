@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BadgePoundSterling, Ban, CalendarClock, Check, Cloud, CreditCard, Eye, EyeOff, LogOut, Play, RefreshCw, Save, ShieldCheck, UserRoundCheck, UsersRound } from 'lucide-react';
+import { AlertTriangle, BadgePoundSterling, Ban, CalendarClock, ChevronDown, ChevronUp, Cloud, CreditCard, Eye, EyeOff, LogOut, Plus, Play, RefreshCw, Save, ShieldCheck, Trash2, UserRoundCheck, UsersRound, X } from 'lucide-react';
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', ...options });
@@ -96,14 +96,37 @@ export default function AdminApp({ version }) {
   const [data, setData] = useState({ plans: [], customers: [], billingEvents: [], summary: {}, stripeConfigured: false });
   const [activeTab, setActiveTab] = useState('overview');
   const [editor, setEditor] = useState(emptyPlan());
+  const [planEditorOpen, setPlanEditorOpen] = useState(false);
+  const [planEditorMode, setPlanEditorMode] = useState('new');
+  const [expandedCustomerId, setExpandedCustomerId] = useState('');
+  const [planVisibility, setPlanVisibility] = useState('active');
   const [notice, setNotice] = useState('');
   const [trialDays, setTrialDays] = useState({});
 
-  const sortedPlans = useMemo(() => [...(data.plans || [])].sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0)), [data.plans]);
+  const sortedPlans = useMemo(() => [...(data.plans || [])]
+    .filter((plan) => String(plan?.code || '').trim() && String(plan?.display_name || '').trim())
+    .sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0)), [data.plans]);
+  const activePublishedPlans = useMemo(() => sortedPlans.filter((plan) => plan.is_active && plan.is_public), [sortedPlans]);
+  const hiddenPlans = useMemo(() => sortedPlans.filter((plan) => !(plan.is_active && plan.is_public)), [sortedPlans]);
+  const visiblePlans = planVisibility === 'active' ? activePublishedPlans : hiddenPlans;
 
   useEffect(() => {
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    if (!planEditorOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape' && !busy) setPlanEditorOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [planEditorOpen, busy]);
 
   async function checkAuth() {
     const result = await requestJson('/.netlify/functions/admin-auth');
@@ -152,8 +175,23 @@ export default function AdminApp({ version }) {
 
   function editPlan(plan) {
     setEditor(toEditorPlan(plan));
-    setActiveTab('plans');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setPlanEditorMode('edit');
+    setPlanEditorOpen(true);
+  }
+
+  function addPlan() {
+    setEditor(emptyPlan());
+    setPlanEditorMode('new');
+    setPlanEditorOpen(true);
+  }
+
+  function closePlanEditor() {
+    if (busy) return;
+    setPlanEditorOpen(false);
+  }
+
+  function toggleCustomer(customerId) {
+    setExpandedCustomerId((current) => current === customerId ? '' : customerId);
   }
 
   async function savePlan(event) {
@@ -190,6 +228,7 @@ export default function AdminApp({ version }) {
     }
     setNotice(result.message || 'Subscription plan saved.');
     setEditor(result.plan ? toEditorPlan(result.plan) : emptyPlan());
+    setPlanEditorOpen(false);
     await loadData();
   }
 
@@ -204,6 +243,24 @@ export default function AdminApp({ version }) {
     setNotice(result.message || (result.ok ? 'Stripe Billing sync complete.' : 'Stripe Billing sync failed.'));
     if (result.plan) setEditor(toEditorPlan(result.plan));
     await loadData();
+  }
+
+  async function deletePlan() {
+    if (!editor.code) return;
+    const confirmed = window.confirm(`Delete the ${editor.displayName || editor.code} plan? This is only allowed when no customer account or subscription uses it.`);
+    if (!confirmed) return;
+    setBusy(true);
+    setNotice('Deleting subscription plan...');
+    const result = await requestJson('/.netlify/functions/admin-data', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'delete_plan', planCode: editor.code })
+    });
+    setBusy(false);
+    setNotice(result.message || (result.ok ? 'Subscription plan deleted.' : 'Plan could not be deleted.'));
+    if (result.ok) {
+      setPlanEditorOpen(false);
+      setEditor(emptyPlan());
+      await loadData();
+    }
   }
 
   async function setAccountStatus(customer, nextStatus) {
@@ -282,96 +339,101 @@ export default function AdminApp({ version }) {
             <article><AlertTriangle /><strong>{data.summary?.paymentProblems || 0}</strong><span>Payment problems</span></article>
             <article><AlertTriangle /><strong>{data.summary?.syncIssues || 0}</strong><span>Sync issues</span></article>
           </div>
-          <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow">Foundation status</p><h2>SaaS controls</h2></div></div><div className="admin-check-grid"><span><Check size={17} /> Secure customer sessions</span><span><Check size={17} /> Server-derived tenant identity</span><span><Check size={17} /> Protected cloud vault and documents</span><span><Check size={17} /> Editable plan catalogue</span><span><Check size={17} /> Trial start, extension and cancellation</span><span><Check size={17} /> Expired-trial cloud enforcement</span><span><Check size={17} /> Customer suspension controls</span><span><Check size={17} /> Stripe-hosted recurring checkout</span><span><Check size={17} /> Verified Stripe webhooks</span><span><Check size={17} /> Stripe Customer Portal</span><span><Check size={17} /> One Netlify site</span></div></section>
         </section>
       )}
 
       {activeTab === 'plans' && (
-        <section className="admin-content admin-two-column">
-          <form className="admin-panel admin-plan-form" onSubmit={savePlan}>
-            <div className="admin-panel-heading"><div><p className="eyebrow">Plan Manager</p><h2>{editor.code ? `Edit ${editor.displayName || editor.code}` : 'Add subscription plan'}</h2></div>{editor.code && <button type="button" className="secondary-button" onClick={() => setEditor(emptyPlan())}>New plan</button>}</div>
-            <div className="admin-form-grid">
-              <label>Plan code<input value={editor.code} onChange={(e) => setEditor({ ...editor, code: e.target.value })} placeholder="personal" required /></label>
-              <label>Display name<input value={editor.displayName} onChange={(e) => setEditor({ ...editor, displayName: e.target.value })} placeholder="Personal" required /></label>
-              <label className="admin-full">Description<textarea value={editor.description} onChange={(e) => setEditor({ ...editor, description: e.target.value })} /></label>
-              <label>Currency<input value="GBP (£)" disabled aria-label="Global currency GBP" /></label>
-              <label>Trial days<input type="number" min="0" value={editor.trialDays} onChange={(e) => setEditor({ ...editor, trialDays: e.target.value })} /></label>
-              <label>Monthly price<input type="number" min="0" step="0.01" value={editor.monthlyPrice} onChange={(e) => setEditor({ ...editor, monthlyPrice: e.target.value })} /></label>
-              <label>Quarterly price<input type="number" min="0" step="0.01" value={editor.quarterlyPrice} onChange={(e) => setEditor({ ...editor, quarterlyPrice: e.target.value })} /></label>
-              <label>Annual price<input type="number" min="0" step="0.01" value={editor.annualPrice} onChange={(e) => setEditor({ ...editor, annualPrice: e.target.value })} /></label>
-              <label>Maximum users<input type="number" min="1" value={editor.maxUsers} onChange={(e) => setEditor({ ...editor, maxUsers: e.target.value })} /></label>
-              <label>Storage limit MB<input type="number" min="0" value={editor.storageLimitMb} onChange={(e) => setEditor({ ...editor, storageLimitMb: e.target.value })} /></label>
-              <label>Document limit<input type="number" min="0" value={editor.documentLimit} onChange={(e) => setEditor({ ...editor, documentLimit: e.target.value })} /></label>
-              <label>Display order<input type="number" min="0" value={editor.displayOrder} onChange={(e) => setEditor({ ...editor, displayOrder: e.target.value })} /></label>
-              <label className="admin-full">Features, one per line<textarea rows="6" value={editor.features} onChange={(e) => setEditor({ ...editor, features: e.target.value })} /></label>
+        <section className="admin-content">
+          <section className="admin-panel">
+            <div className="admin-panel-heading admin-plan-directory-heading">
+              <div><p className="eyebrow">Subscription Plans</p><h2>Sellable plans</h2></div>
+              <div className="admin-plan-directory-actions">
+                <div className="admin-plan-filter" role="group" aria-label="Filter subscription plans">
+                  <button type="button" className={planVisibility === 'active' ? 'active' : ''} onClick={() => setPlanVisibility('active')}>Active <span>{activePublishedPlans.length}</span></button>
+                  <button type="button" className={planVisibility === 'hidden' ? 'active' : ''} onClick={() => setPlanVisibility('hidden')}>Hidden <span>{hiddenPlans.length}</span></button>
+                </div>
+                <button type="button" className="primary-button" onClick={addPlan}><Plus size={18} /> Add plan</button>
+              </div>
             </div>
-            <div className="admin-toggle-grid"><label><input type="checkbox" checked={editor.isActive} onChange={(e) => setEditor({ ...editor, isActive: e.target.checked })} /> Active</label><label><input type="checkbox" checked={editor.isPublic} onChange={(e) => setEditor({ ...editor, isPublic: e.target.checked })} /> Publish on website</label><label><input type="checkbox" checked={editor.isFeatured} onChange={(e) => setEditor({ ...editor, isFeatured: e.target.checked })} /> Featured plan</label></div>
-            <div className="admin-plan-save-actions"><button type="submit" className="primary-button" disabled={busy}><Save size={18} /> {busy ? 'Saving...' : 'Save and sync plan'}</button>{editor.code && <button type="button" className="secondary-button" onClick={() => syncPlanToStripe(editor.code)} disabled={busy}><RefreshCw size={17} /> Sync Stripe</button>}</div>
-            <div className={`admin-stripe-status ${editor.stripeSyncStatus || 'not_synced'}`}><CreditCard size={18} /><span><strong>Stripe Billing: {data.stripeConfigured ? (editor.stripeSyncStatus || 'Not synced').replace(/_/g, ' ') : 'Not configured'}</strong><small>{editor.stripeSyncMessage || (data.stripeConfigured ? 'Save the plan to create or update its Stripe Product and recurring Prices.' : 'Add STRIPE_SECRET_KEY to the existing My Passwords Netlify site.')}</small></span></div>
-          </form>
-
-          <div className="admin-plan-list">
-            {sortedPlans.map((plan) => <button type="button" className="admin-plan-card" key={plan.id || plan.code} onClick={() => editPlan(plan)}><div><strong>{plan.display_name}</strong><code>{plan.code}</code></div><p>{plan.description}</p><div className="admin-plan-prices"><span><small>Monthly</small>{money(plan.monthly_price_minor)}</span><span><small>Quarterly</small>{money(plan.quarterly_price_minor)}</span><span><small>Annual</small>{money(plan.annual_price_minor)}</span></div><footer><span>{plan.trial_days || 0} trial days</span><span>{plan.is_public ? 'Published' : 'Hidden'}</span><span>{plan.is_active ? 'Active' : 'Inactive'}</span><span className={`stripe-plan-state ${plan.stripe_sync_status || 'not_synced'}`}>Stripe: {(plan.stripe_sync_status || 'not synced').replace(/_/g, ' ')}</span></footer></button>)}
-            {!sortedPlans.length && <div className="admin-empty">Run the Ver-0.039 Supabase SQL to create and seed the subscription plans.</div>}
-          </div>
+            <div className="admin-plan-list admin-plan-directory">
+              {visiblePlans.map((plan) => (
+                <button type="button" className="admin-plan-card" key={plan.id || plan.code} onClick={() => editPlan(plan)} aria-label={`Open ${plan.display_name} plan`}>
+                  <div><strong>{plan.display_name}</strong><code>{plan.code}</code></div>
+                  <p>{plan.description}</p>
+                  <div className="admin-plan-prices"><span><small>Monthly</small>{money(plan.monthly_price_minor)}</span><span><small>Quarterly</small>{money(plan.quarterly_price_minor)}</span><span><small>Annual</small>{money(plan.annual_price_minor)}</span></div>
+                  <footer><span>{plan.trial_days || 0} trial days</span><span>{plan.is_public ? 'Published' : 'Hidden'}</span><span>{plan.is_active ? 'Active' : 'Inactive'}</span><span className={`stripe-plan-state ${plan.stripe_sync_status || 'not_synced'}`}>Stripe: {(plan.stripe_sync_status || 'not synced').replace(/_/g, ' ')}</span></footer>
+                </button>
+              ))}
+              {!visiblePlans.length && <div className="admin-empty">{planVisibility === 'active' ? 'No active published plans are available.' : 'No hidden, unpublished or inactive plans are available.'}</div>}
+            </div>
+          </section>
         </section>
       )}
 
       {activeTab === 'customers' && (
         <section className="admin-content">
           <section className="admin-panel">
-            <div className="admin-panel-heading"><div><p className="eyebrow">Accounts</p><h2>Customer overview</h2></div><span>{data.customers?.length || 0} accounts</span></div>
-            <div className="admin-customer-list">
+            <div className="admin-panel-heading"><div><p className="eyebrow">Accounts</p><h2>Customers</h2></div><span>{data.customers?.length || 0} accounts</span></div>
+            <div className="admin-customer-list admin-customer-accordion-list">
               {(data.customers || []).map((customer) => {
                 const founder = isFounder(customer);
                 const daysLeft = trialDaysLeft(customer.trialEndsAt);
                 const extensionDays = Number(trialDays[customer.id] || 7);
                 const stripeManaged = customer.subscription?.provider === 'stripe' && Boolean(customer.subscription?.provider_subscription_id);
+                const expanded = expandedCustomerId === customer.id;
+                const onboardingLabel = founder ? 'Founder account' : customer.onboardingCompletedAt ? `Completed ${dateLabel(customer.onboardingCompletedAt)}` : 'Pending verification';
                 return (
-                  <article key={customer.id} className="admin-customer-card admin-customer-trial-card">
-                    <div className="admin-customer-main">
-                      <strong>{customer.accountName}</strong>
-                      <span>{planDisplayName(customer.planCode)} · {planStatusDisplayName(customer.planStatus)}</span>
-                      <small>{customer.users?.[0]?.displayName || 'Owner'} · {customer.users?.[0]?.emailMasked || 'No email'} · {customer.users?.[0]?.phoneMasked || 'No phone'}</small>
-                    </div>
-                    <div className="admin-customer-meta">
-                      <span className={`admin-status ${customer.accountStatus}`}>{customer.accountStatus}</span>
-                      <small>Created {dateLabel(customer.createdAt)}</small>
-                    </div>
-                    <div className="admin-trial-summary">
-                      <span><strong>Trial started</strong>{dateLabel(customer.trialStartedAt, true)}</span>
-                      <span><strong>Trial ends</strong>{founder ? 'No expiry' : dateLabel(customer.trialEndsAt, true)}</span>
-                      <span><strong>Time remaining</strong>{founder ? 'Founder access' : daysLeft === null ? 'No active trial' : `${daysLeft} day${daysLeft === 1 ? '' : 's'}`}</span>
-                      <span><strong>Onboarding</strong>{customer.onboardingCompletedAt ? `Completed ${dateLabel(customer.onboardingCompletedAt)}` : 'Pending verification'}</span>
-                    </div>
-                    {!founder && customer.subscription?.provider === 'stripe' && (
-                      <div className="admin-billing-summary">
-                        <CreditCard size={17} />
-                        <span>
-                          <strong>Stripe subscription</strong>
-                          <small>{String(customer.subscription.status || 'pending').replace(/_/g, ' ')} · {customer.subscription.billing_interval || 'interval pending'} · {money(customer.subscription.price_minor || 0)}{customer.subscription.current_period_end ? ` · renews/ends ${dateLabel(customer.subscription.current_period_end)}` : ''}</small>
-                          <span className="admin-stripe-reference-grid">
-                            <span><small>Stripe customer reference</small><code>{customer.subscription.provider_customer_id || 'Pending'}</code></span>
-                            <span><small>Stripe subscription reference</small><code>{customer.subscription.provider_subscription_id || 'Pending'}</code></span>
-                          </span>
-                        </span>
+                  <article key={customer.id} className={`admin-customer-accordion ${expanded ? 'open' : ''}`}>
+                    <button type="button" className="admin-customer-summary" onClick={() => toggleCustomer(customer.id)} aria-expanded={expanded}>
+                      <span className="admin-customer-main">
+                        <strong>{customer.accountName}</strong>
+                        <span>{planDisplayName(customer.planCode)} · {planStatusDisplayName(customer.planStatus)}</span>
+                        <small>{customer.users?.[0]?.displayName || 'Owner'} · {customer.users?.[0]?.email || customer.users?.[0]?.emailMasked || 'No email'} · {customer.users?.[0]?.phone || customer.users?.[0]?.phoneMasked || 'No phone'}</small>
+                      </span>
+                      <span className="admin-customer-meta">
+                        <span className={`admin-status ${customer.accountStatus}`}>{customer.accountStatus}</span>
+                        <small>Created {dateLabel(customer.createdAt)}</small>
+                      </span>
+                      <span className="admin-accordion-chevron">{expanded ? <ChevronUp size={21} /> : <ChevronDown size={21} />}</span>
+                    </button>
+                    {expanded && (
+                      <div className="admin-customer-details">
+                        <div className="admin-trial-summary">
+                          <span><strong>Trial started</strong>{dateLabel(customer.trialStartedAt, true)}</span>
+                          <span><strong>Trial ends</strong>{founder ? 'No expiry' : dateLabel(customer.trialEndsAt, true)}</span>
+                          <span><strong>Time remaining</strong>{founder ? 'Founder access' : daysLeft === null ? 'No active trial' : `${daysLeft} day${daysLeft === 1 ? '' : 's'}`}</span>
+                          <span><strong>Onboarding</strong>{onboardingLabel}</span>
+                        </div>
+                        {!founder && customer.subscription?.provider === 'stripe' && (
+                          <div className="admin-billing-summary admin-billing-summary-wide">
+                            <div className="admin-billing-summary-heading"><CreditCard size={20} /><span><strong>Stripe subscription</strong><small>{String(customer.subscription.status || 'pending').replace(/_/g, ' ')} · {customer.subscription.billing_interval || 'interval pending'} · {money(customer.subscription.price_minor || 0)}{customer.subscription.current_period_end ? ` · renews/ends ${dateLabel(customer.subscription.current_period_end)}` : ''}</small></span></div>
+                            <div className="admin-stripe-reference-grid">
+                              <span><small>Stripe customer reference</small><code>{customer.subscription.provider_customer_id || 'Pending'}</code></span>
+                              <span><small>Stripe subscription reference</small><code>{customer.subscription.provider_subscription_id || 'Pending'}</code></span>
+                            </div>
+                          </div>
+                        )}
+                        {!founder && !stripeManaged && (
+                          <div className="admin-trial-controls">
+                            <label>Days<input type="number" min="1" max="365" value={extensionDays} onChange={(event) => setTrialDays((current) => ({ ...current, [customer.id]: event.target.value }))} /></label>
+                            <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'start_trial', { days: extensionDays })} disabled={busy}><Play size={16} /> Start trial</button>
+                            <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'extend_trial', { days: extensionDays })} disabled={busy}><CalendarClock size={16} /> Extend</button>
+                            <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'activate_account')} disabled={busy}><UserRoundCheck size={16} /> Activate</button>
+                            <button type="button" className="secondary-button danger-soft" onClick={() => manageTrial(customer, 'cancel_trial')} disabled={busy}><Ban size={16} /> Cancel trial</button>
+                            {customer.accountStatus === 'suspended'
+                              ? <button type="button" className="secondary-button" onClick={() => setAccountStatus(customer, 'active')} disabled={busy}>Remove suspension</button>
+                              : <button type="button" className="secondary-button danger-soft" onClick={() => setAccountStatus(customer, 'suspended')} disabled={busy}>Suspend</button>}
+                          </div>
+                        )}
+                        {!founder && stripeManaged && (
+                          <div className="admin-stripe-account-actions">
+                            {customer.accountStatus === 'suspended'
+                              ? <button type="button" className="secondary-button" onClick={() => setAccountStatus(customer, 'active')} disabled={busy}>Remove suspension</button>
+                              : <button type="button" className="secondary-button danger-soft" onClick={() => setAccountStatus(customer, 'suspended')} disabled={busy}>Suspend</button>}
+                          </div>
+                        )}
                       </div>
                     )}
-                    {!founder && !stripeManaged && (
-                      <div className="admin-trial-controls">
-                        <label>Days<input type="number" min="1" max="365" value={extensionDays} onChange={(event) => setTrialDays((current) => ({ ...current, [customer.id]: event.target.value }))} /></label>
-                        <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'start_trial', { days: extensionDays })} disabled={busy}><Play size={16} /> Start trial</button>
-                        <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'extend_trial', { days: extensionDays })} disabled={busy}><CalendarClock size={16} /> Extend</button>
-                        <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'activate_account')} disabled={busy}><UserRoundCheck size={16} /> Activate</button>
-                        <button type="button" className="secondary-button danger-soft" onClick={() => manageTrial(customer, 'cancel_trial')} disabled={busy}><Ban size={16} /> Cancel trial</button>
-                      </div>
-                    )}
-                    {!founder && stripeManaged && <div className="admin-stripe-managed-note"><CreditCard size={17} /><span><strong>Managed by Stripe Billing</strong><small>Use Stripe Dashboard or the customer billing portal for subscription changes. Suspending the My Passwords account only pauses app access; it does not stop Stripe billing.</small></span></div>}
-                    <div className="admin-customer-actions">
-                      {customer.accountStatus === 'suspended'
-                        ? <button type="button" className="secondary-button" onClick={() => setAccountStatus(customer, 'active')} disabled={busy}>Remove suspension</button>
-                        : !founder && <button type="button" className="secondary-button danger-soft" onClick={() => setAccountStatus(customer, 'suspended')} disabled={busy}>Suspend</button>}
-                    </div>
                   </article>
                 );
               })}
@@ -380,7 +442,6 @@ export default function AdminApp({ version }) {
           </section>
         </section>
       )}
-
 
 
       {activeTab === 'billing' && (
@@ -423,6 +484,46 @@ export default function AdminApp({ version }) {
             </div>
           </section>
         </section>
+      )}
+
+      {planEditorOpen && (
+        <div className="admin-modal-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePlanEditor(); }}>
+          <section className="admin-plan-window" role="dialog" aria-modal="true" aria-labelledby="admin-plan-window-title">
+            <header className="admin-plan-window-header">
+              <div><p className="eyebrow">Subscription Plan</p><h2 id="admin-plan-window-title">{planEditorMode === 'edit' ? `Edit ${editor.displayName || editor.code}` : 'Add new plan'}</h2></div>
+              <button type="button" className="admin-window-close" onClick={closePlanEditor} aria-label="Close plan window"><X size={22} /></button>
+            </header>
+            <form className="admin-plan-window-form" onSubmit={savePlan}>
+              <div className="admin-plan-window-body">
+                <div className="admin-form-grid">
+                  <label>Plan code<input value={editor.code} onChange={(e) => setEditor({ ...editor, code: e.target.value })} placeholder="personal" required disabled={planEditorMode === 'edit'} /></label>
+                  <label>Display name<input value={editor.displayName} onChange={(e) => setEditor({ ...editor, displayName: e.target.value })} placeholder="Personal" required /></label>
+                  <label className="admin-full">Description<textarea value={editor.description} onChange={(e) => setEditor({ ...editor, description: e.target.value })} /></label>
+                  <label>Currency<input value="GBP (£)" disabled aria-label="Global currency GBP" /></label>
+                  <label>Trial days<input type="number" min="0" value={editor.trialDays} onChange={(e) => setEditor({ ...editor, trialDays: e.target.value })} /></label>
+                  <label>Monthly price<input type="number" min="0" step="0.01" value={editor.monthlyPrice} onChange={(e) => setEditor({ ...editor, monthlyPrice: e.target.value })} /></label>
+                  <label>Quarterly price<input type="number" min="0" step="0.01" value={editor.quarterlyPrice} onChange={(e) => setEditor({ ...editor, quarterlyPrice: e.target.value })} /></label>
+                  <label>Annual price<input type="number" min="0" step="0.01" value={editor.annualPrice} onChange={(e) => setEditor({ ...editor, annualPrice: e.target.value })} /></label>
+                  <label>Maximum users<input type="number" min="1" value={editor.maxUsers} onChange={(e) => setEditor({ ...editor, maxUsers: e.target.value })} /></label>
+                  <label>Storage limit MB<input type="number" min="0" value={editor.storageLimitMb} onChange={(e) => setEditor({ ...editor, storageLimitMb: e.target.value })} /></label>
+                  <label>Document limit<input type="number" min="0" value={editor.documentLimit} onChange={(e) => setEditor({ ...editor, documentLimit: e.target.value })} /></label>
+                  <label>Display order<input type="number" min="0" value={editor.displayOrder} onChange={(e) => setEditor({ ...editor, displayOrder: e.target.value })} /></label>
+                  <label className="admin-full">Features, one per line<textarea rows="6" value={editor.features} onChange={(e) => setEditor({ ...editor, features: e.target.value })} /></label>
+                </div>
+                <div className="admin-toggle-grid"><label><input type="checkbox" checked={editor.isActive} onChange={(e) => setEditor({ ...editor, isActive: e.target.checked })} /> Active</label><label><input type="checkbox" checked={editor.isPublic} onChange={(e) => setEditor({ ...editor, isPublic: e.target.checked })} /> Publish on website</label><label><input type="checkbox" checked={editor.isFeatured} onChange={(e) => setEditor({ ...editor, isFeatured: e.target.checked })} /> Featured plan</label></div>
+                <div className={`admin-stripe-status ${editor.stripeSyncStatus || 'not_synced'}`}><CreditCard size={18} /><span><strong>Stripe Billing: {data.stripeConfigured ? (editor.stripeSyncStatus || 'Not synced').replace(/_/g, ' ') : 'Not configured'}</strong><small>{editor.stripeSyncMessage || (data.stripeConfigured ? 'Save the plan to create or update its Stripe Product and recurring Prices.' : 'Add STRIPE_SECRET_KEY to the existing My Passwords Netlify site.')}</small></span></div>
+              </div>
+              <footer className="admin-plan-window-footer">
+                <div>{planEditorMode === 'edit' && <button type="button" className="secondary-button danger-soft" onClick={deletePlan} disabled={busy}><Trash2 size={17} /> Delete plan</button>}</div>
+                <div className="admin-plan-window-actions">
+                  <button type="button" className="secondary-button" onClick={closePlanEditor} disabled={busy}>Cancel</button>
+                  {planEditorMode === 'edit' && <button type="button" className="secondary-button" onClick={() => syncPlanToStripe(editor.code)} disabled={busy}><RefreshCw size={17} /> Sync Stripe</button>}
+                  <button type="submit" className="primary-button" disabled={busy}><Save size={18} /> {busy ? 'Saving...' : 'Save and sync plan'}</button>
+                </div>
+              </footer>
+            </form>
+          </section>
+        </div>
       )}
 
       <footer className="admin-footer">{version} · one-site admin foundation</footer>
