@@ -8715,3 +8715,631 @@ a,
   }
 }
 
+
+/* My Passwords Ver-0.042E — customer-focused landing page and onboarding UX */
+.public-landing-page,
+.public-landing-page button,
+.public-landing-page input,
+.public-landing-page textarea,
+.public-landing-page select {
+  font-family: "Ubuntu", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.public-landing-page {
+  --landing-accent: #f28c28;
+  --landing-accent-dark: #c96b12;
+  --landing-accent-soft: #fff3e6;
+  --landing-accent-border: #f4c58f;
+}
+
+.public-landing-topbar {
+  border-top: 4px solid var(--landing-accent);
+}
+
+.public-landing-page .landing-pill {
+  color: #8b480d;
+  background: var(--landing-accent-soft);
+  border-color: var(--landing-accent-border);
+}
+
+.public-landing-page .landing-hero-shell {
+  background:
+    radial-gradient(circle at 12% 10%, rgba(69,123,157,.18), transparent 28%),
+    radial-gradient(circle at 86% 20%, rgba(242,140,40,.18), transparent 28%),
+    linear-gradient(135deg, rgba(255,255,255,.97), rgba(248,251,254,.95));
+}
+
+.public-landing-page .landing-primary-cta,
+.public-landing-page .landing-plan-cta,
+.public-landing-page .landing-contact-card .primary-button,
+.public-landing-page .create-account-popup-card .primary-button {
+  background: linear-gradient(135deg, var(--landing-accent), #ff9f43);
+  border-color: var(--landing-accent);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(201,107,18,.22);
+}
+
+.public-landing-page .landing-primary-cta:hover,
+.public-landing-page .landing-plan-cta:hover,
+.public-landing-page .landing-contact-card .primary-button:hover,
+.public-landing-page .create-account-popup-card .primary-button:hover {
+  background: linear-gradient(135deg, var(--landing-accent-dark), var(--landing-accent));
+  border-color: var(--landing-accent-dark);
+}
+
+.public-landing-page .eyebrow {
+  color: var(--landing-accent-dark);
+}
+
+.public-landing-page .landing-trust-strip svg,
+.public-landing-page .landing-feature-grid svg,
+.public-landing-page .landing-security-grid svg {
+  color: var(--landing-accent-dark);
+}
+
+.public-landing-page .landing-pricing-section {
+  display: block;
+}
+
+.public-landing-page .landing-pricing-heading {
+  max-width: 850px;
+  margin-bottom: 26px;
+}
+
+.landing-plan-tier-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.landing-plan-tier {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 26px;
+  background: #fff;
+  border: 1px solid #d8e4ed;
+  box-shadow: 0 16px 40px rgba(29,53,87,.07);
+}
+
+.landing-plan-tier.featured {
+  border: 2px solid var(--landing-accent);
+  background: linear-gradient(180deg, #fffaf5, #fff);
+  transform: translateY(-5px);
+  box-shadow: 0 22px 50px rgba(201,107,18,.14);
+}
+
+.landing-plan-badge {
+  position: absolute;
+  top: -13px;
+  right: 20px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--landing-accent);
+  color: #fff;
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+.landing-plan-tier-heading {
+  display: grid;
+  gap: 8px;
+}
+
+.landing-plan-tier h3,
+.landing-plan-tier p {
+  margin: 0;
+}
+
+.landing-plan-tier h3 {
+  color: #14263b;
+  font-size: 1.45rem;
+}
+
+.landing-plan-tier p {
+  color: #637489;
+  line-height: 1.5;
+}
+
+.landing-plan-price {
+  display: grid;
+  gap: 5px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #f4f8fb;
+  border: 1px solid #e0e9f0;
+}
+
+.landing-plan-price strong {
+  color: #14263b;
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.landing-plan-price span {
+  color: var(--landing-accent-dark);
+  font-weight: 700;
+}
+
+.landing-plan-tier ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-plan-tier li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #40566d;
+  line-height: 1.4;
+}
+
+.landing-plan-tier li svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #2f7b57;
+}
+
+.landing-plan-cta {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 16px;
+}
+
+.landing-plans-unavailable {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #fff3f3;
+  border: 1px solid #f3c2c2;
+  color: #8e3434;
+}
+
+.landing-plans-unavailable span {
+  display: grid;
+  gap: 4px;
+}
+
+.public-landing-page .landing-step-grid span {
+  background: var(--landing-accent);
+}
+
+.public-landing-page .landing-final-cta {
+  background: linear-gradient(135deg, #14263b 0%, #1d3557 58%, #7a4418 140%);
+}
+
+.public-landing-page .landing-final-cta .primary-button {
+  background: var(--landing-accent);
+  border-color: var(--landing-accent);
+  color: #fff;
+}
+
+.public-landing-page .create-account-popup-card .onboarding-progress span.active {
+  background: var(--landing-accent);
+  border-color: var(--landing-accent);
+  box-shadow: 0 8px 20px rgba(201,107,18,.2);
+}
+
+.public-landing-page .create-account-popup-card .plan-choice-grid button.active {
+  background: var(--landing-accent-soft);
+  border-color: var(--landing-accent);
+  box-shadow: 0 12px 30px rgba(201,107,18,.1);
+}
+
+/* The country-code selector is portalled to document.body so it always sits above the onboarding popup. */
+.country-picker-layer {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 12000 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 60px 25px !important;
+}
+
+.country-picker-layer .country-picker-backdrop,
+.unlock-form .country-picker-layer .country-picker-backdrop,
+.account-restore-panel .country-picker-layer .country-picker-backdrop {
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: rgba(15,23,42,.38) !important;
+  backdrop-filter: blur(9px) !important;
+  box-shadow: none !important;
+}
+
+.country-picker-layer .country-picker-panel {
+  position: relative !important;
+  z-index: 1 !important;
+  width: min(520px, 100%) !important;
+  max-height: calc(100dvh - 150px) !important;
+  margin: 0 !important;
+}
+
+/* Create Account phone field: clear space between flag and number, without a dividing line. */
+.create-account-popup-card .phone-combo-field {
+  grid-template-columns: 76px minmax(0, 1fr) !important;
+  gap: 10px !important;
+  overflow: visible !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.create-account-popup-card .phone-combo-field:focus-within {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.create-account-popup-card .country-picker {
+  min-width: 76px !important;
+  border: 1px solid #d7e1ea !important;
+  border-radius: 15px !important;
+  background: #fbfdff !important;
+  box-shadow: none !important;
+}
+
+.create-account-popup-card .country-picker-trigger {
+  width: 76px !important;
+  min-width: 76px !important;
+  min-height: 54px !important;
+  padding: 0 10px !important;
+  border: 0 !important;
+  border-right: 0 !important;
+  border-radius: 15px !important;
+  background: #fbfdff !important;
+}
+
+.create-account-popup-card .phone-combo-field > input {
+  min-height: 54px !important;
+  padding: 13px 14px !important;
+  border: 1px solid #d7e1ea !important;
+  border-radius: 15px !important;
+  background: #fbfdff !important;
+}
+
+.create-account-popup-card .phone-combo-field > input:focus,
+.create-account-popup-card .country-picker:focus-within {
+  border-color: #457b9d !important;
+  box-shadow: 0 0 0 4px rgba(69,123,157,.12) !important;
+}
+
+@media (max-width: 980px) {
+  .landing-plan-tier-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-plan-tier.featured {
+    transform: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .country-picker-layer {
+    padding: 60px 25px !important;
+  }
+
+  .country-picker-layer .country-picker-panel {
+    width: 100% !important;
+  }
+
+  .landing-plan-tier {
+    padding: 21px;
+  }
+}
+
+.country-picker-layer,
+.country-picker-layer button,
+.country-picker-layer input {
+  font-family: "Ubuntu", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+
+/* My Passwords Ver-0.042E — non-sticky landing header and back-to-top control */
+.public-landing-page .public-landing-topbar {
+  position: static !important;
+  top: auto !important;
+}
+
+.landing-back-to-top {
+  position: fixed;
+  right: max(22px, env(safe-area-inset-right));
+  bottom: max(22px, env(safe-area-inset-bottom));
+  z-index: 30;
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(29, 53, 87, .16);
+  border-radius: 999px;
+  background: #1d3557;
+  color: #fff;
+  box-shadow: 0 14px 34px rgba(29, 53, 87, .24);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  animation: landingBackToTopIn .18s ease-out;
+}
+
+.landing-back-to-top:hover {
+  background: #14263b;
+  transform: translateY(-2px);
+}
+
+.landing-back-to-top:focus-visible {
+  outline: 3px solid rgba(242, 140, 40, .42);
+  outline-offset: 3px;
+}
+
+@keyframes landingBackToTopIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 680px) {
+  .landing-back-to-top {
+    right: max(16px, env(safe-area-inset-right));
+    bottom: max(18px, env(safe-area-inset-bottom));
+    width: 48px;
+    height: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-back-to-top { animation: none; }
+}
+
+/* My Passwords Ver-0.042F — landing page visual refinements */
+.public-landing-page .landing-hero-copy h1 {
+  font-size: clamp(2.4375rem, calc(6vw - 5px), 5.3375rem);
+}
+
+/* Restrained orange details inside the right-side vault preview. */
+.public-landing-page .preview-window-bar span:first-child {
+  background: var(--landing-accent);
+}
+
+.public-landing-page .preview-lock-card {
+  border-top-color: rgba(242, 140, 40, .62);
+}
+
+.public-landing-page .preview-lock-icon {
+  color: #ffc27c;
+  background: rgba(242, 140, 40, .16);
+  border: 1px solid rgba(242, 140, 40, .34);
+}
+
+.public-landing-page .preview-search-row {
+  box-shadow: inset 3px 0 0 rgba(242, 140, 40, .78);
+}
+
+/* Keep the final CTA dark blue without the previous orange/brown tint. */
+.public-landing-page .landing-final-cta {
+  background: linear-gradient(135deg, #14263b 0%, #1d3557 100%);
+}
+
+.public-landing-page .landing-final-cta .primary-button {
+  box-shadow: none;
+}
+
+.landing-footer-links {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.landing-footer-links a,
+.landing-footer-links button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #1d5f90;
+  font: inherit;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.landing-footer-links a:hover,
+.landing-footer-links button:hover {
+  color: var(--landing-accent-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.landing-footer-links a:focus-visible,
+.landing-footer-links button:focus-visible {
+  outline: 3px solid rgba(69, 123, 157, .24);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+@media (max-width: 680px) {
+  .public-landing-page .landing-hero-copy h1 {
+    font-size: clamp(2.2375rem, calc(13vw - 5px), 3.3375rem);
+  }
+
+  .landing-footer-links {
+    justify-content: center;
+  }
+}
+
+
+/* My Passwords Ver-0.042G — solid landing orange accents */
+.public-landing-page .landing-hero-shell {
+  background:
+    radial-gradient(circle at 12% 10%, rgba(69,123,157,.18), transparent 28%),
+    linear-gradient(135deg, rgba(255,255,255,.97), rgba(248,251,254,.95));
+}
+
+.public-landing-page .landing-pill {
+  background: var(--landing-accent);
+  border-color: var(--landing-accent);
+  color: #fff;
+  box-shadow: none;
+}
+
+.public-landing-page .landing-pill svg {
+  color: #fff;
+}
+
+.public-landing-page .preview-window-bar span:first-child {
+  background: var(--landing-accent);
+}
+
+.public-landing-page .preview-lock-card {
+  border-top-color: var(--landing-accent);
+}
+
+.public-landing-page .preview-lock-icon {
+  color: #fff;
+  background: var(--landing-accent);
+  border-color: var(--landing-accent);
+}
+
+.public-landing-page .preview-search-row {
+  box-shadow: inset 3px 0 0 var(--landing-accent);
+}
+
+/* My Passwords Ver-0.042H — restrained orange accents for vault login, selected navigation and primary vault actions */
+:root {
+  --vault-accent: #f28c28;
+  --vault-accent-dark: #c96b12;
+  --vault-accent-soft: #fff3e6;
+  --vault-accent-ring: rgba(242, 140, 40, .18);
+}
+
+/* Login screen: retain the secure blue foundation with a restrained orange cue. */
+.lock-card {
+  border-top: 5px solid var(--vault-accent);
+}
+
+.lock-card .eyebrow {
+  color: var(--vault-accent-dark);
+}
+
+.lock-card input:focus {
+  border-color: var(--vault-accent);
+  box-shadow: 0 0 0 4px var(--vault-accent-ring);
+}
+
+.lock-card .unlock-form > button:not(.unlock-password-toggle):not(.unlock-biometric-icon-button),
+.create-vault-entry-actions .primary-button {
+  background: var(--vault-accent);
+  color: #fff;
+  border-color: var(--vault-accent);
+  box-shadow: 0 10px 24px rgba(201, 107, 18, .18);
+}
+
+.lock-card .unlock-form > button:not(.unlock-password-toggle):not(.unlock-biometric-icon-button):hover,
+.lock-card .unlock-form > button:not(.unlock-password-toggle):not(.unlock-biometric-icon-button):focus-visible,
+.create-vault-entry-actions .primary-button:hover,
+.create-vault-entry-actions .primary-button:focus-visible {
+  background: var(--vault-accent-dark);
+  outline: none;
+}
+
+.unlock-form .unlock-biometric-icon-button,
+.unlock-form .unlock-biometric-icon-button.enabled,
+.unlock-form .unlock-biometric-icon-button.setup {
+  color: var(--vault-accent-dark) !important;
+}
+
+/* Selected navigation states use orange; safety, warning, success and error colours stay unchanged. */
+.nav-pill.active,
+.topbar-help-button.active {
+  background: var(--vault-accent);
+  color: #fff;
+  border-color: var(--vault-accent);
+  box-shadow: 0 12px 28px rgba(201, 107, 18, .18);
+}
+
+.nav-pill.active:hover,
+.nav-pill.active:focus-visible,
+.topbar-help-button.active:hover,
+.topbar-help-button.active:focus-visible {
+  background: var(--vault-accent-dark);
+  border-color: var(--vault-accent-dark);
+  color: #fff;
+  outline: none;
+}
+
+.vault-folder-row .chip.active {
+  background: var(--vault-accent);
+  color: #fff;
+  border-color: var(--vault-accent);
+  box-shadow: 0 10px 24px rgba(201, 107, 18, .14);
+}
+
+.vault-folder-row .chip.active:hover,
+.vault-folder-row .chip.active:focus-visible {
+  background: var(--vault-accent-dark);
+  border-color: var(--vault-accent-dark);
+  color: #fff;
+}
+
+.vault-folder-row .chip.active .chip-count {
+  color: var(--vault-accent-dark);
+  background: #fff;
+}
+
+.folder-home-button.active {
+  color: #fff;
+  border-color: var(--vault-accent);
+  background: var(--vault-accent);
+}
+
+.folder-home-button.active svg {
+  filter: none;
+}
+
+/* Primary vault actions only. */
+.floating-add-button {
+  background: var(--vault-accent);
+  color: #fff;
+  border-color: var(--vault-accent);
+  box-shadow: 0 14px 34px rgba(201, 107, 18, .22);
+}
+
+.floating-add-button:hover,
+.floating-add-button:focus-visible {
+  background: var(--vault-accent-dark);
+  color: #fff;
+  border-color: var(--vault-accent-dark);
+  box-shadow: 0 18px 38px rgba(201, 107, 18, .26);
+  outline: none;
+}
+
+.item-popup-card .form-buttons .primary-button {
+  background: var(--vault-accent);
+  color: #fff;
+  border-color: var(--vault-accent);
+  box-shadow: 0 10px 24px rgba(201, 107, 18, .16);
+}
+
+.item-popup-card .form-buttons .primary-button:hover,
+.item-popup-card .form-buttons .primary-button:focus-visible {
+  background: var(--vault-accent-dark);
+  border-color: var(--vault-accent-dark);
+  color: #fff;
+  outline: none;
+}

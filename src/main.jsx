@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, ArrowLeft, CalendarClock, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.042C';
+const VERSION = 'My Passwords Ver-0.042H';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -20,12 +21,7 @@ const SYNC_DEVICE_ID_KEY = 'my-passwords-sync-device-id-v1';
 const SECURE_DEVICE_PASSWORD_CONFIRM_DAYS = 14;
 const SECURE_DEVICE_UNLOCK_COUNT_LIMIT = 10;
 
-const FALLBACK_SAAS_PLANS = [
-  { code: 'personal', displayName: 'Personal', description: 'A private vault for one person.', currency: 'GBP', monthlyPriceMinor: 0, trialDays: 14 },
-  { code: 'family', displayName: 'Family', description: 'For household vault sharing when available.', currency: 'GBP', monthlyPriceMinor: 0, trialDays: 14 },
-  { code: 'business', displayName: 'Business', description: 'For team and client vaults when available.', currency: 'GBP', monthlyPriceMinor: 0, trialDays: 14 }
-
-];
+const FALLBACK_SAAS_PLANS = [];
 
 
 function readSyncSafetyState() {
@@ -1030,7 +1026,7 @@ function CountryPicker({ countryCode, countryIso, onChange }) {
         <img className="phone-flag-img" src={countryFlagPathFromCode(selected.code, selected.iso)} alt="" aria-hidden="true" />
         <span className="country-picker-chevron" aria-hidden="true">⌄</span>
       </button>
-      {open && (
+      {open && createPortal(
         <div className="country-picker-layer" role="dialog" aria-modal="true" aria-label="Choose mobile country code">
           <button type="button" className="country-picker-backdrop" aria-label="Close country picker" onClick={() => setOpen(false)} />
           <div className="country-picker-panel">
@@ -1063,7 +1059,8 @@ function CountryPicker({ countryCode, countryIso, onChange }) {
               {!filteredCountries.length && <div className="country-empty">No country found. Try the dialling code, for example +254.</div>}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -1587,21 +1584,19 @@ function App() {
   const [isCreateAccountPopupOpen, setIsCreateAccountPopupOpen] = useState(false);
   const [isCreateVaultPopupOpen, setIsCreateVaultPopupOpen] = useState(false);
   const [landingOnboardingStep, setLandingOnboardingStep] = useState(1);
-  const [landingAccountDraft, setLandingAccountDraft] = useState(() => {
-    const saved = readSavedAccount();
-    return {
-      displayName: saved.displayName || '',
-      email: saved.email || '',
-      phoneCountryCode: saved.phoneCountryCode || '+254',
-      phoneCountryIso: saved.phoneCountryIso || 'ke',
-      phoneNumber: saved.phoneNumber || '',
-      phoneE164: saved.phoneE164 || '',
-      accountName: saved.accountName || saved.tenantName || 'My Private Vault',
-      planCode: ['personal', 'family', 'business'].includes(saved.planCode) ? saved.planCode : 'personal'
-    };
+  const [landingAccountDraft, setLandingAccountDraft] = useState({
+    displayName: '',
+    email: '',
+    phoneCountryCode: '+254',
+    phoneCountryIso: 'ke',
+    phoneNumber: '',
+    phoneE164: '',
+    accountName: '',
+    planCode: ''
   });
   const [landingSignup, setLandingSignup] = useState({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
   const [landingOtp, setLandingOtp] = useState({ status: 'idle', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
+  const [showLandingBackToTop, setShowLandingBackToTop] = useState(false);
   const touchReorderRef = useRef({ timer: null, source: '', active: false });
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
@@ -1976,6 +1971,10 @@ function App() {
           quarterlyPriceMinor: Number(plan.quarterly_price_minor || 0),
           annualPriceMinor: Number(plan.annual_price_minor || 0),
           trialDays: Number(plan.trial_days || 0),
+          maxUsers: Number(plan.max_users || 1),
+          storageLimitMb: Number(plan.storage_limit_mb || 0),
+          documentLimit: Number(plan.document_limit || 0),
+          features: Array.isArray(plan.features) ? plan.features.filter(Boolean) : [],
           isFeatured: Boolean(plan.is_featured),
           stripeSyncStatus: plan.stripe_sync_status || '',
           stripeMonthlyReady: Boolean(plan.stripe_monthly_price_id),
@@ -3354,6 +3353,30 @@ function App() {
   const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute;
 
   useEffect(() => {
+    if (!isPublicLandingRoute) {
+      setShowLandingBackToTop(false);
+      return undefined;
+    }
+
+    const updateBackToTopVisibility = () => {
+      setShowLandingBackToTop(window.scrollY > window.innerHeight);
+    };
+
+    updateBackToTopVisibility();
+    window.addEventListener('scroll', updateBackToTopVisibility, { passive: true });
+    window.addEventListener('resize', updateBackToTopVisibility);
+
+    return () => {
+      window.removeEventListener('scroll', updateBackToTopVisibility);
+      window.removeEventListener('resize', updateBackToTopVisibility);
+    };
+  }, [isPublicLandingRoute]);
+
+  function scrollLandingToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  useEffect(() => {
     if (isEmergencyInviteRoute) loadEmergencyInviteStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEmergencyInviteRoute]);
@@ -3362,21 +3385,24 @@ function App() {
     window.location.assign('/vault');
   }
 
-  function openCreateAccountPopup() {
+  function openCreateAccountPopup(preselectedPlanCode = '') {
+    const preferredPlan = publicPlans.find((plan) => plan.code === preselectedPlanCode)
+      || publicPlans[Math.floor(publicPlans.length / 2)]
+      || publicPlans[0]
+      || null;
     setLandingOnboardingStep(1);
     setLandingSignup({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
     setLandingOtp({ status: 'idle', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
-    setLandingAccountDraft((current) => ({
-      ...current,
-      displayName: current.displayName || bootstrap.displayName || '',
-      email: current.email || bootstrap.email || '',
-      phoneCountryCode: current.phoneCountryCode || bootstrap.phoneCountryCode || '+254',
-      phoneCountryIso: current.phoneCountryIso || bootstrap.phoneCountryIso || 'ke',
-      phoneNumber: current.phoneNumber || bootstrap.phoneNumber || '',
-      phoneE164: current.phoneE164 || bootstrap.phoneE164 || '',
-      accountName: current.accountName || bootstrap.accountName || bootstrap.tenantName || 'My Private Vault',
-      planCode: ['personal', 'family', 'business'].includes(current.planCode) ? current.planCode : (['personal', 'family', 'business'].includes(bootstrap.planCode) ? bootstrap.planCode : 'personal')
-    }));
+    setLandingAccountDraft({
+      displayName: '',
+      email: '',
+      phoneCountryCode: '+254',
+      phoneCountryIso: 'ke',
+      phoneNumber: '',
+      phoneE164: '',
+      accountName: '',
+      planCode: preferredPlan?.code || ''
+    });
     setIsCreateAccountPopupOpen(true);
   }
 
@@ -4324,17 +4350,17 @@ function App() {
 
         <section className="landing-hero-shell" aria-label="My Passwords introduction">
           <div className="landing-hero-copy">
-            <div className="landing-pill"><Sparkles size={16} /> Private vault for passwords, notes and documents</div>
-            <h1>Keep your important private details in one secure place.</h1>
-            <p className="landing-intro">My Passwords is a clean encrypted vault for logins, secret notes, checklists and important documents. It is designed for everyday personal use now, with room to grow into family and business vaults later.</p>
+            <div className="landing-pill"><Sparkles size={16} /> Encrypted password vault for everyday life</div>
+            <h1>One secure place for the passwords and private details you rely on.</h1>
+            <p className="landing-intro">Save passwords, secure notes, cards, checklists and encrypted documents in a vault designed to stay simple across your phone, laptop and desktop.</p>
             <div className="landing-cta-row">
-              <button type="button" className="primary-button landing-primary-cta" onClick={openCreateAccountPopup}><UserRoundCheck size={18} /> Create Account</button>
+              <button type="button" className="primary-button landing-primary-cta" onClick={() => openCreateAccountPopup()}><UserRoundCheck size={18} /> Start free trial</button>
               <button type="button" className="secondary-button landing-secondary-cta" onClick={openVaultApp}><Unlock size={18} /> Open My Vault</button>
             </div>
             <div className="landing-trust-strip" aria-label="Security highlights">
-              <span><ShieldCheck size={16} /> Browser-side encryption</span>
-              <span><Cloud size={16} /> Encrypted cloud backup</span>
-              <span><MonitorSmartphone size={16} /> Installable PWA</span>
+              <span><ShieldCheck size={16} /> Encrypted before backup</span>
+              <span><Cloud size={16} /> Protected cross-device syncing</span>
+              <span><UsersRound size={16} /> Emergency Access included</span>
             </div>
           </div>
 
@@ -4346,68 +4372,94 @@ function App() {
             <div className="preview-lock-card">
               <div className="preview-lock-icon"><Lock size={26} /></div>
               <p>Encrypted vault</p>
-              <h2>Passwords, documents and private notes</h2>
+              <h2>Passwords, cards, documents and private notes</h2>
               <div className="preview-search-row"><Search size={16} /> Search your vault</div>
             </div>
             <div className="preview-card-grid">
               <article><KeyRound size={18} /><strong>Passwords</strong><span>Logins and access details</span></article>
-              <article><FileText size={18} /><strong>Documents</strong><span>PDF, Word, Excel and text files</span></article>
-              <article><Star size={18} /><strong>Favourites</strong><span>Fast access to essentials</span></article>
-              <article><RefreshCw size={18} /><strong>Sync</strong><span>Encrypted backup snapshots</span></article>
+              <article><CreditCard size={18} /><strong>Cards</strong><span>Keep card details organised</span></article>
+              <article><FileText size={18} /><strong>Documents</strong><span>Encrypted files and records</span></article>
+              <article><RefreshCw size={18} /><strong>Sync</strong><span>Protected across verified devices</span></article>
             </div>
+          </div>
+        </section>
+
+        <section className="landing-section landing-plan-section landing-pricing-section" aria-label="Subscription plans">
+          <div className="landing-section-heading landing-pricing-heading">
+            <p className="eyebrow">Choose your plan</p>
+            <h2>Start with the vault size that suits you.</h2>
+            <p>Every published plan includes encrypted vault storage, secure syncing, device verification and Emergency Access. Your free trial starts after email verification.</p>
+          </div>
+          <div className="landing-plan-tier-grid">
+            {publicPlans.map((plan, planIndex) => {
+              const isMostPopular = planIndex === Math.floor(publicPlans.length / 2);
+              const documentFeature = plan.documentLimit > 0
+                ? `${plan.documentLimit} encrypted document${plan.documentLimit === 1 ? '' : 's'}`
+                : 'Encrypted documents included';
+              const baseFeatures = plan.features?.length ? plan.features : [
+                'Encrypted password vault',
+                'Secure cloud backup and syncing',
+                'Emergency Access',
+                plan.storageLimitMb ? `${plan.storageLimitMb} MB encrypted storage` : 'Encrypted storage included'
+              ];
+              const featureList = [
+                ...baseFeatures.filter((feature) => !/document/i.test(String(feature))),
+                documentFeature
+              ].slice(0, 6);
+              return (
+                <article key={plan.code} className={`landing-plan-tier ${isMostPopular ? 'featured' : ''}`}>
+                  {isMostPopular && <span className="landing-plan-badge">Most popular</span>}
+                  <div className="landing-plan-tier-heading">
+                    <h3>{plan.displayName}</h3>
+                    <p>{plan.description}</p>
+                  </div>
+                  <div className="landing-plan-price"><strong>{publicPlanPriceLabel(plan)}</strong><span>{plan.trialDays ? `${plan.trialDays}-day free trial` : 'Start securely today'}</span></div>
+                  <ul>{featureList.map((feature) => <li key={feature}><ShieldCheck size={16} /> {feature}</li>)}</ul>
+                  <button type="button" className="primary-button landing-plan-cta" onClick={() => openCreateAccountPopup(plan.code)}><Sparkles size={17} /> {plan.trialDays ? `Start ${plan.trialDays}-day trial` : 'Choose this plan'}</button>
+                </article>
+              );
+            })}
+            {!publicPlans.length && <div className="landing-plans-unavailable"><AlertTriangle size={20} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
           </div>
         </section>
 
         <section className="landing-section landing-feature-section" aria-label="Features">
           <div className="landing-section-heading">
             <p className="eyebrow">Everything important, neatly organised</p>
-            <h2>A vault that feels simple, even when life is not.</h2>
-            <p>Store the details you always need, protect the details you never want exposed, and keep your most important records close at hand.</p>
+            <h2>A private vault that stays easy to use.</h2>
+            <p>Keep the details you need every day organised, searchable and protected without turning your vault into a complicated filing system.</p>
           </div>
           <div className="landing-feature-grid">
-            <article><ShieldCheck size={24} /><h3>Private by design</h3><p>Your vault is encrypted in the browser before it is stored locally, backed up, or uploaded as a document.</p></article>
-            <article><FileText size={24} /><h3>Documents included</h3><p>Store important PDFs, Word files, Excel files, text notes and records alongside your private vault items.</p></article>
-            <article><Search size={24} /><h3>Find things quickly</h3><p>Search across folders, favourites and saved records without turning your vault into a cluttered filing cabinet.</p></article>
-            <article><MonitorSmartphone size={24} /><h3>Made for daily use</h3><p>Install it as a PWA and open your private vault directly from your phone, laptop or desktop.</p></article>
+            <article><ShieldCheck size={24} /><h3>Encrypted before storage</h3><p>Your vault is encrypted on your device before it is backed up or synced.</p></article>
+            <article><FileText size={24} /><h3>Documents included</h3><p>Keep important PDFs, Word files, spreadsheets and text records alongside your vault items.</p></article>
+            <article><Search size={24} /><h3>Find things quickly</h3><p>Search folders, favourites and saved records without scrolling through everything.</p></article>
+            <article><MonitorSmartphone size={24} /><h3>Use it across devices</h3><p>Open your vault from verified phones, laptops and desktops with protected syncing.</p></article>
           </div>
         </section>
 
         <section className="landing-section landing-how-section" aria-label="How setup works">
           <div className="landing-section-heading compact">
             <p className="eyebrow">Simple setup</p>
-            <h2>Create your account, then create your private vault.</h2>
+            <h2>From free trial to secure vault in four steps.</h2>
           </div>
           <div className="landing-step-grid">
-            <article><span>1</span><strong>Create your account</strong><p>Add your name, email and mobile details for account setup and recovery.</p></article>
-            <article><span>2</span><strong>Verify securely</strong><p>Use email verification before creating or restoring a vault on a new device.</p></article>
-            <article><span>3</span><strong>Choose your master password</strong><p>Your master password protects the encrypted vault and is never stored by the app.</p></article>
-            <article><span>4</span><strong>Start saving safely</strong><p>Add passwords, notes, checklists and documents to your encrypted private vault.</p></article>
+            <article><span>1</span><strong>Choose a plan</strong><p>Select the vault size and trial that works for you.</p></article>
+            <article><span>2</span><strong>Verify your email</strong><p>Confirm the email address linked to your account.</p></article>
+            <article><span>3</span><strong>Create your master password</strong><p>Choose the private password that unlocks your encrypted vault.</p></article>
+            <article><span>4</span><strong>Start saving securely</strong><p>Add passwords, notes, cards, checklists and encrypted documents.</p></article>
           </div>
         </section>
-
-        <section className="landing-section landing-plan-section" aria-label="Plans">
-          <div>
-            <p className="eyebrow">Ready to grow</p>
-            <h2>Personal now. Family and business options later.</h2>
-            <p>Start with a private personal vault, then grow into family or business options as they become available. Existing vaults stay private, encrypted and separate.</p>
-          </div>
-          <div className="landing-mini-plans">
-            {publicPlans.map((plan) => <article key={plan.code} className={plan.isFeatured ? 'featured' : ''}><strong>{plan.displayName}</strong><span>{plan.description}</span><small>{publicPlanPriceLabel(plan)}</small></article>)}
-          </div>
-        </section>
-
-
 
         <section className="landing-section landing-security-section" aria-label="Privacy and security">
           <div className="landing-section-heading">
             <p className="eyebrow">Privacy and security</p>
-            <h2>Built around the idea that private details should stay private.</h2>
-            <p>My Passwords keeps the public website separate from your private vault. Your master password is created on the vault page and your saved data is encrypted before it is stored.</p>
+            <h2>Your private details deserve more than a notes app.</h2>
+            <p>My Passwords is designed to protect your vault while keeping everyday access straightforward on the devices you trust.</p>
           </div>
           <div className="landing-security-grid">
-            <article><ShieldCheck size={23} /><strong>Master password stays private</strong><p>Your master vault password is not stored by the app. It is the key to decrypting your private vault.</p></article>
-            <article><Lock size={23} /><strong>Encrypted before backup</strong><p>Vault records and uploaded documents are encrypted before they are saved locally or sent to cloud storage.</p></article>
-            <article><MonitorSmartphone size={23} /><strong>Private vault route</strong><p>The installed app opens the secure vault page directly, while the public landing page remains separate.</p></article>
+            <article><ShieldCheck size={23} /><strong>Your master password stays yours</strong><p>Your master password is not stored by My Passwords and is required to decrypt your vault.</p></article>
+            <article><Lock size={23} /><strong>Encrypted before backup</strong><p>Vault records and uploaded documents are encrypted before they are sent to secure storage.</p></article>
+            <article><MonitorSmartphone size={23} /><strong>Verified-device protection</strong><p>Secure syncing and cloud backup are linked to verified account sessions on your devices.</p></article>
           </div>
         </section>
 
@@ -4417,43 +4469,46 @@ function App() {
             <h2>Frequently asked questions.</h2>
           </div>
           <div className="landing-faq-grid">
-            <article><h3>Can My Passwords recover my master password?</h3><p>No. Your master password is what unlocks the encrypted vault. If it is forgotten, the encrypted vault cannot be decrypted.</p></article>
-            <article><h3>Where does the vault open?</h3><p>The public website opens at the main domain. Your private vault and installed PWA open at the dedicated vault page.</p></article>
-            <article><h3>Can I store documents too?</h3><p>Yes. The vault supports encrypted document storage for PDF, Word, Excel, text and related files.</p></article>
-            <article><h3>Is this only for one person?</h3><p>The current foundation supports personal use first, with family and business options planned for future SaaS stages.</p></article>
+            <article><h3>When does my free trial start?</h3><p>Your trial starts only after you verify your email and complete account setup.</p></article>
+            <article><h3>Will I be charged when I create an account?</h3><p>No. Account creation starts the free trial. You can choose a paid subscription from inside your vault before the trial ends.</p></article>
+            <article><h3>Can My Passwords recover my master password?</h3><p>No. Your master password unlocks the encrypted vault and cannot be recovered by My Passwords.</p></article>
+            <article><h3>Can I use the vault on more than one device?</h3><p>Yes. Verify each device and use secure syncing to keep your latest protected vault available.</p></article>
+            <article><h3>Can I store documents too?</h3><p>Yes. Supported documents are encrypted before upload and stored with your private vault.</p></article>
+            <article><h3>What happens if a backup cannot complete?</h3><p>Your change remains on that device and the app gives you a clear warning and guided steps to finish the backup.</p></article>
           </div>
         </section>
 
-        <section className="landing-section landing-contact-section" aria-label="Contact and support">
-          <div className="landing-contact-copy">
-            <p className="eyebrow">Need help?</p>
-            <h2>Support for setup, access and account questions.</h2>
-            <p>Use the support options for help with getting started, opening your vault on a new device, or asking about future family and business accounts.</p>
-          </div>
-          <div className="landing-contact-card">
-            <div><Mail size={20} /><span><strong>Email support</strong><small>Use your account email when asking for help.</small></span></div>
-            <a href="mailto:info@zippyweb.uk">info@zippyweb.uk</a>
-            <button type="button" className="primary-button" onClick={openCreateAccountPopup}><UserRoundCheck size={18} /> Create Account</button>
-            <button type="button" className="secondary-button" onClick={openVaultApp}><Unlock size={18} /> Open My Vault</button>
-          </div>
-        </section>
-
-        <section className="landing-final-cta" aria-label="Create account">
+        <section className="landing-final-cta" aria-label="Start free trial">
           <div>
             <p className="eyebrow">Start securely</p>
-            <h2>Create your encrypted vault account.</h2>
-            <p>Set up your account from the landing page, then continue to the private vault screen to create your secure master password.</p>
+            <h2>Your private vault is ready when you are.</h2>
+            <p>Choose a plan, verify your account and create the master password that only you know.</p>
           </div>
-          <button type="button" className="primary-button landing-primary-cta" onClick={openCreateAccountPopup}><UserRoundCheck size={18} /> Create Account</button>
+          <button type="button" className="primary-button landing-primary-cta" onClick={() => openCreateAccountPopup()}><Sparkles size={18} /> Start free trial</button>
         </section>
 
         <footer className="landing-footer">
           <div className="landing-footer-copy">
             <span>© 2026 My Passwords</span>
-            <small>A ZippyWeb project, built to keep everyday private details safer and easier to manage.</small>
+            <small>Encrypted password vault for everyday private details.</small>
           </div>
-          <button type="button" onClick={openVaultApp}>Open My Vault</button>
+          <nav className="landing-footer-links" aria-label="Landing page links">
+            <a href="mailto:info@zippyweb.uk">Support</a>
+            <button type="button" onClick={openVaultApp}>Open My Vault</button>
+          </nav>
         </footer>
+
+        {showLandingBackToTop && (
+          <button
+            type="button"
+            className="landing-back-to-top"
+            onClick={scrollLandingToTop}
+            aria-label="Back to top"
+            title="Back to top"
+          >
+            <ArrowUp size={22} />
+          </button>
+        )}
 
         {isCreateAccountPopupOpen && (
           <div className="item-popup-layer create-account-popup-layer" role="dialog" aria-modal="true" aria-label="Create My Passwords account">
@@ -4474,27 +4529,27 @@ function App() {
                 {landingOnboardingStep === 1 && (
                   <div className="create-account-step">
                     <h3>Your account details</h3>
-                    <p>These details identify your account and allow secure email verification on this and future devices. They do not replace your master vault password.</p>
-                    <label>Display name<input value={landingAccountDraft.displayName} onChange={(e) => updateLandingDraft({ displayName: e.target.value })} placeholder="Your name" /></label>
+                    <p>Enter the details you want linked to your My Passwords account. You will create your private master password after verification.</p>
+                    <label>Display name<input value={landingAccountDraft.displayName} onChange={(e) => updateLandingDraft({ displayName: e.target.value })} placeholder="e.g. Alex" /></label>
                     <label>Email for account verification<input type="email" value={landingAccountDraft.email} onChange={(e) => updateLandingDraft({ email: e.target.value })} placeholder="you@example.com" /></label>
                     <label>Mobile number</label>
                     <div className="phone-combo-field">
                       <CountryPicker countryCode={landingAccountDraft.phoneCountryCode || '+254'} countryIso={landingAccountDraft.phoneCountryIso || 'ke'} onChange={(country) => updateLandingDraft({ phoneCountryCode: country.code, phoneCountryIso: country.iso })} />
                       <input inputMode="tel" value={landingAccountDraft.phoneNumber || ''} onChange={(e) => updateLandingDraft({ phoneNumber: e.target.value })} placeholder="712345678" />
                     </div>
-                    <label>Account / vault name<input value={landingAccountDraft.accountName} onChange={(e) => updateLandingDraft({ accountName: e.target.value })} placeholder="My Private Vault" /></label>
+                    <label>Vault name<input value={landingAccountDraft.accountName} onChange={(e) => updateLandingDraft({ accountName: e.target.value })} placeholder="e.g. My Private Vault" /></label>
                   </div>
                 )}
 
                 {landingOnboardingStep === 2 && (
                   <div className="create-account-step">
-                    <h3>Choose your starting plan</h3>
-                    <p>The trial period comes directly from the plan configured in My Passwords Admin.</p>
+                    <h3>Confirm your plan</h3>
+                    <p>Your free trial starts after email verification. You can manage your subscription from inside the vault before the trial ends.</p>
                     <div className="plan-choice-grid">
                       {publicPlans.map((plan) => <button type="button" key={plan.code} className={landingAccountDraft.planCode === plan.code ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: plan.code })}><strong>{plan.displayName}</strong><span>{plan.description}</span><small>{publicPlanPriceLabel(plan)}</small></button>)}
-                      {!publicPlans.length && <div className="no-public-plans"><AlertTriangle size={18} /><span><strong>No plans are published yet.</strong><small>Publish at least one active plan in My Passwords Admin before opening new customer onboarding.</small></span></div>}
+                      {!publicPlans.length && <div className="no-public-plans"><AlertTriangle size={18} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
                     </div>
-                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>No payment is taken during this onboarding build. The selected trial starts only after successful email verification.</span></div>
+                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>Your selected trial starts only after successful email verification.</span></div>
                   </div>
                 )}
 
