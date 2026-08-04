@@ -4,8 +4,9 @@ import { createRoot } from 'react-dom/client';
 import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
+import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.045A';
+const VERSION = 'My Passwords Ver-0.045C';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -3389,6 +3390,7 @@ function App() {
   }
 
   function resetLocalVaultOnDevice() {
+    const localOnlyAtRisk = !featureIncluded('cloudBackupSync');
     setSyncSafetyModal({
       visible: true,
       mode: 'danger',
@@ -5445,7 +5447,7 @@ function App() {
                 <button type="button" onClick={unlockVault}><Unlock size={18} /> Unlock Local Vault</button>
               </div>
               {passwordCheckNotice && <div className="password-check-login-notice" role="status"><AlertTriangle size={18} /><span><strong>Password check required</strong><small>{passwordCheckNotice}</small></span></div>}
-              <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
+              <button type="button" className="clear-local-vault-link" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
             </>
           ) : (
             <>
@@ -5604,16 +5606,16 @@ function App() {
               ? 'unknown'
               : 'safe';
   const vaultSafetyIcon = !isOnline
-    ? <Cloud size={19} />
+    ? <Cloud size={22} />
     : !cloudBackupIncluded
-      ? <Database size={19} />
+      ? <Database size={22} />
       : syncing || syncSafety.state === 'backing-up'
-        ? <RefreshCw size={19} className="sync-button-spinner" />
+        ? <RefreshCw size={22} className="sync-button-spinner" />
         : syncSafety.conflict || syncSafety.pending
-          ? <AlertTriangle size={19} />
+          ? <AlertTriangle size={22} />
           : syncSafety.state === 'unknown'
-            ? <Cloud size={19} />
-            : <ShieldCheck size={19} />;
+            ? <Cloud size={22} />
+            : <ShieldCheck size={22} />;
 
   return (
     <main className="app-shell">
@@ -5624,9 +5626,9 @@ function App() {
         </div>
         <button type="button" className="mobile-top-menu-button" onClick={() => setMobileHeaderMenuOpen((open) => !open)} aria-label="Open vault menu" aria-expanded={mobileHeaderMenuOpen ? 'true' : 'false'}><MoreHorizontal size={22} /></button>
         <div className="topbar-actions">
-          <button type="button" className={`topbar-sync-button ${vaultSafetyClass}`} onClick={openVaultSafetySettings} aria-label={`Vault Safety: ${vaultSafetyLabel}`} title="Vault Safety">
-            {vaultSafetyIcon}
-            <span>{vaultSafetyLabel}</span>
+          <button type="button" className={`topbar-sync-button ${vaultSafetyClass}`} onClick={openVaultSafetySettings} aria-label={`Vault Safety: ${vaultSafetyLabel}`} title="Open Vault Safety">
+            <span className="topbar-sync-icon" aria-hidden="true">{vaultSafetyIcon}</span>
+            <span className="topbar-sync-copy"><small>Vault status</small><strong>{vaultSafetyLabel}</strong></span>
           </button>
           <button type="button" className="mobile-vault-refresh-button" onClick={refreshVaultAndBackup} disabled={syncing} aria-label="Refresh vault and back up changes" title="Refresh vault and back up changes"><RefreshCw size={20} className={syncing ? 'sync-button-spinner' : ''} /></button>
           <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'topbar-help-button active' : 'topbar-help-button'} onClick={openFaqSettings} aria-label="Open frequently asked questions" title="Help and FAQs"><CircleHelp size={20} /></button>
@@ -5779,7 +5781,7 @@ function App() {
                 <div className="item-popup-body">
                   <p className="form-helper">{editingItemId ? 'Update the saved details, then save your changes.' : 'Save a new secure item in your vault.'}</p>
                   {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
-                <label>Folder<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, CARDS_CATEGORY].includes(e.target.value) ? '' : form.username, password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, CARDS_CATEGORY].includes(e.target.value) ? '' : form.password })}>{selectableFolders.map((cat) => <option key={cat}>{cat}</option>)}</select></label>
+                <label>Folder<CustomSelect value={form.category} ariaLabel="Choose a vault folder" options={selectableFolders.map((cat) => ({ value: cat, label: cat }))} onChange={(nextCategory) => setForm({ ...form, category: nextCategory, username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, CARDS_CATEGORY].includes(nextCategory) ? '' : form.username, password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, CARDS_CATEGORY].includes(nextCategory) ? '' : form.password })} /></label>
                 {form.category === CARDS_CATEGORY ? (
                   <div className="card-entry-grid">
                     <label>Name on card<input value={form.cardName} onChange={(e) => setForm({ ...form, cardName: e.target.value })} placeholder="e.g. B Hallam" /></label>
@@ -6074,8 +6076,8 @@ function App() {
 
                     {publicPlans.length ? <>
                       <div className="subscription-selection-form">
-                        <label><span>Plan</span><select value={selectedPlan?.code || ''} onChange={(event) => setBilling((current) => ({ ...current, planCode: event.target.value, message: '' }))} disabled={!chooserEnabled || billing.status === 'updating'}>{publicPlans.map((plan) => <option key={`plan-option-${plan.code}`} value={plan.code}>{plan.displayName}</option>)}</select></label>
-                        <label><span>Billing period</span><select value={billing.interval} onChange={(event) => setBilling((current) => ({ ...current, interval: event.target.value, message: '' }))} disabled={!chooserEnabled || billing.status === 'updating'}>{['monthly', 'quarterly', 'annual'].map((interval) => <option key={interval} value={interval} disabled={!selectedPlan || !planIntervalReady(selectedPlan, interval)}>{billingIntervalLabel(interval)}{selectedPlan && planIntervalReady(selectedPlan, interval) ? ` — ${billingPriceLabel(selectedPlan, interval)}` : ' — Not available'}</option>)}</select></label>
+                        <label><span>Plan</span><CustomSelect value={selectedPlan?.code || ''} ariaLabel="Choose subscription plan" options={publicPlans.map((plan) => ({ value: plan.code, label: plan.displayName }))} onChange={(planCode) => setBilling((current) => ({ ...current, planCode, message: '' }))} disabled={!chooserEnabled || billing.status === 'updating'} /></label>
+                        <label><span>Billing period</span><CustomSelect value={billing.interval} ariaLabel="Choose billing period" options={['monthly', 'quarterly', 'annual'].map((interval) => ({ value: interval, label: `${billingIntervalLabel(interval)}${selectedPlan && planIntervalReady(selectedPlan, interval) ? ` — ${billingPriceLabel(selectedPlan, interval)}` : ' — Not available'}`, disabled: !selectedPlan || !planIntervalReady(selectedPlan, interval) }))} onChange={(interval) => setBilling((current) => ({ ...current, interval, message: '' }))} disabled={!chooserEnabled || billing.status === 'updating'} /></label>
                       </div>
 
                       <div className="subscription-selection-summary">
@@ -6150,14 +6152,14 @@ function App() {
                   <label>Relationship<input value={emergencyDraft.relationship} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, relationship: e.target.value })} placeholder="Spouse, child, sibling, solicitor..." /></label>
                   <label>Email<input type="email" value={emergencyDraft.contactEmail} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactEmail: e.target.value })} placeholder="trusted@example.com" /></label>
                   <label>Phone<input inputMode="tel" value={emergencyDraft.contactPhone} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactPhone: e.target.value })} placeholder="Mobile or landline" /></label>
-                  <label>Waiting period<select value={emergencyDraft.waitingPeriod} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, waitingPeriod: e.target.value })}>
-                    <option value="10 minutes">10 minutes — testing only</option>
-                    <option value="24 hours">24 hours</option>
-                    <option value="3 days">3 days</option>
-                    <option value="7 days">7 days</option>
-                    <option value="14 days">14 days</option>
-                    <option value="30 days">30 days</option>
-                  </select></label>
+                  <label>Waiting period<CustomSelect value={emergencyDraft.waitingPeriod} ariaLabel="Choose emergency waiting period" options={[
+                    { value: '10 minutes', label: '10 minutes — testing only' },
+                    { value: '24 hours', label: '24 hours' },
+                    { value: '3 days', label: '3 days' },
+                    { value: '7 days', label: '7 days' },
+                    { value: '14 days', label: '14 days' },
+                    { value: '30 days', label: '30 days' }
+                  ]} onChange={(waitingPeriod) => setEmergencyDraft({ ...emergencyDraft, waitingPeriod })} /></label>
                 </div>
                 <label className="emergency-access-notes-label">Notes or instructions<textarea value={emergencyDraft.instructions} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, instructions: e.target.value })} placeholder="Add any wishes, instructions, or details you want kept with this emergency plan." /></label>
 
@@ -6230,12 +6232,12 @@ function App() {
                   </label>
                   <div className="bootstrap-grid emergency-package-grid">
                     <label>Package title<input value={emergencyDraft.emergencyPackageTitle || 'Emergency Info package'} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageTitle: e.target.value })} placeholder="Emergency Info package" /></label>
-                    <label>Release scope<select value={emergencyDraft.accessScope} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, accessScope: e.target.value })}>
-                      <option value="Emergency Info folder only">Emergency Info folder only</option>
-                      <option value="Selected folders later">Selected folders later</option>
-                      <option value="Selected documents later">Selected documents later</option>
-                      <option value="Full vault access">Full vault access</option>
-                    </select></label>
+                    <label>Release scope<CustomSelect value={emergencyDraft.accessScope} ariaLabel="Choose emergency release scope" options={[
+                      { value: 'Emergency Info folder only', label: 'Emergency Info folder only' },
+                      { value: 'Selected folders later', label: 'Selected folders later' },
+                      { value: 'Selected documents later', label: 'Selected documents later' },
+                      { value: 'Full vault access', label: 'Full vault access' }
+                    ]} onChange={(accessScope) => setEmergencyDraft({ ...emergencyDraft, accessScope })} /></label>
                   </div>
                   <div className="emergency-package-notes-grid">
                     <label className="emergency-access-notes-label">Emergency message<textarea value={emergencyDraft.emergencyPackageMessage || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageMessage: e.target.value })} placeholder="Write the message your trusted person should see first if the waiting period ends." /></label>
@@ -6316,7 +6318,7 @@ function App() {
                   <p>These controls are only needed when changing devices or recovering an earlier secure copy.</p>
                   <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={17} /> {featureIncluded('cloudBackupSync') ? 'Check available recovery points' : 'Recovery points unavailable'}</button>
                   {!!snapshotHistory.snapshots.length && <p className="recovery-summary">{snapshotHistory.total} encrypted recovery point(s) are available. The latest contains {snapshotHistory.snapshots[0]?.item_count || 0} item(s) from {new Date(snapshotHistory.snapshots[0]?.created_at).toLocaleString()}.</p>}
-                  <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear vault copy from this device</button>
+                  <button type="button" className="clear-local-vault-link" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
                 </div>
               </details>
             </section>

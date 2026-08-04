@@ -11662,3 +11662,439 @@ input[type="radio"] {
   border-color: var(--mp-primary) !important;
   color: var(--mp-surface) !important;
 }
+
+/* My Passwords Ver-0.045B — shared custom dropdown system. */
+.custom-select {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.custom-select-trigger {
+  width: 100%;
+  min-width: 0;
+  min-height: 47px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #d7e1ea;
+  border-radius: 15px;
+  padding: 12px 13px 12px 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%);
+  color: #1f2937;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .78);
+  text-align: left;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.35;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.custom-select-trigger:hover:not(:disabled) {
+  border-color: #b8cad9;
+  background: #ffffff;
+}
+
+.custom-select-trigger:focus-visible,
+.custom-select.is-open .custom-select-trigger {
+  border-color: #457b9d;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(69, 123, 157, .12), inset 0 1px 0 rgba(255, 255, 255, .82);
+  outline: none;
+}
+
+.custom-select-trigger:disabled {
+  cursor: not-allowed !important;
+  opacity: .62;
+  background: #f3f6f8;
+  color: #718096;
+}
+
+.custom-select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-select-value.placeholder {
+  color: #78899b;
+  font-weight: 500;
+}
+
+.custom-select-chevron {
+  flex: 0 0 auto;
+  color: #527087;
+  transition: transform .17s ease, color .17s ease;
+}
+
+.custom-select.is-open .custom-select-chevron {
+  transform: rotate(180deg);
+  color: #245f87;
+}
+
+.custom-select-menu {
+  position: fixed;
+  z-index: 130000;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 7px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #cbd9e5;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .985);
+  box-shadow: 0 18px 42px rgba(28, 57, 83, .18), 0 4px 12px rgba(28, 57, 83, .08);
+  scrollbar-width: thin;
+  scrollbar-color: #aebfce transparent;
+  animation: custom-select-open .14s ease-out;
+}
+
+.custom-select-menu.opens-upward {
+  transform-origin: bottom center;
+}
+
+.custom-select-menu.opens-downward {
+  transform-origin: top center;
+}
+
+.custom-select-menu::-webkit-scrollbar {
+  width: 9px;
+}
+
+.custom-select-menu::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+
+.custom-select-menu::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: #aebfce;
+  background-clip: padding-box;
+}
+
+.custom-select-option {
+  width: 100%;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: #24384d;
+  text-align: left;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.35;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.custom-select-option > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.custom-select-option:hover:not(:disabled),
+.custom-select-option.active:not(:disabled) {
+  border-color: #d6e3ed;
+  background: #f1f7fb;
+  color: #183c58;
+  outline: none;
+}
+
+.custom-select-option.selected {
+  border-color: #bed4e4;
+  background: #eaf4fb;
+  color: #174e74;
+}
+
+.custom-select-option.selected:hover:not(:disabled),
+.custom-select-option.selected.active:not(:disabled) {
+  border-color: #a9c8dc;
+  background: #e2f0f9;
+}
+
+.custom-select-option svg {
+  justify-self: end;
+  color: #2d709a;
+}
+
+.custom-select-check-space {
+  width: 17px;
+  height: 17px;
+}
+
+.custom-select-option:disabled {
+  cursor: not-allowed !important;
+  opacity: 1;
+  border-color: transparent;
+  background: #f7f9fb;
+  color: #97a4b1;
+}
+
+.admin-entitlement-overrides .custom-select-trigger,
+.admin-plan-form .custom-select-trigger {
+  min-height: 45px;
+  border-color: #c8d6e3;
+  border-radius: 13px;
+  padding: 11px 12px;
+  background: #ffffff;
+  color: #172b3f;
+}
+
+@keyframes custom-select-open {
+  from { opacity: 0; transform: translateY(-3px) scale(.992); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 680px) {
+  .custom-select-trigger {
+    min-height: 48px;
+  }
+
+  .custom-select-menu {
+    border-radius: 15px;
+    padding: 6px;
+  }
+
+  .custom-select-option {
+    min-height: 48px;
+    padding: 10px 10px 10px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .custom-select-menu {
+    animation: none;
+  }
+
+  .custom-select-chevron,
+  .custom-select-trigger {
+    transition: none;
+  }
+}
+
+/* My Passwords Ver-0.045C — clear-vault link, scrollbar and premium status panel fixes. */
+.clear-local-vault-link {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  width: auto;
+  min-height: 34px;
+  margin: 0.7rem auto 0;
+  padding: 4px 2px;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  color: var(--mp-primary) !important;
+  box-shadow: none !important;
+  font: inherit;
+  font-size: 0.94rem;
+  font-weight: 760;
+  line-height: 1.4;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.clear-local-vault-link:hover,
+.clear-local-vault-link:focus-visible {
+  background: transparent !important;
+  color: var(--mp-text) !important;
+  box-shadow: none !important;
+  outline: none;
+  text-decoration-thickness: 2px;
+}
+
+.clear-local-vault-link:focus-visible {
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px rgba(69, 123, 157, 0.16) !important;
+}
+
+.advanced-recovery-card .clear-local-vault-link {
+  justify-self: start;
+  margin-left: 0;
+}
+
+/* Remove native scrollbar arrow buttons while reserving blank end space. */
+.custom-select-menu::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.custom-select-menu::-webkit-scrollbar-track {
+  margin-block: 10px;
+}
+
+/* Premium Vault Status control. */
+.topbar-sync-button {
+  min-width: 192px;
+  min-height: 58px;
+  justify-content: flex-start;
+  gap: 11px;
+  padding: 7px 16px 7px 8px;
+  border-radius: 19px;
+  border: 1px solid #bfd2df !important;
+  background: linear-gradient(145deg, #ffffff 0%, #edf5fa 100%) !important;
+  color: #294d68 !important;
+  box-shadow: 0 12px 28px rgba(29, 53, 87, 0.11), inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
+  text-align: left;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.topbar-sync-button:hover:not(:disabled),
+.topbar-sync-button:focus-visible {
+  transform: translateY(-1px);
+  border-color: #9fb9cb !important;
+  box-shadow: 0 15px 32px rgba(29, 53, 87, 0.14), 0 0 0 4px rgba(69, 123, 157, 0.09) !important;
+  outline: none;
+}
+
+.topbar-sync-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.topbar-sync-icon {
+  width: 41px;
+  height: 41px;
+  flex: 0 0 41px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #315f7f, #244b68);
+  color: #ffffff !important;
+  box-shadow: 0 7px 16px rgba(36, 75, 104, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.topbar-sync-icon svg {
+  width: 23px !important;
+  height: 23px !important;
+  color: inherit !important;
+  stroke-width: 2.25;
+}
+
+.topbar-sync-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  line-height: 1.08;
+}
+
+.topbar-sync-copy small {
+  color: inherit !important;
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.topbar-sync-copy strong {
+  overflow: hidden;
+  color: inherit !important;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-sync-button.safe {
+  border-color: #afd8bf !important;
+  background: linear-gradient(145deg, #fbfffc 0%, #e8f7ee 100%) !important;
+  color: #245f43 !important;
+}
+
+.topbar-sync-button.safe .topbar-sync-icon {
+  background: linear-gradient(145deg, #3d9468, #28734f) !important;
+  color: #ffffff !important;
+  box-shadow: 0 7px 17px rgba(40, 115, 79, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.topbar-sync-button.pending,
+.topbar-sync-button.conflict,
+.topbar-sync-button.offline {
+  border-color: #e4cb8d !important;
+  background: linear-gradient(145deg, #fffefa 0%, #fff5d8 100%) !important;
+  color: #6e5113 !important;
+}
+
+.topbar-sync-button.pending .topbar-sync-icon,
+.topbar-sync-button.conflict .topbar-sync-icon,
+.topbar-sync-button.offline .topbar-sync-icon {
+  background: linear-gradient(145deg, #bd8a23, #8d6518) !important;
+  color: #ffffff !important;
+  box-shadow: 0 7px 17px rgba(141, 101, 24, 0.23), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.topbar-sync-button.unknown,
+.topbar-sync-button.syncing,
+.topbar-sync-button.plan-local-only {
+  border-color: #bfd2df !important;
+  background: linear-gradient(145deg, #ffffff 0%, #edf5fa 100%) !important;
+  color: #294d68 !important;
+}
+
+@media (max-width: 860px) {
+  .topbar-sync-button {
+    min-width: 0;
+    min-height: 56px;
+    padding: 7px 13px 7px 7px;
+    gap: 10px;
+    border-radius: 18px;
+  }
+
+  .topbar-sync-icon {
+    width: 39px;
+    height: 39px;
+    flex-basis: 39px;
+    border-radius: 13px;
+  }
+
+  .topbar-sync-icon svg {
+    display: block !important;
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  .topbar-sync-copy small {
+    font-size: 0.62rem;
+  }
+
+  .topbar-sync-copy strong {
+    font-size: 0.94rem;
+  }
+}
+
+@media (max-width: 390px) {
+  .topbar-sync-button {
+    min-height: 54px;
+    padding-right: 9px;
+    gap: 8px;
+  }
+
+  .topbar-sync-icon {
+    width: 37px;
+    height: 37px;
+    flex-basis: 37px;
+  }
+
+  .topbar-sync-copy strong {
+    font-size: 0.88rem;
+  }
+}
