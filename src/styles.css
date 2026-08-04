@@ -12098,3 +12098,257 @@ input[type="radio"] {
     font-size: 0.88rem;
   }
 }
+
+/* My Passwords Ver-0.045D — unified red risk states, status alignment and full search focus. */
+:root {
+  --mp-warning: #C92A2A;
+  --mp-error: #C92A2A;
+  --mp-risk: #C92A2A;
+  --mp-risk-soft: #FDE2E2;
+  --mp-risk-soft-strong: #FAD5D5;
+  --mp-risk-border: #F1B6B6;
+}
+
+/* Warning, caution, local-only risk, attention and irreversible actions now share one red language. */
+.message,
+.db-wait,
+.sync-status-card.warning,
+.toast.warning,
+.create-warning,
+.device-status-card.local-fallback,
+.device-status-card.local-only,
+.device-status-card.no-cloud-snapshot,
+.account-status-card.needs-details,
+.topbar-sync-button.pending,
+.topbar-sync-button.conflict,
+.topbar-sync-button.offline,
+.topbar-sync-button.plan-local-only,
+.vault-safety-status-card.pending,
+.vault-safety-status-card.conflict,
+.vault-safety-status-card.offline,
+.vault-safety-status-card.plan-local-only,
+.admin-status.warning,
+.admin-sync-card.warning,
+.admin-plan-readiness,
+.admin-subscription-warning,
+.settings-directory-state.attention,
+.warning-panel,
+.status-warning,
+.sync-warning-banner,
+.sync-warning-banner.conflict,
+.password-check-login-notice,
+.emergency-request-warning,
+.master-password-manager-warning,
+.subscription-payment-warning,
+.danger-button,
+.danger-delete-button,
+.danger-soft,
+.icon-button.danger,
+.link-danger,
+.admin-status.suspended,
+.admin-status.error,
+.admin-status.cancelled,
+.admin-status.trial_expired,
+.admin-notice.error,
+.admin-sync-card.error,
+.admin-stripe-status.error,
+.admin-stripe-status.not_configured,
+.sync-status-card.error,
+.toast.error,
+.account-status-card.error,
+.device-status-card.cloud-decrypt-failed,
+.error-panel,
+.status-error {
+  background: var(--mp-risk-soft) !important;
+  border-color: var(--mp-risk-border) !important;
+  color: var(--mp-risk) !important;
+  box-shadow: none !important;
+}
+
+.message *,
+.db-wait *,
+.sync-status-card.warning *,
+.toast.warning *,
+.create-warning *,
+.device-status-card.local-fallback *,
+.device-status-card.local-only *,
+.device-status-card.no-cloud-snapshot *,
+.account-status-card.needs-details *,
+.topbar-sync-button.pending *,
+.topbar-sync-button.conflict *,
+.topbar-sync-button.offline *,
+.topbar-sync-button.plan-local-only *,
+.vault-safety-status-card.pending *,
+.vault-safety-status-card.conflict *,
+.vault-safety-status-card.offline *,
+.vault-safety-status-card.plan-local-only *,
+.admin-status.warning *,
+.admin-sync-card.warning *,
+.admin-plan-readiness *,
+.admin-subscription-warning *,
+.settings-directory-state.attention *,
+.warning-panel *,
+.status-warning *,
+.sync-warning-banner *,
+.password-check-login-notice *,
+.emergency-request-warning *,
+.master-password-manager-warning *,
+.subscription-payment-warning *,
+.danger-button *,
+.danger-delete-button *,
+.danger-soft *,
+.icon-button.danger *,
+.link-danger *,
+.admin-status.suspended *,
+.admin-status.error *,
+.admin-status.cancelled *,
+.admin-status.trial_expired *,
+.admin-notice.error *,
+.admin-sync-card.error *,
+.admin-stripe-status.error *,
+.admin-stripe-status.not_configured *,
+.sync-status-card.error *,
+.toast.error *,
+.account-status-card.error *,
+.device-status-card.cloud-decrypt-failed *,
+.error-panel *,
+.status-error * {
+  color: var(--mp-risk) !important;
+}
+
+.toast.warning .toast-dot,
+.toast.error .toast-dot,
+.vault-safety-status-card.pending .vault-safety-status-icon,
+.vault-safety-status-card.conflict .vault-safety-status-icon,
+.vault-safety-status-card.offline .vault-safety-status-icon,
+.vault-safety-status-card.plan-local-only .vault-safety-status-icon {
+  background: var(--mp-risk) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 0 4px rgba(201, 42, 42, .12) !important;
+}
+
+.danger-button:hover:not(:disabled),
+.danger-delete-button:hover:not(:disabled),
+.danger-soft:hover:not(:disabled),
+.icon-button.danger:hover:not(:disabled),
+.link-danger:hover:not(:disabled),
+.danger-button:focus-visible,
+.danger-delete-button:focus-visible,
+.danger-soft:focus-visible,
+.icon-button.danger:focus-visible,
+.link-danger:focus-visible {
+  background: var(--mp-risk-soft-strong) !important;
+  border-color: var(--mp-risk) !important;
+  color: var(--mp-risk) !important;
+  box-shadow: 0 0 0 4px rgba(201, 42, 42, .10) !important;
+  outline: none;
+}
+
+/* Premium status: preserve exactly one visible character space and centre the icon tile. */
+.topbar-sync-copy small::after {
+  content: "\00a0";
+}
+
+.topbar-sync-icon {
+  align-self: center;
+  justify-self: center;
+  margin-block: auto;
+}
+
+.topbar-sync-button.pending,
+.topbar-sync-button.conflict,
+.topbar-sync-button.offline,
+.topbar-sync-button.plan-local-only {
+  border-color: var(--mp-risk-border) !important;
+  background: linear-gradient(145deg, #FFFDFD 0%, var(--mp-risk-soft) 100%) !important;
+  color: var(--mp-risk) !important;
+}
+
+.topbar-sync-button.pending .topbar-sync-icon,
+.topbar-sync-button.conflict .topbar-sync-icon,
+.topbar-sync-button.offline .topbar-sync-icon,
+.topbar-sync-button.plan-local-only .topbar-sync-icon {
+  background: linear-gradient(145deg, #D83A3A, #B51F1F) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 7px 17px rgba(181, 31, 31, .22), inset 0 1px 0 rgba(255, 255, 255, .22) !important;
+}
+
+@media (max-width: 860px) {
+  .topbar-sync-button .topbar-sync-icon {
+    display: grid !important;
+    place-items: center !important;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+}
+
+/* Focus belongs to the complete search control, including the search icon. */
+.search-box.hero-search {
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.search-box.hero-search:focus-within {
+  border-color: #B7C2CB !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 0 0 5px rgba(116, 132, 145, .20) !important;
+  outline: none;
+}
+
+.search-box.hero-search input,
+.search-box.hero-search input:focus,
+.search-box.hero-search input:focus-visible {
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+
+/* Remove the remaining legacy brown/orange accents: informational states are blue, risk states are red. */
+.item-form.edit-mode,
+.edit-banner {
+  border-color: rgba(51, 102, 153, .28) !important;
+  background: #EEF4F8 !important;
+  color: var(--mp-primary) !important;
+  box-shadow: none !important;
+}
+
+.edit-banner *,
+.section-card-favs,
+.favourite-mini,
+.favourite-card .category-pill {
+  color: var(--mp-primary) !important;
+}
+
+.favourite-mini,
+.favourite-card .category-pill {
+  background: #EEF4F8 !important;
+  border-color: rgba(51, 102, 153, .20) !important;
+}
+
+.network-status-notice,
+.secure-session-card.inactive,
+.sync-safety-instructions,
+.sync-conflict-summary p,
+.sync-danger-note,
+.subscription-inline-note {
+  background: var(--mp-risk-soft) !important;
+  border-color: var(--mp-risk-border) !important;
+  color: var(--mp-risk) !important;
+  box-shadow: none !important;
+}
+
+.network-status-notice *,
+.secure-session-card.inactive *,
+.sync-safety-instructions *,
+.sync-conflict-summary p *,
+.sync-danger-note *,
+.subscription-inline-note * {
+  color: var(--mp-risk) !important;
+}
+
+.admin-offline-card .admin-mark,
+.secure-session-card.inactive svg {
+  background: var(--mp-risk-soft) !important;
+  color: var(--mp-risk) !important;
+}
