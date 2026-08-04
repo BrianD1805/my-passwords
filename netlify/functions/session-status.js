@@ -3,6 +3,7 @@ import { clearCustomerSession, issueCustomerSession, readCustomerSession } from 
 import { evaluateTenantAccess, loadTenantSubscription, trialDaysRemaining } from './_trial.js';
 import { stripeConfigured } from './_stripe.js';
 import { serializeSubscription } from './_subscription-lifecycle.js';
+import { resolveTenantEntitlements } from './_entitlements.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -40,21 +41,28 @@ export async function handler(event) {
 
     const lifecycle = await evaluateTenantAccess(tenant);
     const subscription = await loadTenantSubscription(tenant.id);
+    const entitlementContext = await resolveTenantEntitlements(tenant.id);
     const trialStartedAt = tenant.trial_started_at || subscription?.trial_started_at || null;
     const trialEndsAt = tenant.trial_ends_at || subscription?.trial_ends_at || null;
-    const cloudAccess = Boolean(lifecycle.allowed);
+    const backupIncluded = entitlementContext.effective.features.cloudBackupSync !== false;
+    const cloudAccess = Boolean(lifecycle.allowed && backupIncluded);
+    const accessCode = lifecycle.allowed && !backupIncluded ? 'PLAN_FEATURE_REQUIRED' : (cloudAccess ? '' : lifecycle.code || 'ACCOUNT_ACCESS_PAUSED');
+    const accessMessage = lifecycle.allowed && !backupIncluded
+      ? 'Cloud backup and syncing are not included in this plan. Your local encrypted vault remains available.'
+      : (cloudAccess ? 'This device is verified for secure backup and syncing.' : lifecycle.message);
 
     return jsonResponse(200, {
       ok: true,
       version: APP_VERSION,
       authenticated: true,
       cloudAccess,
-      accessCode: cloudAccess ? '' : lifecycle.code || 'ACCOUNT_ACCESS_PAUSED',
+      accessCode,
       tenantId: tenant.id,
       userId: user.id,
       role: user.role || session.role || 'member',
       stripeConfigured: stripeConfigured(),
       subscription: serializeSubscription(subscription),
+      entitlements: entitlementContext.serialized,
       account: {
         displayName: user.display_name || '',
         email: user.email || '',
@@ -69,7 +77,7 @@ export async function handler(event) {
         trialDaysRemaining: trialDaysRemaining(trialEndsAt),
         onboardingCompletedAt: tenant.onboarding_completed_at || null
       },
-      message: cloudAccess ? 'This device is verified for secure backup and syncing.' : lifecycle.message
+      message: accessMessage
     }, {
       'set-cookie': issueCustomerSession(event, { tenantId: tenant.id, userId: user.id, role: user.role || session.role || 'member' })
     });

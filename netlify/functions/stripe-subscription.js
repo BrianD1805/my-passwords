@@ -1,6 +1,7 @@
 import { APP_VERSION, jsonResponse, parseBody } from './_db.js';
 import { getBillingContext } from './_billing.js';
 import { stripeConfigured } from './_stripe.js';
+import { resolveTenantEntitlements } from './_entitlements.js';
 import {
   cancelStripeSubscriptionAtPeriodEnd,
   changeStripeSubscription,
@@ -54,6 +55,7 @@ export async function handler(event) {
       else return jsonResponse(400, { ok: false, version: APP_VERSION, code: 'UNKNOWN_SUBSCRIPTION_ACTION', message: 'Unknown subscription action.' });
     }
 
+    const entitlementContext = await resolveTenantEntitlements(context.tenant.id);
     return jsonResponse(200, {
       ok: true,
       version: APP_VERSION,
@@ -63,6 +65,7 @@ export async function handler(event) {
       nextInvoice: result.nextInvoice || null,
       paymentHistory: result.paymentHistory || [],
       account: accountPayload(context),
+      entitlements: entitlementContext.serialized,
       message: result.message || 'Subscription updated.'
     });
   } catch (error) {

@@ -1,4 +1,5 @@
 import { insertRow, publicId, selectRows, updateRow, upsertRow } from './_db.js';
+import { loadPlanEntitlementSnapshot } from './_entitlements.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -27,10 +28,14 @@ export async function loadTenantSubscription(tenantId) {
 
 export async function upsertTrialSubscription({ tenant, trialStartedAt, trialEndsAt, status = 'trialing', metadata = {} }) {
   const existing = await loadTenantSubscription(tenant.id);
+  const planCode = tenant.plan_code || 'personal';
+  const entitlementSnapshot = existing?.entitlements_snapshot?.version
+    ? existing.entitlements_snapshot
+    : await loadPlanEntitlementSnapshot(planCode);
   const row = {
     id: existing?.id || publicId('subscription'),
     tenant_id: tenant.id,
-    plan_code: tenant.plan_code || 'personal',
+    plan_code: planCode,
     status,
     billing_interval: existing?.billing_interval || null,
     currency: existing?.currency || 'GBP',
@@ -49,6 +54,12 @@ export async function upsertTrialSubscription({ tenant, trialStartedAt, trialEnd
     last_payment_at: existing?.last_payment_at || null,
     last_payment_failed_at: existing?.last_payment_failed_at || null,
     admin_override: Boolean(existing?.admin_override),
+    entitlements_snapshot: entitlementSnapshot,
+    entitlements_snapshot_at: existing?.entitlements_snapshot_at || new Date().toISOString(),
+    entitlement_overrides: existing?.entitlement_overrides || {},
+    entitlement_override_note: existing?.entitlement_override_note || '',
+    entitlement_override_updated_at: existing?.entitlement_override_updated_at || null,
+    entitlement_override_updated_by: existing?.entitlement_override_updated_by || null,
     metadata: { ...(existing?.metadata || {}), ...metadata },
     updated_at: new Date().toISOString()
   };

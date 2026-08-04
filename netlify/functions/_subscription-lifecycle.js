@@ -1,5 +1,6 @@
 import { APP_VERSION, insertRow, publicId, selectRows, updateRow, upsertRow } from './_db.js';
 import { billingIntervalDefinition, stripeObjectId, stripeRequest, stripeTimestampToIso } from './_stripe.js';
+import { launchReadyPlan, loadPlanEntitlementSnapshot } from './_entitlements.js';
 
 const ACTIVE_STRIPE_STATUSES = new Set(['incomplete', 'trialing', 'active', 'past_due', 'unpaid', 'paused']);
 const SCHEDULE_ACTIVE_STATUSES = new Set(['not_started', 'active']);
@@ -208,6 +209,10 @@ export async function syncStripeSubscriptionObject(subscription, hints = {}) {
   const planCode = metadataValue(subscription, 'my_passwords_plan_code') || hints.planCode || pricePlan?.code || local?.plan_code || tenant?.plan_code || 'personal';
   const billingInterval = metadataValue(subscription, 'my_passwords_billing_interval') || hints.billingInterval || intervalFromPlanPrice(pricePlan, price.id) || intervalFromRecurring(price) || local?.billing_interval || null;
   const status = internalSubscriptionStatus(subscription?.status);
+  const planChanged = Boolean(local?.plan_code && String(local.plan_code) !== String(planCode));
+  const entitlementSnapshot = (!local?.entitlements_snapshot?.version || planChanged)
+    ? await loadPlanEntitlementSnapshot(planCode)
+    : local.entitlements_snapshot;
   const period = subscriptionPeriod(subscription);
   const now = new Date().toISOString();
   const trialEndsAt = stripeTimestampToIso(subscription?.trial_end) || local?.trial_ends_at || null;
@@ -258,6 +263,12 @@ export async function syncStripeSubscriptionObject(subscription, hints = {}) {
     last_stripe_sync_status: duplicateIds.length ? 'review_required' : 'ready',
     last_stripe_sync_message: duplicateIds.length ? 'Multiple live Stripe subscriptions require review.' : 'Stripe subscription status reconciled.',
     admin_override: false,
+    entitlements_snapshot: entitlementSnapshot,
+    entitlements_snapshot_at: (!local?.entitlements_snapshot_at || planChanged) ? now : local.entitlements_snapshot_at,
+    entitlement_overrides: local?.entitlement_overrides || {},
+    entitlement_override_note: local?.entitlement_override_note || '',
+    entitlement_override_updated_at: local?.entitlement_override_updated_at || null,
+    entitlement_override_updated_by: local?.entitlement_override_updated_by || null,
     metadata: { ...(local?.metadata || {}), version: APP_VERSION, stripe_status: subscription?.status || '', last_stripe_sync_at: now },
     created_at: local?.created_at || now,
     updated_at: now
@@ -478,7 +489,10 @@ export function serializeSubscription(row, extras = {}) {
     duplicateSubscriptionIds: Array.isArray(row.duplicate_subscription_ids) ? row.duplicate_subscription_ids : [],
     lastStripeSyncAt: row.last_stripe_sync_at || null,
     lastStripeSyncStatus: row.last_stripe_sync_status || '',
-    lastStripeSyncMessage: row.last_stripe_sync_message || ''
+    lastStripeSyncMessage: row.last_stripe_sync_message || '',
+    entitlementsSnapshot: row.entitlements_snapshot || null,
+    entitlementOverrides: row.entitlement_overrides || {},
+    entitlementSnapshotAt: row.entitlements_snapshot_at || null
   };
 }
 
@@ -645,7 +659,7 @@ async function scheduleRenewalChange({ subscription, currentPlan, currentInterva
 export async function changeStripeSubscription(context, { planCode, billingInterval, requestId = '' }) {
   const targetPlan = await loadPlanByCode(String(planCode || '').trim().toLowerCase());
   const targetDefinition = billingIntervalDefinition(billingInterval);
-  if (!targetPlan?.id || targetPlan.is_active === false || targetPlan.is_public === false) {
+  if (!targetPlan?.id || targetPlan.is_active === false || targetPlan.is_public === false || !launchReadyPlan(targetPlan.code)) {
     const error = new Error('That subscription plan is not currently available.');
     error.code = 'PLAN_NOT_AVAILABLE';
     throw error;

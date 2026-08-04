@@ -239,6 +239,17 @@ export async function handler(event) {
   try { session = await getActiveCustomerSession(event); }
   catch (error) { return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not check device verification.', error: error.message }); }
   if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify your account before managing Emergency Access.' });
+  if (session.entitlements?.features?.emergencyAccess === false) {
+    return jsonResponse(403, {
+      ok: false,
+      version: APP_VERSION,
+      code: 'PLAN_FEATURE_REQUIRED',
+      feature: 'emergencyAccess',
+      upgradeRequired: true,
+      entitlements: session.entitlements,
+      message: 'Emergency Access is not included in this plan.'
+    });
+  }
   const sessionTenantId = session.tenantId;
   const sessionUserId = session.userId;
 

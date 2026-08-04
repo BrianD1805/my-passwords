@@ -18,10 +18,44 @@ async function requestJson(url, options = {}) {
   }
 }
 
+
+const DEFAULT_PLAN_FEATURE_FLAGS = Object.freeze({
+  documents: true,
+  emergencyAccess: true,
+  secureDeviceUnlock: true,
+  cloudBackupSync: true,
+  multiUser: false,
+  sharing: false
+});
+
+function normaliseFeatureFlags(value = {}) {
+  return { ...DEFAULT_PLAN_FEATURE_FLAGS, ...(value && typeof value === 'object' ? value : {}), multiUser: false, sharing: false };
+}
+
+function isReservedFuturePlan(code) {
+  return ['family', 'business'].includes(String(code || '').trim().toLowerCase());
+}
+
+function emptyEntitlementDraft(customer = {}) {
+  const overrides = customer.entitlementOverrides || {};
+  const limits = overrides.limits || {};
+  const features = overrides.features || {};
+  return {
+    maxUsers: limits.maxUsers ?? '',
+    documentLimit: limits.documentLimit ?? '',
+    storageLimitMb: limits.storageLimitMb ?? '',
+    documents: typeof features.documents === 'boolean' ? String(features.documents) : 'plan',
+    emergencyAccess: typeof features.emergencyAccess === 'boolean' ? String(features.emergencyAccess) : 'plan',
+    secureDeviceUnlock: typeof features.secureDeviceUnlock === 'boolean' ? String(features.secureDeviceUnlock) : 'plan',
+    cloudBackupSync: typeof features.cloudBackupSync === 'boolean' ? String(features.cloudBackupSync) : 'plan',
+    note: customer.entitlementOverrideNote || ''
+  };
+}
+
 function emptyPlan() {
   return {
     code: '', displayName: '', description: '', currency: 'GBP', monthlyPrice: '0.00', quarterlyPrice: '0.00', annualPrice: '0.00',
-    trialDays: 14, maxUsers: 1, storageLimitMb: 0, documentLimit: 0, features: '', isFeatured: false, isPublic: false, isActive: true, displayOrder: 10, stripeSyncStatus: 'not_synced', stripeSyncMessage: '', stripeSyncedAt: ''
+    trialDays: 14, maxUsers: 1, storageLimitMb: 0, documentLimit: 0, features: '', featureFlags: { ...DEFAULT_PLAN_FEATURE_FLAGS }, isFeatured: false, isPublic: false, isActive: true, displayOrder: 10, stripeSyncStatus: 'not_synced', stripeSyncMessage: '', stripeSyncedAt: ''
   };
 }
 
@@ -39,6 +73,7 @@ function toEditorPlan(plan) {
     storageLimitMb: Number(plan.storage_limit_mb || 0),
     documentLimit: Number(plan.document_limit || 0),
     features: Array.isArray(plan.features) ? plan.features.join('\n') : '',
+    featureFlags: normaliseFeatureFlags(plan.feature_flags || {}),
     isFeatured: Boolean(plan.is_featured),
     isPublic: Boolean(plan.is_public),
     isActive: plan.is_active !== false,
@@ -131,6 +166,7 @@ export default function AdminApp({ version }) {
   const [planVisibility, setPlanVisibility] = useState('active');
   const [notice, setNotice] = useState('');
   const [trialDays, setTrialDays] = useState({});
+  const [entitlementDrafts, setEntitlementDrafts] = useState({});
 
   const sortedPlans = useMemo(() => [...(data.plans || [])]
     .filter((plan) => String(plan?.code || '').trim() && String(plan?.display_name || '').trim())
@@ -209,7 +245,9 @@ export default function AdminApp({ version }) {
       setNotice(result.message || 'Could not load admin data.');
       return;
     }
-    setData({ plans: result.plans || [], customers: result.customers || [], billingEvents: result.billingEvents || [], summary: result.summary || {}, stripeConfigured: Boolean(result.stripeConfigured) });
+    const customers = result.customers || [];
+    setData({ plans: result.plans || [], customers, billingEvents: result.billingEvents || [], summary: result.summary || {}, stripeConfigured: Boolean(result.stripeConfigured) });
+    setEntitlementDrafts(Object.fromEntries(customers.map((customer) => [customer.id, emptyEntitlementDraft(customer)])));
     setNotice('');
   }
 
@@ -254,6 +292,7 @@ export default function AdminApp({ version }) {
           storageLimitMb: Number(editor.storageLimitMb || 0),
           documentLimit: Number(editor.documentLimit || 0),
           features: editor.features,
+          featureFlags: normaliseFeatureFlags(editor.featureFlags),
           isFeatured: editor.isFeatured,
           isPublic: editor.isPublic,
           isActive: editor.isActive,
@@ -336,6 +375,33 @@ export default function AdminApp({ version }) {
     });
     setBusy(false);
     setNotice(result.message || (result.ok ? 'Stripe subscription refreshed.' : 'Stripe refresh failed.'));
+    if (result.ok) await loadData();
+  }
+
+  function updateEntitlementDraft(customerId, patch) {
+    setEntitlementDrafts((current) => ({ ...current, [customerId]: { ...(current[customerId] || {}), ...patch } }));
+  }
+
+  async function saveEntitlementOverrides(customer, clear = false) {
+    const draft = entitlementDrafts[customer.id] || emptyEntitlementDraft(customer);
+    const optionalNumber = (value) => value === '' || value === null || value === undefined ? null : Math.max(0, Math.round(Number(value) || 0));
+    const optionalFeature = (value) => value === 'plan' ? undefined : value === 'true';
+    const features = {};
+    for (const key of ['documents', 'emergencyAccess', 'secureDeviceUnlock', 'cloudBackupSync']) {
+      const value = optionalFeature(draft[key]);
+      if (typeof value === 'boolean') features[key] = value;
+    }
+    setBusy(true);
+    setNotice(clear ? 'Clearing entitlement overrides...' : 'Saving entitlement overrides...');
+    const result = await requestJson('/.netlify/functions/admin-data', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        action: 'save_entitlement_overrides', tenantId: customer.id,
+        overrides: clear ? {} : { limits: { maxUsers: optionalNumber(draft.maxUsers), documentLimit: optionalNumber(draft.documentLimit), storageLimitMb: optionalNumber(draft.storageLimitMb) }, features },
+        note: clear ? '' : draft.note
+      })
+    });
+    setBusy(false);
+    setNotice(result.message || (result.ok ? 'Entitlement overrides saved.' : 'Entitlement overrides could not be saved.'));
     if (result.ok) await loadData();
   }
 
@@ -490,6 +556,24 @@ export default function AdminApp({ version }) {
                             </div>
                           </div>
                         )}
+                        {!founder && customer.entitlements && (
+                          <div className="admin-entitlement-panel">
+                            <div className="admin-entitlement-heading"><ShieldCheck size={20} /><span><strong>Purchased plan entitlements</strong><small>Server-enforced limits stay attached to the purchased plan unless an Admin override is saved.</small></span></div>
+                            <div className="admin-entitlement-usage">
+                              <span><small>Users</small><strong>{customer.entitlements.usage?.users || 0} / {customer.entitlements.limits?.maxUsers || 'Unlimited'}</strong></span>
+                              <span><small>Documents</small><strong>{customer.entitlements.usage?.documents || 0} / {customer.entitlements.limits?.documentLimit || 'Unlimited'}</strong></span>
+                              <span><small>Storage</small><strong>{customer.entitlements.usage?.storageMb || 0} MB / {customer.entitlements.limits?.storageLimitMb || 'Unlimited'}</strong></span>
+                            </div>
+                            <div className="admin-entitlement-overrides">
+                              <label>Maximum users override<input type="number" min="1" placeholder="Use purchased plan" value={(entitlementDrafts[customer.id] || {}).maxUsers ?? ''} onChange={(e) => updateEntitlementDraft(customer.id, { maxUsers: e.target.value })} /></label>
+                              <label>Document limit override<input type="number" min="0" placeholder="Use purchased plan" value={(entitlementDrafts[customer.id] || {}).documentLimit ?? ''} onChange={(e) => updateEntitlementDraft(customer.id, { documentLimit: e.target.value })} /></label>
+                              <label>Storage MB override<input type="number" min="0" placeholder="Use purchased plan" value={(entitlementDrafts[customer.id] || {}).storageLimitMb ?? ''} onChange={(e) => updateEntitlementDraft(customer.id, { storageLimitMb: e.target.value })} /></label>
+                              {['documents', 'emergencyAccess', 'secureDeviceUnlock', 'cloudBackupSync'].map((feature) => <label key={`${customer.id}-${feature}`}>{feature.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase())}<select value={(entitlementDrafts[customer.id] || {})[feature] || 'plan'} onChange={(e) => updateEntitlementDraft(customer.id, { [feature]: e.target.value })}><option value="plan">Use purchased plan</option><option value="true">Enabled</option><option value="false">Disabled</option></select></label>)}
+                              <label className="admin-full">Override note<textarea rows="2" value={(entitlementDrafts[customer.id] || {}).note || ''} onChange={(e) => updateEntitlementDraft(customer.id, { note: e.target.value })} placeholder="Reason for the override" /></label>
+                            </div>
+                            <div className="admin-entitlement-actions"><button type="button" className="secondary-button" onClick={() => saveEntitlementOverrides(customer)} disabled={busy}><Save size={16} /> Save overrides</button><button type="button" className="secondary-button danger-soft" onClick={() => saveEntitlementOverrides(customer, true)} disabled={busy}>Clear overrides</button></div>
+                          </div>
+                        )}
                         {!founder && !stripeManaged && (
                           <div className="admin-trial-controls">
                             <label>Days<input type="number" min="1" max="365" value={extensionDays} onChange={(event) => setTrialDays((current) => ({ ...current, [customer.id]: event.target.value }))} /></label>
@@ -586,9 +670,18 @@ export default function AdminApp({ version }) {
                   <label>Storage limit MB<input type="number" min="0" value={editor.storageLimitMb} onChange={(e) => setEditor({ ...editor, storageLimitMb: e.target.value })} /></label>
                   <label>Document limit<input type="number" min="0" value={editor.documentLimit} onChange={(e) => setEditor({ ...editor, documentLimit: e.target.value })} /></label>
                   <label>Display order<input type="number" min="0" value={editor.displayOrder} onChange={(e) => setEditor({ ...editor, displayOrder: e.target.value })} /></label>
-                  <label className="admin-full">Features, one per line<textarea rows="6" value={editor.features} onChange={(e) => setEditor({ ...editor, features: e.target.value })} /></label>
+                  <label className="admin-full">Customer-facing features, one per line<textarea rows="6" value={editor.features} onChange={(e) => setEditor({ ...editor, features: e.target.value })} /></label>
                 </div>
-                <div className="admin-toggle-grid"><label><input type="checkbox" checked={editor.isActive} onChange={(e) => setEditor({ ...editor, isActive: e.target.checked })} /> Active</label><label><input type="checkbox" checked={editor.isPublic} onChange={(e) => setEditor({ ...editor, isPublic: e.target.checked })} /> Publish on website</label><label><input type="checkbox" checked={editor.isFeatured} onChange={(e) => setEditor({ ...editor, isFeatured: e.target.checked })} /> Featured plan</label></div>
+                <fieldset className="admin-feature-flags"><legend>Enforced plan features</legend>
+                  <label><input type="checkbox" checked={editor.featureFlags.documents} onChange={(e) => setEditor({ ...editor, featureFlags: { ...editor.featureFlags, documents: e.target.checked } })} /> Encrypted documents</label>
+                  <label><input type="checkbox" checked={editor.featureFlags.emergencyAccess} onChange={(e) => setEditor({ ...editor, featureFlags: { ...editor.featureFlags, emergencyAccess: e.target.checked } })} /> Emergency Access</label>
+                  <label><input type="checkbox" checked={editor.featureFlags.secureDeviceUnlock} onChange={(e) => setEditor({ ...editor, featureFlags: { ...editor.featureFlags, secureDeviceUnlock: e.target.checked } })} /> Secure device unlock</label>
+                  <label><input type="checkbox" checked={editor.featureFlags.cloudBackupSync} onChange={(e) => setEditor({ ...editor, featureFlags: { ...editor.featureFlags, cloudBackupSync: e.target.checked } })} /> Cloud backup and sync</label>
+                  <label className="not-ready"><input type="checkbox" checked={false} disabled /> Household/team users — not built</label>
+                  <label className="not-ready"><input type="checkbox" checked={false} disabled /> Sharing — not built</label>
+                </fieldset>
+                {isReservedFuturePlan(editor.code) && <div className="admin-plan-readiness"><AlertTriangle size={18} /><span><strong>{editor.displayName || planDisplayName(editor.code)} remains hidden</strong><small>Family and Business cannot be published until member accounts and sharing have been built and tested.</small></span></div>}
+                <div className="admin-toggle-grid"><label><input type="checkbox" checked={editor.isActive} onChange={(e) => setEditor({ ...editor, isActive: e.target.checked })} /> Active</label><label><input type="checkbox" checked={isReservedFuturePlan(editor.code) ? false : editor.isPublic} onChange={(e) => setEditor({ ...editor, isPublic: e.target.checked })} disabled={isReservedFuturePlan(editor.code)} /> Publish on website</label><label><input type="checkbox" checked={isReservedFuturePlan(editor.code) ? false : editor.isFeatured} onChange={(e) => setEditor({ ...editor, isFeatured: e.target.checked })} disabled={isReservedFuturePlan(editor.code)} /> Featured plan</label></div>
                 <div className={`admin-stripe-status ${editor.stripeSyncStatus || 'not_synced'}`}><CreditCard size={18} /><span><strong>Stripe Billing: {data.stripeConfigured ? (editor.stripeSyncStatus || 'Not synced').replace(/_/g, ' ') : 'Not configured'}</strong><small>{editor.stripeSyncMessage || (data.stripeConfigured ? 'Save the plan to create or update its Stripe Product and recurring Prices.' : 'Add STRIPE_SECRET_KEY to the existing My Passwords Netlify site.')}</small></span></div>
               </div>
               <footer className="admin-plan-window-footer">

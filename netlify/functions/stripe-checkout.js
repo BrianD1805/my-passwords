@@ -2,6 +2,7 @@ import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, 
 import { getBillingContext } from './_billing.js';
 import { billingIntervalDefinition, publicSiteUrl, stripeConfigured, stripeObjectId, stripeRequest, syncStripePlan } from './_stripe.js';
 import { listCustomerStripeSubscriptions, syncStripeSubscriptionObject } from './_subscription-lifecycle.js';
+import { launchReadyPlan, loadPlanEntitlementSnapshot } from './_entitlements.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -107,7 +108,7 @@ export async function handler(event) {
 
   try {
     let plan = await loadPlan(planCode);
-    if (!plan?.id) return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'PLAN_NOT_AVAILABLE', message: 'That subscription plan is not currently available.' });
+    if (!plan?.id || !launchReadyPlan(plan.code)) return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'PLAN_NOT_AVAILABLE', message: 'That subscription plan is not currently available. Personal is the current launch plan.' });
     if (Number(plan[interval.amountColumn] || 0) <= 0) return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'PRICE_NOT_AVAILABLE', message: `${interval.label} billing has not been priced yet.` });
 
     if (!plan[interval.priceColumn] || plan.stripe_sync_status !== 'ready') {
@@ -175,6 +176,9 @@ export async function handler(event) {
     });
 
     const now = new Date().toISOString();
+    const entitlementSnapshot = context.subscription?.entitlements_snapshot?.version
+      ? context.subscription.entitlements_snapshot
+      : await loadPlanEntitlementSnapshot(plan.code);
     const subscriptionRow = await upsertRow('tenant_subscriptions', {
       id: context.subscription?.id || publicId('subscription'),
       tenant_id: context.tenant.id,
@@ -198,7 +202,13 @@ export async function handler(event) {
       latest_invoice_id: context.subscription?.latest_invoice_id || null,
       last_payment_at: context.subscription?.last_payment_at || null,
       last_payment_failed_at: context.subscription?.last_payment_failed_at || null,
-      admin_override: false,
+      admin_override: Boolean(context.subscription?.admin_override),
+      entitlements_snapshot: entitlementSnapshot,
+      entitlements_snapshot_at: context.subscription?.entitlements_snapshot_at || now,
+      entitlement_overrides: context.subscription?.entitlement_overrides || {},
+      entitlement_override_note: context.subscription?.entitlement_override_note || '',
+      entitlement_override_updated_at: context.subscription?.entitlement_override_updated_at || null,
+      entitlement_override_updated_by: context.subscription?.entitlement_override_updated_by || null,
       metadata: {
         ...(context.subscription?.metadata || {}),
         version: APP_VERSION,

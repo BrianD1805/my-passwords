@@ -18,7 +18,9 @@ export async function handler() {
 
   try {
     const rows = await selectRows('tenants', 'select=id&limit=1');
-    const plans = await selectRows('subscription_plans', 'select=id&limit=1');
+    const plans = await selectRows('subscription_plans', 'select=id,feature_flags,entitlement_version&limit=1');
+    await selectRows('tenant_subscriptions', 'select=id,entitlements_snapshot,entitlement_overrides&limit=1');
+    await selectRows('document_blobs', 'select=id,storage_bytes&limit=1');
     return jsonResponse(200, {
       ok: true,
       connected: true,
@@ -34,6 +36,8 @@ export async function handler() {
     });
   } catch (error) {
     const relationMissing = error.details?.code === '42P01' || String(error.message || '').toLowerCase().includes('does not exist');
+    const entitlementMigrationMissing = error.details?.code === '42703'
+      || /feature_flags|entitlement_version|entitlements_snapshot|entitlement_overrides|storage_bytes/i.test(String(error.message || ''));
     return jsonResponse(200, {
       ok: false,
       connected: !relationMissing,
@@ -45,9 +49,11 @@ export async function handler() {
       supabase,
       error: error.message,
       details: error.details || null,
-      message: relationMissing
-        ? 'Supabase is reachable, but the Ver-0.039 SaaS tables are missing. Run the Ver-0.039 and Ver-0.039A migrations in Supabase SQL Editor.'
-        : 'Supabase connection failed. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
+      message: entitlementMigrationMissing
+        ? 'Supabase is reachable, but the Ver-0.044 entitlement columns are missing. Run the Ver-0.044 migration in Supabase SQL Editor.'
+        : relationMissing
+          ? 'Supabase is reachable, but the SaaS tables are missing. Run the required My Passwords migrations in Supabase SQL Editor.'
+          : 'Supabase connection failed. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
     });
   }
 }

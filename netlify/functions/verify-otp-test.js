@@ -1,6 +1,7 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, updateRow } from './_db.js';
 import { issueCustomerSession } from './_auth.js';
 import { evaluateTenantAccess, isFounderTenant, recordLifecycleEvent, upsertTrialSubscription } from './_trial.js';
+import { resolveTenantEntitlements } from './_entitlements.js';
 import { createHash } from 'node:crypto';
 
 function eq(value) {
@@ -201,12 +202,21 @@ export async function handler(event) {
       trial_started_at: trialStartedAt,
       trial_ends_at: trialEndsAt
     });
-    const cloudAccess = Boolean(lifecycle.allowed);
-    const message = !cloudAccess
-      ? lifecycle.message
-      : firstActivation
-        ? (trialDays ? `Account verified. Your ${trialDays}-day ${planName} trial is now active.` : `Account verified. Your ${planName} account is now active.`)
-        : 'Device verified. Cloud backup and secure syncing are active.';
+    const entitlementContext = await resolveTenantEntitlements(tenant.id);
+    const backupIncluded = entitlementContext.effective.features.cloudBackupSync !== false;
+    const cloudAccess = Boolean(lifecycle.allowed && backupIncluded);
+    const accessCode = lifecycle.allowed && !backupIncluded
+      ? 'PLAN_FEATURE_REQUIRED'
+      : (cloudAccess ? '' : lifecycle.code || 'ACCOUNT_ACCESS_PAUSED');
+    const message = lifecycle.allowed && !backupIncluded
+      ? (firstActivation
+          ? `Account verified. Your ${planName} vault is active on this device. Cloud backup and syncing are not included in the current plan.`
+          : 'Device verified. Your encrypted local vault is available, but cloud backup and syncing are not included in the current plan.')
+      : !cloudAccess
+        ? lifecycle.message
+        : firstActivation
+          ? (trialDays ? `Account verified. Your ${trialDays}-day ${planName} trial is now active.` : `Account verified. Your ${planName} account is now active.`)
+          : 'Device verified. Cloud backup and secure syncing are active.';
 
     return jsonResponse(200, {
       ok: true,
@@ -218,9 +228,10 @@ export async function handler(event) {
       role: user.role || 'administrator',
       authenticated: true,
       cloudAccess,
-      accessCode: cloudAccess ? '' : lifecycle.code || 'ACCOUNT_ACCESS_PAUSED',
+      accessCode,
       onboardingCompleted: firstActivation,
       welcomeEmailSent: Boolean(welcomeEmail.sent),
+      entitlements: entitlementContext.serialized,
       account: {
         accountName: tenant.account_name || tenant.name || '',
         planCode: tenant.plan_code || 'personal',

@@ -3,6 +3,7 @@ import { readAdminSession } from './_auth.js';
 import { isFounderTenant, loadTenantSubscription, recordLifecycleEvent, upsertTrialSubscription } from './_trial.js';
 import { archiveStripePlan, stripeConfigured, syncStripePlan } from './_stripe.js';
 import { refreshStripeSubscriptionForTenant } from './_subscription-lifecycle.js';
+import { applyEntitlementOverrides, entitlementSnapshotFromPlan, normaliseEntitlementOverrides, normalisePlanFeatureFlags, reservedPlanCannotPublish, serialiseEntitlements } from './_entitlements.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -62,14 +63,15 @@ async function ensureNonFounder(tenant) {
 }
 
 async function loadDashboard() {
-  const [plans, tenants, users, subscriptions, snapshots, syncEvents, billingEvents] = await Promise.all([
+  const [plans, tenants, users, subscriptions, snapshots, syncEvents, billingEvents, documentBlobs] = await Promise.all([
     selectRows('subscription_plans', 'select=*&order=display_order.asc,display_name.asc'),
     selectRows('tenants', 'select=id,name,account_name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at,onboarding_completed_at,created_at,updated_at&order=created_at.desc&limit=250'),
     selectRows('users', 'select=id,tenant_id,email,phone_e164,display_name,role,status,email_verified,phone_verified,onboarding_status,onboarding_completed_at,welcome_email_sent_at,created_at&order=created_at.desc&limit=500'),
-    selectRows('tenant_subscriptions', 'select=id,tenant_id,plan_code,status,billing_interval,currency,price_minor,trial_started_at,trial_ends_at,current_period_start,current_period_end,cancel_at_period_end,cancelled_at,grace_period_ends_at,admin_override,provider,provider_customer_id,provider_subscription_id,provider_price_id,checkout_session_id,latest_invoice_id,last_payment_at,last_payment_failed_at,stripe_schedule_id,scheduled_plan_code,scheduled_billing_interval,scheduled_price_id,scheduled_change_at,scheduled_change_type,scheduled_change_created_at,next_invoice_amount_minor,next_invoice_currency,next_invoice_at,last_stripe_sync_at,last_stripe_sync_status,last_stripe_sync_message,duplicate_subscription_count,duplicate_subscription_ids,updated_at&order=updated_at.desc&limit=250'),
+    selectRows('tenant_subscriptions', 'select=id,tenant_id,plan_code,status,billing_interval,currency,price_minor,trial_started_at,trial_ends_at,current_period_start,current_period_end,cancel_at_period_end,cancelled_at,grace_period_ends_at,admin_override,provider,provider_customer_id,provider_subscription_id,provider_price_id,checkout_session_id,latest_invoice_id,last_payment_at,last_payment_failed_at,stripe_schedule_id,scheduled_plan_code,scheduled_billing_interval,scheduled_price_id,scheduled_change_at,scheduled_change_type,scheduled_change_created_at,next_invoice_amount_minor,next_invoice_currency,next_invoice_at,last_stripe_sync_at,last_stripe_sync_status,last_stripe_sync_message,duplicate_subscription_count,duplicate_subscription_ids,entitlements_snapshot,entitlements_snapshot_at,entitlement_overrides,entitlement_override_note,entitlement_override_updated_at,entitlement_override_updated_by,updated_at&order=updated_at.desc&limit=250'),
     selectRows('vault_sync_snapshots', 'select=id,tenant_id,user_id,item_count,client_updated_at,created_at&order=created_at.desc&limit=1000'),
     selectRows('vault_sync_events', 'select=id,tenant_id,user_id,event_type,status,item_count,message,device_id,metadata,created_at&order=created_at.desc&limit=1000'),
-    selectRows('billing_events', 'select=id,tenant_id,subscription_id,provider,provider_event_id,event_type,status,amount_minor,currency,metadata,occurred_at,created_at&order=created_at.desc&limit=500')
+    selectRows('billing_events', 'select=id,tenant_id,subscription_id,provider,provider_event_id,event_type,status,amount_minor,currency,metadata,occurred_at,created_at&order=created_at.desc&limit=500'),
+    selectRows('document_blobs', 'select=id,tenant_id,file_size,storage_bytes&limit=5000').catch(() => [])
   ]);
 
   const usersByTenant = new Map();
@@ -101,8 +103,28 @@ async function loadDashboard() {
     if (!latestSyncEventByTenant.has(syncEvent.tenant_id)) latestSyncEventByTenant.set(syncEvent.tenant_id, syncEvent);
     syncEventCountsByTenant.set(syncEvent.tenant_id, Number(syncEventCountsByTenant.get(syncEvent.tenant_id) || 0) + 1);
   }
+  const plansByCode = new Map((plans || []).map((plan) => [String(plan.code || '').toLowerCase(), plan]));
+  const documentUsageByTenant = new Map();
+  for (const document of documentBlobs || []) {
+    const current = documentUsageByTenant.get(document.tenant_id) || { documents: 0, storageBytes: 0 };
+    current.documents += 1;
+    current.storageBytes += Math.max(0, Number(document.storage_bytes || document.file_size || 0));
+    documentUsageByTenant.set(document.tenant_id, current);
+  }
   const customerRows = (tenants || []).map((tenant) => {
     const subscription = subscriptionsByTenant.get(tenant.id) || null;
+    const customerUsers = usersByTenant.get(tenant.id) || [];
+    const plan = plansByCode.get(String(subscription?.plan_code || tenant.plan_code || 'personal').toLowerCase()) || null;
+    const founder = isFounderTenant(tenant);
+    const snapshot = subscription?.entitlements_snapshot?.version
+      ? subscription.entitlements_snapshot
+      : entitlementSnapshotFromPlan(founder ? {
+          code: 'founder_private', display_name: 'Founder Plan', max_users: 1, document_limit: 0, storage_limit_mb: 0,
+          feature_flags: { documents: true, emergencyAccess: true, secureDeviceUnlock: true, cloudBackupSync: true, multiUser: false, sharing: false }
+        } : (plan || { code: tenant.plan_code || 'personal', display_name: tenant.plan_code || 'Personal', max_users: 1 }));
+    const effectiveEntitlements = applyEntitlementOverrides(snapshot, subscription?.entitlement_overrides || {});
+    const documentUsage = documentUsageByTenant.get(tenant.id) || { documents: 0, storageBytes: 0 };
+    const usage = { users: customerUsers.filter((user) => !['cancelled', 'deleted'].includes(String(user.status || '').toLowerCase())).length, ...documentUsage };
     return {
       id: tenant.id,
       accountName: tenant.account_name || tenant.name || '',
@@ -115,8 +137,13 @@ async function loadDashboard() {
       onboardingCompletedAt: tenant.onboarding_completed_at || '',
       createdAt: tenant.created_at,
       updatedAt: tenant.updated_at,
-      users: usersByTenant.get(tenant.id) || [],
+      users: customerUsers,
       subscription,
+      entitlements: serialiseEntitlements(effectiveEntitlements, usage),
+      entitlementOverrides: normaliseEntitlementOverrides(subscription?.entitlement_overrides || {}),
+      entitlementOverrideNote: subscription?.entitlement_override_note || '',
+      entitlementOverrideUpdatedAt: subscription?.entitlement_override_updated_at || '',
+      entitlementOverrideUpdatedBy: subscription?.entitlement_override_updated_by || '',
       billingEvents: (billingEvents || []).filter((event) => event.tenant_id === tenant.id).slice(0, 20),
       syncDiagnostics: {
         latestSnapshot: latestSnapshotByTenant.get(tenant.id) || null,
@@ -152,7 +179,7 @@ export async function handler(event) {
     try {
       return jsonResponse(200, { ok: true, version: APP_VERSION, ...(await loadDashboard()) });
     } catch (error) {
-      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.043.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.044.', error: error.message, details: error.details || null });
     }
   }
 
@@ -179,9 +206,15 @@ export async function handler(event) {
         max_users: Math.max(1, toNonNegativeInt(plan.maxUsers) || 1),
         storage_limit_mb: toNonNegativeInt(plan.storageLimitMb),
         document_limit: toNonNegativeInt(plan.documentLimit),
-        features: cleanFeatures(plan.features),
-        is_featured: Boolean(plan.isFeatured),
-        is_public: Boolean(plan.isPublic),
+        features: reservedPlanCannotPublish(code) ? [] : cleanFeatures(plan.features),
+        feature_flags: {
+          ...normalisePlanFeatureFlags(plan.featureFlags || {}),
+          multiUser: false,
+          sharing: false
+        },
+        entitlement_version: 1,
+        is_featured: reservedPlanCannotPublish(code) ? false : Boolean(plan.isFeatured),
+        is_public: reservedPlanCannotPublish(code) ? false : Boolean(plan.isPublic),
         is_active: plan.isActive !== false,
         display_order: toNonNegativeInt(plan.displayOrder),
         updated_at: new Date().toISOString()
@@ -191,7 +224,7 @@ export async function handler(event) {
       else saved = await insertRow('subscription_plans', { id: publicId('plan'), ...row });
       const stripeSync = await syncStripePlan(saved);
       await audit('subscription_plan_saved', { plan_code: code, stripe_sync_status: stripeSync.plan?.stripe_sync_status || '' });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, plan: stripeSync.plan || saved, stripeConfigured: stripeSync.configured, stripeSynced: Boolean(stripeSync.ok), message: stripeSync.message || 'Subscription plan saved.' });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, plan: stripeSync.plan || saved, stripeConfigured: stripeSync.configured, stripeSynced: Boolean(stripeSync.ok), message: reservedPlanCannotPublish(code) ? 'Plan saved as hidden. Family and Business stay unpublished until their advertised functionality is built.' : (stripeSync.message || 'Subscription plan saved.') });
     }
 
 
@@ -220,6 +253,39 @@ export async function handler(event) {
       await deleteRow('subscription_plans', `id=${eq(plan.id)}`);
       await audit('subscription_plan_deleted', { plan_code: code, stripe_archived: Boolean(archived.configured) });
       return jsonResponse(200, { ok: true, version: APP_VERSION, message: 'Subscription plan deleted. Any Stripe Product and Prices were archived.' });
+    }
+
+    if (action === 'save_entitlement_overrides') {
+      const tenantId = String(body.tenantId || '').trim();
+      if (!tenantId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A customer account is required.' });
+      const tenant = await loadTenant(tenantId);
+      if (!tenant?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Customer account was not found.' });
+      let subscription = await loadTenantSubscription(tenantId);
+      if (!subscription?.id && !isFounderTenant(tenant)) {
+        subscription = await upsertTrialSubscription({
+          tenant,
+          trialStartedAt: tenant.trial_started_at || null,
+          trialEndsAt: tenant.trial_ends_at || null,
+          status: String(tenant.plan_status || '').includes('trial') ? 'trialing' : 'active',
+          metadata: { version: APP_VERSION, entitlement_override_record_created: true }
+        });
+      }
+      if (!subscription?.id) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'Admin overrides are not required for the Founder account.' });
+      const overrides = normaliseEntitlementOverrides(body.overrides || {});
+      overrides.features.multiUser = false;
+      overrides.features.sharing = false;
+      const note = String(body.note || '').trim().slice(0, 500);
+      const now = new Date().toISOString();
+      const cleared = !Object.keys(overrides.features).length && Object.values(overrides.limits).every((value) => value === null);
+      const updated = await updateRow('tenant_subscriptions', `id=${eq(subscription.id)}`, {
+        entitlement_overrides: cleared ? {} : overrides,
+        entitlement_override_note: cleared ? '' : note,
+        entitlement_override_updated_at: now,
+        entitlement_override_updated_by: 'platform_admin',
+        updated_at: now
+      });
+      await audit(cleared ? 'tenant_entitlement_overrides_cleared' : 'tenant_entitlement_overrides_saved', { tenant_id: tenantId, overrides: cleared ? {} : overrides, note: cleared ? '' : note });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, subscription: updated, overrides: cleared ? {} : overrides, message: cleared ? 'Plan entitlement overrides cleared.' : 'Plan entitlement overrides saved.' });
     }
 
     if (action === 'refresh_stripe_subscription') {

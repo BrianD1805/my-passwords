@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleH
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.043A';
+const VERSION = 'My Passwords Ver-0.044';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -18,6 +18,65 @@ const BIOMETRIC_KEY_STORE = 'deviceKeys';
 const BIOMETRIC_KEY_ID = 'local-master-password-wrap-key';
 const SYNC_SAFETY_KEY = 'my-passwords-sync-safety-v1';
 const SYNC_DEVICE_ID_KEY = 'my-passwords-sync-device-id-v1';
+const ENTITLEMENTS_CACHE_KEY = 'my-passwords-entitlements-v1';
+const PENDING_DOCUMENT_DELETIONS_KEY = 'my-passwords-pending-document-deletions-v1';
+const DEFAULT_ENTITLEMENTS = Object.freeze({
+  version: 1,
+  planCode: 'personal',
+  planName: 'Personal',
+  limits: { maxUsers: 1, documentLimit: 0, storageLimitMb: 0 },
+  features: { documents: true, emergencyAccess: true, secureDeviceUnlock: true, cloudBackupSync: true, multiUser: false, sharing: false },
+  usage: { users: 1, documents: 0, storageBytes: 0, storageMb: 0 },
+  remaining: { users: 0, documents: null, storageBytes: null }
+});
+
+function normaliseClientEntitlements(value = {}) {
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    ...DEFAULT_ENTITLEMENTS,
+    ...source,
+    limits: { ...DEFAULT_ENTITLEMENTS.limits, ...(source.limits || {}) },
+    features: { ...DEFAULT_ENTITLEMENTS.features, ...(source.features || {}), multiUser: false, sharing: false },
+    usage: { ...DEFAULT_ENTITLEMENTS.usage, ...(source.usage || {}) },
+    remaining: { ...DEFAULT_ENTITLEMENTS.remaining, ...(source.remaining || {}) }
+  };
+}
+
+function readCachedEntitlements() {
+  try { return normaliseClientEntitlements(JSON.parse(localStorage.getItem(ENTITLEMENTS_CACHE_KEY) || '{}')); }
+  catch { return normaliseClientEntitlements(); }
+}
+
+function persistEntitlements(value) {
+  const next = normaliseClientEntitlements(value);
+  localStorage.setItem(ENTITLEMENTS_CACHE_KEY, JSON.stringify(next));
+  return next;
+}
+
+function readPendingDocumentDeletions() {
+  try {
+    const value = JSON.parse(localStorage.getItem(PENDING_DOCUMENT_DELETIONS_KEY) || '[]');
+    return Array.isArray(value) ? value.filter((entry) => entry?.documentId && entry?.tenantId && entry?.userId) : [];
+  } catch {
+    return [];
+  }
+}
+
+function queuePendingDocumentDeletion(entry) {
+  if (!entry?.documentId || !entry?.tenantId || !entry?.userId) return;
+  const current = readPendingDocumentDeletions();
+  const key = `${entry.tenantId}:${entry.userId}:${entry.documentId}`;
+  if (!current.some((item) => `${item.tenantId}:${item.userId}:${item.documentId}` === key)) {
+    current.push({ documentId: entry.documentId, tenantId: entry.tenantId, userId: entry.userId, queuedAt: new Date().toISOString() });
+    localStorage.setItem(PENDING_DOCUMENT_DELETIONS_KEY, JSON.stringify(current));
+  }
+}
+
+function removePendingDocumentDeletion(entry) {
+  const key = `${entry.tenantId}:${entry.userId}:${entry.documentId}`;
+  const next = readPendingDocumentDeletions().filter((item) => `${item.tenantId}:${item.userId}:${item.documentId}` !== key);
+  localStorage.setItem(PENDING_DOCUMENT_DELETIONS_KEY, JSON.stringify(next));
+}
 const SECURE_DEVICE_PASSWORD_CONFIRM_DAYS = 14;
 const SECURE_DEVICE_UNLOCK_COUNT_LIMIT = 10;
 
@@ -1672,6 +1731,20 @@ class AppStartupBoundary extends React.Component {
   }
 }
 
+
+function PlanEntitlementModal({ state, entitlements, onClose, onOpenSubscription }) {
+  if (!state?.visible) return null;
+  return (
+    <div className="entitlement-modal-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="entitlement-modal" role="dialog" aria-modal="true" aria-labelledby="entitlement-modal-title">
+        <header><div><p className="eyebrow">Current plan</p><h2 id="entitlement-modal-title">{state.title}</h2></div><button type="button" onClick={onClose} aria-label="Close"><X size={21} /></button></header>
+        <div className="entitlement-modal-body"><ShieldCheck size={30} /><p>{state.message}</p><div className="entitlement-current-plan"><span>Current plan</span><strong>{entitlements?.planName || entitlements?.planCode || 'Personal'}</strong></div></div>
+        <footer><button type="button" className="secondary-button" onClick={onClose}>Close</button><button type="button" className="primary-button" onClick={onOpenSubscription}>Open My Subscription</button></footer>
+      </section>
+    </div>
+  );
+}
+
 function App() {
   const [locked, setLocked] = useState(true);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -1696,6 +1769,8 @@ function App() {
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
   const [accountStatus, setAccountStatus] = useState({ state: 'local-first', message: 'Your account details help you recover your vault on a new device.' });
   const [customerSession, setCustomerSession] = useState({ checked: false, authenticated: false, cloudAccess: false, accessCode: '', message: 'Device verification has not been checked yet.' });
+  const [entitlements, setEntitlements] = useState(() => readCachedEntitlements());
+  const [entitlementModal, setEntitlementModal] = useState({ visible: false, feature: '', title: '', message: '' });
   const [publicPlans, setPublicPlans] = useState(FALLBACK_SAAS_PLANS);
   const [billing, setBilling] = useState({ status: 'idle', message: '', planCode: '', interval: 'monthly', subscription: null, stripeConfigured: false, returnState: '', loaded: false, paymentHistory: [], nextInvoice: null, duplicateSubscriptionIds: [] });
   const [subscriptionActionModal, setSubscriptionActionModal] = useState({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' });
@@ -1807,6 +1882,15 @@ function App() {
   }, [mobileHeaderMenuOpen]);
 
   useEffect(() => {
+    if (!entitlementModal.visible) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setEntitlementModal({ visible: false, feature: '', title: '', message: '' });
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [entitlementModal.visible]);
+
+  useEffect(() => {
     if (!subscriptionActionModal.visible) return undefined;
     const closeOnEscape = (event) => {
       if (event.key === 'Escape' && billing.status !== 'updating') setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' });
@@ -1841,6 +1925,7 @@ function App() {
       otpStatus: 'Device verified'
     };
     setBootstrap(next);
+    if (result?.entitlements) updateEntitlements(result.entitlements);
     setCustomerSession((current) => ({
       ...current,
       checked: true,
@@ -1887,6 +1972,7 @@ function App() {
         }));
         return result;
       }
+      if (result.entitlements) updateEntitlements(result.entitlements);
       return applySubscriptionResult(result, { message: options.message ?? result.message });
     } catch (error) {
       const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
@@ -1894,6 +1980,67 @@ function App() {
       setBilling((current) => ({ ...current, status: 'error', loaded: true, message }));
       return { ok: false, message: error.message };
     }
+  }
+
+  function updateEntitlements(nextValue) {
+    if (!nextValue || typeof nextValue !== 'object') return entitlements;
+    const previous = entitlements;
+    const next = persistEntitlements(nextValue);
+    setEntitlements(next);
+    const backupWasIncluded = previous?.features?.cloudBackupSync !== false;
+    const backupIsIncluded = next?.features?.cloudBackupSync !== false;
+    if (backupWasIncluded && !backupIsIncluded) {
+      saveSyncSafety({
+        state: 'plan-local-only',
+        pending: false,
+        conflict: false,
+        sessionRequired: false,
+        message: 'Cloud backup and syncing are not included in the current plan. The encrypted vault remains available on this device.',
+        itemCount: getVisibleVaultItems(items).length,
+        lastFailureAt: '',
+        acknowledgedAt: ''
+      });
+      setSyncPromptShown(true);
+    } else if (!backupWasIncluded && backupIsIncluded && getLocalEnvelope()) {
+      saveSyncSafety({
+        state: 'backup-pending',
+        pending: true,
+        conflict: false,
+        sessionRequired: false,
+        message: 'Cloud backup is now available. Back up this device’s latest encrypted vault copy.',
+        itemCount: getVisibleVaultItems(items).length,
+        lastFailureAt: '',
+        acknowledgedAt: ''
+      });
+      setSyncPromptShown(false);
+    }
+    return next;
+  }
+
+  function featureIncluded(feature) {
+    return entitlements?.features?.[feature] !== false;
+  }
+
+  function showEntitlementUpgrade(feature, message = '') {
+    const labels = { documents: 'Encrypted documents', emergencyAccess: 'Emergency Access', secureDeviceUnlock: 'Secure device unlock', cloudBackupSync: 'Cloud backup and sync', users: 'Additional users' };
+    setEntitlementModal({ visible: true, feature, title: `${labels[feature] || 'This feature'} needs a plan upgrade`, message: message || `${labels[feature] || 'This feature'} is not included in the current plan or its plan limit has been reached.` });
+  }
+
+  function openSubscriptionFromEntitlement() {
+    setEntitlementModal({ visible: false, feature: '', title: '', message: '' });
+    if (locked) {
+      showMessage('Unlock your vault to review subscription options.', 'warning');
+      return;
+    }
+    openSettingsSection('subscription');
+  }
+
+  function handleEntitlementError(result, fallbackFeature = '') {
+    if (!result?.upgradeRequired && !['PLAN_FEATURE_REQUIRED', 'DOCUMENT_LIMIT_REACHED', 'STORAGE_LIMIT_REACHED', 'USER_LIMIT_REACHED'].includes(String(result?.code || ''))) return false;
+    if (result.entitlements) updateEntitlements(result.entitlements);
+    const feature = result.feature || (String(result.code || '').includes('DOCUMENT') || String(result.code || '').includes('STORAGE') ? 'documents' : fallbackFeature);
+    showEntitlementUpgrade(feature, result.message);
+    return true;
   }
 
   async function performSubscriptionAction(action, payload = {}) {
@@ -1913,6 +2060,7 @@ function App() {
       }));
       return result;
     }
+    if (result.entitlements) updateEntitlements(result.entitlements);
     applySubscriptionResult(result, { status: 'success', message: result.message });
     showMessage(result.message || 'Subscription updated.', 'success');
     return result;
@@ -2085,6 +2233,10 @@ function App() {
 
   async function retryPendingBackup() {
     closeSyncSafetyModal();
+    if (!featureIncluded('cloudBackupSync')) {
+      showEntitlementUpgrade('cloudBackupSync', 'Cloud backup and sync are not included in the current plan. Your encrypted vault remains available locally on this device.');
+      return;
+    }
     if (!customerSession.authenticated) {
       await openDeviceVerification();
       return;
@@ -2294,6 +2446,7 @@ function App() {
             storageLimitMb: Number(plan.storage_limit_mb || 0),
             documentLimit: Number(plan.document_limit || 0),
             features: Array.isArray(plan.features) ? plan.features.filter(Boolean) : [],
+            featureFlags: { ...DEFAULT_ENTITLEMENTS.features, ...(plan.feature_flags || {}), multiUser: false, sharing: false },
             isFeatured: Boolean(plan.is_featured),
             displayOrder: Number(plan.display_order || 0),
             stripeSyncStatus: plan.stripe_sync_status || '',
@@ -2341,6 +2494,7 @@ function App() {
             otpStatus: 'Device verified'
           };
           setBootstrap(next);
+          if (result.entitlements) updateEntitlements(result.entitlements);
           const cloudAccess = result.cloudAccess !== false;
           setCustomerSession({ checked: true, authenticated: true, cloudAccess, accessCode: result.accessCode || '', message: result.message || (cloudAccess ? 'This device is verified for secure backup and syncing.' : 'Cloud features are paused for this account.'), subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured) });
           setBilling((current) => ({ ...current, subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), planCode: result.subscription?.planCode || result.account?.planCode || current.planCode || 'personal' }));
@@ -2402,12 +2556,12 @@ function App() {
   }, [locked, items]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible);
+    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible);
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible]);
 
   useEffect(() => {
-    if (locked || !syncSafety.pending || syncing || syncPromptShown || syncSafetyModal.visible || deviceVerificationModal.visible) return undefined;
+    if (locked || !featureIncluded('cloudBackupSync') || !syncSafety.pending || syncing || syncPromptShown || syncSafetyModal.visible || deviceVerificationModal.visible) return undefined;
     const timer = window.setTimeout(() => {
       if (syncSafety.conflict) {
         setSyncSafetyModal({ visible: true, mode: 'conflict-reminder', title: 'Vault sync needs your attention', message: 'Different vault changes were found earlier. Nothing will be replaced until you choose what to do in Vault Safety.', details: null });
@@ -2427,7 +2581,7 @@ function App() {
 
   useEffect(() => {
     async function tryAutomaticRetry() {
-      if (locked || !syncSafety.pending || syncSafety.conflict || !customerSession.authenticated || customerSession.cloudAccess === false || syncing || syncOperationRef.current || syncRetryRef.current || !navigator.onLine) return;
+      if (locked || !featureIncluded('cloudBackupSync') || !syncSafety.pending || syncSafety.conflict || !customerSession.authenticated || customerSession.cloudAccess === false || syncing || syncOperationRef.current || syncRetryRef.current || !navigator.onLine) return;
       syncRetryRef.current = true;
       try {
         await syncEncryptedVault({ envelope: getLocalEnvelope(), nextItems: items, silent: true, retry: true, suppressFailureModal: true });
@@ -2445,12 +2599,22 @@ function App() {
   }, [locked, syncSafety.pending, syncSafety.conflict, customerSession.authenticated, customerSession.cloudAccess, syncing, items]);
 
   useEffect(() => {
+    const runCleanup = () => processPendingDocumentDeletions();
+    runCleanup();
+    window.addEventListener('online', runCleanup);
+    return () => window.removeEventListener('online', runCleanup);
+  }, [locked, customerSession.authenticated, bootstrap.tenantId, bootstrap.userId, syncSafety.pending, entitlements.features.cloudBackupSync]);
+
+  useEffect(() => {
     if (!locked) setIsCreateVaultPopupOpen(false);
   }, [locked]);
 
   async function fetchLatestCloudSnapshot(account = bootstrap) {
+    if (!featureIncluded('cloudBackupSync')) return { ok: false, code: 'PLAN_FEATURE_REQUIRED', feature: 'cloudBackupSync', upgradeRequired: true, entitlements, hasSnapshot: false, message: 'Cloud backup and sync are not included in the current plan.' };
     if (!account.tenantId || !account.userId) return { ok: false, hasSnapshot: false, message: 'Account identity is not verified on this device yet.' };
-    return fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(account.tenantId)}&userId=${encodeURIComponent(account.userId)}`).then((res) => res.json());
+    const response = await fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(account.tenantId)}&userId=${encodeURIComponent(account.userId)}`);
+    const result = await response.json().catch(() => ({ ok: false, message: 'Secure backup returned an invalid response.' }));
+    return response.ok ? result : { ...result, ok: false, httpStatus: response.status };
   }
 
   async function restoreLatestCloudVault(passwordToUse, { showSuccess = true, reason = 'manual', account = bootstrap, forceCloud = false, latestOverride = null } = {}) {
@@ -2463,6 +2627,15 @@ function App() {
     }));
     const latest = latestOverride || await fetchLatestCloudSnapshot(account);
     if (!latest?.ok) {
+      if (latest?.code === 'PLAN_FEATURE_REQUIRED') {
+        if (latest.entitlements) updateEntitlements(latest.entitlements);
+        const note = latest.message || 'Cloud backup and sync are not included in the current plan.';
+        setDeviceStatus((current) => ({ ...current, state: 'plan-feature-required', label: note, lastCloudCheckAt: checkedAt }));
+        setCustomerSession((current) => ({ ...current, cloudAccess: false, accessCode: 'PLAN_FEATURE_REQUIRED', message: note }));
+        saveSyncSafety({ state: 'plan-local-only', pending: false, conflict: false, sessionRequired: false, message: note, itemCount: getVisibleVaultItems(items).length, lastFailureAt: '', acknowledgedAt: '' });
+        if (reason !== 'unlock') showEntitlementUpgrade('cloudBackupSync', note);
+        return { restored: false, latest, planFeatureRequired: true };
+      }
       const sessionRequired = latest?.code === 'SESSION_REQUIRED' || Number(latest?.httpStatus || 0) === 401;
       const note = sessionRequired
         ? 'Verify this device to continue secure backup and syncing.'
@@ -2728,21 +2901,24 @@ function App() {
         otpStatus: 'Device verified'
       };
       setBootstrap(nextAccount);
-      setCustomerSession({ checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: result.accessCode || '', message: result.message || 'This device is verified for secure backup and syncing.' });
+      if (result.entitlements) updateEntitlements(result.entitlements);
+      const verifiedCloudAccess = result.cloudAccess !== false;
+      const verifiedMessage = result.message || (verifiedCloudAccess ? 'This device is verified for secure backup and syncing.' : 'This device is verified. The vault remains local because cloud backup is not included in the current plan.');
+      setCustomerSession({ checked: true, authenticated: true, cloudAccess: verifiedCloudAccess, accessCode: result.accessCode || '', message: verifiedMessage, entitlements: result.entitlements || entitlements });
       setOtpTest((current) => ({
         ...current,
         status: 'verified',
         verified: true,
-        message: 'Device verified. Secure backup and syncing are active.'
+        message: verifiedCloudAccess ? 'Device verified. Secure backup and syncing are active.' : 'Device verified. This plan keeps the vault on this device.'
       }));
-      setAccountStatus({ state: 'ready', message: 'Device verified. Secure backup and syncing are active.' });
+      setAccountStatus({ state: verifiedCloudAccess ? 'ready' : 'plan-local-only', message: verifiedMessage });
       if (popupFlow) setDeviceVerificationModal({ visible: false, purpose: '' });
       if (verificationPurpose === 'billing') {
         openSubscriptionSettings();
         await refreshCustomerSubscription();
       }
 
-      const shouldFinishPendingBackup = result.cloudAccess !== false && syncSafety.pending && !syncSafety.conflict && Boolean(getLocalEnvelope());
+      const shouldFinishPendingBackup = featureIncluded('cloudBackupSync') && result.cloudAccess !== false && syncSafety.pending && !syncSafety.conflict && Boolean(getLocalEnvelope());
       if (shouldFinishPendingBackup) {
         showVerifyOverlay('working', 'Finishing secure backup', 'Your device is verified. We are now backing up the latest vault changes.');
         const backupResult = await syncEncryptedVault({
@@ -2763,8 +2939,8 @@ function App() {
           showVerifyOverlay('error', 'Backup still needs attention', 'Your device was verified, but the latest backup did not complete. Follow the Vault Safety message to try again.');
         }
       } else {
-        showVerifyOverlay('success', 'Device verified', 'Secure backup and syncing are now active on this device.');
-        if (!popupFlow) showMessage('Device verified. Secure backup and syncing are active.', 'success');
+        showVerifyOverlay('success', 'Device verified', verifiedCloudAccess ? 'Secure backup and syncing are now active on this device.' : 'This device is verified. Your encrypted vault remains available locally.');
+        if (!popupFlow) showMessage(verifiedCloudAccess ? 'Device verified. Secure backup and syncing are active.' : 'Device verified. This plan keeps the vault local to this device.', 'success');
       }
     } catch (error) {
       const note = `Code did not verify. ${error.message || ''}`.trim();
@@ -2788,7 +2964,7 @@ function App() {
   }
 
   async function endCustomerSession() {
-    if (syncSafety.pending) {
+    if (featureIncluded('cloudBackupSync') && syncSafety.pending) {
       setSyncSafetyModal({ visible: true, mode: 'danger', title: 'Back up your changes before ending verification', message: 'This device has vault changes that are not safely backed up yet.', details: { action: 'end-session', warning: 'Ending verification now will prevent this device from finishing the backup until you verify it again.' } });
       return;
     }
@@ -2828,7 +3004,7 @@ function App() {
         activeAccount = accountCheck.account;
       }
 
-      const canCheckCloud = Boolean(activeAccount.tenantId && activeAccount.userId);
+      const canCheckCloud = featureIncluded('cloudBackupSync') && Boolean(activeAccount.tenantId && activeAccount.userId);
 
       let cloudCheckResult = null;
       if (canCheckCloud) {
@@ -2881,7 +3057,7 @@ function App() {
         if (cloudCheckResult?.conflict) {
           hideVerifyOverlay();
           showMessage('Vault opened from this device. Different changes were found elsewhere, so nothing was replaced.', 'warning');
-        } else if (cloudCheckResult?.localNewer) {
+        } else if (cloudCheckResult?.localNewer && featureIncluded('cloudBackupSync')) {
           const pendingSync = await syncEncryptedVault({ envelope: cloudCheckResult.localEnvelope || getLocalEnvelope(), nextItems: existing, silent: true });
           if (pendingSync?.ok) {
             showMessage('Vault opened. Your latest changes are backed up and available on your devices.', 'success');
@@ -2917,13 +3093,20 @@ function App() {
       setCreateMode(false);
       setConfirmMasterPassword('');
       setItems(starterItems);
-      saveSyncSafety({ state: 'backup-pending', pending: true, conflict: false, sessionRequired: !customerSession.authenticated, message: 'Your new vault is saved on this device and is waiting to be backed up.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' });
+      const cloudBackupAvailable = featureIncluded('cloudBackupSync');
+      saveSyncSafety(cloudBackupAvailable
+        ? { state: 'backup-pending', pending: true, conflict: false, sessionRequired: !customerSession.authenticated, message: 'Your new vault is saved on this device and is waiting to be backed up.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' }
+        : { state: 'plan-local-only', pending: false, conflict: false, sessionRequired: false, message: 'Your new encrypted vault is saved locally. Cloud backup and sync are not included in the current plan.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' });
       if (!fromBiometric) confirmSecureDevicePasswordCheck();
       setLocked(false);
       showVerifyOverlay('success', 'Vault created', 'Your encrypted vault has been created on this device.');
-      const initialBackup = await syncEncryptedVault({ envelope: newVaultEnvelope, nextItems: starterItems, silent: true });
-      if (initialBackup?.ok) showMessage('New secure vault created and backed up.', 'success');
-      else showMessage('New secure vault created on this device. Backup needs attention.', 'warning');
+      if (cloudBackupAvailable) {
+        const initialBackup = await syncEncryptedVault({ envelope: newVaultEnvelope, nextItems: starterItems, silent: true });
+        if (initialBackup?.ok) showMessage('New secure vault created and backed up.', 'success');
+        else showMessage('New secure vault created on this device. Backup needs attention.', 'warning');
+      } else {
+        showMessage('New encrypted vault created locally. Cloud backup is not included in this plan.', 'success');
+      }
       if (options.setupBiometricAfterPassword) await setupBiometricUnlockForPassword(password, { fromLoginIcon: true });
     } catch (error) {
       showVerifyOverlay('error', 'Something went wrong', 'We could not unlock your vault. Please check your master password and try again.');
@@ -2942,6 +3125,10 @@ function App() {
   }
 
   async function setupBiometricUnlockForPassword(password, options = {}) {
+    if (!featureIncluded('secureDeviceUnlock')) {
+      showEntitlementUpgrade('secureDeviceUnlock', 'Secure device unlock is not included in the current plan. Your master password will continue to open the local encrypted vault.');
+      return false;
+    }
     if (!isBiometricUnlockSupported()) {
       showMessage('Secure device unlock is not supported on this browser or device.');
       return false;
@@ -3003,10 +3190,18 @@ function App() {
   }
 
   async function enableBiometricUnlock() {
+    if (!featureIncluded('secureDeviceUnlock')) {
+      showEntitlementUpgrade('secureDeviceUnlock', 'Secure device unlock is not included in the current plan. Your master password will continue to open the local encrypted vault.');
+      return;
+    }
     await setupBiometricUnlockForPassword(masterPassword);
   }
 
   async function handleBiometricIconAction() {
+    if (!featureIncluded('secureDeviceUnlock')) {
+      showEntitlementUpgrade('secureDeviceUnlock', 'Secure device unlock is not included in the current plan. Your master password will continue to open the local encrypted vault.');
+      return;
+    }
     if (biometricUnlock) {
       await unlockWithBiometric();
       return;
@@ -3032,6 +3227,10 @@ function App() {
   }
 
   async function unlockWithBiometric() {
+    if (!featureIncluded('secureDeviceUnlock')) {
+      showEntitlementUpgrade('secureDeviceUnlock', 'Secure device unlock is not included in the current plan. Your master password will continue to open the local encrypted vault.');
+      return;
+    }
     const record = readBiometricUnlockRecord();
     if (!record) {
       showMessage('Secure device unlock has not been enabled on this device yet.');
@@ -3076,6 +3275,14 @@ function App() {
     setItems(nextItems);
     const envelope = await encryptVault(nextItems, masterPassword);
     const itemCount = getVisibleVaultItems(nextItems).length;
+
+    if (options.autoSync && !featureIncluded('cloudBackupSync')) {
+      const note = 'Your latest changes are encrypted and saved locally. Cloud backup and sync are not included in the current plan.';
+      setSyncPromptShown(true);
+      setSyncStatus((current) => ({ ...current, state: 'local-only', message: note, itemCount }));
+      saveSyncSafety({ state: 'plan-local-only', pending: false, conflict: false, sessionRequired: false, message: note, itemCount, lastFailureAt: '', acknowledgedAt: '' });
+      return { ok: true, localOnly: true, planLimited: true, code: 'PLAN_FEATURE_REQUIRED', feature: 'cloudBackupSync', envelope };
+    }
 
     if (options.autoSync && typeof navigator !== 'undefined' && navigator.onLine === false) {
       const note = 'Your latest changes are encrypted and saved on this device. They will be backed up automatically when your internet connection returns.';
@@ -3142,7 +3349,7 @@ function App() {
   }
 
   function lockVault(note = 'Vault locked.', options = {}) {
-    if (syncSafety.pending && note === 'Vault locked.' && options.force !== true) {
+    if (featureIncluded('cloudBackupSync') && syncSafety.pending && note === 'Vault locked.' && options.force !== true) {
       setSyncSafetyModal({ visible: true, mode: 'danger', title: 'Your latest changes are not backed up yet', message: 'The vault can be locked safely, but backup cannot retry until you unlock it again.', details: { action: 'lock-vault', warning: 'Your changes will remain encrypted on this device only until backup succeeds.' } });
       return;
     }
@@ -3176,21 +3383,78 @@ function App() {
     setMasterPassword('');
     setConfirmMasterPassword('');
     setMasterPasswordFieldArmed(false);
-    showMessage('The vault copy on this device was cleared. Your secure backup was not deleted.', 'success');
+    showMessage(featureIncluded('cloudBackupSync')
+      ? 'The vault copy on this device was cleared. Your secure backup was not deleted.'
+      : 'The encrypted vault copy on this device was cleared.', 'success');
   }
 
   function resetLocalVaultOnDevice() {
     setSyncSafetyModal({
       visible: true,
       mode: 'danger',
-      title: syncSafety.pending ? 'Unprotected changes may be lost' : 'Clear this device’s vault copy?',
-      message: syncSafety.pending ? 'This device has changes that have not been backed up.' : 'This removes the encrypted vault copy from this device only.',
+      title: localOnlyAtRisk ? 'Clear the only current vault copy on this device?' : syncSafety.pending ? 'Unprotected changes may be lost' : 'Clear this device’s vault copy?',
+      message: localOnlyAtRisk ? 'Cloud backup is not included in the current plan. Clearing this device can permanently remove the latest vault copy.' : syncSafety.pending ? 'This device has changes that have not been backed up.' : 'This removes the encrypted vault copy from this device only.',
       details: { action: 'clear-local', warning: syncSafety.pending ? 'Continuing will permanently remove the changes that exist only on this device.' : 'You will need to verify this device and enter the master password to use the vault here again.' }
     });
   }
 
   function emptyForm(categoryToKeep = form.category) {
     return { title: '', category: categoryToKeep || 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '' };
+  }
+
+  function storedDocumentDeletionEntry(item) {
+    const file = item?.payload?.file;
+    const documentId = file?.externalDocumentId || (file?.storedExternally ? item?.id : '');
+    if (!documentId || !bootstrap.tenantId || !bootstrap.userId) return null;
+    return { documentId, tenantId: bootstrap.tenantId, userId: bootstrap.userId };
+  }
+
+  async function removeStoredDocumentBlob(entry, { silent = false } = {}) {
+    if (!entry?.documentId || !entry?.tenantId || !entry?.userId) return { ok: false, message: 'Document cleanup details are incomplete.' };
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return { ok: false, offline: true, message: 'Document cleanup is waiting for an internet connection.' };
+    try {
+      const response = await fetch(`/.netlify/functions/document-blob?documentId=${encodeURIComponent(entry.documentId)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin'
+      });
+      const result = await response.json().catch(() => ({ ok: false, message: 'Document cleanup returned an invalid response.' }));
+      if (!response.ok || !result.ok) return { ...result, ok: false, httpStatus: response.status };
+      removePendingDocumentDeletion(entry);
+      if (result.entitlements) updateEntitlements(result.entitlements);
+      if (!silent) showMessage('Encrypted document storage removed.', 'success');
+      return result;
+    } catch (error) {
+      return { ok: false, offline: typeof navigator !== 'undefined' && navigator.onLine === false, message: error.message || 'Document cleanup could not complete.' };
+    }
+  }
+
+  async function cleanupStoredDocumentAfterVaultSave(item, syncResult, { silent = false } = {}) {
+    const entry = storedDocumentDeletionEntry(item);
+    if (!entry) return { ok: true, skipped: true };
+    const cloudFeatureIncluded = featureIncluded('cloudBackupSync');
+    const cloudCopySafe = !cloudFeatureIncluded || Boolean(syncResult?.ok && !syncResult?.offline && !syncResult?.localOnly);
+    if (!customerSession.authenticated || typeof navigator === 'undefined' || navigator.onLine === false || !cloudCopySafe) {
+      queuePendingDocumentDeletion(entry);
+      if (!silent) showMessage('Document deleted on this device. Encrypted storage cleanup will finish when the latest vault copy is safely backed up.', 'warning');
+      return { ok: true, queued: true };
+    }
+    const removed = await removeStoredDocumentBlob(entry, { silent: true });
+    if (!removed.ok) {
+      queuePendingDocumentDeletion(entry);
+      if (!silent) showMessage('Document deleted on this device. Encrypted storage cleanup will retry automatically.', 'warning');
+      return { ok: true, queued: true, cleanupError: removed.message || '' };
+    }
+    return removed;
+  }
+
+  async function processPendingDocumentDeletions() {
+    if (locked || !customerSession.authenticated || typeof navigator === 'undefined' || navigator.onLine === false) return;
+    if (featureIncluded('cloudBackupSync') && syncSafety.pending) return;
+    const accountEntries = readPendingDocumentDeletions().filter((entry) => entry.tenantId === bootstrap.tenantId && entry.userId === bootstrap.userId);
+    for (const entry of accountEntries) {
+      const result = await removeStoredDocumentBlob(entry, { silent: true });
+      if (!result.ok) break;
+    }
   }
 
   async function uploadEncryptedDocumentBlob(fileInfo, documentId) {
@@ -3213,8 +3477,10 @@ function App() {
       clientUpdatedAt: new Date().toISOString()
     });
     if (!result.ok) {
+      if (handleEntitlementError(result, 'documents')) { const error = new Error(result.message || 'Your document plan limit has been reached.'); error.entitlementHandled = true; throw error; }
       throw new Error(result.message || 'Document file could not be stored separately.');
     }
+    if (result.entitlements) updateEntitlements(result.entitlements);
     return {
       name: fileInfo.name,
       type: fileInfo.type || 'application/octet-stream',
@@ -3269,6 +3535,22 @@ function App() {
     try {
       const isDocument = form.category === DOCUMENTS_CATEGORY;
       const isCard = form.category === CARDS_CATEGORY;
+      if (isDocument && !featureIncluded('documents')) {
+        showEntitlementUpgrade('documents', 'Encrypted document storage is not included in the current plan. Passwords and other local vault items remain available.');
+        return;
+      }
+      if (isDocument && !editingItemId && Number(entitlements?.limits?.documentLimit || 0) > 0 && Number(entitlements?.usage?.documents || 0) >= Number(entitlements.limits.documentLimit)) {
+        showEntitlementUpgrade('documents', `This plan includes ${entitlements.limits.documentLimit} encrypted document${Number(entitlements.limits.documentLimit) === 1 ? '' : 's'}. Upgrade or ask Admin for an override to store another document.`);
+        return;
+      }
+      if (isDocument && !editingItemId && form.file?.dataUrl && Number(entitlements?.limits?.storageLimitMb || 0) > 0) {
+        const estimatedEncryptedBytes = new TextEncoder().encode(String(form.file.dataUrl || '')).length + 16;
+        const projectedStorage = Number(entitlements?.usage?.storageBytes || 0) + estimatedEncryptedBytes;
+        if (projectedStorage > Number(entitlements.limits.storageLimitMb) * 1024 * 1024) {
+          showEntitlementUpgrade('documents', `This upload would exceed the ${entitlements.limits.storageLimitMb} MB encrypted document storage allowance.`);
+          return;
+        }
+      }
       if (isCard) {
         const cardDigits = onlyDigits(form.cardNumber);
         if (!form.cardName.trim()) {
@@ -3330,14 +3612,16 @@ function App() {
 
       if (editingItemId) {
         const itemIdBeingEdited = editingItemId;
-        const exists = items.some((item) => item.id === itemIdBeingEdited);
-        if (!exists) {
+        const previousItem = items.find((item) => item.id === itemIdBeingEdited);
+        if (!previousItem) {
           setEditingItemId('');
           showMessage('That item is no longer available to edit. Nothing was changed.');
           return;
         }
         const next = items.map((item) => item.id === itemIdBeingEdited ? { ...item, ...itemPayload } : item);
         const syncResult = await saveItems(next, { autoSync: true, silentAutoSync: true, suppressSyncWarning: true });
+        const removedExternalDocument = previousItem.category === DOCUMENTS_CATEGORY && form.category !== DOCUMENTS_CATEGORY && previousItem.payload?.file?.storedExternally;
+        const cleanupResult = removedExternalDocument ? await cleanupStoredDocumentAfterVaultSave(previousItem, syncResult, { silent: true }) : null;
         const editedCategory = form.category;
         setEditingItemId('');
         setForm(emptyForm(editedCategory));
@@ -3347,6 +3631,8 @@ function App() {
         setViewItemId(itemIdBeingEdited);
         if (syncResult?.offline) {
           // The one-time offline popup or compact offline toast already confirms the local save.
+        } else if (cleanupResult?.queued) {
+          showMessage('Item updated. Encrypted document cleanup will finish automatically when the latest vault copy is protected.', 'warning');
         } else if (syncResult?.ok) {
           showMessage('Item updated.', 'success');
         } else {
@@ -3372,7 +3658,7 @@ function App() {
         showMessage('Item saved.', 'success');
       }
     } catch (error) {
-      showMessage(error.message || 'Item could not be saved. Please try again.', 'error');
+      if (!error.entitlementHandled) showMessage(error.message || 'Item could not be saved. Please try again.', 'error');
     } finally {
       setIsSavingItem(false);
     }
@@ -3430,13 +3716,19 @@ function App() {
 
   async function deleteItem(id) {
     if (viewItemId === id) setViewItemId('');
+    const itemToDelete = items.find((item) => item.id === id) || null;
     const syncResult = await saveItems(items.filter((item) => item.id !== id), { autoSync: true, silentAutoSync: true });
+    const cleanupResult = itemToDelete?.payload?.file?.storedExternally
+      ? await cleanupStoredDocumentAfterVaultSave(itemToDelete, syncResult, { silent: true })
+      : null;
     if (!bootstrap.tenantId || !bootstrap.userId) {
-      showMessage('Item deleted on this device. Save your account details to enable cloud backup.', 'warning');
+      showMessage('Item deleted on this device. Save your account details to enable protected cloud services.', 'warning');
     } else if (syncResult?.offline) {
-      // The offline save confirmation already covers this local change.
+      // The offline save confirmation already covers this local change; document cleanup is queued when needed.
+    } else if (cleanupResult?.queued) {
+      showMessage('Item deleted. Encrypted document storage cleanup will finish automatically after the latest vault copy is protected.', 'warning');
     } else if (syncResult?.ok) {
-      showMessage('Item deleted.', 'success');
+      showMessage(itemToDelete?.payload?.file?.storedExternally ? 'Item and encrypted document storage deleted.' : 'Item deleted.', 'success');
     }
   }
 
@@ -3509,6 +3801,12 @@ function App() {
   }
 
   async function loadSnapshotHistory(shouldShowMessage = true) {
+    if (!featureIncluded('cloudBackupSync')) {
+      const note = 'Recovery points are not included in the current plan because cloud backup and sync are unavailable.';
+      setSnapshotHistory((current) => ({ ...current, loaded: true, loading: false, message: note }));
+      if (shouldShowMessage) showEntitlementUpgrade('cloudBackupSync', note);
+      return null;
+    }
     if (!bootstrap.tenantId || !bootstrap.userId) {
       const note = 'Save your account details first so backup history can be loaded.';
       setSnapshotHistory((current) => ({ ...current, loaded: true, loading: false, message: note }));
@@ -3539,6 +3837,12 @@ function App() {
   }
 
   async function syncEncryptedVault(options = {}) {
+    if (!featureIncluded('cloudBackupSync')) {
+      const note = 'Cloud backup and sync are not included in the current plan. Your encrypted local vault remains available.';
+      saveSyncSafety({ state: 'plan-local-only', pending: false, conflict: false, sessionRequired: false, message: note, itemCount: getVisibleVaultItems(options.nextItems || items).length, lastFailureAt: '', acknowledgedAt: '' });
+      if (!options.silent) showEntitlementUpgrade('cloudBackupSync', note);
+      return { ok: false, localOnly: true, planLimited: true, code: 'PLAN_FEATURE_REQUIRED', feature: 'cloudBackupSync', upgradeRequired: true, message: note };
+    }
     const effectiveItems = options.nextItems || items;
     const envelope = options.envelope || getLocalEnvelope();
     const silent = Boolean(options.silent);
@@ -3581,6 +3885,12 @@ function App() {
         explicitConflictChoice: Boolean(options.explicitConflictChoice)
       });
       if (!result.ok) {
+        if (handleEntitlementError(result, 'cloudBackupSync')) {
+          const note = result.message || 'Cloud backup and sync are not included in the current plan.';
+          saveSyncSafety({ state: 'plan-local-only', pending: false, conflict: false, sessionRequired: false, message: note, itemCount, lastFailureAt: '', acknowledgedAt: '' });
+          setCustomerSession((current) => ({ ...current, checked: true, authenticated: true, cloudAccess: false, accessCode: result.code || 'PLAN_FEATURE_REQUIRED', message: note, entitlements: result.entitlements || current.entitlements }));
+          return { ...result, planLimited: true };
+        }
         const conflictBlocked = result.code === 'VAULT_CONFLICT' || Number(result.httpStatus || 0) === 409;
         if (conflictBlocked) {
           const latest = await fetchLatestCloudSnapshot(activeAccount);
@@ -3660,6 +3970,10 @@ function App() {
   }
 
   async function restoreCloudToThisDevice(confirmed = false) {
+    if (!featureIncluded('cloudBackupSync')) {
+      showEntitlementUpgrade('cloudBackupSync', 'Checking other devices and recovery copies requires cloud backup and sync. Your encrypted local vault remains available.');
+      return;
+    }
     if (!masterPassword) return showMessage('Unlock the vault first, then check for the latest secure copy.', 'warning');
     if (syncSafety.pending && !confirmed) {
       setSyncSafetyModal({
@@ -3682,6 +3996,10 @@ function App() {
 
   async function refreshVaultAndBackup() {
     if (syncing || syncOperationRef.current) return;
+    if (!featureIncluded('cloudBackupSync')) {
+      showEntitlementUpgrade('cloudBackupSync', 'Refreshing across devices and backing up changes requires cloud backup and sync. Your encrypted local vault remains available.');
+      return;
+    }
     if (!navigator.onLine) {
       setSyncSafetyModal({
         visible: true,
@@ -4006,7 +4324,8 @@ function App() {
         onboardingStatus: 'complete'
       };
       setBootstrap(nextAccount);
-      setCustomerSession({ checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: result.accessCode || '', message: result.message || 'This device is verified.' });
+      if (result.entitlements) updateEntitlements(result.entitlements);
+      setCustomerSession({ checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: result.accessCode || '', message: result.message || 'This device is verified.', entitlements: result.entitlements || entitlements });
       setLandingSignup((current) => ({
         ...current,
         status: 'complete',
@@ -4105,8 +4424,15 @@ function App() {
   }
 
 
+  function ensureEmergencyAccessEntitled() {
+    if (featureIncluded('emergencyAccess')) return true;
+    showEntitlementUpgrade('emergencyAccess', 'Emergency Access is not included in the current plan. Upgrade or ask Admin for an override to configure a trusted contact.');
+    return false;
+  }
+
   async function saveEmergencyAccessPlan(event) {
     event.preventDefault();
+    if (!ensureEmergencyAccessEntitled()) return;
     const cleanPlan = {
       ...emergencyDraft,
       contactName: String(emergencyDraft.contactName || '').trim(),
@@ -4145,6 +4471,7 @@ function App() {
 
 
   async function saveEmergencyReleasePackageForPlan(planToSave = emergencyDraft, currentItems = items) {
+    if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
     const inviteUrl = planToSave.invitationUrl || '';
     const inviteToken = tokenFromInviteUrl(inviteUrl);
     if (!planToSave.invitationId || !inviteToken) return { ok: false, skipped: true, message: 'Invite link is not ready yet.' };
@@ -4171,6 +4498,7 @@ function App() {
 
 
   async function sendEmergencyAccessInvite() {
+    if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
     const cleanPlan = {
       ...emergencyDraft,
       contactName: String(emergencyDraft.contactName || '').trim(),
@@ -4243,6 +4571,7 @@ function App() {
   }
 
   async function checkEmergencyInvitationStatus() {
+    if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
     if (!emergencyDraft.invitationId) return showMessage('Send an invitation first.', 'warning');
     setEmergencyInviteState({ status: 'checking', message: 'Checking invitation status...' });
     try {
@@ -4283,6 +4612,7 @@ function App() {
 
 
   async function cancelEmergencyInvitation() {
+    if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
     const savedPlan = {
       ...emergencyDraft,
       invitationStatus: 'cancelled',
@@ -4306,6 +4636,7 @@ function App() {
 
 
   async function resendEmergencyAccessInvite() {
+    if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
     if (!emergencyDraft.invitationId) return showMessage('Send an invitation first.', 'warning');
     setEmergencyInviteState({ status: 'resending', message: 'Resending invitation...' });
     try {
@@ -4336,6 +4667,7 @@ function App() {
   }
 
   async function resetEmergencyAccessInvite() {
+    if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
     if (!emergencyDraft.invitationId) return showMessage('There is no invite to reset.', 'warning');
     setEmergencyInviteState({ status: 'resetting', message: 'Resetting invitation...' });
     try {
@@ -4392,6 +4724,7 @@ function App() {
   }
 
   async function resendEmergencyRequestLink() {
+    if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
     if (!emergencyDraft.invitationId) return showMessage('Send an invitation first.', 'warning');
     if (emergencyDraft.invitationStatus !== 'accepted') return showMessage('The trusted person must accept the invitation before you can resend the Request Access link.', 'warning');
     setEmergencyInviteState({ status: 'resending-request-link', message: 'Resending Request Access link...' });
@@ -4423,6 +4756,7 @@ function App() {
   }
 
   async function cancelEmergencyAccessRequest() {
+    if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
     if (!emergencyDraft.requestId) return showMessage('There is no emergency request to cancel.', 'warning');
     setEmergencyInviteState({ status: 'cancelling-request', message: 'Cancelling emergency request...' });
     try {
@@ -4818,9 +5152,9 @@ function App() {
               <button type="button" className="secondary-button landing-secondary-cta" onClick={openVaultApp}><Unlock size={18} /> Open My Vault</button>
             </div>
             <div className="landing-trust-strip" aria-label="Security highlights">
-              <span><ShieldCheck size={16} /> Encrypted before backup</span>
-              <span><Cloud size={16} /> Protected cross-device syncing</span>
-              <span><UsersRound size={16} /> Emergency Access included</span>
+              <span><ShieldCheck size={16} /> Encrypted on your device</span>
+              <span><Lock size={16} /> Master password stays private</span>
+              <span><Database size={16} /> Local encrypted vault access</span>
             </div>
           </div>
 
@@ -4848,24 +5182,31 @@ function App() {
           <div className="landing-section-heading landing-pricing-heading">
             <p className="eyebrow">Choose your plan</p>
             <h2>Start with the vault size that suits you.</h2>
-            <p>Every published plan includes encrypted vault storage, secure syncing, device verification and Emergency Access. Your free trial starts after email verification.</p>
+            <p>Review the included features and limits below. Your free trial starts after email verification.</p>
           </div>
           <div className="landing-plan-tier-grid">
             {publicPlans.map((plan, planIndex) => {
-              const isMostPopular = planIndex === Math.floor(publicPlans.length / 2);
-              const documentFeature = plan.documentLimit > 0
-                ? `${plan.documentLimit} encrypted document${plan.documentLimit === 1 ? '' : 's'}`
-                : 'Encrypted documents included';
-              const baseFeatures = plan.features?.length ? plan.features : [
+              const isMostPopular = publicPlans.length >= 3 && planIndex === Math.floor(publicPlans.length / 2);
+              const flags = { ...DEFAULT_ENTITLEMENTS.features, ...(plan.featureFlags || {}), multiUser: false, sharing: false };
+              const enforcedFeatures = [
                 'Encrypted password vault',
-                'Secure cloud backup and syncing',
-                'Emergency Access',
-                plan.storageLimitMb ? `${plan.storageLimitMb} MB encrypted storage` : 'Encrypted storage included'
-              ];
-              const featureList = [
-                ...baseFeatures.filter((feature) => !/document/i.test(String(feature))),
-                documentFeature
-              ].slice(0, 6);
+                flags.documents !== false ? (plan.documentLimit > 0 ? `${plan.documentLimit} encrypted document${plan.documentLimit === 1 ? '' : 's'}` : 'Encrypted documents included') : '',
+                flags.documents !== false && plan.storageLimitMb > 0 ? `${plan.storageLimitMb} MB encrypted document storage` : '',
+                flags.cloudBackupSync !== false ? 'Secure cloud backup and syncing' : '',
+                flags.emergencyAccess !== false ? 'Emergency Access' : '',
+                flags.secureDeviceUnlock !== false ? 'Secure device unlock' : ''
+              ].filter(Boolean);
+              const marketingFeatures = (plan.features || []).filter((feature) => {
+                const text = String(feature || '');
+                if (!text) return false;
+                if (flags.documents === false && /document|file|storage/i.test(text)) return false;
+                if (flags.cloudBackupSync === false && /backup|sync|cloud/i.test(text)) return false;
+                if (flags.emergencyAccess === false && /emergency/i.test(text)) return false;
+                if (flags.secureDeviceUnlock === false && /secure device|biometric|passkey/i.test(text)) return false;
+                if (/household|family sharing|team user|multi.?user|sharing controls/i.test(text)) return false;
+                return true;
+              });
+              const featureList = [...new Set([...marketingFeatures, ...enforcedFeatures])].slice(0, 7);
               return (
                 <article key={plan.code} className={`landing-plan-tier ${isMostPopular ? 'featured' : ''}`}>
                   {isMostPopular && <span className="landing-plan-badge">Most popular</span>}
@@ -4890,10 +5231,10 @@ function App() {
             <p>Keep the details you need every day organised, searchable and protected without turning your vault into a complicated filing system.</p>
           </div>
           <div className="landing-feature-grid">
-            <article><ShieldCheck size={24} /><h3>Encrypted before storage</h3><p>Your vault is encrypted on your device before it is backed up or synced.</p></article>
-            <article><FileText size={24} /><h3>Documents included</h3><p>Keep important PDFs, Word files, spreadsheets and text records alongside your vault items.</p></article>
+            <article><ShieldCheck size={24} /><h3>Encrypted on your device</h3><p>Your readable vault contents and master password are not sent to the server.</p></article>
+            <article><KeyRound size={24} /><h3>More than passwords</h3><p>Organise logins, cards, secure notes and checklists inside one encrypted vault.</p></article>
             <article><Search size={24} /><h3>Find things quickly</h3><p>Search folders, favourites and saved records without scrolling through everything.</p></article>
-            <article><MonitorSmartphone size={24} /><h3>Use it across devices</h3><p>Open your vault from verified phones, laptops and desktops with protected syncing.</p></article>
+            <article><Database size={24} /><h3>Local encrypted access</h3><p>Your encrypted local vault remains available on the device where it was created.</p></article>
           </div>
         </section>
 
@@ -5069,6 +5410,7 @@ function App() {
           </div>
         )}
 
+      <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
@@ -5090,10 +5432,10 @@ function App() {
               <div className="unlock-form" role="form" onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); unlockVault(event); } }} autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other">
                 <label htmlFor="master-password-input">Master vault password</label>
                 <div className="unlock-password-and-biometric-row">
-                  <div className={`unlock-password-field ${hasLocalVault && !createMode && biometricStatus.supported ? 'has-secure-device-key' : ''}`}>
+                  <div className={`unlock-password-field ${hasLocalVault && !createMode && biometricStatus.supported && featureIncluded('secureDeviceUnlock') ? 'has-secure-device-key' : ''}`}>
                     <input ref={masterPasswordInputRef} id="master-password-input" name="vault-local-decryption-key" type={showUnlockPassword ? 'text' : 'password'} autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!masterPasswordFieldArmed} onPointerDown={armMasterPasswordField} onFocus={armMasterPasswordField} value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter Password" />
                     <button type="button" className="unlock-password-toggle" onClick={() => setShowUnlockPassword((current) => !current)} aria-label={showUnlockPassword ? 'Hide master password' : 'Show master password'} title={showUnlockPassword ? 'Hide password' : 'Show password'}>{showUnlockPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-                    {hasLocalVault && !createMode && biometricStatus.supported && (
+                    {hasLocalVault && !createMode && biometricStatus.supported && featureIncluded('secureDeviceUnlock') && (
                       <button type="button" className={`unlock-biometric-icon-button ${biometricUnlock ? 'enabled' : 'setup'}`} onClick={handleBiometricIconAction} disabled={biometricStatus.state === 'setting-up'} aria-label={biometricUnlock ? 'Open with secure device unlock' : 'Set up secure device unlock'} title={biometricUnlock ? 'Open with secure device unlock' : 'Enter password, then tap the key to set up secure device unlock'}>
                         <KeyRound size={23} strokeWidth={1.25} />
                       </button>
@@ -5186,7 +5528,8 @@ function App() {
           </div>
         )}
         <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={focusMasterPassword} />
-        <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
+        <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
+      <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
         <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
@@ -5233,37 +5576,44 @@ function App() {
       ? 'The emergency access request has been cancelled. No vault contents were released.'
       : emergencyDraft.requestMessage || '';
 
+  const cloudBackupIncluded = featureIncluded('cloudBackupSync');
   const vaultSafetyLabel = !isOnline
     ? 'Offline'
-    : syncing || syncSafety.state === 'backing-up'
-      ? 'Saving...'
-      : syncSafety.conflict
-        ? 'Review vault'
-        : syncSafety.pending
-          ? 'Backup pending'
-          : syncSafety.state === 'unknown'
-            ? 'Not checked'
-            : 'Up to date';
+    : !cloudBackupIncluded
+      ? 'Local only'
+      : syncing || syncSafety.state === 'backing-up'
+        ? 'Saving...'
+        : syncSafety.conflict
+          ? 'Review vault'
+          : syncSafety.pending
+            ? 'Backup pending'
+            : syncSafety.state === 'unknown'
+              ? 'Not checked'
+              : 'Up to date';
   const vaultSafetyClass = !isOnline
     ? 'offline'
-    : syncing || syncSafety.state === 'backing-up'
-      ? 'syncing'
-      : syncSafety.conflict
-        ? 'conflict'
-        : syncSafety.pending
-          ? 'pending'
-          : syncSafety.state === 'unknown'
-            ? 'unknown'
-            : 'safe';
+    : !cloudBackupIncluded
+      ? 'plan-local-only'
+      : syncing || syncSafety.state === 'backing-up'
+        ? 'syncing'
+        : syncSafety.conflict
+          ? 'conflict'
+          : syncSafety.pending
+            ? 'pending'
+            : syncSafety.state === 'unknown'
+              ? 'unknown'
+              : 'safe';
   const vaultSafetyIcon = !isOnline
     ? <Cloud size={19} />
-    : syncing || syncSafety.state === 'backing-up'
-      ? <RefreshCw size={19} className="sync-button-spinner" />
-      : syncSafety.conflict || syncSafety.pending
-        ? <AlertTriangle size={19} />
-        : syncSafety.state === 'unknown'
-          ? <Cloud size={19} />
-          : <ShieldCheck size={19} />;
+    : !cloudBackupIncluded
+      ? <Database size={19} />
+      : syncing || syncSafety.state === 'backing-up'
+        ? <RefreshCw size={19} className="sync-button-spinner" />
+        : syncSafety.conflict || syncSafety.pending
+          ? <AlertTriangle size={19} />
+          : syncSafety.state === 'unknown'
+            ? <Cloud size={19} />
+            : <ShieldCheck size={19} />;
 
   return (
     <main className="app-shell">
@@ -5297,7 +5647,7 @@ function App() {
 
       {!isOnline && <NetworkStatusNotice context="vault" hasLocalVault />}
 
-      {syncSafety.pending && (
+      {cloudBackupIncluded && syncSafety.pending && (
         <section className={`sync-warning-banner ${syncSafety.conflict ? 'conflict' : syncSafety.sessionRequired ? 'verification' : 'pending'}`} role="alert">
           <div>{syncSafety.conflict ? <AlertTriangle size={21} /> : <Cloud size={21} />}<span><strong>{syncSafety.conflict ? 'Different vault changes need review' : syncSafety.sessionRequired ? 'Verify this device to finish backup' : 'Your latest changes are saved on this device only'}</strong><small>{syncSafety.message || 'Open Vault Safety to protect the latest changes.'}</small></span></div>
           <button type="button" className="secondary-button" onClick={() => {
@@ -5551,7 +5901,7 @@ function App() {
                   <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('safety')}>
                     <span className="settings-directory-icon"><ShieldCheck size={22} /></span>
                     <span className="settings-directory-copy"><strong>Vault Safety</strong><small>Backup, syncing, device protection and recovery.</small></span>
-                    <span className={`settings-directory-state ${syncSafety.conflict || syncSafety.pending ? 'attention' : 'safe'}`}>{syncSafety.conflict ? 'Review' : syncSafety.pending ? 'Action needed' : syncSafety.state === 'unknown' ? 'Check' : 'Up to date'}</span>
+                    <span className={`settings-directory-state ${!featureIncluded('cloudBackupSync') ? '' : syncSafety.conflict || syncSafety.pending ? 'attention' : 'safe'}`}>{!featureIncluded('cloudBackupSync') ? 'Local only' : syncSafety.conflict ? 'Review' : syncSafety.pending ? 'Action needed' : syncSafety.state === 'unknown' ? 'Check' : 'Up to date'}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
                 </section>
@@ -5639,11 +5989,12 @@ function App() {
                 </div>
               </form>
 
-              <section className={`biometric-settings-card settings-inner-card ${biometricUnlock ? 'enabled' : ''}`}>
+              {!featureIncluded('secureDeviceUnlock') && <div className="plan-feature-unavailable"><KeyRound size={21} /><span><strong>Secure device unlock is not included</strong><small>Your master password still opens the encrypted vault normally. Upgrade or ask Admin for an entitlement override to enable quick unlock on this device.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('secureDeviceUnlock')}>Review plan</button></div>}
+              <section className={`biometric-settings-card settings-inner-card ${biometricUnlock ? 'enabled' : ''} ${!featureIncluded('secureDeviceUnlock') ? 'feature-disabled' : ''}`}>
                 <div className="vault-security-info-heading"><KeyRound size={19} /><strong>Secure device unlock on this device</strong></div>
-                <p>{biometricStatus.supported ? 'Use the secure key icon beside the password field on the login screen. Your phone or browser may offer a PIN, fingerprint, face unlock, passkey or device lock. Enter your password once and tap the key icon to set this device up; after that, the icon can open your local vault quickly on this device.' : 'This browser or device does not support secure device unlock for this PWA.'}</p>
+                <p>{!featureIncluded('secureDeviceUnlock') ? 'Quick unlock is unavailable on the current plan. The master password remains the secure way to open this device’s local encrypted vault.' : biometricStatus.supported ? 'Use the secure key icon beside the password field on the login screen. Your phone or browser may offer a PIN, fingerprint, face unlock, passkey or device lock. Enter your password once and tap the key icon to set this device up; after that, the icon can open your local vault quickly on this device.' : 'This browser or device does not support secure device unlock for this PWA.'}</p>
                 <div className="biometric-status-grid">
-                  <span><strong>Status</strong>{biometricUnlock ? 'Enabled on this device' : (biometricStatus.supported ? 'Set up from login icon' : 'Not available')}</span>
+                  <span><strong>Status</strong>{!featureIncluded('secureDeviceUnlock') ? 'Not included in current plan' : biometricUnlock ? 'Enabled on this device' : (biometricStatus.supported ? 'Set up from login icon' : 'Not available')}</span>
                   <span><strong>Device method</strong>{biometricStatus.label}</span>
                   <span><strong>Scope</strong>This device only</span>
                   <span><strong>Password check</strong>Required every 14 days or 10 quick unlocks</span>
@@ -5774,6 +6125,8 @@ function App() {
                 <p>Nominate someone you trust so the right person is recorded if emergency access is enabled later.</p>
               </div>
 
+              {!featureIncluded('emergencyAccess') && <div className="plan-feature-unavailable"><UsersRound size={21} /><span><strong>Emergency Access is not included</strong><small>Your existing encrypted vault items remain available. Upgrade or ask Admin for an entitlement override to configure and manage a trusted person.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('emergencyAccess')}>Review plan</button></div>}
+
               <div className="emergency-access-intro-card">
                 <ShieldCheck size={22} />
                 <div>
@@ -5782,7 +6135,7 @@ function App() {
                 </div>
               </div>
 
-              <form className="emergency-access-form" onSubmit={saveEmergencyAccessPlan}>
+              <form className={`emergency-access-form ${!featureIncluded('emergencyAccess') ? 'feature-disabled' : ''}`} aria-disabled={!featureIncluded('emergencyAccess')} onSubmit={saveEmergencyAccessPlan}>
                 <div className="bootstrap-grid emergency-access-grid">
                   <label>Trusted person name<input value={emergencyDraft.contactName} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactName: e.target.value })} placeholder="Full name" /></label>
                   <label>Relationship<input value={emergencyDraft.relationship} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, relationship: e.target.value })} placeholder="Spouse, child, sibling, solicitor..." /></label>
@@ -5908,7 +6261,7 @@ function App() {
                 </div>
                 {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last updated: {new Date(emergencyDraft.updatedAt).toLocaleString()}</p>}
                 <div className="button-stack emergency-access-actions">
-                  <button type="submit" className="primary-button emergency-save-button" disabled={emergencySaveState === 'saving'}>{emergencySaveState === 'saving' ? <RefreshCw size={17} className="spin-icon" /> : <UsersRound size={17} />} {emergencySaveState === 'saving' ? 'Saving...' : 'Save plan'}</button>
+                  <button type="submit" className="primary-button emergency-save-button" disabled={emergencySaveState === 'saving' || !featureIncluded('emergencyAccess')}>{emergencySaveState === 'saving' ? <RefreshCw size={17} className="spin-icon" /> : <UsersRound size={17} />} {emergencySaveState === 'saving' ? 'Saving...' : 'Save plan'}</button>
                 </div>
               </form>
             </section>
@@ -5922,21 +6275,23 @@ function App() {
                 <p>See at a glance whether your latest vault changes are safely backed up and available on your devices.</p>
               </div>
 
-              <div className={`vault-safety-status-card ${syncSafety.conflict ? 'conflict' : syncSafety.pending ? 'pending' : syncSafety.state === 'unknown' ? 'unknown' : 'safe'}`}>
-                <div className="vault-safety-status-icon">{syncSafety.conflict || syncSafety.pending ? <AlertTriangle size={27} /> : <ShieldCheck size={27} />}</div>
+              {!featureIncluded('cloudBackupSync') && <div className="plan-feature-unavailable"><Cloud size={21} /><span><strong>Cloud backup and sync are not included</strong><small>Your encrypted vault remains available on this device. Cross-device refresh, cloud recovery points and automatic backup require an upgrade or Admin override.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('cloudBackupSync')}>Review plan</button></div>}
+
+              <div className={`vault-safety-status-card ${!featureIncluded('cloudBackupSync') ? 'plan-local-only' : syncSafety.conflict ? 'conflict' : syncSafety.pending ? 'pending' : syncSafety.state === 'unknown' ? 'unknown' : 'safe'}`}>
+                <div className="vault-safety-status-icon">{!featureIncluded('cloudBackupSync') ? <Database size={27} /> : syncSafety.conflict || syncSafety.pending ? <AlertTriangle size={27} /> : <ShieldCheck size={27} />}</div>
                 <div>
-                  <strong>{syncSafety.conflict ? 'Different vault changes need review' : syncSafety.pending ? 'Changes are waiting to be backed up' : syncSafety.state === 'unknown' ? 'Vault safety has not been checked yet' : 'Your vault is up to date'}</strong>
-                  <span>{syncSafety.message || (syncSafety.pending ? 'Your latest changes are currently stored on this device only.' : syncSafety.state === 'unknown' ? 'Use Check and back up now to confirm this device is protected.' : 'Your latest changes are protected and available on your verified devices.')}</span>
-                  <small>{syncSafety.lastSuccessAt ? `Last successful backup: ${new Date(syncSafety.lastSuccessAt).toLocaleString()}` : 'No successful backup recorded on this device yet.'}{syncSafety.itemCount ? ` · ${syncSafety.itemCount} item(s)` : ''}</small>
+                  <strong>{!featureIncluded('cloudBackupSync') ? 'Your vault is stored locally on this device' : syncSafety.conflict ? 'Different vault changes need review' : syncSafety.pending ? 'Changes are waiting to be backed up' : syncSafety.state === 'unknown' ? 'Vault safety has not been checked yet' : 'Your vault is up to date'}</strong>
+                  <span>{!featureIncluded('cloudBackupSync') ? 'Local saves continue to be encrypted. They are not backed up or available on another device under the current plan.' : syncSafety.message || (syncSafety.pending ? 'Your latest changes are currently stored on this device only.' : syncSafety.state === 'unknown' ? 'Use Check and back up now to confirm this device is protected.' : 'Your latest changes are protected and available on your verified devices.')}</span>
+                  <small>{featureIncluded('cloudBackupSync') ? `${syncSafety.lastSuccessAt ? `Last successful backup: ${new Date(syncSafety.lastSuccessAt).toLocaleString()}` : 'No successful backup recorded on this device yet.'}${syncSafety.itemCount ? ` · ${syncSafety.itemCount} item(s)` : ''}` : `${getVisibleVaultItems(items).length} vault item(s) stored in this device’s encrypted local copy`}</small>
                 </div>
               </div>
 
               <div className="vault-safety-action-grid">
-                <button type="button" className="settings-tool-card primary-safety-action" disabled={syncing || syncSafety.conflict} onClick={retryPendingBackup}><Cloud size={20} /><strong>{syncing ? 'Protecting changes...' : syncSafety.pending ? 'Back up changes now' : 'Check and back up now'}</strong><span>Securely protect the latest vault copy from this device.</span></button>
-                <button type="button" className="settings-tool-card" onClick={restoreCloudToThisDevice} disabled={syncing}><RefreshCw size={20} /><strong>Check for changes from another device</strong><span>Nothing is replaced if different changes are found.</span></button>
+                <button type="button" className="settings-tool-card primary-safety-action" disabled={syncing || (featureIncluded('cloudBackupSync') && syncSafety.conflict)} onClick={retryPendingBackup}><Cloud size={20} /><strong>{!featureIncluded('cloudBackupSync') ? 'Cloud backup unavailable' : syncing ? 'Protecting changes...' : syncSafety.pending ? 'Back up changes now' : 'Check and back up now'}</strong><span>{featureIncluded('cloudBackupSync') ? 'Securely protect the latest vault copy from this device.' : 'Review your plan to make this vault available on verified devices.'}</span></button>
+                <button type="button" className="settings-tool-card" onClick={restoreCloudToThisDevice} disabled={syncing}><RefreshCw size={20} /><strong>{featureIncluded('cloudBackupSync') ? 'Check for changes from another device' : 'Cross-device refresh unavailable'}</strong><span>{featureIncluded('cloudBackupSync') ? 'Nothing is replaced if different changes are found.' : 'Cloud backup and sync are required for this action.'}</span></button>
               </div>
 
-              {!customerSession.authenticated && (
+              {featureIncluded('cloudBackupSync') && !customerSession.authenticated && (
                 <div className="vault-safety-verification-card"><UserRoundCheck size={21} /><span><strong>Device verification required</strong><small>Verify this device before secure backup and syncing can continue.</small></span><button type="button" className="secondary-button" onClick={openDeviceVerification}>Verify device</button></div>
               )}
 
@@ -5950,7 +6305,7 @@ function App() {
                 <summary><ShieldCheck size={18} /> Advanced recovery tools</summary>
                 <div>
                   <p>These controls are only needed when changing devices or recovering an earlier secure copy.</p>
-                  <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={17} /> Check available recovery points</button>
+                  <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={17} /> {featureIncluded('cloudBackupSync') ? 'Check available recovery points' : 'Recovery points unavailable'}</button>
                   {!!snapshotHistory.snapshots.length && <p className="recovery-summary">{snapshotHistory.total} encrypted recovery point(s) are available. The latest contains {snapshotHistory.snapshots[0]?.item_count || 0} item(s) from {new Date(snapshotHistory.snapshots[0]?.created_at).toLocaleString()}.</p>}
                   <button type="button" className="link-danger" onClick={resetLocalVaultOnDevice}>Clear vault copy from this device</button>
                 </div>
@@ -6203,6 +6558,7 @@ function App() {
         </div>
       )}
 
+      <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />

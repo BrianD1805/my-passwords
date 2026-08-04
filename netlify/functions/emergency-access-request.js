@@ -1,6 +1,7 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, updateRow } from './_db.js';
 import { getActiveCustomerSession } from './_session.js';
 import { createHash } from 'node:crypto';
+import { resolveTenantEntitlements } from './_entitlements.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -207,6 +208,7 @@ export async function handler(event) {
       const requestId = String(body.requestId || '').trim();
       const session = await getActiveCustomerSession(event);
       if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify your account before cancelling an Emergency Access request.' });
+      if (session.entitlements?.features?.emergencyAccess === false) return jsonResponse(403, { ok: false, version: APP_VERSION, code: 'PLAN_FEATURE_REQUIRED', feature: 'emergencyAccess', upgradeRequired: true, message: 'Emergency Access is not included in this plan.' });
       const tenantId = session.tenantId;
       const userId = session.userId;
       if (!requestId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Request details are missing.' });
@@ -221,6 +223,10 @@ export async function handler(event) {
     const invitation = rows?.[0];
     if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'This invitation link was not found or has expired.' });
     if (invitation.expires_at && new Date(invitation.expires_at).getTime() < Date.now()) return jsonResponse(410, { ok: false, version: APP_VERSION, message: 'This invitation has expired. Please ask the account owner to send a new one.' });
+    const entitlementContext = await resolveTenantEntitlements(invitation.tenant_id, { includeUsage: false });
+    if (entitlementContext.effective.features.emergencyAccess === false) {
+      return jsonResponse(403, { ok: false, version: APP_VERSION, code: 'PLAN_FEATURE_REQUIRED', feature: 'emergencyAccess', message: 'Emergency Access is not currently available for this account.' });
+    }
 
     const existing = await selectRows('emergency_access_requests', `select=*&invitation_id=${eq(invitation.id)}&status=in.(requested,waiting,owner_notified,release_ready)&order=requested_at.desc&limit=1`);
 

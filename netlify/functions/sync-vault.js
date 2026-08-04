@@ -33,6 +33,18 @@ export async function handler(event) {
 
   const tenantId = access.session.tenantId;
   const userId = access.session.userId;
+  const entitlements = access.entitlementContext?.serialized || access.entitlements || access.session.entitlements || null;
+  if (access.entitlementContext?.effective?.features?.cloudBackupSync === false) {
+    return jsonResponse(403, {
+      ok: false,
+      version: APP_VERSION,
+      code: 'PLAN_FEATURE_REQUIRED',
+      feature: 'cloudBackupSync',
+      upgradeRequired: true,
+      entitlements,
+      message: 'Cloud backup and syncing are not included in this plan. Your encrypted local vault remains available.'
+    });
+  }
 
   if (event.httpMethod === 'GET') {
     try {

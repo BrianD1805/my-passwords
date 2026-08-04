@@ -161,6 +161,7 @@ create table if not exists public.document_blobs (
   file_type text not null default 'application/octet-stream',
   file_extension text,
   file_size integer not null default 0,
+  storage_bytes bigint not null default 0,
   encrypted_blob text not null,
   local_salt text not null,
   local_iv text not null,
@@ -358,3 +359,8 @@ grant execute on function public.save_vault_snapshot_if_current(
 -- My Passwords Ver-0.043
 -- Apply db/migrations/2026-08-03_subscription_lifecycle_management_ver_0_043.sql
 -- to add Stripe schedule, renewal preview, reconciliation and duplicate-subscription fields.
+
+-- My Passwords Ver-0.044
+-- Apply db/migrations/2026-08-04_plan_entitlements_enforcement_ver_0_044.sql
+-- to add structured plan feature flags, purchased entitlement snapshots,
+-- Admin overrides and server-enforced plan limits.

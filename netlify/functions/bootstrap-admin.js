@@ -1,4 +1,5 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows } from './_db.js';
+import { assertUserCapacity, entitlementSnapshotFromPlan, launchReadyPlan } from './_entitlements.js';
 
 const defaultCategories = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
 
@@ -42,7 +43,7 @@ async function findByPhone(phoneE164) {
 }
 
 async function loadPlan(planCode) {
-  const rows = await selectRows('subscription_plans', `select=code,display_name,trial_days,is_public,is_active,currency&code=${eq(planCode)}&limit=1`).catch(() => []);
+  const rows = await selectRows('subscription_plans', `select=code,display_name,trial_days,is_public,is_active,currency,max_users,storage_limit_mb,document_limit,feature_flags&code=${eq(planCode)}&limit=1`).catch(() => []);
   return rows?.[0] || null;
 }
 
@@ -105,14 +106,17 @@ export async function handler(event) {
     }
 
     const plan = await loadPlan(selectedPlanCode);
-    if (!plan?.code || plan.is_active === false || plan.is_public === false) {
+    if (!plan?.code || plan.is_active === false || plan.is_public === false || !launchReadyPlan(plan.code)) {
       return jsonResponse(409, {
         ok: false,
         version: APP_VERSION,
         code: 'PLAN_NOT_AVAILABLE',
-        message: 'That plan is not currently available for new accounts. Choose a published plan or ask the administrator to publish it first.'
+        message: 'That plan is not currently available for new accounts. Personal is the available launch plan.'
       });
     }
+
+    const signupEntitlements = entitlementSnapshotFromPlan(plan);
+    assertUserCapacity({ effective: signupEntitlements, usage: { users: 0 } }, 1);
 
     const finalTenantId = publicId('tenant');
     const finalUserId = publicId('user');
@@ -172,7 +176,8 @@ export async function handler(event) {
         version: APP_VERSION,
         selected_plan_code: selectedPlanCode,
         selected_plan_name: plan.display_name || selectedPlanCode,
-        trial_days: Number(plan.trial_days || 0)
+        trial_days: Number(plan.trial_days || 0),
+        entitlements: signupEntitlements
       }
     });
 
@@ -192,6 +197,7 @@ export async function handler(event) {
       planCode: selectedPlanCode,
       planName: plan.display_name || selectedPlanCode,
       trialDays: Number(plan.trial_days || 0),
+      entitlements: signupEntitlements,
       planStatus: 'signup_pending',
       accountStatus: 'pending_verification',
       tenantRole: 'primary_owner',
@@ -202,6 +208,18 @@ export async function handler(event) {
       message: 'Your account and selected plan are ready. Request the email code to verify the account and start the trial.'
     });
   } catch (error) {
+    if (error?.code === 'USER_LIMIT_REACHED') {
+      return jsonResponse(409, {
+        ok: false,
+        connected: true,
+        provider: 'supabase',
+        version: APP_VERSION,
+        code: error.code,
+        upgradeRequired: true,
+        entitlements: error.entitlements || null,
+        message: error.message || 'This plan does not have capacity for another user.'
+      });
+    }
     return jsonResponse(500, {
       ok: false,
       connected: true,

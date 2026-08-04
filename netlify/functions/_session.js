@@ -1,6 +1,7 @@
 import { selectRows } from './_db.js';
 import { readCustomerSession } from './_auth.js';
 import { evaluateTenantAccess } from './_trial.js';
+import { resolveTenantEntitlements } from './_entitlements.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -25,14 +26,18 @@ export async function getCustomerAccess(event) {
 
   const lifecycle = await evaluateTenantAccess(tenant);
   if (!lifecycle.allowed) return { ok: false, ...lifecycle };
+  const entitlementContext = await resolveTenantEntitlements(tenant.id);
 
   return {
     ok: true,
+    entitlements: entitlementContext.serialized,
+    entitlementContext,
     session: {
       ...session,
       role: user.role || session.role || 'member',
       tenant,
       founder: Boolean(lifecycle.founder),
+      entitlements: entitlementContext.serialized,
       trialStartedAt: lifecycle.trialStartedAt || tenant.trial_started_at || null,
       trialEndsAt: lifecycle.trialEndsAt || tenant.trial_ends_at || null,
       trialDaysRemaining: lifecycle.trialDaysRemaining ?? null

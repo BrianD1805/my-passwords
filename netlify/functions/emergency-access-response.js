@@ -1,5 +1,6 @@
 import { APP_VERSION, jsonResponse, parseBody, requirePost, selectRows, updateRow } from './_db.js';
 import { createHash } from 'node:crypto';
+import { resolveTenantEntitlements } from './_entitlements.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -92,9 +93,13 @@ export async function handler(event) {
   if (!token) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation token is missing.' });
 
   try {
-    const rows = await selectRows('emergency_access_invitations', `select=id,status,expires_at,contact_name,contact_email,invite_url,waiting_period,access_scope,metadata&invite_token_hash=${eq(tokenHash(token))}&limit=1`);
+    const rows = await selectRows('emergency_access_invitations', `select=id,tenant_id,status,expires_at,contact_name,contact_email,invite_url,waiting_period,access_scope,metadata&invite_token_hash=${eq(tokenHash(token))}&limit=1`);
     const invitation = rows?.[0];
     if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'This invitation link was not found or has expired.' });
+    const entitlementContext = await resolveTenantEntitlements(invitation.tenant_id, { includeUsage: false });
+    if (entitlementContext.effective.features.emergencyAccess === false) {
+      return jsonResponse(403, { ok: false, version: APP_VERSION, code: 'PLAN_FEATURE_REQUIRED', feature: 'emergencyAccess', message: 'Emergency Access is not currently available for this account.' });
+    }
     if (invitation.status === 'cancelled') return jsonResponse(410, { ok: false, version: APP_VERSION, message: 'This invitation has been cancelled by the account owner.' });
     if (invitation.expires_at && new Date(invitation.expires_at).getTime() < Date.now()) return jsonResponse(410, { ok: false, version: APP_VERSION, message: 'This invitation has expired. Please ask the account owner to send a new one.' });
 
