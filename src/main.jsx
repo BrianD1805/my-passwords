@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleH
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.043';
+const VERSION = 'My Passwords Ver-0.043A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -192,6 +192,60 @@ function formatBillingMoney(amountMinor, currency = 'GBP') {
   } catch {
     return `${(Number(amountMinor || 0) / 100).toFixed(2)} ${String(currency || 'GBP').toUpperCase()}`;
   }
+}
+
+function invoiceCustomerDisplay(invoice = {}) {
+  const status = String(invoice.status || '').toLowerCase();
+  const dueTime = invoice.dueAt ? new Date(invoice.dueAt).getTime() : 0;
+  const pastDue = status === 'open' && Number(invoice.amountRemainingMinor || 0) > 0 && dueTime > 0 && dueTime < Date.now();
+  if (status === 'paid') {
+    return {
+      statusLabel: 'Paid',
+      dateLabel: invoice.paidAt ? `Paid on ${formatAccountDate(invoice.paidAt, true)}` : `Paid invoice · ${formatAccountDate(invoice.createdAt, true)}`,
+      amountMinor: Number(invoice.amountPaidMinor || invoice.amountDueMinor || 0),
+      primaryLabel: 'View receipt',
+      primaryUrl: invoice.receiptUrl || invoice.hostedInvoiceUrl || invoice.invoicePdfUrl || '',
+      showInvoiceDownload: Boolean(invoice.invoicePdfUrl)
+    };
+  }
+  if (status === 'open') {
+    return {
+      statusLabel: pastDue ? 'Payment needs attention' : 'Payment due',
+      dateLabel: invoice.dueAt ? `${pastDue ? 'Due' : 'Pay by'} ${formatAccountDate(invoice.dueAt)}` : `Created ${formatAccountDate(invoice.createdAt)}`,
+      amountMinor: Number(invoice.amountRemainingMinor || invoice.amountDueMinor || 0),
+      primaryLabel: pastDue ? 'Pay now' : 'Pay invoice',
+      primaryUrl: invoice.hostedInvoiceUrl || '',
+      showInvoiceDownload: Boolean(invoice.invoicePdfUrl)
+    };
+  }
+  if (status === 'void') {
+    return {
+      statusLabel: 'Void',
+      dateLabel: `Issued ${formatAccountDate(invoice.createdAt)}`,
+      amountMinor: Number(invoice.amountDueMinor || 0),
+      primaryLabel: 'View invoice',
+      primaryUrl: invoice.hostedInvoiceUrl || invoice.invoicePdfUrl || '',
+      showInvoiceDownload: Boolean(invoice.invoicePdfUrl)
+    };
+  }
+  if (status === 'uncollectible') {
+    return {
+      statusLabel: 'Payment not collected',
+      dateLabel: `Issued ${formatAccountDate(invoice.createdAt)}`,
+      amountMinor: Number(invoice.amountDueMinor || 0),
+      primaryLabel: 'View invoice',
+      primaryUrl: invoice.hostedInvoiceUrl || invoice.invoicePdfUrl || '',
+      showInvoiceDownload: Boolean(invoice.invoicePdfUrl)
+    };
+  }
+  return {
+    statusLabel: status ? status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Invoice',
+    dateLabel: `Created ${formatAccountDate(invoice.createdAt)}`,
+    amountMinor: Number(invoice.amountDueMinor || 0),
+    primaryLabel: status === 'draft' ? '' : 'View invoice',
+    primaryUrl: status === 'draft' ? '' : (invoice.hostedInvoiceUrl || invoice.invoicePdfUrl || ''),
+    showInvoiceDownload: status !== 'draft' && Boolean(invoice.invoicePdfUrl)
+  };
 }
 
 function subscriptionLifecycleState(subscription = null, account = {}) {
@@ -5687,12 +5741,19 @@ function App() {
                   {stripeSubscriptionExists && <section className="subscription-history-card settings-inner-card">
                     <div className="subscription-history-heading"><div><p className="eyebrow">Payment history</p><h3>Invoices and payments</h3></div><span>{paymentHistory.length} shown</span></div>
                     <div className="subscription-invoice-list">
-                      {paymentHistory.map((invoice) => <article key={invoice.id} className={`subscription-invoice-row status-${String(invoice.status || '').toLowerCase()}`}>
-                        <FileText size={19} />
-                        <div><strong>{invoice.number || 'Stripe invoice'}</strong><small>{formatAccountDate(invoice.paidAt || invoice.createdAt, true)} · {String(invoice.status || 'open').replace(/_/g, ' ')}</small></div>
-                        <span>{formatBillingMoney(invoice.amountPaidMinor || invoice.amountDueMinor, invoice.currency)}</span>
-                        {(invoice.hostedInvoiceUrl || invoice.invoicePdfUrl) && <a className="secondary-button invoice-link-button" href={invoice.hostedInvoiceUrl || invoice.invoicePdfUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> View</a>}
-                      </article>)}
+                      {paymentHistory.map((invoice) => {
+                        const display = invoiceCustomerDisplay(invoice);
+                        const downloadUrl = invoice.invoicePdfUrl && invoice.invoicePdfUrl !== display.primaryUrl ? invoice.invoicePdfUrl : '';
+                        return <article key={invoice.id} className={`subscription-invoice-row status-${String(invoice.status || '').toLowerCase()}`}>
+                          <FileText size={19} />
+                          <div className="subscription-invoice-copy"><strong>{invoice.number || 'Stripe invoice'}</strong><small><span className="invoice-status-label">{display.statusLabel}</span>{display.dateLabel}</small></div>
+                          <span>{formatBillingMoney(display.amountMinor, invoice.currency)}</span>
+                          <div className="subscription-invoice-actions">
+                            {display.primaryUrl && <a className="secondary-button invoice-link-button" href={display.primaryUrl} target="_blank" rel="noreferrer">{String(invoice.status || '').toLowerCase() === 'paid' ? <ShieldCheck size={15} /> : <ExternalLink size={15} />} {display.primaryLabel}</a>}
+                            {downloadUrl && <a className="secondary-button invoice-link-button invoice-download-button" href={downloadUrl} target="_blank" rel="noreferrer"><Download size={15} /> Download invoice</a>}
+                          </div>
+                        </article>;
+                      })}
                       {!paymentHistory.length && <div className="subscription-history-empty">No Stripe invoices are available yet.</div>}
                     </div>
                   </section>}

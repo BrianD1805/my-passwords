@@ -10080,3 +10080,73 @@ body,
   .admin-subscription-lifecycle-grid { grid-template-columns: 1fr; }
   .admin-stripe-account-actions > button { width: 100%; }
 }
+
+/* Ver-0.043A Paid Invoice Status & Receipt Link Correction */
+.subscription-invoice-row {
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(150px, auto);
+}
+.subscription-invoice-copy small {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  text-transform: none;
+}
+.invoice-status-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #edf3f8;
+  color: #536b80;
+  font-size: .75rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+.status-paid .invoice-status-label {
+  background: #e5f5ea;
+  color: #2f7146;
+}
+.status-open .invoice-status-label {
+  background: #fff4e3;
+  color: #8a5a18;
+}
+.status-void .invoice-status-label,
+.status-uncollectible .invoice-status-label {
+  background: #eef1f4;
+  color: #5d6874;
+}
+.subscription-invoice-actions {
+  display: flex !important;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.invoice-download-button {
+  background: #f8fafc;
+}
+@media (max-width: 920px) {
+  .subscription-invoice-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .subscription-invoice-actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+  .subscription-invoice-actions .invoice-link-button {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+}
+@media (max-width: 560px) {
+  .subscription-invoice-actions {
+    display: grid !important;
+    grid-template-columns: 1fr;
+  }
+  .subscription-invoice-actions .invoice-link-button {
+    width: 100%;
+  }
+}

@@ -295,33 +295,147 @@ async function previewUpcomingInvoice({ customerId, subscriptionId, scheduleId }
   };
 }
 
+function receiptUrlFromCharge(charge) {
+  if (!charge || typeof charge === 'string') return '';
+  return String(charge.receipt_url || '').trim();
+}
+
+export function paymentReferencesFromInvoice(invoice) {
+  const paymentIntentIds = new Set();
+  const chargeIds = new Set();
+  const receiptUrls = new Set();
+  const addPaymentIntent = (value) => {
+    const id = stripeObjectId(value);
+    if (id) paymentIntentIds.add(id);
+    const latestCharge = typeof value === 'object' ? value?.latest_charge : null;
+    const latestChargeId = stripeObjectId(latestCharge);
+    if (latestChargeId) chargeIds.add(latestChargeId);
+    const receiptUrl = receiptUrlFromCharge(latestCharge);
+    if (receiptUrl) receiptUrls.add(receiptUrl);
+  };
+  const addCharge = (value) => {
+    const id = stripeObjectId(value);
+    if (id) chargeIds.add(id);
+    const receiptUrl = receiptUrlFromCharge(value);
+    if (receiptUrl) receiptUrls.add(receiptUrl);
+  };
+
+  addPaymentIntent(invoice?.payment_intent);
+  addCharge(invoice?.charge);
+  for (const invoicePayment of invoice?.payments?.data || []) {
+    if (String(invoicePayment?.status || '').toLowerCase() !== 'paid') continue;
+    addPaymentIntent(invoicePayment?.payment?.payment_intent);
+    addCharge(invoicePayment?.payment?.charge);
+  }
+  return { paymentIntentIds, chargeIds, receiptUrls };
+}
+
+async function retrieveReceiptFromPaymentIntent(paymentIntentId) {
+  if (!paymentIntentId) return '';
+  const paymentIntent = await stripeRequest(`payment_intents/${encodeURIComponent(paymentIntentId)}`, {
+    method: 'GET',
+    params: { expand: ['latest_charge'] }
+  }).catch(() => null);
+  if (!paymentIntent) return '';
+  const directReceipt = receiptUrlFromCharge(paymentIntent.latest_charge);
+  if (directReceipt) return directReceipt;
+  const chargeId = stripeObjectId(paymentIntent.latest_charge);
+  if (!chargeId) return '';
+  const charge = await stripeRequest(`charges/${encodeURIComponent(chargeId)}`, { method: 'GET' }).catch(() => null);
+  return receiptUrlFromCharge(charge);
+}
+
+async function retrieveReceiptFromCharge(chargeId) {
+  if (!chargeId) return '';
+  const charge = await stripeRequest(`charges/${encodeURIComponent(chargeId)}`, { method: 'GET' }).catch(() => null);
+  return receiptUrlFromCharge(charge);
+}
+
+async function resolveInvoiceReceiptUrl(invoice) {
+  if (String(invoice?.status || '').toLowerCase() !== 'paid') return '';
+  const direct = paymentReferencesFromInvoice(invoice);
+  if (direct.receiptUrls.size) return [...direct.receiptUrls][0];
+
+  for (const paymentIntentId of direct.paymentIntentIds) {
+    const receiptUrl = await retrieveReceiptFromPaymentIntent(paymentIntentId);
+    if (receiptUrl) return receiptUrl;
+  }
+  for (const chargeId of direct.chargeIds) {
+    const receiptUrl = await retrieveReceiptFromCharge(chargeId);
+    if (receiptUrl) return receiptUrl;
+  }
+
+  const invoicePayments = await stripeRequest('invoice_payments', {
+    method: 'GET',
+    params: {
+      invoice: invoice.id,
+      status: 'paid',
+      limit: 10,
+      expand: ['data.payment.payment_intent.latest_charge', 'data.payment.charge']
+    }
+  }).catch(async () => stripeRequest('invoice_payments', {
+    method: 'GET',
+    params: { invoice: invoice.id, status: 'paid', limit: 10 }
+  }).catch(() => null));
+
+  for (const invoicePayment of invoicePayments?.data || []) {
+    const references = paymentReferencesFromInvoice({ payments: { data: [invoicePayment] } });
+    if (references.receiptUrls.size) return [...references.receiptUrls][0];
+    for (const paymentIntentId of references.paymentIntentIds) {
+      const receiptUrl = await retrieveReceiptFromPaymentIntent(paymentIntentId);
+      if (receiptUrl) return receiptUrl;
+    }
+    for (const chargeId of references.chargeIds) {
+      const receiptUrl = await retrieveReceiptFromCharge(chargeId);
+      if (receiptUrl) return receiptUrl;
+    }
+  }
+  return '';
+}
+
+async function mapWithConcurrency(values, limit, mapper) {
+  const results = new Array(values.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(values[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), values.length || 1) }, worker));
+  return results;
+}
+
 async function listInvoiceHistory(customerId, subscriptionId) {
   if (!customerId) return [];
   const result = await stripeRequest('invoices', {
     method: 'GET',
     params: { customer: customerId, limit: 24 }
   });
-  return (Array.isArray(result?.data) ? result.data : [])
+  const invoices = (Array.isArray(result?.data) ? result.data : [])
     .filter((invoice) => {
       if (!subscriptionId) return true;
       const linked = stripeObjectId(invoice.subscription || invoice.parent?.subscription_details?.subscription);
       return !linked || linked === subscriptionId;
-    })
-    .map((invoice) => ({
-      id: invoice.id,
-      number: invoice.number || '',
-      status: invoice.status || '',
-      billingReason: invoice.billing_reason || '',
-      currency: String(invoice.currency || 'gbp').toUpperCase(),
-      amountDueMinor: Number(invoice.amount_due || 0),
-      amountPaidMinor: Number(invoice.amount_paid || 0),
-      amountRemainingMinor: Number(invoice.amount_remaining || 0),
-      createdAt: stripeTimestampToIso(invoice.created),
-      dueAt: stripeTimestampToIso(invoice.due_date),
-      paidAt: stripeTimestampToIso(invoice.status_transitions?.paid_at),
-      hostedInvoiceUrl: invoice.hosted_invoice_url || '',
-      invoicePdfUrl: invoice.invoice_pdf || ''
-    }));
+    });
+
+  return mapWithConcurrency(invoices, 4, async (invoice) => ({
+    id: invoice.id,
+    number: invoice.number || '',
+    status: invoice.status || '',
+    billingReason: invoice.billing_reason || '',
+    currency: String(invoice.currency || 'gbp').toUpperCase(),
+    amountDueMinor: Number(invoice.amount_due || 0),
+    amountPaidMinor: Number(invoice.amount_paid || 0),
+    amountRemainingMinor: Number(invoice.amount_remaining || 0),
+    createdAt: stripeTimestampToIso(invoice.created),
+    dueAt: stripeTimestampToIso(invoice.due_date),
+    paidAt: stripeTimestampToIso(invoice.status_transitions?.paid_at),
+    receiptUrl: await resolveInvoiceReceiptUrl(invoice),
+    hostedInvoiceUrl: invoice.hosted_invoice_url || '',
+    invoicePdfUrl: invoice.invoice_pdf || ''
+  }));
 }
 
 export function serializeSubscription(row, extras = {}) {
