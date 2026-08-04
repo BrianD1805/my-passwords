@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleH
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.044';
+const VERSION = 'My Passwords Ver-0.044A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1973,7 +1973,7 @@ function App() {
         return result;
       }
       if (result.entitlements) updateEntitlements(result.entitlements);
-      return applySubscriptionResult(result, { message: options.message ?? result.message });
+      return applySubscriptionResult(result, { message: options.keepSuccessMessage ? (options.successMessage ?? result.message ?? '') : (options.successMessage || '') });
     } catch (error) {
       const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
       const message = offline ? 'Subscription details cannot refresh while this device is offline.' : 'Subscription status could not be refreshed.';
@@ -6021,76 +6021,86 @@ function App() {
                 const currentSubscription = billing.subscription || customerSession.subscription || null;
                 const lifecycleState = subscriptionLifecycleState(currentSubscription, bootstrap);
                 const lifecycleLabel = subscriptionLifecycleLabel(currentSubscription, bootstrap);
-                const currentPlan = publicPlans.find((plan) => plan.code === (currentSubscription?.planCode || bootstrap.planCode)) || null;
-                const selectedPlan = publicPlans.find((plan) => plan.code === (billing.planCode || currentSubscription?.planCode || bootstrap.planCode)) || publicPlans[0] || null;
+                const currentPlanCode = currentSubscription?.planCode || bootstrap.planCode;
+                const currentPlan = publicPlans.find((plan) => plan.code === currentPlanCode) || null;
+                const selectedPlan = publicPlans.find((plan) => plan.code === (billing.planCode || currentPlanCode)) || publicPlans[0] || null;
                 const stripeSubscriptionExists = currentSubscription?.provider === 'stripe' && Boolean(currentSubscription?.providerSubscriptionIdPresent);
                 const paymentNeedsAttention = lifecycleState === 'payment_needs_attention';
                 const cancellationScheduled = lifecycleState === 'cancellation_scheduled';
                 const ended = lifecycleState === 'cancelled';
                 const suspended = lifecycleState === 'suspended';
-                const canChange = stripeSubscriptionExists && ['subscription_active', 'trial_active'].includes(lifecycleState) && !cancellationScheduled && !paymentNeedsAttention && !suspended && Number(currentSubscription?.duplicateSubscriptionCount || billing.duplicateSubscriptionIds.length || 0) <= 1;
+                const duplicateCount = Number(currentSubscription?.duplicateSubscriptionCount || billing.duplicateSubscriptionIds.length || 0);
+                const canChange = stripeSubscriptionExists && ['subscription_active', 'trial_active'].includes(lifecycleState) && !cancellationScheduled && !paymentNeedsAttention && !suspended && duplicateCount <= 1;
                 const nextInvoice = billing.nextInvoice || currentSubscription?.nextInvoice || null;
                 const paymentHistory = billing.paymentHistory?.length ? billing.paymentHistory : (currentSubscription?.paymentHistory || []);
                 const nextAmount = nextInvoice?.amountDueMinor ?? currentSubscription?.priceMinor ?? 0;
                 const nextCurrency = nextInvoice?.currency || currentSubscription?.currency || 'GBP';
                 const nextDate = nextInvoice?.renewalAt || currentSubscription?.currentPeriodEnd || null;
                 const changeMode = selectedPlan ? subscriptionChangeMode(currentSubscription, currentPlan, selectedPlan, billing.interval) : 'none';
-                const duplicateCount = Number(currentSubscription?.duplicateSubscriptionCount || billing.duplicateSubscriptionIds.length || 0);
+                const chooserEnabled = (!stripeSubscriptionExists || ended) ? true : canChange;
+                const visibleBillingMessage = billing.message && billing.status !== 'refreshing' && billing.message !== 'Subscription status refreshed directly from Stripe.' ? billing.message : '';
+                const currentActionLabel = changeMode === 'immediate' ? 'Upgrade now' : changeMode === 'scheduled' ? 'Schedule for next renewal' : 'Current plan and billing';
                 return <>
                   <section className={`subscription-status-card subscription-lifecycle-card settings-inner-card state-${lifecycleState}`}>
-                    <div className="subscription-lifecycle-heading"><span className="subscription-lifecycle-icon">{paymentNeedsAttention ? <AlertTriangle size={22} /> : <ShieldCheck size={22} />}</span><span><strong>{lifecycleLabel}</strong><small>{currentSubscription?.provider === 'stripe' ? `${planDisplayName(currentSubscription.planCode || bootstrap.planCode)} · ${billingIntervalLabel(currentSubscription.billingInterval)} billing` : `${planDisplayName(bootstrap.planCode)} · trial access`}</small></span></div>
-                    <div className="subscription-status-grid subscription-lifecycle-grid">
-                      <span><strong>Plan</strong>{planDisplayName(currentSubscription?.planCode || bootstrap.planCode)}</span>
-                      <span><strong>Billing</strong>{currentSubscription?.provider === 'stripe' ? billingIntervalLabel(currentSubscription.billingInterval) : 'Trial / not billed'}</span>
-                      <span><strong>Renewal date</strong>{cancellationScheduled ? `Ends ${formatAccountDate(currentSubscription?.currentPeriodEnd, true)}` : formatAccountDate(nextDate, true)}</span>
-                      <span><strong>Renewal amount</strong>{stripeSubscriptionExists && !cancellationScheduled ? formatBillingMoney(nextAmount, nextCurrency) : cancellationScheduled ? 'No further renewal' : 'Trial / not billed'}</span>
-                      <span><strong>Last payment</strong>{formatAccountDate(currentSubscription?.lastPaymentAt, true)}</span>
-                      <span><strong>Last Stripe refresh</strong>{formatAccountDate(currentSubscription?.lastStripeSyncAt, true)}</span>
+                    <div className="subscription-lifecycle-topline">
+                      <div className="subscription-lifecycle-heading"><span className="subscription-lifecycle-icon">{paymentNeedsAttention ? <AlertTriangle size={22} /> : <ShieldCheck size={22} />}</span><span><strong>{lifecycleLabel}</strong><small>{currentSubscription?.provider === 'stripe' ? `${planDisplayName(currentPlanCode)} · ${billingIntervalLabel(currentSubscription.billingInterval)} billing` : `${planDisplayName(bootstrap.planCode)} · trial access`}</small></span></div>
+                      <button type="button" className="subscription-refresh-icon-button" onClick={() => refreshCustomerSubscription()} disabled={billing.status === 'refreshing' || billing.status === 'updating'} aria-label={billing.status === 'refreshing' ? 'Refreshing subscription from Stripe' : 'Refresh subscription from Stripe'} title={billing.status === 'refreshing' ? 'Refreshing from Stripe' : 'Refresh from Stripe'}><RefreshCw size={20} className={billing.status === 'refreshing' ? 'is-rotating' : ''} /></button>
                     </div>
 
-                    {currentSubscription?.scheduledChange && <div className="subscription-scheduled-change"><CalendarClock size={20} /><span><strong>Upcoming scheduled change</strong><small>{planDisplayName(currentSubscription.scheduledChange.planCode)} · {billingIntervalLabel(currentSubscription.scheduledChange.billingInterval)} billing{currentSubscription.scheduledChange.amountMinor ? ` · ${formatBillingMoney(currentSubscription.scheduledChange.amountMinor, currentSubscription.scheduledChange.currency)}` : ''}</small><small>Takes effect at renewal on {formatAccountDate(currentSubscription.scheduledChange.effectiveAt, true)}.</small></span></div>}
+                    <div className="subscription-status-grid subscription-summary-grid">
+                      <span><strong>Current plan</strong>{planDisplayName(currentPlanCode)}</span>
+                      <span><strong>{cancellationScheduled ? 'Access ends' : 'Next renewal'}</strong>{formatAccountDate(nextDate, true)}</span>
+                      <span><strong>{cancellationScheduled ? 'Renewal' : 'Renewal amount'}</strong>{stripeSubscriptionExists && !cancellationScheduled ? formatBillingMoney(nextAmount, nextCurrency) : cancellationScheduled ? 'No further renewal' : 'Trial / not billed'}</span>
+                    </div>
 
+                    <details className="subscription-disclosure subscription-details-disclosure">
+                      <summary><span><strong>More subscription details</strong><small>Billing period, payment and Stripe refresh information</small></span><ChevronRight size={19} /></summary>
+                      <div className="subscription-status-grid subscription-detail-grid">
+                        <span><strong>Billing period</strong>{currentSubscription?.provider === 'stripe' ? billingIntervalLabel(currentSubscription.billingInterval) : 'Trial / not billed'}</span>
+                        <span><strong>Last payment</strong>{formatAccountDate(currentSubscription?.lastPaymentAt, true)}</span>
+                        <span><strong>Last Stripe refresh</strong>{formatAccountDate(currentSubscription?.lastStripeSyncAt, true)}</span>
+                      </div>
+                    </details>
+
+                    {currentSubscription?.scheduledChange && <div className="subscription-scheduled-change"><CalendarClock size={20} /><span><strong>Upcoming scheduled change</strong><small>{planDisplayName(currentSubscription.scheduledChange.planCode)} · {billingIntervalLabel(currentSubscription.scheduledChange.billingInterval)} billing{currentSubscription.scheduledChange.amountMinor ? ` · ${formatBillingMoney(currentSubscription.scheduledChange.amountMinor, currentSubscription.scheduledChange.currency)}` : ''}</small><small>Takes effect at renewal on {formatAccountDate(currentSubscription.scheduledChange.effectiveAt, true)}.</small></span></div>}
                     {paymentNeedsAttention && <div className="subscription-payment-warning"><AlertTriangle size={19} /><span><strong>Payment needs attention</strong><small>{String(currentSubscription?.status || '').toLowerCase() === 'unpaid' ? 'Stripe has stopped automatic payment retries. Open the billing portal now to update your payment method and settle the invoice.' : 'Stripe could not complete the latest payment. Open the billing portal to update your payment method before the grace period ends.'}</small>{currentSubscription?.gracePeriodEndsAt && <small><strong>Grace period:</strong> cloud services may pause after {formatAccountDate(currentSubscription.gracePeriodEndsAt, true)}.</small>}</span></div>}
                     {cancellationScheduled && <div className="subscription-cancellation-note"><CalendarClock size={19} /><span><strong>Cancellation is scheduled</strong><small>Your subscription remains active until {formatAccountDate(currentSubscription?.currentPeriodEnd, true)}. You can reactivate it before then.</small></span></div>}
                     {suspended && <div className="subscription-payment-warning"><AlertTriangle size={19} /><span><strong>Account suspended</strong><small>Subscription changes are unavailable while the account is suspended. Contact support if you believe this is incorrect.</small></span></div>}
                     {duplicateCount > 1 && <div className="subscription-payment-warning"><AlertTriangle size={19} /><span><strong>Overlapping Stripe subscriptions detected</strong><small>No automatic plan change will be made until Admin keeps one live subscription and refreshes this account from Stripe.</small></span></div>}
                   </section>
 
-                  {!stripeSubscriptionExists || ended ? <section className="subscription-chooser settings-inner-card">
-                    <div className="subscription-card-heading"><div><p className="eyebrow">Choose your plan</p><h3>{ended ? 'Restart your subscription' : 'Start recurring billing'}</h3></div><span>GBP (£)</span></div>
-                    <div className="subscription-plan-options">
-                      {publicPlans.map((plan) => <button type="button" key={`billing-${plan.code}`} className={(billing.planCode || bootstrap.planCode) === plan.code ? 'active' : ''} onClick={() => setBilling((current) => ({ ...current, planCode: plan.code, message: '' }))}><strong>{plan.displayName}</strong><small>{plan.description}</small><span>{billingPriceLabel(plan, billing.interval)}</span></button>)}
-                    </div>
-                    <div className="subscription-interval-options" role="group" aria-label="Billing period">
-                      {['monthly', 'quarterly', 'annual'].map((interval) => <button type="button" key={interval} className={billing.interval === interval ? 'active' : ''} onClick={() => setBilling((current) => ({ ...current, interval, message: '' }))}>{billingIntervalLabel(interval)}<small>{selectedPlan ? billingPriceLabel(selectedPlan, interval) : 'Not available'}</small></button>)}
-                    </div>
-                    {selectedPlan && !planIntervalReady(selectedPlan, billing.interval) && <div className="subscription-inline-note"><AlertTriangle size={17} /><span>This billing option is not available yet.</span></div>}
-                    <button type="button" className="primary-button subscription-checkout-button" onClick={startStripeCheckout} disabled={billing.status === 'opening-checkout' || !selectedPlan || !planIntervalAmount(selectedPlan, billing.interval) || !planIntervalReady(selectedPlan, billing.interval)}><CreditCard size={18} /> {billing.status === 'opening-checkout' ? 'Opening Stripe Checkout...' : `Continue with ${billingIntervalLabel(billing.interval)} billing`}</button>
-                  </section> : <section className="subscription-chooser subscription-change-card settings-inner-card">
-                    <div className="subscription-card-heading"><div><p className="eyebrow">Change subscription</p><h3>Plan and billing period</h3><p>Higher-plan upgrades take effect immediately. Downgrades and billing-period changes begin at the next renewal.</p></div><span>GBP (£)</span></div>
-                    <div className="subscription-plan-options">
-                      {publicPlans.map((plan) => <button type="button" key={`change-${plan.code}`} className={(billing.planCode || currentSubscription?.planCode) === plan.code ? 'active' : ''} onClick={() => setBilling((current) => ({ ...current, planCode: plan.code, message: '' }))} disabled={!canChange}><strong>{plan.displayName}</strong><small>{plan.description}</small><span>{billingPriceLabel(plan, billing.interval)}</span></button>)}
-                    </div>
-                    <div className="subscription-interval-options" role="group" aria-label="Billing period">
-                      {['monthly', 'quarterly', 'annual'].map((interval) => <button type="button" key={interval} className={billing.interval === interval ? 'active' : ''} onClick={() => setBilling((current) => ({ ...current, interval, message: '' }))} disabled={!canChange}>{billingIntervalLabel(interval)}<small>{selectedPlan ? billingPriceLabel(selectedPlan, interval) : 'Not available'}</small></button>)}
-                    </div>
-                    {selectedPlan && !planIntervalReady(selectedPlan, billing.interval) && <div className="subscription-inline-note"><AlertTriangle size={17} /><span>This billing option is not available yet.</span></div>}
-                    <button type="button" className="primary-button subscription-change-button" onClick={reviewSubscriptionChange} disabled={!canChange || changeMode === 'none' || !selectedPlan || !planIntervalReady(selectedPlan, billing.interval) || billing.status === 'updating'}><CalendarClock size={18} /> {changeMode === 'immediate' ? 'Upgrade now' : changeMode === 'scheduled' ? 'Schedule for next renewal' : 'Current plan and billing'}</button>
-                  </section>}
+                  <section className="subscription-chooser subscription-change-card settings-inner-card">
+                    <div className="subscription-card-heading"><div><p className="eyebrow">{!stripeSubscriptionExists || ended ? 'Subscription options' : 'Change subscription'}</p><h3>{ended ? 'Restart your subscription' : !stripeSubscriptionExists ? 'Choose your plan and billing period' : 'Change plan or billing period'}</h3><p>Choose the plan and payment frequency you prefer. Higher-plan upgrades take effect immediately; downgrades and billing-period changes begin at the next renewal.</p></div><span>GBP (£)</span></div>
 
-                  {stripeSubscriptionExists && <section className="subscription-lifecycle-actions settings-inner-card">
-                    <div><strong>Subscription controls</strong><small>Cancellation only takes effect at the end of the current paid period.</small></div>
-                    <div className="subscription-action-row">
-                      {cancellationScheduled
-                        ? <button type="button" className="primary-button" onClick={reviewSubscriptionReactivation} disabled={billing.status === 'updating'}><ShieldCheck size={17} /> Keep subscription active</button>
-                        : !ended && <button type="button" className="secondary-button danger-soft" onClick={reviewSubscriptionCancellation} disabled={billing.status === 'updating' || suspended}><X size={17} /> Cancel at period end</button>}
+                    {publicPlans.length ? <>
+                      <div className="subscription-selection-form">
+                        <label><span>Plan</span><select value={selectedPlan?.code || ''} onChange={(event) => setBilling((current) => ({ ...current, planCode: event.target.value, message: '' }))} disabled={!chooserEnabled || billing.status === 'updating'}>{publicPlans.map((plan) => <option key={`plan-option-${plan.code}`} value={plan.code}>{plan.displayName}</option>)}</select></label>
+                        <label><span>Billing period</span><select value={billing.interval} onChange={(event) => setBilling((current) => ({ ...current, interval: event.target.value, message: '' }))} disabled={!chooserEnabled || billing.status === 'updating'}>{['monthly', 'quarterly', 'annual'].map((interval) => <option key={interval} value={interval} disabled={!selectedPlan || !planIntervalReady(selectedPlan, interval)}>{billingIntervalLabel(interval)}{selectedPlan && planIntervalReady(selectedPlan, interval) ? ` — ${billingPriceLabel(selectedPlan, interval)}` : ' — Not available'}</option>)}</select></label>
+                      </div>
+
+                      <div className="subscription-selection-summary">
+                        <div><strong>{selectedPlan?.displayName || 'Select a plan'}</strong><small>{selectedPlan?.description || 'Choose a published Personal plan.'}</small></div>
+                        <span>{selectedPlan ? billingPriceLabel(selectedPlan, billing.interval) : 'Not available'}</span>
+                      </div>
+
+                      {selectedPlan && !planIntervalReady(selectedPlan, billing.interval) && <div className="subscription-inline-note"><AlertTriangle size={17} /><span>This billing option is not available yet. Choose another billing period.</span></div>}
+
+                      {!stripeSubscriptionExists || ended
+                        ? <button type="button" className="primary-button subscription-checkout-button" onClick={startStripeCheckout} disabled={billing.status === 'opening-checkout' || !selectedPlan || !planIntervalAmount(selectedPlan, billing.interval) || !planIntervalReady(selectedPlan, billing.interval)}><CreditCard size={18} /> {billing.status === 'opening-checkout' ? 'Opening Stripe Checkout...' : `Continue with ${billingIntervalLabel(billing.interval)} billing`}</button>
+                        : <button type="button" className="primary-button subscription-change-button" onClick={reviewSubscriptionChange} disabled={!canChange || changeMode === 'none' || !selectedPlan || !planIntervalReady(selectedPlan, billing.interval) || billing.status === 'updating'}><CalendarClock size={18} /> {currentActionLabel}</button>}
+                    </> : <div className="subscription-inline-note"><AlertTriangle size={17} /><span>Plan choices could not be loaded. Use the refresh icon above and try again.</span></div>}
+                  </section>
+
+                  {stripeSubscriptionExists && <details className="subscription-disclosure subscription-management-disclosure settings-inner-card">
+                    <summary><span><strong>Manage subscription</strong><small>Payment method, Stripe records and cancellation</small></span><ChevronRight size={19} /></summary>
+                    <div className="subscription-management-content">
+                      {currentSubscription?.providerCustomerIdPresent && <div className="subscription-manage-card"><div><ExternalLink size={20} /><span><strong>Stripe Customer Portal</strong><small>Update card details, pay an outstanding invoice and open Stripe’s full invoice records.</small></span></div><button type="button" className="secondary-button" onClick={openStripePortal} disabled={billing.status === 'opening-portal'}>{billing.status === 'opening-portal' ? 'Opening...' : 'Open billing portal'}</button></div>}
+                      <div className="subscription-lifecycle-actions"><div><strong>Subscription controls</strong><small>Cancellation only takes effect at the end of the current paid period.</small></div><div className="subscription-action-row">{cancellationScheduled ? <button type="button" className="primary-button" onClick={reviewSubscriptionReactivation} disabled={billing.status === 'updating'}><ShieldCheck size={17} /> Keep subscription active</button> : !ended && <button type="button" className="secondary-button danger-soft" onClick={reviewSubscriptionCancellation} disabled={billing.status === 'updating' || suspended}><X size={17} /> Cancel at period end</button>}</div></div>
                     </div>
-                  </section>}
+                  </details>}
 
-                  {currentSubscription?.providerCustomerIdPresent && <section className="subscription-manage-card settings-inner-card"><div><ExternalLink size={20} /><span><strong>Stripe Customer Portal</strong><small>Update card details, pay an outstanding invoice and open Stripe’s full invoice records.</small></span></div><button type="button" className="secondary-button" onClick={openStripePortal} disabled={billing.status === 'opening-portal'}>{billing.status === 'opening-portal' ? 'Opening...' : 'Open billing portal'}</button></section>}
-
-                  {stripeSubscriptionExists && <section className="subscription-history-card settings-inner-card">
-                    <div className="subscription-history-heading"><div><p className="eyebrow">Payment history</p><h3>Invoices and payments</h3></div><span>{paymentHistory.length} shown</span></div>
+                  {stripeSubscriptionExists && <details className="subscription-disclosure subscription-history-disclosure settings-inner-card">
+                    <summary><span><strong>Payment and invoice history</strong><small>{paymentHistory.length ? `${paymentHistory.length} recent Stripe record${paymentHistory.length === 1 ? '' : 's'}` : 'No Stripe invoices are available yet'}</small></span><ChevronRight size={19} /></summary>
                     <div className="subscription-invoice-list">
                       {paymentHistory.map((invoice) => {
                         const display = invoiceCustomerDisplay(invoice);
@@ -6107,11 +6117,10 @@ function App() {
                       })}
                       {!paymentHistory.length && <div className="subscription-history-empty">No Stripe invoices are available yet.</div>}
                     </div>
-                  </section>}
+                  </details>}
 
                   {!customerSession.authenticated && <section className="subscription-verify-card settings-inner-card"><ShieldCheck size={20} /><span><strong>Verify this device first</strong><small>Device verification protects access to subscription and billing actions.</small></span><button type="button" className="secondary-button" onClick={openDeviceVerification}>Verify this device</button></section>}
-                  {billing.message && <div className={`subscription-message ${billing.status}`}>{billing.message}</div>}
-                  <button type="button" className="secondary-button subscription-refresh-button" onClick={() => refreshCustomerSubscription()} disabled={billing.status === 'refreshing' || billing.status === 'updating'}><RefreshCw size={17} /> {billing.status === 'refreshing' ? 'Refreshing from Stripe...' : 'Refresh from Stripe'}</button>
+                  {visibleBillingMessage && <div className={`subscription-message ${billing.status}`}>{visibleBillingMessage}</div>}
                 </>;
               })()}
             </section>

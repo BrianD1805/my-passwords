@@ -251,7 +251,8 @@ export function requireEntitledFeature(entitlementContext, feature, message = ''
 
 
 export function launchReadyPlan(planCode) {
-  return String(planCode || '').trim().toLowerCase() === 'personal';
+  const code = String(planCode || '').trim().toLowerCase();
+  return code === 'personal' || code.startsWith('personal_');
 }
 
 export function assertUserCapacity(entitlementContext, requestedUsers = 1) {
