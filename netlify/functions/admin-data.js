@@ -2,6 +2,7 @@ import { APP_VERSION, deleteRow, insertRow, jsonResponse, parseBody, publicId, s
 import { readAdminSession } from './_auth.js';
 import { isFounderTenant, loadTenantSubscription, recordLifecycleEvent, upsertTrialSubscription } from './_trial.js';
 import { archiveStripePlan, stripeConfigured, syncStripePlan } from './_stripe.js';
+import { refreshStripeSubscriptionForTenant } from './_subscription-lifecycle.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -65,7 +66,7 @@ async function loadDashboard() {
     selectRows('subscription_plans', 'select=*&order=display_order.asc,display_name.asc'),
     selectRows('tenants', 'select=id,name,account_name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at,onboarding_completed_at,created_at,updated_at&order=created_at.desc&limit=250'),
     selectRows('users', 'select=id,tenant_id,email,phone_e164,display_name,role,status,email_verified,phone_verified,onboarding_status,onboarding_completed_at,welcome_email_sent_at,created_at&order=created_at.desc&limit=500'),
-    selectRows('tenant_subscriptions', 'select=id,tenant_id,plan_code,status,billing_interval,currency,price_minor,trial_started_at,trial_ends_at,current_period_start,current_period_end,cancel_at_period_end,cancelled_at,grace_period_ends_at,admin_override,provider,provider_customer_id,provider_subscription_id,provider_price_id,checkout_session_id,latest_invoice_id,last_payment_at,last_payment_failed_at,updated_at&order=updated_at.desc&limit=250'),
+    selectRows('tenant_subscriptions', 'select=id,tenant_id,plan_code,status,billing_interval,currency,price_minor,trial_started_at,trial_ends_at,current_period_start,current_period_end,cancel_at_period_end,cancelled_at,grace_period_ends_at,admin_override,provider,provider_customer_id,provider_subscription_id,provider_price_id,checkout_session_id,latest_invoice_id,last_payment_at,last_payment_failed_at,stripe_schedule_id,scheduled_plan_code,scheduled_billing_interval,scheduled_price_id,scheduled_change_at,scheduled_change_type,scheduled_change_created_at,next_invoice_amount_minor,next_invoice_currency,next_invoice_at,last_stripe_sync_at,last_stripe_sync_status,last_stripe_sync_message,duplicate_subscription_count,duplicate_subscription_ids,updated_at&order=updated_at.desc&limit=250'),
     selectRows('vault_sync_snapshots', 'select=id,tenant_id,user_id,item_count,client_updated_at,created_at&order=created_at.desc&limit=1000'),
     selectRows('vault_sync_events', 'select=id,tenant_id,user_id,event_type,status,item_count,message,device_id,metadata,created_at&order=created_at.desc&limit=1000'),
     selectRows('billing_events', 'select=id,tenant_id,subscription_id,provider,provider_event_id,event_type,status,amount_minor,currency,metadata,occurred_at,created_at&order=created_at.desc&limit=500')
@@ -151,7 +152,7 @@ export async function handler(event) {
     try {
       return jsonResponse(200, { ok: true, version: APP_VERSION, ...(await loadDashboard()) });
     } catch (error) {
-      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.042.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.043.', error: error.message, details: error.details || null });
     }
   }
 
@@ -219,6 +220,17 @@ export async function handler(event) {
       await deleteRow('subscription_plans', `id=${eq(plan.id)}`);
       await audit('subscription_plan_deleted', { plan_code: code, stripe_archived: Boolean(archived.configured) });
       return jsonResponse(200, { ok: true, version: APP_VERSION, message: 'Subscription plan deleted. Any Stripe Product and Prices were archived.' });
+    }
+
+    if (action === 'refresh_stripe_subscription') {
+      const tenantId = String(body.tenantId || '').trim();
+      if (!tenantId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A customer account is required.' });
+      const tenant = await loadTenant(tenantId);
+      if (!tenant?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Customer account was not found.' });
+      if (isFounderTenant(tenant)) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'Founder access does not use Stripe Billing.' });
+      const result = await refreshStripeSubscriptionForTenant(tenantId);
+      await audit('stripe_subscription_refreshed_by_admin', { tenant_id: tenantId, stripe_subscription_id: result.row?.provider_subscription_id || '', status: result.row?.status || '' });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, subscription: result.row || null, message: result.message || 'Stripe subscription refreshed.' });
     }
 
     if (action === 'set_account_status') {
@@ -291,6 +303,14 @@ export async function handler(event) {
 
     return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Unknown admin action.' });
   } catch (error) {
-    return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Admin update failed.', error: error.message, details: error.details || null });
+    const overlapping = error?.code === 'OVERLAPPING_SUBSCRIPTIONS';
+    return jsonResponse(overlapping ? 409 : 500, {
+      ok: false,
+      version: APP_VERSION,
+      code: error.code || 'ADMIN_UPDATE_FAILED',
+      message: overlapping ? error.message : `Admin update failed. ${error.message || 'Please try again.'}`,
+      duplicateSubscriptionIds: error.subscriptionIds || [],
+      details: error.details || null
+    });
   }
 }

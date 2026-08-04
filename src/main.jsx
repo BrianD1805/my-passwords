@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleH
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.042L';
+const VERSION = 'My Passwords Ver-0.043';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -173,16 +173,69 @@ function billingPriceLabel(plan, interval) {
 
 function subscriptionStatusLabel(status) {
   const value = String(status || '').toLowerCase();
-  if (value === 'active') return 'Active';
+  if (value === 'active') return 'Subscription active';
   if (value === 'trialing') return 'Trial active';
   if (value === 'checkout_pending' || value === 'incomplete') return 'Checkout pending';
   if (value === 'checkout_cancelled') return 'Checkout cancelled';
   if (value === 'checkout_expired' || value === 'incomplete_expired') return 'Checkout expired';
   if (value === 'past_due' || value === 'unpaid') return 'Payment needs attention';
-  if (value === 'paused') return 'Paused';
+  if (value === 'paused') return 'Suspended';
   if (value === 'cancelled' || value === 'canceled') return 'Cancelled';
   if (value === 'expired') return 'Trial expired';
   return value ? value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'No paid subscription';
+}
+
+
+function formatBillingMoney(amountMinor, currency = 'GBP') {
+  try {
+    return new Intl.NumberFormat('en-GB', { style: 'currency', currency: String(currency || 'GBP').toUpperCase() }).format(Number(amountMinor || 0) / 100);
+  } catch {
+    return `${(Number(amountMinor || 0) / 100).toFixed(2)} ${String(currency || 'GBP').toUpperCase()}`;
+  }
+}
+
+function subscriptionLifecycleState(subscription = null, account = {}) {
+  const accountStatus = String(account?.accountStatus || '').toLowerCase();
+  const planStatus = String(account?.planStatus || '').toLowerCase();
+  const status = String(subscription?.status || planStatus || '').toLowerCase();
+  if (accountStatus === 'suspended' || planStatus === 'suspended' || status === 'paused') return 'suspended';
+  if (subscription?.cancelAtPeriodEnd && ['active', 'trialing'].includes(status)) return 'cancellation_scheduled';
+  if (status === 'trialing' || status === 'trial_active') return 'trial_active';
+  if (status === 'active') return subscription?.provider === 'stripe' ? 'subscription_active' : 'trial_active';
+  if (['past_due', 'unpaid', 'incomplete', 'payment_problem'].includes(status)) return 'payment_needs_attention';
+  if (['cancelled', 'canceled', 'incomplete_expired', 'subscription_cancelled', 'trial_cancelled', 'trial_expired', 'expired'].includes(status)) return 'cancelled';
+  if (['trial_pending', 'signup_pending'].includes(status)) return 'trial_pending';
+  return subscription?.provider === 'stripe' ? 'payment_needs_attention' : 'trial_active';
+}
+
+function subscriptionLifecycleLabel(subscription = null, account = {}) {
+  const state = subscriptionLifecycleState(subscription, account);
+  if (state === 'trial_active') return 'Trial active';
+  if (state === 'subscription_active') return 'Subscription active';
+  if (state === 'payment_needs_attention') return 'Payment needs attention';
+  if (state === 'cancellation_scheduled') return 'Cancellation scheduled';
+  if (state === 'cancelled') return 'Cancelled';
+  if (state === 'suspended') return 'Suspended';
+  return 'Trial pending';
+}
+
+function monthlyEquivalentPrice(plan, interval) {
+  const amount = planIntervalAmount(plan, interval);
+  if (interval === 'annual') return amount / 12;
+  if (interval === 'quarterly') return amount / 3;
+  return amount;
+}
+
+function subscriptionChangeMode(currentSubscription, currentPlan, targetPlan, targetInterval) {
+  if (!currentSubscription?.providerSubscriptionIdPresent) return 'checkout';
+  const currentInterval = currentSubscription.billingInterval || 'monthly';
+  if (currentPlan?.code === targetPlan?.code && currentInterval === targetInterval) return 'none';
+  const currentOrder = Number(currentPlan?.displayOrder || 0);
+  const targetOrder = Number(targetPlan?.displayOrder || 0);
+  const differentPlan = Boolean(targetPlan?.code && currentPlan?.code && targetPlan.code !== currentPlan.code);
+  const higherPlan = differentPlan && targetOrder > currentOrder;
+  const sameRankHigherValue = differentPlan && targetOrder === currentOrder && monthlyEquivalentPrice(targetPlan, targetInterval) > monthlyEquivalentPrice(currentPlan, currentInterval);
+  return higherPlan || sameRankHigherValue ? 'immediate' : 'scheduled';
 }
 
 function planDisplayName(planCode) {
@@ -200,8 +253,9 @@ function planStatusDisplayName(planStatus, accountStatus = '') {
   if (status === 'trial_pending') return 'Trial Pending';
   if (status === 'signup_pending') return 'Signup Pending';
   if (status === 'trial_active' || status === 'trialing') return 'Trial Active';
-  if (status === 'active') return 'Active';
+  if (status === 'active') return 'Subscription Active';
   if (status === 'suspended') return 'Suspended';
+  if (status === 'cancellation_scheduled') return 'Cancellation Scheduled';
   if (status === 'trial_expired') return 'Trial Expired';
   if (status === 'trial_cancelled') return 'Trial Cancelled';
   if (status === 'payment_problem' || status === 'past_due' || status === 'unpaid') return 'Payment Needs Attention';
@@ -1589,7 +1643,8 @@ function App() {
   const [accountStatus, setAccountStatus] = useState({ state: 'local-first', message: 'Your account details help you recover your vault on a new device.' });
   const [customerSession, setCustomerSession] = useState({ checked: false, authenticated: false, cloudAccess: false, accessCode: '', message: 'Device verification has not been checked yet.' });
   const [publicPlans, setPublicPlans] = useState(FALLBACK_SAAS_PLANS);
-  const [billing, setBilling] = useState({ status: 'idle', message: '', planCode: '', interval: 'monthly', subscription: null, stripeConfigured: false, returnState: '' });
+  const [billing, setBilling] = useState({ status: 'idle', message: '', planCode: '', interval: 'monthly', subscription: null, stripeConfigured: false, returnState: '', loaded: false, paymentHistory: [], nextInvoice: null, duplicateSubscriptionIds: [] });
+  const [subscriptionActionModal, setSubscriptionActionModal] = useState({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' });
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'Your vault safety status will update after the first secure backup check.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
   const [syncSafety, setSyncSafety] = useState(() => readSyncSafetyState());
@@ -1697,41 +1752,169 @@ function App() {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [mobileHeaderMenuOpen]);
 
+  useEffect(() => {
+    if (!subscriptionActionModal.visible) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape' && billing.status !== 'updating') setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' });
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [subscriptionActionModal.visible, billing.status]);
+
+  useEffect(() => {
+    if (activeSettingsSection !== 'subscription' || !customerSession.authenticated || isFounderPlan(bootstrap)) return;
+    if (billing.loaded || ['refreshing', 'updating', 'opening-checkout', 'opening-portal'].includes(billing.status)) return;
+    refreshCustomerSubscription();
+    // Refresh once when the customer opens My Subscription. Further refreshes are manual.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSettingsSection, customerSession.authenticated, billing.loaded]);
+
+  function applySubscriptionResult(result, options = {}) {
+    const account = result?.account || {};
+    const next = {
+      ...bootstrap,
+      displayName: account.displayName || bootstrap.displayName,
+      email: account.email || bootstrap.email,
+      accountName: account.accountName || bootstrap.accountName,
+      tenantName: account.accountName || bootstrap.tenantName,
+      planCode: account.planCode || result?.subscription?.planCode || bootstrap.planCode,
+      planStatus: account.planStatus || bootstrap.planStatus,
+      accountStatus: account.accountStatus || bootstrap.accountStatus,
+      tenantRole: account.tenantRole || bootstrap.tenantRole,
+      trialStartedAt: account.trialStartedAt || bootstrap.trialStartedAt || '',
+      trialEndsAt: account.trialEndsAt || bootstrap.trialEndsAt || '',
+      accountVerified: true,
+      otpStatus: 'Device verified'
+    };
+    setBootstrap(next);
+    setCustomerSession((current) => ({
+      ...current,
+      checked: true,
+      authenticated: true,
+      subscription: result?.subscription || null,
+      stripeConfigured: true
+    }));
+    setBilling((current) => ({
+      ...current,
+      status: options.status || 'ready',
+      loaded: true,
+      message: options.message ?? result?.message ?? '',
+      subscription: result?.subscription || null,
+      stripeConfigured: true,
+      planCode: result?.subscription?.planCode || account.planCode || current.planCode || 'personal',
+      interval: result?.subscription?.billingInterval || current.interval || 'monthly',
+      paymentHistory: result?.paymentHistory || result?.subscription?.paymentHistory || [],
+      nextInvoice: result?.nextInvoice || result?.subscription?.nextInvoice || null,
+      duplicateSubscriptionIds: result?.duplicateSubscriptionIds || result?.subscription?.duplicateSubscriptionIds || []
+    }));
+    return result;
+  }
+
   async function refreshCustomerSubscription(options = {}) {
+    if (!customerSession.authenticated) {
+      setBilling((current) => ({ ...current, status: 'verification-required', message: 'Verify this device before managing billing.', loaded: true }));
+      return { ok: false, code: 'SESSION_REQUIRED', message: 'Verify this device before managing billing.' };
+    }
+    setBilling((current) => ({ ...current, status: 'refreshing', message: options.message || 'Refreshing directly from Stripe...' }));
     try {
-      const response = await fetch('/.netlify/functions/session-status', { credentials: 'same-origin' });
-      const result = await response.json();
-      if (!result?.authenticated) {
-        setBilling((current) => ({ ...current, status: 'verification-required', message: result?.message || 'Verify this device before managing billing.', subscription: null, stripeConfigured: Boolean(result?.stripeConfigured) }));
+      const response = await fetch('/.netlify/functions/stripe-subscription', { credentials: 'same-origin' });
+      const result = await response.json().catch(() => ({ ok: false, message: 'Stripe returned an invalid response.' }));
+      if (!response.ok || !result?.ok) {
+        if (response.status === 401 || result?.code === 'SESSION_REQUIRED') {
+          setBilling((current) => ({ ...current, status: 'verification-required', loaded: true, message: result?.message || 'Verify this device before managing billing.' }));
+          return result;
+        }
+        setBilling((current) => ({
+          ...current,
+          status: 'error',
+          loaded: true,
+          message: result?.message || 'Subscription status could not be refreshed.',
+          duplicateSubscriptionIds: result?.duplicateSubscriptionIds || []
+        }));
         return result;
       }
-      const next = {
-        ...bootstrap,
-        tenantId: result.tenantId || bootstrap.tenantId,
-        userId: result.userId || bootstrap.userId,
-        displayName: result.account?.displayName || bootstrap.displayName,
-        email: result.account?.email || bootstrap.email,
-        phoneE164: result.account?.phoneE164 || bootstrap.phoneE164,
-        accountName: result.account?.accountName || bootstrap.accountName,
-        tenantName: result.account?.accountName || bootstrap.tenantName,
-        planCode: result.account?.planCode || bootstrap.planCode,
-        planStatus: result.account?.planStatus || bootstrap.planStatus,
-        accountStatus: result.account?.accountStatus || bootstrap.accountStatus,
-        tenantRole: result.account?.tenantRole || bootstrap.tenantRole,
-        trialStartedAt: result.account?.trialStartedAt || bootstrap.trialStartedAt || '',
-        trialEndsAt: result.account?.trialEndsAt || bootstrap.trialEndsAt || '',
-        trialDaysRemaining: result.account?.trialDaysRemaining ?? bootstrap.trialDaysRemaining ?? null,
-        accountVerified: true,
-        otpStatus: 'Device verified'
-      };
-      setBootstrap(next);
-      setCustomerSession((current) => ({ ...current, checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: result.accessCode || '', message: result.message || current.message, subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured) }));
-      setBilling((current) => ({ ...current, status: 'ready', message: options.message || '', subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), planCode: result.subscription?.planCode || result.account?.planCode || current.planCode || 'personal' }));
-      return result;
+      return applySubscriptionResult(result, { message: options.message ?? result.message });
     } catch (error) {
-      setBilling((current) => ({ ...current, status: 'error', message: 'Subscription status could not be refreshed.' }));
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      const message = offline ? 'Subscription details cannot refresh while this device is offline.' : 'Subscription status could not be refreshed.';
+      setBilling((current) => ({ ...current, status: 'error', loaded: true, message }));
       return { ok: false, message: error.message };
     }
+  }
+
+  async function performSubscriptionAction(action, payload = {}) {
+    if (!customerSession.authenticated) {
+      setDeviceVerificationModal({ visible: true, purpose: 'billing' });
+      return { ok: false };
+    }
+    setBilling((current) => ({ ...current, status: 'updating', message: 'Updating your subscription securely...' }));
+    const result = await postJson('/.netlify/functions/stripe-subscription', { action, requestId: crypto.randomUUID(), ...payload });
+    if (!result.ok) {
+      setBilling((current) => ({
+        ...current,
+        status: 'error',
+        loaded: true,
+        message: result.message || 'The subscription change could not be completed.',
+        duplicateSubscriptionIds: result.duplicateSubscriptionIds || []
+      }));
+      return result;
+    }
+    applySubscriptionResult(result, { status: 'success', message: result.message });
+    showMessage(result.message || 'Subscription updated.', 'success');
+    return result;
+  }
+
+  function reviewSubscriptionChange() {
+    const currentSubscription = billing.subscription || customerSession.subscription || null;
+    const currentPlan = publicPlans.find((plan) => plan.code === currentSubscription?.planCode) || null;
+    const targetPlan = publicPlans.find((plan) => plan.code === billing.planCode) || null;
+    if (!targetPlan) return;
+    const mode = subscriptionChangeMode(currentSubscription, currentPlan, targetPlan, billing.interval);
+    if (mode === 'none') {
+      setBilling((current) => ({ ...current, status: 'ready', message: 'That plan and billing period are already active.' }));
+      return;
+    }
+    const amount = billingPriceLabel(targetPlan, billing.interval);
+    setSubscriptionActionModal({
+      visible: true,
+      action: 'change_subscription',
+      title: mode === 'immediate' ? 'Confirm plan upgrade' : 'Schedule subscription change',
+      message: mode === 'immediate'
+        ? `Upgrade to ${targetPlan.displayName} with ${billingIntervalLabel(billing.interval).toLowerCase()} billing at ${amount}. The higher plan becomes active immediately and Stripe may add a prorated adjustment to your next invoice.`
+        : `Change to ${targetPlan.displayName} with ${billingIntervalLabel(billing.interval).toLowerCase()} billing at ${amount}. Your current plan stays active until the next renewal, when this change will take effect.`,
+      planCode: targetPlan.code,
+      interval: billing.interval,
+      mode
+    });
+  }
+
+  function reviewSubscriptionCancellation() {
+    const subscription = billing.subscription || customerSession.subscription || null;
+    setSubscriptionActionModal({
+      visible: true,
+      action: 'cancel_at_period_end',
+      title: 'Cancel at the end of this period?',
+      message: `Your subscription and cloud services remain available until ${formatAccountDate(subscription?.currentPeriodEnd, true)}. No further renewal will be taken after that date.`,
+      planCode: '', interval: '', mode: 'scheduled'
+    });
+  }
+
+  function reviewSubscriptionReactivation() {
+    setSubscriptionActionModal({
+      visible: true,
+      action: 'reactivate',
+      title: 'Keep this subscription active?',
+      message: 'The scheduled cancellation will be removed and the subscription will renew normally on its current renewal date.',
+      planCode: '', interval: '', mode: 'immediate'
+    });
+  }
+
+  async function confirmSubscriptionAction() {
+    const pending = subscriptionActionModal;
+    if (!pending.visible || !pending.action) return;
+    const payload = pending.action === 'change_subscription' ? { planCode: pending.planCode, billingInterval: pending.interval } : {};
+    const result = await performSubscriptionAction(pending.action, payload);
+    if (result?.ok) setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' });
   }
 
   async function startStripeCheckout() {
@@ -2058,6 +2241,7 @@ function App() {
             documentLimit: Number(plan.document_limit || 0),
             features: Array.isArray(plan.features) ? plan.features.filter(Boolean) : [],
             isFeatured: Boolean(plan.is_featured),
+            displayOrder: Number(plan.display_order || 0),
             stripeSyncStatus: plan.stripe_sync_status || '',
             stripeMonthlyReady: Boolean(plan.stripe_monthly_price_id),
             stripeQuarterlyReady: Boolean(plan.stripe_quarterly_price_id),
@@ -2164,9 +2348,9 @@ function App() {
   }, [locked, items]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible);
+    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible);
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible]);
 
   useEffect(() => {
     if (locked || !syncSafety.pending || syncing || syncPromptShown || syncSafetyModal.visible || deviceVerificationModal.visible) return undefined;
@@ -2185,7 +2369,7 @@ function App() {
       setSyncPromptShown(true);
     }, 1800);
     return () => window.clearTimeout(timer);
-  }, [locked, syncSafety.pending, syncSafety.conflict, syncSafety.sessionRequired, syncSafety.message, syncSafety.itemCount, syncing, syncPromptShown, syncSafetyModal.visible, deviceVerificationModal.visible]);
+  }, [locked, syncSafety.pending, syncSafety.conflict, syncSafety.sessionRequired, syncSafety.message, syncSafety.itemCount, syncing, syncPromptShown, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible]);
 
   useEffect(() => {
     async function tryAutomaticRetry() {
@@ -4830,6 +5014,7 @@ function App() {
             </section>
           </div>
         )}
+
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
@@ -5306,7 +5491,7 @@ function App() {
                   <button type="button" className="settings-directory-row" onClick={openSubscriptionSettings}>
                     <span className="settings-directory-icon"><CreditCard size={22} /></span>
                     <span className="settings-directory-copy"><strong>My Subscription</strong><small>Choose billing, manage payments and view renewal status.</small></span>
-                    <span className={`settings-directory-state ${['past_due', 'unpaid'].includes(String(billing.subscription?.status || '').toLowerCase()) ? 'attention' : 'safe'}`}>{isFounderPlan(bootstrap) ? 'Founder' : subscriptionStatusLabel(billing.subscription?.status || bootstrap.planStatus)}</span>
+                    <span className={`settings-directory-state ${['past_due', 'unpaid'].includes(String(billing.subscription?.status || '').toLowerCase()) ? 'attention' : 'safe'}`}>{isFounderPlan(bootstrap) ? 'Founder' : subscriptionLifecycleLabel(billing.subscription || customerSession.subscription, bootstrap)}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
                   <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('safety')}>
@@ -5422,46 +5607,99 @@ function App() {
               <div className="settings-section-heading">
                 <p className="eyebrow">My Subscription</p>
                 <h3><CreditCard size={20} /> Plan and billing</h3>
-                <p>Choose a billing period and complete payment securely through Stripe. My Passwords never receives or stores your full card details.</p>
+                <p>See your current status, renewal and payment history here. Stripe Customer Portal continues to securely handle card details and full invoice self-service.</p>
               </div>
 
               {isFounderPlan(bootstrap) ? (
                 <section className="subscription-founder-card settings-inner-card"><ShieldCheck size={24} /><div><strong>Permanent Founder access</strong><p>Your Founder Plan does not expire and does not require Stripe Billing.</p></div></section>
               ) : (() => {
                 const currentSubscription = billing.subscription || customerSession.subscription || null;
-                const selectedPlan = publicPlans.find((plan) => plan.code === (billing.planCode || bootstrap.planCode)) || publicPlans[0] || null;
+                const lifecycleState = subscriptionLifecycleState(currentSubscription, bootstrap);
+                const lifecycleLabel = subscriptionLifecycleLabel(currentSubscription, bootstrap);
+                const currentPlan = publicPlans.find((plan) => plan.code === (currentSubscription?.planCode || bootstrap.planCode)) || null;
+                const selectedPlan = publicPlans.find((plan) => plan.code === (billing.planCode || currentSubscription?.planCode || bootstrap.planCode)) || publicPlans[0] || null;
                 const stripeSubscriptionExists = currentSubscription?.provider === 'stripe' && Boolean(currentSubscription?.providerSubscriptionIdPresent);
-                const paidActive = currentSubscription?.provider === 'stripe' && (stripeSubscriptionExists || ['active', 'trialing', 'past_due', 'unpaid', 'paused', 'incomplete'].includes(String(currentSubscription.status || '').toLowerCase()));
+                const paymentNeedsAttention = lifecycleState === 'payment_needs_attention';
+                const cancellationScheduled = lifecycleState === 'cancellation_scheduled';
+                const ended = lifecycleState === 'cancelled';
+                const suspended = lifecycleState === 'suspended';
+                const canChange = stripeSubscriptionExists && ['subscription_active', 'trial_active'].includes(lifecycleState) && !cancellationScheduled && !paymentNeedsAttention && !suspended && Number(currentSubscription?.duplicateSubscriptionCount || billing.duplicateSubscriptionIds.length || 0) <= 1;
+                const nextInvoice = billing.nextInvoice || currentSubscription?.nextInvoice || null;
+                const paymentHistory = billing.paymentHistory?.length ? billing.paymentHistory : (currentSubscription?.paymentHistory || []);
+                const nextAmount = nextInvoice?.amountDueMinor ?? currentSubscription?.priceMinor ?? 0;
+                const nextCurrency = nextInvoice?.currency || currentSubscription?.currency || 'GBP';
+                const nextDate = nextInvoice?.renewalAt || currentSubscription?.currentPeriodEnd || null;
+                const changeMode = selectedPlan ? subscriptionChangeMode(currentSubscription, currentPlan, selectedPlan, billing.interval) : 'none';
+                const duplicateCount = Number(currentSubscription?.duplicateSubscriptionCount || billing.duplicateSubscriptionIds.length || 0);
                 return <>
-                  <section className={`subscription-status-card settings-inner-card ${String(currentSubscription?.status || bootstrap.planStatus || '').toLowerCase()}`}>
-                    <div><CreditCard size={22} /><span><strong>{subscriptionStatusLabel(currentSubscription?.status || bootstrap.planStatus)}</strong><small>{currentSubscription?.provider === 'stripe' ? `${planDisplayName(currentSubscription.planCode || bootstrap.planCode)} · ${billingIntervalLabel(currentSubscription.billingInterval)} billing` : `${planDisplayName(bootstrap.planCode)} · free trial`}</small></span></div>
-                    <div className="subscription-status-grid">
+                  <section className={`subscription-status-card subscription-lifecycle-card settings-inner-card state-${lifecycleState}`}>
+                    <div className="subscription-lifecycle-heading"><span className="subscription-lifecycle-icon">{paymentNeedsAttention ? <AlertTriangle size={22} /> : <ShieldCheck size={22} />}</span><span><strong>{lifecycleLabel}</strong><small>{currentSubscription?.provider === 'stripe' ? `${planDisplayName(currentSubscription.planCode || bootstrap.planCode)} · ${billingIntervalLabel(currentSubscription.billingInterval)} billing` : `${planDisplayName(bootstrap.planCode)} · trial access`}</small></span></div>
+                    <div className="subscription-status-grid subscription-lifecycle-grid">
                       <span><strong>Plan</strong>{planDisplayName(currentSubscription?.planCode || bootstrap.planCode)}</span>
-                      <span><strong>Price</strong>{currentSubscription?.priceMinor ? billingPriceLabel({ monthlyPriceMinor: currentSubscription.priceMinor, quarterlyPriceMinor: currentSubscription.priceMinor, annualPriceMinor: currentSubscription.priceMinor }, currentSubscription.billingInterval || 'monthly') : 'Trial / not billed'}</span>
-                      <span><strong>Trial ends</strong>{formatAccountDate(currentSubscription?.trialEndsAt || bootstrap.trialEndsAt, true)}</span>
-                      <span><strong>Next renewal</strong>{formatAccountDate(currentSubscription?.currentPeriodEnd, true)}</span>
-                      <span><strong>Cancellation</strong>{currentSubscription?.cancelAtPeriodEnd ? 'Ends after current period' : 'Not scheduled'}</span>
+                      <span><strong>Billing</strong>{currentSubscription?.provider === 'stripe' ? billingIntervalLabel(currentSubscription.billingInterval) : 'Trial / not billed'}</span>
+                      <span><strong>Renewal date</strong>{cancellationScheduled ? `Ends ${formatAccountDate(currentSubscription?.currentPeriodEnd, true)}` : formatAccountDate(nextDate, true)}</span>
+                      <span><strong>Renewal amount</strong>{stripeSubscriptionExists && !cancellationScheduled ? formatBillingMoney(nextAmount, nextCurrency) : cancellationScheduled ? 'No further renewal' : 'Trial / not billed'}</span>
                       <span><strong>Last payment</strong>{formatAccountDate(currentSubscription?.lastPaymentAt, true)}</span>
+                      <span><strong>Last Stripe refresh</strong>{formatAccountDate(currentSubscription?.lastStripeSyncAt, true)}</span>
                     </div>
-                    {['past_due', 'unpaid'].includes(String(currentSubscription?.status || '').toLowerCase()) && <div className="subscription-payment-warning"><AlertTriangle size={19} /><span><strong>Payment needs attention</strong><small>Open the Stripe billing portal to update the payment method. Cloud access may pause after the grace period.</small></span></div>}
+
+                    {currentSubscription?.scheduledChange && <div className="subscription-scheduled-change"><CalendarClock size={20} /><span><strong>Upcoming scheduled change</strong><small>{planDisplayName(currentSubscription.scheduledChange.planCode)} · {billingIntervalLabel(currentSubscription.scheduledChange.billingInterval)} billing{currentSubscription.scheduledChange.amountMinor ? ` · ${formatBillingMoney(currentSubscription.scheduledChange.amountMinor, currentSubscription.scheduledChange.currency)}` : ''}</small><small>Takes effect at renewal on {formatAccountDate(currentSubscription.scheduledChange.effectiveAt, true)}.</small></span></div>}
+
+                    {paymentNeedsAttention && <div className="subscription-payment-warning"><AlertTriangle size={19} /><span><strong>Payment needs attention</strong><small>{String(currentSubscription?.status || '').toLowerCase() === 'unpaid' ? 'Stripe has stopped automatic payment retries. Open the billing portal now to update your payment method and settle the invoice.' : 'Stripe could not complete the latest payment. Open the billing portal to update your payment method before the grace period ends.'}</small>{currentSubscription?.gracePeriodEndsAt && <small><strong>Grace period:</strong> cloud services may pause after {formatAccountDate(currentSubscription.gracePeriodEndsAt, true)}.</small>}</span></div>}
+                    {cancellationScheduled && <div className="subscription-cancellation-note"><CalendarClock size={19} /><span><strong>Cancellation is scheduled</strong><small>Your subscription remains active until {formatAccountDate(currentSubscription?.currentPeriodEnd, true)}. You can reactivate it before then.</small></span></div>}
+                    {suspended && <div className="subscription-payment-warning"><AlertTriangle size={19} /><span><strong>Account suspended</strong><small>Subscription changes are unavailable while the account is suspended. Contact support if you believe this is incorrect.</small></span></div>}
+                    {duplicateCount > 1 && <div className="subscription-payment-warning"><AlertTriangle size={19} /><span><strong>Overlapping Stripe subscriptions detected</strong><small>No automatic plan change will be made until Admin keeps one live subscription and refreshes this account from Stripe.</small></span></div>}
                   </section>
 
-                  {!paidActive && <section className="subscription-chooser settings-inner-card">
-                    <div className="subscription-card-heading"><div><p className="eyebrow">Choose your plan</p><h3>Start recurring billing</h3></div><span>GBP (£)</span></div>
+                  {!stripeSubscriptionExists || ended ? <section className="subscription-chooser settings-inner-card">
+                    <div className="subscription-card-heading"><div><p className="eyebrow">Choose your plan</p><h3>{ended ? 'Restart your subscription' : 'Start recurring billing'}</h3></div><span>GBP (£)</span></div>
                     <div className="subscription-plan-options">
                       {publicPlans.map((plan) => <button type="button" key={`billing-${plan.code}`} className={(billing.planCode || bootstrap.planCode) === plan.code ? 'active' : ''} onClick={() => setBilling((current) => ({ ...current, planCode: plan.code, message: '' }))}><strong>{plan.displayName}</strong><small>{plan.description}</small><span>{billingPriceLabel(plan, billing.interval)}</span></button>)}
                     </div>
                     <div className="subscription-interval-options" role="group" aria-label="Billing period">
                       {['monthly', 'quarterly', 'annual'].map((interval) => <button type="button" key={interval} className={billing.interval === interval ? 'active' : ''} onClick={() => setBilling((current) => ({ ...current, interval, message: '' }))}>{billingIntervalLabel(interval)}<small>{selectedPlan ? billingPriceLabel(selectedPlan, interval) : 'Not available'}</small></button>)}
                     </div>
-                    {selectedPlan && !planIntervalReady(selectedPlan, billing.interval) && <div className="subscription-inline-note"><AlertTriangle size={17} /><span>This price has not yet been synced to Stripe by Admin.</span></div>}
+                    {selectedPlan && !planIntervalReady(selectedPlan, billing.interval) && <div className="subscription-inline-note"><AlertTriangle size={17} /><span>This billing option is not available yet.</span></div>}
                     <button type="button" className="primary-button subscription-checkout-button" onClick={startStripeCheckout} disabled={billing.status === 'opening-checkout' || !selectedPlan || !planIntervalAmount(selectedPlan, billing.interval) || !planIntervalReady(selectedPlan, billing.interval)}><CreditCard size={18} /> {billing.status === 'opening-checkout' ? 'Opening Stripe Checkout...' : `Continue with ${billingIntervalLabel(billing.interval)} billing`}</button>
+                  </section> : <section className="subscription-chooser subscription-change-card settings-inner-card">
+                    <div className="subscription-card-heading"><div><p className="eyebrow">Change subscription</p><h3>Plan and billing period</h3><p>Higher-plan upgrades take effect immediately. Downgrades and billing-period changes begin at the next renewal.</p></div><span>GBP (£)</span></div>
+                    <div className="subscription-plan-options">
+                      {publicPlans.map((plan) => <button type="button" key={`change-${plan.code}`} className={(billing.planCode || currentSubscription?.planCode) === plan.code ? 'active' : ''} onClick={() => setBilling((current) => ({ ...current, planCode: plan.code, message: '' }))} disabled={!canChange}><strong>{plan.displayName}</strong><small>{plan.description}</small><span>{billingPriceLabel(plan, billing.interval)}</span></button>)}
+                    </div>
+                    <div className="subscription-interval-options" role="group" aria-label="Billing period">
+                      {['monthly', 'quarterly', 'annual'].map((interval) => <button type="button" key={interval} className={billing.interval === interval ? 'active' : ''} onClick={() => setBilling((current) => ({ ...current, interval, message: '' }))} disabled={!canChange}>{billingIntervalLabel(interval)}<small>{selectedPlan ? billingPriceLabel(selectedPlan, interval) : 'Not available'}</small></button>)}
+                    </div>
+                    {selectedPlan && !planIntervalReady(selectedPlan, billing.interval) && <div className="subscription-inline-note"><AlertTriangle size={17} /><span>This billing option is not available yet.</span></div>}
+                    <button type="button" className="primary-button subscription-change-button" onClick={reviewSubscriptionChange} disabled={!canChange || changeMode === 'none' || !selectedPlan || !planIntervalReady(selectedPlan, billing.interval) || billing.status === 'updating'}><CalendarClock size={18} /> {changeMode === 'immediate' ? 'Upgrade now' : changeMode === 'scheduled' ? 'Schedule for next renewal' : 'Current plan and billing'}</button>
                   </section>}
 
-                  {currentSubscription?.providerCustomerIdPresent && <section className="subscription-manage-card settings-inner-card"><div><ExternalLink size={20} /><span><strong>Manage billing securely</strong><small>Update payment details, view invoices or cancel through Stripe Customer Portal.</small></span></div><button type="button" className="secondary-button" onClick={openStripePortal} disabled={billing.status === 'opening-portal'}>{billing.status === 'opening-portal' ? 'Opening...' : 'Open billing portal'}</button></section>}
+                  {stripeSubscriptionExists && <section className="subscription-lifecycle-actions settings-inner-card">
+                    <div><strong>Subscription controls</strong><small>Cancellation only takes effect at the end of the current paid period.</small></div>
+                    <div className="subscription-action-row">
+                      {cancellationScheduled
+                        ? <button type="button" className="primary-button" onClick={reviewSubscriptionReactivation} disabled={billing.status === 'updating'}><ShieldCheck size={17} /> Keep subscription active</button>
+                        : !ended && <button type="button" className="secondary-button danger-soft" onClick={reviewSubscriptionCancellation} disabled={billing.status === 'updating' || suspended}><X size={17} /> Cancel at period end</button>}
+                    </div>
+                  </section>}
+
+                  {currentSubscription?.providerCustomerIdPresent && <section className="subscription-manage-card settings-inner-card"><div><ExternalLink size={20} /><span><strong>Stripe Customer Portal</strong><small>Update card details, pay an outstanding invoice and open Stripe’s full invoice records.</small></span></div><button type="button" className="secondary-button" onClick={openStripePortal} disabled={billing.status === 'opening-portal'}>{billing.status === 'opening-portal' ? 'Opening...' : 'Open billing portal'}</button></section>}
+
+                  {stripeSubscriptionExists && <section className="subscription-history-card settings-inner-card">
+                    <div className="subscription-history-heading"><div><p className="eyebrow">Payment history</p><h3>Invoices and payments</h3></div><span>{paymentHistory.length} shown</span></div>
+                    <div className="subscription-invoice-list">
+                      {paymentHistory.map((invoice) => <article key={invoice.id} className={`subscription-invoice-row status-${String(invoice.status || '').toLowerCase()}`}>
+                        <FileText size={19} />
+                        <div><strong>{invoice.number || 'Stripe invoice'}</strong><small>{formatAccountDate(invoice.paidAt || invoice.createdAt, true)} · {String(invoice.status || 'open').replace(/_/g, ' ')}</small></div>
+                        <span>{formatBillingMoney(invoice.amountPaidMinor || invoice.amountDueMinor, invoice.currency)}</span>
+                        {(invoice.hostedInvoiceUrl || invoice.invoicePdfUrl) && <a className="secondary-button invoice-link-button" href={invoice.hostedInvoiceUrl || invoice.invoicePdfUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> View</a>}
+                      </article>)}
+                      {!paymentHistory.length && <div className="subscription-history-empty">No Stripe invoices are available yet.</div>}
+                    </div>
+                  </section>}
+
                   {!customerSession.authenticated && <section className="subscription-verify-card settings-inner-card"><ShieldCheck size={20} /><span><strong>Verify this device first</strong><small>Device verification protects access to subscription and billing actions.</small></span><button type="button" className="secondary-button" onClick={openDeviceVerification}>Verify this device</button></section>}
                   {billing.message && <div className={`subscription-message ${billing.status}`}>{billing.message}</div>}
-                  <button type="button" className="secondary-button subscription-refresh-button" onClick={() => refreshCustomerSubscription()}><RefreshCw size={17} /> Refresh subscription status</button>
+                  <button type="button" className="secondary-button subscription-refresh-button" onClick={() => refreshCustomerSubscription()} disabled={billing.status === 'refreshing' || billing.status === 'updating'}><RefreshCw size={17} /> {billing.status === 'refreshing' ? 'Refreshing from Stripe...' : 'Refresh from Stripe'}</button>
                 </>;
               })()}
             </section>
@@ -5882,6 +6120,27 @@ function App() {
           </div>
         );
       })()}
+
+      {subscriptionActionModal.visible && (
+        <div className="item-popup-layer subscription-action-layer" role="presentation">
+          <div className="item-popup-backdrop" onClick={() => billing.status !== 'updating' && setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' })} />
+          <section className="item-popup-card subscription-action-modal" role="dialog" aria-modal="true" aria-labelledby="subscription-action-title">
+            <header className="item-popup-header">
+              <h2 id="subscription-action-title"><CreditCard size={21} /> {subscriptionActionModal.title}</h2>
+              <button type="button" className="icon-button" onClick={() => setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' })} disabled={billing.status === 'updating'} aria-label="Close subscription confirmation"><X size={20} /></button>
+            </header>
+            <div className="item-popup-body subscription-action-body">
+              <div className={`subscription-action-symbol ${subscriptionActionModal.mode}`}><CalendarClock size={28} /></div>
+              <p>{subscriptionActionModal.message}</p>
+              <div className="subscription-action-safety"><ShieldCheck size={18} /><span>Stripe securely processes payments. My Passwords does not receive or store your full card details.</span></div>
+            </div>
+            <footer className="item-popup-footer subscription-action-footer">
+              <button type="button" className="secondary-button" onClick={() => setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' })} disabled={billing.status === 'updating'}>Go back</button>
+              <button type="button" className="primary-button" onClick={confirmSubscriptionAction} disabled={billing.status === 'updating'}>{billing.status === 'updating' ? 'Updating...' : subscriptionActionModal.action === 'cancel_at_period_end' ? 'Schedule cancellation' : subscriptionActionModal.action === 'reactivate' ? 'Keep active' : subscriptionActionModal.mode === 'immediate' ? 'Confirm upgrade' : 'Schedule change'}</button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />

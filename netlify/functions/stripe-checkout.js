@@ -1,15 +1,12 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow, upsertRow } from './_db.js';
 import { getBillingContext } from './_billing.js';
-import { billingIntervalDefinition, publicSiteUrl, stripeConfigured, stripeRequest, syncStripePlan } from './_stripe.js';
+import { billingIntervalDefinition, publicSiteUrl, stripeConfigured, stripeObjectId, stripeRequest, syncStripePlan } from './_stripe.js';
+import { listCustomerStripeSubscriptions, syncStripeSubscriptionObject } from './_subscription-lifecycle.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
 }
 
-function activeStripeSubscription(subscription) {
-  return Boolean(subscription?.provider_subscription_id)
-    && ['checkout_pending', 'incomplete', 'trialing', 'active', 'past_due', 'unpaid', 'paused'].includes(String(subscription.status || '').toLowerCase());
-}
 
 function remainingTrialEnd(tenant) {
   const timestamp = tenant?.trial_ends_at ? Math.floor(new Date(tenant.trial_ends_at).getTime() / 1000) : 0;
@@ -22,24 +19,44 @@ async function loadPlan(planCode) {
   return rows?.[0] || null;
 }
 
-async function createOrReuseCustomer(context) {
+async function findOrCreateTenantCustomers(context) {
+  const found = [];
+  const seen = new Set();
+  const add = (customer) => {
+    if (!customer?.id || customer.deleted || seen.has(customer.id)) return;
+    seen.add(customer.id);
+    found.push(customer);
+  };
+
   const existingId = String(context.subscription?.provider_customer_id || '').trim();
-  if (existingId) {
-    const customer = await stripeRequest(`customers/${encodeURIComponent(existingId)}`, { method: 'GET' }).catch(() => null);
-    if (customer?.id && !customer.deleted) return customer;
-  }
-  return stripeRequest('customers', {
-    idempotencyKey: `mp-customer-${context.tenant.id}`,
-    params: {
-      email: context.user.email || undefined,
-      name: context.user.display_name || context.tenant.account_name || context.tenant.name || undefined,
-      metadata: {
-        my_passwords_tenant_id: context.tenant.id,
-        my_passwords_user_id: context.user.id,
-        my_passwords_account_name: context.tenant.account_name || context.tenant.name || ''
-      }
+  if (existingId) add(await stripeRequest(`customers/${encodeURIComponent(existingId)}`, { method: 'GET' }).catch(() => null));
+
+  const tenantQuery = `metadata['my_passwords_tenant_id']:'${String(context.tenant.id).replace(/'/g, '')}'`;
+  const search = await stripeRequest('customers/search', { method: 'GET', params: { query: tenantQuery, limit: 100 } }).catch(() => null);
+  for (const customer of search?.data || []) add(customer);
+
+  if (context.user.email) {
+    const byEmail = await stripeRequest('customers', { method: 'GET', params: { email: context.user.email, limit: 100 } }).catch(() => null);
+    for (const customer of byEmail?.data || []) {
+      if (String(customer?.metadata?.my_passwords_tenant_id || '') === context.tenant.id || customer.id === existingId) add(customer);
     }
-  });
+  }
+
+  if (!found.length) {
+    add(await stripeRequest('customers', {
+      idempotencyKey: `mp-customer-${context.tenant.id}`,
+      params: {
+        email: context.user.email || undefined,
+        name: context.user.display_name || context.tenant.account_name || context.tenant.name || undefined,
+        metadata: {
+          my_passwords_tenant_id: context.tenant.id,
+          my_passwords_user_id: context.user.id,
+          my_passwords_account_name: context.tenant.account_name || context.tenant.name || ''
+        }
+      }
+    }));
+  }
+  return found;
 }
 
 export async function handler(event) {
@@ -49,16 +66,6 @@ export async function handler(event) {
   const context = await getBillingContext(event);
   if (!context.ok) return jsonResponse(context.code === 'SESSION_REQUIRED' ? 401 : 409, { ok: false, version: APP_VERSION, code: context.code, message: context.message });
   const existingSubscription = context.subscription || null;
-  if (existingSubscription?.provider === 'stripe' && existingSubscription?.provider_subscription_id) {
-    return jsonResponse(409, {
-      ok: false,
-      version: APP_VERSION,
-      code: 'SUBSCRIPTION_ALREADY_EXISTS',
-      portalAvailable: Boolean(existingSubscription.provider_customer_id),
-      message: 'This account already has a Stripe subscription. Open My Subscription to manage it.'
-    });
-  }
-
   if (existingSubscription?.status === 'checkout_pending' && existingSubscription?.checkout_session_id) {
     const previousSession = await stripeRequest(`checkout/sessions/${encodeURIComponent(existingSubscription.checkout_session_id)}`, { method: 'GET' }).catch(() => null);
     if (previousSession?.status === 'open' && previousSession?.url) {
@@ -72,11 +79,17 @@ export async function handler(event) {
       });
     }
     if (previousSession?.status === 'complete') {
+      const subscriptionId = stripeObjectId(previousSession.subscription);
+      if (subscriptionId) {
+        const stripeSubscription = await stripeRequest(`subscriptions/${encodeURIComponent(subscriptionId)}`, { method: 'GET', params: { expand: ['items.data.price', 'latest_invoice'] } }).catch(() => null);
+        if (stripeSubscription?.id) await syncStripeSubscriptionObject(stripeSubscription, { tenantId: context.tenant.id, tenant: context.tenant, existing: existingSubscription, checkoutSessionId: previousSession.id }).catch(() => null);
+      }
       return jsonResponse(409, {
         ok: false,
         version: APP_VERSION,
-        code: 'CHECKOUT_CONFIRMING',
-        message: 'Stripe is confirming your completed checkout. Refresh your subscription status in a moment.'
+        code: 'SUBSCRIPTION_ALREADY_EXISTS',
+        portalAvailable: Boolean(existingSubscription.provider_customer_id),
+        message: 'The completed Stripe checkout has been restored in My Subscription. Refresh the subscription status to see the latest details.'
       });
     }
     await updateRow('tenant_subscriptions', `id=${eq(existingSubscription.id)}`, {
@@ -84,14 +97,6 @@ export async function handler(event) {
       checkout_session_id: null,
       updated_at: new Date().toISOString()
     }).catch(() => null);
-  } else if (activeStripeSubscription(existingSubscription)) {
-    return jsonResponse(409, {
-      ok: false,
-      version: APP_VERSION,
-      code: 'SUBSCRIPTION_ALREADY_EXISTS',
-      portalAvailable: Boolean(existingSubscription.provider_customer_id),
-      message: 'This account already has a Stripe subscription or checkout in progress. Open My Subscription to manage it.'
-    });
   }
 
   const body = parseBody(event);
@@ -111,7 +116,31 @@ export async function handler(event) {
       if (!synced.ok || !plan[interval.priceColumn]) return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'STRIPE_PLAN_NOT_READY', message: synced.message || 'This plan is not ready for Stripe Checkout.' });
     }
 
-    const customer = await createOrReuseCustomer(context);
+    const matchingCustomers = await findOrCreateTenantCustomers(context);
+    const customer = matchingCustomers.find((item) => item.id === existingSubscription?.provider_customer_id) || matchingCustomers[0];
+    if (!customer?.id) throw new Error('Stripe customer could not be created or restored.');
+    const remoteSubscriptions = (await Promise.all(matchingCustomers.map((item) => listCustomerStripeSubscriptions(item.id).catch(() => [])))).flat();
+    const liveRemoteSubscriptions = remoteSubscriptions.filter((subscription) => ['incomplete', 'trialing', 'active', 'past_due', 'unpaid', 'paused'].includes(String(subscription?.status || '').toLowerCase()));
+    if (liveRemoteSubscriptions.length > 1) {
+      return jsonResponse(409, {
+        ok: false,
+        version: APP_VERSION,
+        code: 'OVERLAPPING_SUBSCRIPTIONS',
+        duplicateSubscriptionIds: liveRemoteSubscriptions.map((subscription) => subscription.id),
+        portalAvailable: true,
+        message: 'More than one live Stripe subscription exists for this account. No new checkout was created. Review the subscriptions in Stripe Dashboard, keep one subscription, then refresh again.'
+      });
+    }
+    if (liveRemoteSubscriptions.length === 1) {
+      await syncStripeSubscriptionObject(liveRemoteSubscriptions[0], { tenantId: context.tenant.id, tenant: context.tenant, existing: existingSubscription, customerId: customer.id }).catch(() => null);
+      return jsonResponse(409, {
+        ok: false,
+        version: APP_VERSION,
+        code: 'SUBSCRIPTION_ALREADY_EXISTS',
+        portalAvailable: true,
+        message: 'Stripe already has a live subscription for this account. Its status has been restored in My Subscription.'
+      });
+    }
     const baseUrl = publicSiteUrl(event);
     const trialEnd = remainingTrialEnd(context.tenant);
     const session = await stripeRequest('checkout/sessions', {

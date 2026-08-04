@@ -354,3 +354,7 @@ grant execute on function public.save_vault_snapshot_if_current(
 -- to add Stripe Product/Price references, checkout and invoice references,
 -- Stripe sync indexes and service-role grants. Stripe webhooks remain the
 -- source of truth for paid subscription activation and lifecycle changes.
+
+-- My Passwords Ver-0.043
+-- Apply db/migrations/2026-08-03_subscription_lifecycle_management_ver_0_043.sql
+-- to add Stripe schedule, renewal preview, reconciliation and duplicate-subscription fields.

@@ -2,6 +2,7 @@ import { APP_VERSION, jsonResponse, parseBody, selectRows } from './_db.js';
 import { clearCustomerSession, issueCustomerSession, readCustomerSession } from './_auth.js';
 import { evaluateTenantAccess, loadTenantSubscription, trialDaysRemaining } from './_trial.js';
 import { stripeConfigured } from './_stripe.js';
+import { serializeSubscription } from './_subscription-lifecycle.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -53,26 +54,7 @@ export async function handler(event) {
       userId: user.id,
       role: user.role || session.role || 'member',
       stripeConfigured: stripeConfigured(),
-      subscription: subscription ? {
-        id: subscription.id,
-        planCode: subscription.plan_code || tenant.plan_code || 'personal',
-        status: subscription.status || '',
-        billingInterval: subscription.billing_interval || '',
-        currency: subscription.currency || 'GBP',
-        priceMinor: Number(subscription.price_minor || 0),
-        trialStartedAt: subscription.trial_started_at || null,
-        trialEndsAt: subscription.trial_ends_at || null,
-        currentPeriodStart: subscription.current_period_start || null,
-        currentPeriodEnd: subscription.current_period_end || null,
-        cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
-        cancelledAt: subscription.cancelled_at || null,
-        gracePeriodEndsAt: subscription.grace_period_ends_at || null,
-        provider: subscription.provider || '',
-        providerCustomerIdPresent: Boolean(subscription.provider_customer_id),
-        providerSubscriptionIdPresent: Boolean(subscription.provider_subscription_id),
-        lastPaymentAt: subscription.last_payment_at || null,
-        lastPaymentFailedAt: subscription.last_payment_failed_at || null
-      } : null,
+      subscription: serializeSubscription(subscription),
       account: {
         displayName: user.display_name || '',
         email: user.email || '',

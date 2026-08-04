@@ -9775,3 +9775,308 @@ body,
     width: calc(100% - 24px);
   }
 }
+
+/* Ver-0.043 Subscription Lifecycle Management */
+.subscription-lifecycle-card {
+  position: relative;
+  overflow: hidden;
+}
+.subscription-lifecycle-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: #6f879b;
+}
+.subscription-lifecycle-card.state-subscription_active::before,
+.subscription-lifecycle-card.state-trial_active::before { background: #3d8a5c; }
+.subscription-lifecycle-card.state-payment_needs_attention::before { background: #c14a4a; }
+.subscription-lifecycle-card.state-cancellation_scheduled::before { background: #b97923; }
+.subscription-lifecycle-card.state-cancelled::before,
+.subscription-lifecycle-card.state-suspended::before { background: #6e7781; }
+.subscription-lifecycle-heading {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+}
+.subscription-lifecycle-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 50%;
+  background: #e9f4ed;
+  color: #2f7d4d;
+}
+.state-payment_needs_attention .subscription-lifecycle-icon {
+  background: #fff0f0;
+  color: #a23d3d;
+}
+.state-cancellation_scheduled .subscription-lifecycle-icon {
+  background: #fff6e9;
+  color: #a86716;
+}
+.state-cancelled .subscription-lifecycle-icon,
+.state-suspended .subscription-lifecycle-icon {
+  background: #eef1f4;
+  color: #5d6874;
+}
+.subscription-lifecycle-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.subscription-scheduled-change,
+.subscription-cancellation-note,
+.subscription-action-safety {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #efd5ad;
+  border-radius: 14px;
+  background: #fff8ed;
+  color: #754d18;
+}
+.subscription-scheduled-change span,
+.subscription-cancellation-note span {
+  display: grid;
+  gap: 4px;
+}
+.subscription-scheduled-change small,
+.subscription-cancellation-note small {
+  color: #80633f;
+  line-height: 1.45;
+}
+.subscription-change-card .subscription-card-heading p:last-child {
+  margin-top: 5px;
+  color: #64788b;
+  line-height: 1.5;
+  max-width: 720px;
+}
+.subscription-plan-options button:disabled,
+.subscription-interval-options button:disabled {
+  opacity: .62;
+  cursor: not-allowed;
+}
+.subscription-change-button {
+  justify-content: center;
+  width: 100%;
+}
+.subscription-lifecycle-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.subscription-lifecycle-actions > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.subscription-lifecycle-actions small {
+  color: #65798c;
+}
+.subscription-action-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.subscription-history-card {
+  display: grid;
+  gap: 14px;
+}
+.subscription-history-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+.subscription-history-heading h3,
+.subscription-history-heading p { margin: 0; }
+.subscription-history-heading > span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #edf3f8;
+  color: #536b80;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.subscription-invoice-list {
+  display: grid;
+  gap: 9px;
+}
+.subscription-invoice-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 13px;
+  border: 1px solid #d9e3eb;
+  border-radius: 14px;
+  background: #fff;
+}
+.subscription-invoice-row > svg { color: #5f7890; }
+.subscription-invoice-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.subscription-invoice-row small {
+  color: #6d7f90;
+  text-transform: capitalize;
+}
+.subscription-invoice-row > span {
+  color: #263e54;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.subscription-invoice-row.status-paid {
+  border-color: #cae3d1;
+  background: #f5fbf7;
+}
+.invoice-link-button {
+  min-height: 36px;
+  padding: 8px 11px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.subscription-history-empty {
+  padding: 18px;
+  border: 1px dashed #cddae5;
+  border-radius: 14px;
+  color: #6d8092;
+  text-align: center;
+  background: #f9fbfc;
+}
+.subscription-message.refreshing,
+.subscription-message.updating,
+.subscription-message.opening-checkout,
+.subscription-message.opening-portal {
+  border-color: #c6d9e8;
+  background: #eef6fb;
+  color: #315f84;
+}
+.subscription-action-modal {
+  width: min(650px, calc(100vw - 50px));
+  max-height: calc(100dvh - 150px);
+}
+.subscription-action-body {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  text-align: center;
+  padding-top: 26px;
+  padding-bottom: 26px;
+}
+.subscription-action-body > p {
+  margin: 0;
+  max-width: 540px;
+  color: #43596e;
+  line-height: 1.65;
+  font-size: 1rem;
+}
+.subscription-action-symbol {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: #eaf3fa;
+  color: #356d99;
+}
+.subscription-action-symbol.scheduled {
+  background: #fff4e2;
+  color: #a66512;
+}
+.subscription-action-safety {
+  width: 100%;
+  text-align: left;
+  border-color: #cfe1d5;
+  background: #f1f9f4;
+  color: #386349;
+}
+.subscription-action-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.subscription-action-footer button { width: 100%; justify-content: center; }
+
+.admin-subscription-lifecycle-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  width: 100%;
+}
+.admin-subscription-lifecycle-grid > span {
+  display: grid !important;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #dce5ed;
+  border-radius: 12px;
+  background: #fff;
+}
+.admin-subscription-lifecycle-grid strong,
+.admin-subscription-lifecycle-grid small {
+  overflow-wrap: anywhere;
+}
+.admin-subscription-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 13px;
+  border: 1px solid #efcaca;
+  border-radius: 13px;
+  background: #fff1f1;
+  color: #8d3434;
+}
+.admin-subscription-warning span {
+  display: grid !important;
+  gap: 3px;
+}
+.admin-stripe-account-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.admin-billing-summary-wide {
+  display: grid;
+  gap: 13px;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .subscription-lifecycle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-subscription-lifecycle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .subscription-lifecycle-grid,
+  .subscription-plan-options,
+  .subscription-interval-options { grid-template-columns: 1fr; }
+  .subscription-lifecycle-actions,
+  .subscription-manage-card,
+  .subscription-verify-card {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .subscription-action-row,
+  .subscription-lifecycle-actions button,
+  .subscription-manage-card button,
+  .subscription-verify-card button { width: 100%; }
+  .subscription-invoice-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .subscription-invoice-row .invoice-link-button {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: center;
+  }
+  .subscription-action-footer { grid-template-columns: 1fr; }
+  .admin-subscription-lifecycle-grid { grid-template-columns: 1fr; }
+  .admin-stripe-account-actions > button { width: 100%; }
+}

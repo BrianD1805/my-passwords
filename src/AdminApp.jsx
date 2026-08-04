@@ -92,10 +92,28 @@ function planStatusDisplayName(planStatus) {
   if (status === 'trial_pending') return 'Trial Pending';
   if (status === 'signup_pending') return 'Signup Pending';
   if (status === 'trial_active' || status === 'trialing') return 'Trial Active';
-  if (status === 'active') return 'Active';
+  if (status === 'active') return 'Subscription Active';
   if (status === 'trial_expired') return 'Trial Expired';
   if (status === 'trial_cancelled') return 'Trial Cancelled';
+  if (status === 'cancellation_scheduled') return 'Cancellation Scheduled';
+  if (status === 'payment_problem' || status === 'past_due' || status === 'unpaid') return 'Payment Needs Attention';
+  if (status === 'suspended' || status === 'paused') return 'Suspended';
+  if (status === 'subscription_cancelled' || status === 'cancelled') return 'Cancelled';
   return status ? status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Active';
+}
+
+
+function subscriptionLifecycleLabel(customer) {
+  if (String(customer?.accountStatus || '').toLowerCase() === 'suspended') return 'Suspended';
+  const subscription = customer?.subscription || {};
+  const status = String(subscription.status || customer?.planStatus || '').toLowerCase();
+  if (subscription.cancel_at_period_end && ['active', 'trialing'].includes(status)) return 'Cancellation Scheduled';
+  if (status === 'trialing' || status === 'trial_active') return 'Trial Active';
+  if (status === 'active') return subscription?.provider === 'stripe' ? 'Subscription Active' : 'Trial Active';
+  if (['past_due', 'unpaid', 'incomplete'].includes(status)) return 'Payment Needs Attention';
+  if (['cancelled', 'canceled', 'incomplete_expired'].includes(status)) return 'Cancelled';
+  if (status === 'paused') return 'Suspended';
+  return planStatusDisplayName(status);
 }
 
 export default function AdminApp({ version }) {
@@ -307,6 +325,20 @@ export default function AdminApp({ version }) {
     if (result.ok) await loadData();
   }
 
+
+  async function refreshStripeCustomer(customer) {
+    setBusy(true);
+    setNotice(`Refreshing ${customer.accountName} directly from Stripe...`);
+    const result = await requestJson('/.netlify/functions/admin-data', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'refresh_stripe_subscription', tenantId: customer.id })
+    });
+    setBusy(false);
+    setNotice(result.message || (result.ok ? 'Stripe subscription refreshed.' : 'Stripe refresh failed.'));
+    if (result.ok) await loadData();
+  }
+
   if (!isOnline) {
     return (
       <main className="admin-shell admin-centred">
@@ -417,7 +449,7 @@ export default function AdminApp({ version }) {
                 const founder = isFounder(customer);
                 const daysLeft = trialDaysLeft(customer.trialEndsAt);
                 const extensionDays = Number(trialDays[customer.id] || 7);
-                const stripeManaged = customer.subscription?.provider === 'stripe' && Boolean(customer.subscription?.provider_subscription_id);
+                const stripeManaged = customer.subscription?.provider === 'stripe' && Boolean(customer.subscription?.provider_customer_id || customer.subscription?.provider_subscription_id);
                 const expanded = expandedCustomerId === customer.id;
                 const onboardingLabel = founder ? 'Founder account' : customer.onboardingCompletedAt ? `Completed ${dateLabel(customer.onboardingCompletedAt)}` : 'Pending verification';
                 return (
@@ -425,7 +457,7 @@ export default function AdminApp({ version }) {
                     <button type="button" className="admin-customer-summary" onClick={() => toggleCustomer(customer.id)} aria-expanded={expanded}>
                       <span className="admin-customer-main">
                         <strong>{customer.accountName}</strong>
-                        <span>{planDisplayName(customer.planCode)} · {planStatusDisplayName(customer.planStatus)}</span>
+                        <span>{planDisplayName(customer.planCode)} · {subscriptionLifecycleLabel(customer)}</span>
                         <small>{customer.users?.[0]?.displayName || 'Owner'} · {customer.users?.[0]?.email || customer.users?.[0]?.emailMasked || 'No email'} · {customer.users?.[0]?.phone || customer.users?.[0]?.phoneMasked || 'No phone'}</small>
                       </span>
                       <span className="admin-customer-meta">
@@ -444,7 +476,14 @@ export default function AdminApp({ version }) {
                         </div>
                         {!founder && customer.subscription?.provider === 'stripe' && (
                           <div className="admin-billing-summary admin-billing-summary-wide">
-                            <div className="admin-billing-summary-heading"><CreditCard size={20} /><span><strong>Stripe subscription</strong><small>{String(customer.subscription.status || 'pending').replace(/_/g, ' ')} · {customer.subscription.billing_interval || 'interval pending'} · {money(customer.subscription.price_minor || 0)}{customer.subscription.current_period_end ? ` · renews/ends ${dateLabel(customer.subscription.current_period_end)}` : ''}</small></span></div>
+                            <div className="admin-billing-summary-heading"><CreditCard size={20} /><span><strong>{subscriptionLifecycleLabel(customer)}</strong><small>{customer.subscription.billing_interval || 'interval pending'} · {money(customer.subscription.price_minor || 0)}{customer.subscription.current_period_end ? ` · renews/ends ${dateLabel(customer.subscription.current_period_end)}` : ''}</small></span></div>
+                            <div className="admin-subscription-lifecycle-grid">
+                              <span><small>Next renewal amount</small><strong>{customer.subscription.next_invoice_amount_minor !== null && customer.subscription.next_invoice_amount_minor !== undefined ? money(customer.subscription.next_invoice_amount_minor) : money(customer.subscription.price_minor || 0)}</strong></span>
+                              <span><small>Next renewal date</small><strong>{dateLabel(customer.subscription.next_invoice_at || customer.subscription.current_period_end, true)}</strong></span>
+                              <span><small>Scheduled change</small><strong>{customer.subscription.scheduled_change_at ? `${planDisplayName(customer.subscription.scheduled_plan_code)} · ${customer.subscription.scheduled_billing_interval || 'billing'} · ${dateLabel(customer.subscription.scheduled_change_at)}` : 'None'}</strong></span>
+                              <span><small>Last Stripe refresh</small><strong>{dateLabel(customer.subscription.last_stripe_sync_at, true)}</strong></span>
+                            </div>
+                            {Number(customer.subscription.duplicate_subscription_count || 0) > 1 && <div className="admin-subscription-warning"><AlertTriangle size={18} /><span><strong>Overlapping subscriptions detected</strong><small>{(customer.subscription.duplicate_subscription_ids || []).join(', ')}</small></span></div>}
                             <div className="admin-stripe-reference-grid">
                               <span><small>Stripe customer reference</small><code>{customer.subscription.provider_customer_id || 'Pending'}</code></span>
                               <span><small>Stripe subscription reference</small><code>{customer.subscription.provider_subscription_id || 'Pending'}</code></span>
@@ -465,6 +504,7 @@ export default function AdminApp({ version }) {
                         )}
                         {!founder && stripeManaged && (
                           <div className="admin-stripe-account-actions">
+                            <button type="button" className="secondary-button" onClick={() => refreshStripeCustomer(customer)} disabled={busy}><RefreshCw size={16} /> Refresh from Stripe</button>
                             {customer.accountStatus === 'suspended'
                               ? <button type="button" className="secondary-button" onClick={() => setAccountStatus(customer, 'active')} disabled={busy}>Remove suspension</button>
                               : <button type="button" className="secondary-button danger-soft" onClick={() => setAccountStatus(customer, 'suspended')} disabled={busy}>Suspend</button>}
