@@ -8726,8 +8726,8 @@ a,
 }
 
 .public-landing-page {
-  --landing-accent: #f28c28;
-  --landing-accent-dark: #c96b12;
+  --landing-accent: #336699;
+  --landing-accent-dark: #336699;
   --landing-accent-soft: #fff3e6;
   --landing-accent-border: #f4c58f;
 }
@@ -8745,7 +8745,7 @@ a,
 .public-landing-page .landing-hero-shell {
   background:
     radial-gradient(circle at 12% 10%, rgba(69,123,157,.18), transparent 28%),
-    radial-gradient(circle at 86% 20%, rgba(242,140,40,.18), transparent 28%),
+    radial-gradient(circle at 86% 20%, rgba(51,102,153,.18), transparent 28%),
     linear-gradient(135deg, rgba(255,255,255,.97), rgba(248,251,254,.95));
 }
 
@@ -8753,10 +8753,10 @@ a,
 .public-landing-page .landing-plan-cta,
 .public-landing-page .landing-contact-card .primary-button,
 .public-landing-page .create-account-popup-card .primary-button {
-  background: linear-gradient(135deg, var(--landing-accent), #ff9f43);
+  background: linear-gradient(135deg, var(--landing-accent), #336699);
   border-color: var(--landing-accent);
   color: #fff;
-  box-shadow: 0 12px 28px rgba(201,107,18,.22);
+  box-shadow: 0 12px 28px rgba(51,102,153,.22);
 }
 
 .public-landing-page .landing-primary-cta:hover,
@@ -8810,7 +8810,7 @@ a,
   border: 2px solid var(--landing-accent);
   background: linear-gradient(180deg, #fffaf5, #fff);
   transform: translateY(-5px);
-  box-shadow: 0 22px 50px rgba(201,107,18,.14);
+  box-shadow: 0 22px 50px rgba(51,102,153,.14);
 }
 
 .landing-plan-badge {
@@ -8928,13 +8928,13 @@ a,
 .public-landing-page .create-account-popup-card .onboarding-progress span.active {
   background: var(--landing-accent);
   border-color: var(--landing-accent);
-  box-shadow: 0 8px 20px rgba(201,107,18,.2);
+  box-shadow: 0 8px 20px rgba(51,102,153,.2);
 }
 
 .public-landing-page .create-account-popup-card .plan-choice-grid button.active {
   background: var(--landing-accent-soft);
   border-color: var(--landing-accent);
-  box-shadow: 0 12px 30px rgba(201,107,18,.1);
+  box-shadow: 0 12px 30px rgba(51,102,153,.1);
 }
 
 /* The country-code selector is portalled to document.body so it always sits above the onboarding popup. */
@@ -9084,7 +9084,7 @@ a,
 }
 
 .landing-back-to-top:focus-visible {
-  outline: 3px solid rgba(242, 140, 40, .42);
+  outline: 3px solid rgba(51, 102, 153, .42);
   outline-offset: 3px;
 }
 
@@ -9117,17 +9117,17 @@ a,
 }
 
 .public-landing-page .preview-lock-card {
-  border-top-color: rgba(242, 140, 40, .62);
+  border-top-color: rgba(51, 102, 153, .62);
 }
 
 .public-landing-page .preview-lock-icon {
-  color: #ffc27c;
-  background: rgba(242, 140, 40, .16);
-  border: 1px solid rgba(242, 140, 40, .34);
+  color: #336699;
+  background: rgba(51, 102, 153, .16);
+  border: 1px solid rgba(51, 102, 153, .34);
 }
 
 .public-landing-page .preview-search-row {
-  box-shadow: inset 3px 0 0 rgba(242, 140, 40, .78);
+  box-shadow: inset 3px 0 0 rgba(51, 102, 153, .78);
 }
 
 /* Keep the final CTA dark blue without the previous orange/brown tint. */
@@ -9222,10 +9222,10 @@ a,
 
 /* My Passwords Ver-0.042H — restrained orange accents for vault login, selected navigation and primary vault actions */
 :root {
-  --vault-accent: #f28c28;
-  --vault-accent-dark: #c96b12;
+  --vault-accent: #336699;
+  --vault-accent-dark: #336699;
   --vault-accent-soft: #fff3e6;
-  --vault-accent-ring: rgba(242, 140, 40, .18);
+  --vault-accent-ring: rgba(51, 102, 153, .18);
 }
 
 /* Login screen: retain the secure blue foundation with a restrained orange cue. */
@@ -9247,7 +9247,7 @@ a,
   background: var(--vault-accent);
   color: #fff;
   border-color: var(--vault-accent);
-  box-shadow: 0 10px 24px rgba(201, 107, 18, .18);
+  box-shadow: 0 10px 24px rgba(51, 102, 153, .18);
 }
 
 .lock-card .unlock-form > button:not(.unlock-password-toggle):not(.unlock-biometric-icon-button):hover,
@@ -9270,7 +9270,7 @@ a,
   background: var(--vault-accent);
   color: #fff;
   border-color: var(--vault-accent);
-  box-shadow: 0 12px 28px rgba(201, 107, 18, .18);
+  box-shadow: 0 12px 28px rgba(51, 102, 153, .18);
 }
 
 .nav-pill.active:hover,
@@ -9287,7 +9287,7 @@ a,
   background: var(--vault-accent);
   color: #fff;
   border-color: var(--vault-accent);
-  box-shadow: 0 10px 24px rgba(201, 107, 18, .14);
+  box-shadow: 0 10px 24px rgba(51, 102, 153, .14);
 }
 
 .vault-folder-row .chip.active:hover,
@@ -9317,7 +9317,7 @@ a,
   background: var(--vault-accent);
   color: #fff;
   border-color: var(--vault-accent);
-  box-shadow: 0 14px 34px rgba(201, 107, 18, .22);
+  box-shadow: 0 14px 34px rgba(51, 102, 153, .22);
 }
 
 .floating-add-button:hover,
@@ -9325,7 +9325,7 @@ a,
   background: var(--vault-accent-dark);
   color: #fff;
   border-color: var(--vault-accent-dark);
-  box-shadow: 0 18px 38px rgba(201, 107, 18, .26);
+  box-shadow: 0 18px 38px rgba(51, 102, 153, .26);
   outline: none;
 }
 
@@ -9333,7 +9333,7 @@ a,
   background: var(--vault-accent);
   color: #fff;
   border-color: var(--vault-accent);
-  box-shadow: 0 10px 24px rgba(201, 107, 18, .16);
+  box-shadow: 0 10px 24px rgba(51, 102, 153, .16);
 }
 
 .item-popup-card .form-buttons .primary-button:hover,
@@ -10726,4 +10726,939 @@ body,
   .subscription-disclosure > summary {
     padding: 15px 16px;
   }
+}
+
+/* My Passwords Ver-0.045 — unified colour makeover
+   Approved palette:
+   Blue #336699 · Warm Grey #F7F5F2 · White #FFFFFF · Soft Black #2A2A2A
+   Grey #66635F · Success #63A96D · Warning #D6A247 · Error #C96A6A */
+:root {
+  --mp-primary: #336699;
+  --mp-background: #F7F5F2;
+  --mp-surface: #FFFFFF;
+  --mp-text: #2A2A2A;
+  --mp-muted: #66635F;
+  --mp-success: #63A96D;
+  --mp-warning: #D6A247;
+  --mp-error: #C96A6A;
+  --mp-border: rgba(102, 99, 95, .20);
+  --mp-border-strong: rgba(102, 99, 95, .32);
+  --mp-shadow: 0 18px 48px rgba(42, 42, 42, .09);
+  color-scheme: light;
+  font-family: Ubuntu, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--mp-background);
+  color: var(--mp-text);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: var(--mp-background) !important;
+  color: var(--mp-text) !important;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: Ubuntu, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+
+body {
+  background-image: none !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+label,
+legend,
+strong,
+summary {
+  color: var(--mp-text);
+}
+
+p,
+small,
+.intro,
+.subtitle,
+.version,
+.updated,
+.form-helper,
+.ids-line,
+.admin-footer,
+.app-version-footer,
+.landing-intro,
+.landing-section-heading p:not(.eyebrow),
+.landing-plan-section p,
+.settings-section-heading p:last-child,
+.settings-directory-copy small,
+.admin-header span,
+.admin-panel-heading p,
+.admin-customer-main span,
+.admin-customer-main small,
+.admin-customer-meta small {
+  color: var(--mp-muted) !important;
+}
+
+a,
+.link-button,
+.admin-back-link,
+.landing-footer button,
+.landing-footer a {
+  color: var(--mp-primary) !important;
+}
+
+/* Exact uploaded brand artwork. Never crop or mask the image. */
+.brand-mark {
+  width: 96px !important;
+  height: 96px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.brand-mark-image,
+.public-brand-image,
+.admin-brand-image,
+.admin-header-brand-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+  flex: 0 0 auto;
+}
+
+.brand-mark-image {
+  width: 96px;
+  height: 96px;
+}
+
+.public-brand-image {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+}
+
+.admin-mark {
+  width: 72px !important;
+  height: 72px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--mp-primary) !important;
+}
+
+.admin-brand-image {
+  width: 72px;
+  height: 72px;
+}
+
+.admin-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.admin-header-brand-image {
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+}
+
+/* Universal page backgrounds. */
+.lock-screen,
+.app-shell,
+.public-landing-page,
+.admin-shell,
+.startup-error-screen,
+.settings-page,
+.settings-page-v028,
+.settings-page-v040 {
+  background: var(--mp-background) !important;
+  color: var(--mp-text) !important;
+}
+
+/* White surfaces and neutral borders. */
+.lock-card,
+.startup-error-card,
+.public-landing-topbar,
+.landing-hero-shell,
+.landing-section,
+.landing-plan-section,
+.landing-pricing-card,
+.landing-feature-grid article,
+.landing-step-grid article,
+.landing-security-grid article,
+.landing-faq-grid article,
+.landing-trust-strip span,
+.sync-panel,
+.controls-panel,
+.status-grid article,
+.home-search-panel,
+.home-quick-summary,
+.item-form,
+.vault-card,
+.empty-state,
+.vault-results-panel,
+.vault-result-row,
+.settings-header-card,
+.settings-section-panel,
+.settings-inner-card,
+.settings-tool-card,
+.settings-directory-group,
+.settings-directory-row,
+.settings-faq-hero,
+.settings-faq-quick-grid article,
+.settings-faq-item,
+.settings-faq-support-card,
+.vault-safety-panel,
+.vault-safety-status-card,
+.vault-safety-verification-card,
+.vault-safety-explainer-grid article,
+.subscription-settings-panel,
+.subscription-summary-grid > span,
+.subscription-card,
+.subscription-disclosure,
+.subscription-details-disclosure,
+.subscription-change-card,
+.subscription-selection-summary,
+.subscription-invoice-row,
+.plan-feature-unavailable,
+.entitlement-modal,
+.entitlement-current-plan,
+.item-popup-card,
+.item-form.item-popup-card,
+.item-popup-header,
+.item-popup-footer,
+.verify-modal,
+.country-picker-card,
+.create-account-step,
+.admin-login-card,
+.admin-header,
+.admin-panel,
+.admin-stat-grid article,
+.admin-check-grid span,
+.admin-toggle-grid label,
+.admin-plan-card,
+.admin-customer-card,
+.admin-customer-accordion,
+.admin-customer-details,
+.admin-trial-summary span,
+.admin-billing-summary,
+.admin-stripe-status,
+.admin-billing-event,
+.admin-sync-card,
+.admin-plan-window,
+.admin-plan-window-header,
+.admin-plan-window-footer,
+.admin-feature-flags,
+.admin-feature-flags label,
+.admin-entitlement-panel,
+.admin-entitlement-usage span,
+.admin-plan-readiness {
+  background: var(--mp-surface) !important;
+  border-color: var(--mp-border) !important;
+  color: var(--mp-text) !important;
+  box-shadow: none;
+}
+
+.lock-card,
+.landing-hero-shell,
+.landing-section,
+.landing-plan-section,
+.item-popup-card,
+.admin-login-card,
+.admin-header,
+.admin-panel,
+.admin-plan-window,
+.vault-card,
+.settings-section-panel {
+  box-shadow: var(--mp-shadow) !important;
+}
+
+/* Form controls. */
+input,
+textarea,
+select,
+.admin-login-card input,
+.admin-plan-form input,
+.admin-plan-form select,
+.admin-plan-form textarea,
+.admin-plan-window-form input,
+.admin-plan-window-form textarea,
+.admin-entitlement-overrides input,
+.admin-entitlement-overrides select,
+.admin-entitlement-overrides textarea,
+.subscription-selection-form select {
+  background: var(--mp-surface) !important;
+  color: var(--mp-text) !important;
+  border-color: var(--mp-border-strong) !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--mp-muted) !important;
+  opacity: .78;
+}
+
+input:focus,
+textarea:focus,
+select:focus,
+.subscription-selection-form select:focus,
+.admin-plan-window-form input:focus,
+.admin-plan-window-form textarea:focus {
+  border-color: var(--mp-primary) !important;
+  box-shadow: 0 0 0 4px rgba(51, 102, 153, .15) !important;
+  outline: none;
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled,
+button:disabled {
+  color: var(--mp-muted) !important;
+}
+
+/* Primary actions and links. */
+.primary-button,
+.unlock-form > button,
+.lock-button,
+.landing-primary-cta,
+.landing-plan-button,
+.admin-tabs button.active,
+.admin-plan-filter button.active,
+.settings-section-buttons button.active,
+.settings-subpage-nav button.active,
+.chip.active,
+.vault-folder-row .chip.active,
+.topbar-help-button.active,
+.mobile-folder-chip.active,
+.mobile-header-menu button.active,
+.floating-add-button,
+.add-item-button,
+.save-item-button {
+  background: var(--mp-primary) !important;
+  border-color: var(--mp-primary) !important;
+  color: var(--mp-surface) !important;
+  box-shadow: none !important;
+}
+
+.primary-button:hover:not(:disabled),
+.unlock-form > button:hover:not(:disabled),
+.lock-button:hover:not(:disabled),
+.landing-primary-cta:hover:not(:disabled),
+.admin-tabs button.active:hover,
+.admin-plan-filter button.active:hover,
+.settings-section-buttons button.active:hover,
+.vault-folder-row .chip.active:hover {
+  background: var(--mp-primary) !important;
+  color: var(--mp-surface) !important;
+  filter: brightness(.93);
+}
+
+.secondary-button,
+.icon-button,
+.mini-button,
+.field-row button,
+.url-line button,
+.notes-block button,
+.unlock-password-toggle,
+.subscription-refresh-icon-button,
+.invoice-link-button,
+.admin-tabs button,
+.admin-plan-filter button,
+.settings-section-buttons button,
+.settings-subpage-nav button,
+.mobile-top-menu-button,
+.mobile-vault-refresh-button,
+.admin-window-close,
+.entitlement-modal > header button {
+  background: var(--mp-surface) !important;
+  border: 1px solid var(--mp-border) !important;
+  color: var(--mp-primary) !important;
+  box-shadow: none !important;
+}
+
+.secondary-button:hover:not(:disabled),
+.icon-button:hover:not(:disabled),
+.mini-button:hover:not(:disabled),
+.subscription-refresh-icon-button:hover:not(:disabled),
+.admin-tabs button:hover:not(.active),
+.admin-plan-filter button:hover:not(.active),
+.settings-section-buttons button:hover:not(.active),
+.settings-subpage-nav button:hover:not(.active) {
+  background: var(--mp-background) !important;
+  border-color: var(--mp-primary) !important;
+  color: var(--mp-primary) !important;
+}
+
+/* Selected content uses blue; primary text remains soft black elsewhere. */
+.eyebrow,
+.status-grid svg,
+.landing-feature-grid svg,
+.landing-security-grid svg,
+.settings-tool-card svg,
+.settings-directory-icon,
+.admin-stat-grid svg,
+.admin-sync-icon,
+.admin-entitlement-heading,
+.admin-feature-flags legend,
+.category-pill,
+.subscription-refresh-icon-button,
+.preview-card-grid svg {
+  color: var(--mp-primary) !important;
+}
+
+.category-pill,
+.admin-status,
+.admin-plan-card footer span,
+.admin-plan-card code,
+.settings-directory-state,
+.landing-pill {
+  background: var(--mp-background) !important;
+  border-color: var(--mp-border) !important;
+  color: var(--mp-primary) !important;
+}
+
+/* Landing page. */
+.public-landing-topbar {
+  background: var(--mp-surface) !important;
+}
+
+.public-brand,
+.public-brand span {
+  color: var(--mp-text) !important;
+}
+
+.landing-hero-shell {
+  background: var(--mp-surface) !important;
+}
+
+.landing-hero-shell::before,
+.landing-hero-shell::after {
+  background: transparent !important;
+  opacity: 0 !important;
+}
+
+.landing-pill {
+  background: var(--mp-primary) !important;
+  border-color: var(--mp-primary) !important;
+  color: var(--mp-surface) !important;
+}
+
+.landing-pill svg {
+  color: var(--mp-surface) !important;
+}
+
+.landing-hero-copy h1,
+.landing-section-heading h2,
+.landing-plan-section h2,
+.landing-feature-grid h3,
+.landing-step-grid strong,
+.landing-security-grid strong,
+.landing-faq-grid h3,
+.landing-pricing-card h3 {
+  color: var(--mp-text) !important;
+}
+
+.landing-vault-preview {
+  background: var(--mp-primary) !important;
+  color: var(--mp-surface) !important;
+  box-shadow: none !important;
+}
+
+.landing-vault-preview strong,
+.landing-vault-preview h2,
+.landing-vault-preview p,
+.landing-vault-preview span,
+.landing-vault-preview svg,
+.preview-lock-icon,
+.preview-card-grid svg {
+  color: var(--mp-surface) !important;
+}
+
+.preview-window-bar span,
+.preview-lock-card,
+.preview-lock-icon,
+.preview-search-row,
+.preview-card-grid article {
+  background: rgba(255, 255, 255, .12) !important;
+  border-color: rgba(255, 255, 255, .28) !important;
+}
+
+.preview-lock-card {
+  border-top-color: var(--mp-surface) !important;
+}
+
+.landing-pricing-card.is-featured,
+.landing-pricing-card.featured {
+  border-color: var(--mp-primary) !important;
+  box-shadow: 0 0 0 2px rgba(51, 102, 153, .12) !important;
+}
+
+.landing-popular-badge,
+.plan-popular-badge,
+.most-popular-badge {
+  background: var(--mp-primary) !important;
+  color: var(--mp-surface) !important;
+}
+
+.landing-final-cta {
+  background: var(--mp-primary) !important;
+  border-color: var(--mp-primary) !important;
+  color: var(--mp-surface) !important;
+  box-shadow: none !important;
+}
+
+.landing-final-cta h2,
+.landing-final-cta .eyebrow,
+.landing-final-cta p {
+  color: var(--mp-surface) !important;
+}
+
+.landing-final-cta .primary-button {
+  background: var(--mp-surface) !important;
+  border-color: var(--mp-surface) !important;
+  color: var(--mp-primary) !important;
+}
+
+/* Vault and settings. */
+.topbar h1,
+.settings-header-card h2,
+.settings-section-heading h3,
+.vault-card h3,
+.item-popup-header h2,
+.sync-title h2,
+.status-grid strong,
+.vault-result-name,
+.settings-directory-copy strong {
+  color: var(--mp-text) !important;
+}
+
+.search-box,
+.hero-search,
+.secret-input-row,
+.favourite-toggle,
+.notes,
+.field-row code,
+.snapshot-history-card,
+.snapshot-row,
+.sync-status-card,
+.device-status-card,
+.account-status-card,
+.network-status-notice,
+.password-check-login-notice {
+  background: var(--mp-surface) !important;
+  border-color: var(--mp-border) !important;
+  color: var(--mp-text) !important;
+}
+
+.notes {
+  border-left-color: var(--mp-primary) !important;
+}
+
+/* Up-to-date and success. */
+.db-ok,
+.sync-status-card.success,
+.toast.success,
+.account-status-card.ready,
+.otp-status-line.verified,
+.settings-directory-state.safe,
+.topbar-sync-button.up-to-date,
+.topbar-sync-button.success,
+.vault-safety-status-card.success,
+.admin-status.success,
+.admin-stripe-status.ready,
+.trial-ready-card,
+.success-panel,
+.status-success {
+  background: var(--mp-success) !important;
+  border-color: var(--mp-success) !important;
+  color: var(--mp-surface) !important;
+}
+
+.db-ok *,
+.sync-status-card.success *,
+.toast.success *,
+.account-status-card.ready *,
+.otp-status-line.verified *,
+.settings-directory-state.safe *,
+.topbar-sync-button.up-to-date *,
+.topbar-sync-button.success *,
+.vault-safety-status-card.success *,
+.admin-status.success *,
+.admin-stripe-status.ready *,
+.trial-ready-card * {
+  color: var(--mp-surface) !important;
+}
+
+.toast.success .toast-dot,
+.vault-safety-status-card.success .vault-safety-status-icon {
+  background: var(--mp-surface) !important;
+  color: var(--mp-success) !important;
+  box-shadow: none !important;
+}
+
+/* Pending and warning. */
+.message,
+.db-wait,
+.sync-status-card.warning,
+.toast.warning,
+.create-warning,
+.device-status-card.local-fallback,
+.device-status-card.local-only,
+.device-status-card.no-cloud-snapshot,
+.account-status-card.needs-details,
+.topbar-sync-button.pending,
+.topbar-sync-button.conflict,
+.topbar-sync-button.offline,
+.vault-safety-status-card.pending,
+.vault-safety-status-card.conflict,
+.vault-safety-status-card.offline,
+.admin-status.warning,
+.admin-sync-card.warning,
+.admin-plan-readiness,
+.admin-subscription-warning,
+.settings-directory-state.attention,
+.warning-panel,
+.status-warning {
+  background: var(--mp-warning) !important;
+  border-color: var(--mp-warning) !important;
+  color: var(--mp-text) !important;
+}
+
+.message *,
+.db-wait *,
+.sync-status-card.warning *,
+.toast.warning *,
+.create-warning *,
+.topbar-sync-button.pending *,
+.topbar-sync-button.conflict *,
+.topbar-sync-button.offline *,
+.vault-safety-status-card.pending *,
+.vault-safety-status-card.conflict *,
+.vault-safety-status-card.offline *,
+.admin-status.warning *,
+.admin-sync-card.warning *,
+.admin-plan-readiness *,
+.admin-subscription-warning * {
+  color: var(--mp-text) !important;
+}
+
+.toast.warning .toast-dot,
+.vault-safety-status-card.pending .vault-safety-status-icon,
+.vault-safety-status-card.conflict .vault-safety-status-icon,
+.vault-safety-status-card.offline .vault-safety-status-icon {
+  background: var(--mp-text) !important;
+  color: var(--mp-warning) !important;
+  box-shadow: none !important;
+}
+
+/* Errors and destructive actions. */
+.danger-button,
+.danger-delete-button,
+.danger-soft,
+.icon-button.danger,
+.link-danger,
+.admin-status.suspended,
+.admin-status.error,
+.admin-status.cancelled,
+.admin-status.trial_expired,
+.admin-notice.error,
+.admin-sync-card.error,
+.admin-stripe-status.error,
+.admin-stripe-status.not_configured,
+.sync-status-card.error,
+.toast.error,
+.account-status-card.error,
+.device-status-card.cloud-decrypt-failed,
+.error-panel,
+.status-error {
+  background: var(--mp-error) !important;
+  border-color: var(--mp-error) !important;
+  color: var(--mp-surface) !important;
+  box-shadow: none !important;
+}
+
+.danger-button *,
+.danger-delete-button *,
+.danger-soft *,
+.icon-button.danger *,
+.link-danger *,
+.admin-status.suspended *,
+.admin-status.error *,
+.admin-status.cancelled *,
+.admin-status.trial_expired *,
+.admin-notice.error *,
+.admin-sync-card.error *,
+.admin-stripe-status.error *,
+.admin-stripe-status.not_configured *,
+.sync-status-card.error *,
+.toast.error *,
+.account-status-card.error *,
+.device-status-card.cloud-decrypt-failed * {
+  color: var(--mp-surface) !important;
+}
+
+.toast.error .toast-dot {
+  background: var(--mp-surface) !important;
+  box-shadow: none !important;
+}
+
+/* Neutral cloud/local states. */
+.topbar-sync-button.unknown,
+.topbar-sync-button.syncing,
+.topbar-sync-button.plan-local-only,
+.vault-safety-status-card.unknown,
+.vault-safety-status-card.plan-local-only,
+.sync-status-card.syncing,
+.toast.copy,
+.admin-notice,
+.admin-status {
+  background: var(--mp-surface) !important;
+  border-color: var(--mp-border) !important;
+  color: var(--mp-primary) !important;
+}
+
+.vault-safety-status-card.unknown .vault-safety-status-icon,
+.vault-safety-status-card.plan-local-only .vault-safety-status-icon {
+  background: var(--mp-primary) !important;
+  color: var(--mp-surface) !important;
+}
+
+/* Popups retain locked layout while adopting the palette. */
+.item-popup-layer,
+.admin-modal-overlay,
+.entitlement-modal-overlay,
+.country-picker-layer,
+.verify-modal-layer {
+  background: rgba(42, 42, 42, .52) !important;
+}
+
+.item-popup-header,
+.admin-plan-window-header,
+.entitlement-modal > header {
+  border-top-color: var(--mp-primary) !important;
+}
+
+.item-popup-body,
+.admin-plan-window-body,
+.entitlement-modal-body {
+  background: var(--mp-surface) !important;
+  color: var(--mp-text) !important;
+}
+
+.item-popup-footer,
+.admin-plan-window-footer,
+.entitlement-modal > footer {
+  background: var(--mp-surface) !important;
+  border-top-color: var(--mp-border) !important;
+}
+
+/* Admin. */
+.admin-shell {
+  background: var(--mp-background) !important;
+  color: var(--mp-text) !important;
+}
+
+.admin-tabs button.active,
+.admin-plan-filter button.active {
+  color: var(--mp-surface) !important;
+}
+
+.admin-stat-grid strong,
+.admin-plan-card strong,
+.admin-customer-main strong,
+.admin-panel-heading h2,
+.admin-header h1,
+.admin-login-card h1 {
+  color: var(--mp-text) !important;
+}
+
+.admin-check-grid svg,
+.admin-stripe-status.ready svg {
+  color: var(--mp-success) !important;
+}
+
+.admin-plan-card:hover,
+.admin-customer-summary:hover,
+.admin-customer-accordion.open {
+  border-color: var(--mp-primary) !important;
+}
+
+.admin-plan-prices span,
+.admin-plan-card code,
+.admin-plan-card footer span,
+.admin-empty,
+.admin-detail-grid > span,
+.admin-subscription-lifecycle-grid > span,
+.admin-stripe-reference-grid > span {
+  background: var(--mp-background) !important;
+  border-color: var(--mp-border) !important;
+  color: var(--mp-text) !important;
+}
+
+/* Checkboxes and radio controls. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--mp-primary) !important;
+}
+
+/* Remove old orange accent remnants from interactive and decorative elements. */
+.landing-pill,
+.preview-window-bar span:first-child,
+.preview-lock-card,
+.preview-lock-icon,
+.preview-search-row,
+.landing-primary-cta,
+.floating-add-button,
+.add-item-button,
+.save-item-button,
+.favourite-toggle input,
+.item-popup-header::before {
+  --legacy-orange: var(--mp-primary);
+}
+
+.preview-window-bar span:first-child,
+.item-popup-header::before {
+  background: var(--mp-primary) !important;
+}
+
+/* Mobile keeps the same warm grey from top to bottom. */
+@media (max-width: 760px) {
+  html,
+  body,
+  #root,
+  .lock-screen,
+  .app-shell,
+  .public-landing-page,
+  .admin-shell {
+    background: var(--mp-background) !important;
+    background-image: none !important;
+  }
+
+  .admin-header-brand-image {
+    width: 46px;
+    height: 46px;
+  }
+}
+
+
+/* My Passwords Ver-0.045A — vault list and hover contrast refinements. */
+.vault-results-panel,
+.vault-results-panel.full-vault-list {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.vault-folder-row .chip,
+.vault-folder-row .chip:hover,
+.vault-folder-row .chip:focus-visible,
+.vault-folder-row .chip.active,
+.vault-folder-row .chip.active:hover,
+.vault-folder-row .chip.active:focus-visible,
+.add-folder-chip,
+.add-folder-chip:hover,
+.add-folder-chip:focus-visible,
+.premium-more-folder-button,
+.premium-more-folder-button:hover,
+.premium-more-folder-button:focus-visible {
+  box-shadow: none !important;
+}
+
+.vault-folder-row .chip:not(.active):hover,
+.vault-folder-row .chip:not(.active):focus-visible,
+.add-folder-chip:hover,
+.add-folder-chip:focus-visible,
+.premium-more-folder-button:hover,
+.premium-more-folder-button:focus-visible {
+  background: var(--mp-primary) !important;
+  border-color: var(--mp-primary) !important;
+  color: var(--mp-surface) !important;
+  transform: none !important;
+  outline: none;
+}
+
+.vault-folder-row .chip:not(.active):hover .chip-count,
+.vault-folder-row .chip:not(.active):focus-visible .chip-count,
+.vault-folder-row .chip:not(.active):hover .custom-folder-dot,
+.vault-folder-row .chip:not(.active):focus-visible .custom-folder-dot {
+  color: var(--mp-surface) !important;
+}
+
+.vault-folder-row .chip:not(.active):hover .custom-folder-dot,
+.vault-folder-row .chip:not(.active):focus-visible .custom-folder-dot {
+  background: var(--mp-surface) !important;
+}
+
+.vault-folder-row .chip.active:hover,
+.vault-folder-row .chip.active:focus-visible {
+  background: var(--mp-primary) !important;
+  border-color: var(--mp-primary) !important;
+  color: var(--mp-surface) !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+.vault-result-row {
+  box-shadow: none !important;
+}
+
+.vault-result-row:hover,
+.vault-result-row:focus-visible {
+  background: var(--mp-primary) !important;
+  border-color: var(--mp-primary) !important;
+  color: var(--mp-surface) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.vault-result-row:hover .vault-result-name,
+.vault-result-row:focus-visible .vault-result-name,
+.vault-result-row:hover .vault-result-subline,
+.vault-result-row:focus-visible .vault-result-subline {
+  color: var(--mp-surface) !important;
+}
+
+.vault-result-row:hover .vault-result-open,
+.vault-result-row:focus-visible .vault-result-open {
+  background: var(--mp-surface) !important;
+  border-color: var(--mp-surface) !important;
+  color: var(--mp-primary) !important;
+}
+
+
+.secondary-button:hover:not(:disabled),
+.icon-button:hover:not(:disabled),
+.mini-button:hover:not(:disabled),
+.field-row button:hover:not(:disabled),
+.url-line button:hover:not(:disabled),
+.notes-block button:hover:not(:disabled),
+.unlock-password-toggle:hover:not(:disabled),
+.subscription-refresh-icon-button:hover:not(:disabled),
+.invoice-link-button:hover:not(:disabled),
+.admin-tabs button:hover:not(.active),
+.admin-plan-filter button:hover:not(.active),
+.settings-section-buttons button:hover:not(.active),
+.settings-subpage-nav button:hover:not(.active),
+.mobile-top-menu-button:hover:not(:disabled),
+.mobile-vault-refresh-button:hover:not(:disabled),
+.admin-window-close:hover:not(:disabled),
+.entitlement-modal > header button:hover:not(:disabled) {
+  background: var(--mp-primary) !important;
+  border-color: var(--mp-primary) !important;
+  color: var(--mp-surface) !important;
 }

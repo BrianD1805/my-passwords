@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleH
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 
-const VERSION = 'My Passwords Ver-0.044A';
+const VERSION = 'My Passwords Ver-0.045A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1719,7 +1719,7 @@ class AppStartupBoundary extends React.Component {
     return (
       <main className="startup-error-screen">
         <section className="startup-error-card">
-          <div className="brand-mark"><Lock size={34} /></div>
+          <div className="brand-mark"><img className="brand-mark-image" src="/images/password-encrypt-brand.png" alt="" /></div>
           <h1>{offline ? 'No internet connection' : 'My Passwords could not start'}</h1>
           <p>{offline
             ? 'Your encrypted vault data has not been changed. Reconnect and try again.'
@@ -5034,7 +5034,7 @@ function App() {
     return (
       <main className="public-landing-page emergency-invite-page">
         <section className="emergency-invite-shell">
-          <div className="public-brand emergency-invite-brand"><Lock size={22} /><span>My Passwords</span></div>
+          <div className="public-brand emergency-invite-brand"><img className="public-brand-image" src="/images/password-encrypt-brand.png" alt="" /><span>My Passwords</span></div>
           <article className="emergency-invite-card">
             <div className="preview-lock-icon"><UsersRound size={26} /></div>
             <p className="eyebrow">Emergency Access</p>
@@ -5136,7 +5136,7 @@ function App() {
     return (
       <main className="public-landing-page">
         <header className="public-landing-topbar">
-          <div className="public-brand"><Lock size={22} /><span>My Passwords</span></div>
+          <div className="public-brand"><img className="public-brand-image" src="/images/password-encrypt-brand.png" alt="" /><span>My Passwords</span></div>
           <button type="button" className="secondary-button public-open-button" onClick={openVaultApp}><Unlock size={17} /> Open My Vault</button>
         </header>
 
@@ -5422,7 +5422,7 @@ function App() {
     return (
       <main className="lock-screen">
         <section className="lock-card" id="vault-access-card">
-          <div className="brand-mark"><Lock size={38} /></div>
+          <div className="brand-mark"><img className="brand-mark-image" src="/images/password-encrypt-brand.png" alt="My Passwords secure vault" /></div>
           <p className="eyebrow">Secure private vault</p>
           <h1>My Passwords</h1>
           {!isOnline && <NetworkStatusNotice context="vault" hasLocalVault={hasLocalVault} />}

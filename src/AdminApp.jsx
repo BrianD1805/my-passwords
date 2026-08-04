@@ -409,7 +409,7 @@ export default function AdminApp({ version }) {
     return (
       <main className="admin-shell admin-centred">
         <section className="admin-login-card admin-offline-card">
-          <div className="admin-mark"><Cloud size={28} /></div>
+          <div className="admin-mark"><img className="admin-brand-image" src="/images/password-encrypt-brand.png" alt="" /></div>
           <p className="eyebrow">My Passwords Admin</p>
           <h1>No internet connection</h1>
           <p>Admin needs an internet connection to load plans, customers, billing and sync information. Reconnect, then try again.</p>
@@ -429,7 +429,7 @@ export default function AdminApp({ version }) {
     return (
       <main className="admin-shell admin-centred">
         <section className="admin-login-card">
-          <div className="admin-mark"><ShieldCheck size={28} /></div>
+          <div className="admin-mark"><img className="admin-brand-image" src="/images/password-encrypt-brand.png" alt="My Passwords" /></div>
           <p className="eyebrow">My Passwords Admin</p>
           <h1>Owner administration</h1>
           <p>Manage SaaS plans and customer account status inside the same My Passwords Netlify site.</p>
@@ -450,7 +450,7 @@ export default function AdminApp({ version }) {
   return (
     <main className="admin-shell">
       <header className="admin-header">
-        <div><p className="eyebrow">My Passwords</p><h1>Admin</h1><span>Single-site SaaS administration</span></div>
+        <div className="admin-header-brand"><img className="admin-header-brand-image" src="/images/password-encrypt-brand.png" alt="" /><div><p className="eyebrow">My Passwords</p><h1>Admin</h1><span>Single-site SaaS administration</span></div></div>
         <div className="admin-header-actions"><button type="button" className="secondary-button" onClick={loadData} disabled={busy}><RefreshCw size={17} className={busy ? 'spin-icon' : ''} /> Refresh</button><button type="button" className="secondary-button" onClick={logout}><LogOut size={17} /> Logout</button></div>
       </header>
 

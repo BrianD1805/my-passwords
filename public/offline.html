@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1d3557" />
+    <meta name="theme-color" content="#336699" />
     <title>My Passwords — Offline</title>
     <style>
       * { box-sizing: border-box; }
@@ -12,51 +12,48 @@
         display: grid;
         place-items: center;
         padding: 28px;
-        background: #eaf4fb;
-        color: #1d3557;
+        background: #F7F5F2;
+        color: #2A2A2A;
         font-family: Ubuntu, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
       main {
         width: min(100%, 480px);
         padding: 32px;
-        border: 1px solid #cbddea;
+        border: 1px solid rgba(102, 99, 95, .20);
         border-radius: 22px;
-        background: #fff;
+        background: #FFFFFF;
         text-align: center;
       }
       .mark {
-        display: grid;
-        width: 54px;
-        height: 54px;
-        margin: 0 auto 18px;
-        place-items: center;
-        border-radius: 16px;
-        background: #dcecf7;
-        font-size: 26px;
+        display: block;
+        width: 92px;
+        height: 92px;
+        margin: 0 auto 20px;
+        object-fit: contain;
       }
       h1 { margin: 0 0 12px; font-size: 26px; }
-      p { margin: 0 0 20px; color: #526b7d; line-height: 1.55; }
+      p { margin: 0 0 20px; color: #66635F; line-height: 1.55; }
       button {
         min-height: 46px;
         padding: 0 22px;
         border: 0;
         border-radius: 12px;
-        background: #1d5f91;
+        background: #336699;
         color: #fff;
         font: inherit;
         font-weight: 700;
         cursor: pointer;
       }
-      small { display: block; margin-top: 18px; color: #718797; }
+      small { display: block; margin-top: 18px; color: #66635F; }
     </style>
   </head>
   <body>
     <main>
-      <div class="mark" aria-hidden="true">MP</div>
+      <img class="mark" src="/images/password-encrypt-brand.png" alt="My Passwords" />
       <h1>No internet connection</h1>
       <p>My Passwords could not finish loading. Reconnect, then try again. A vault already saved on this device will remain encrypted and unchanged.</p>
       <button type="button" onclick="window.location.reload()">Try again</button>
-      <small>My Passwords Ver-0.044A</small>
+      <small>My Passwords Ver-0.045A</small>
     </main>
   </body>
 </html>

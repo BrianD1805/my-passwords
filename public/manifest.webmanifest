@@ -4,8 +4,8 @@
   "description": "Private encrypted SaaS-ready password vault PWA.",
   "start_url": "/vault",
   "display": "standalone",
-  "background_color": "#edf3f8",
-  "theme_color": "#1d3557",
+  "background_color": "#F7F5F2",
+  "theme_color": "#336699",
   "icons": [
     { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
