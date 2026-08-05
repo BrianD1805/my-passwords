@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.047';
+const VERSION = 'My Passwords Ver-0.047B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1848,9 +1848,9 @@ function AccountRecoveryModal({ state, setState, onClose, onRequest, onVerify })
     <div className="item-popup-layer account-recovery-modal-layer" role="dialog" aria-modal="true" aria-labelledby="account-recovery-title">
       <button type="button" className="item-popup-backdrop" onClick={state.busy ? undefined : onClose} aria-label="Close account recovery" />
       <section className="item-popup-card account-recovery-modal-card">
-        <header className="item-popup-header"><h2 id="account-recovery-title"><UserRoundCheck size={21} /> Sign in or recover account access</h2><button type="button" className="icon-button" onClick={onClose} disabled={state.busy} aria-label="Close"><X size={19} /></button></header>
+        <header className="item-popup-header"><h2 id="account-recovery-title"><UserRoundCheck size={21} /> Recover account access</h2><button type="button" className="icon-button" onClick={onClose} disabled={state.busy} aria-label="Close"><X size={19} /></button></header>
         <div className="item-popup-body account-recovery-modal-body">
-          {state.step === 'contact' ? <><p>Use a verified contact detail to restore access to your account, subscription and secure cloud services on this device.</p><div className="recovery-channel-switch"><button type="button" className={state.channel === 'email' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'email', contact: '', message: '' }))}><Mail size={17} /> Email</button><button type="button" className={state.channel === 'sms' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'sms', contact: '', message: '' }))}><Phone size={17} /> Mobile</button></div><label>{state.channel === 'email' ? 'Verified email address' : 'Verified mobile number with country code'}<input type={state.channel === 'email' ? 'email' : 'tel'} inputMode={state.channel === 'email' ? 'email' : 'tel'} value={state.contact || ''} onChange={(event) => setState((current) => ({ ...current, contact: event.target.value, message: '' }))} placeholder={state.channel === 'email' ? 'you@example.com' : '+254712345678'} autoFocus /></label></> : <><div className="account-otp-destination"><ShieldCheck size={20} /><span><strong>Enter your recovery code</strong><small>{state.message}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" autoFocus /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
+          {state.step === 'contact' ? <><p>Use this when setting up a new device, after ending account sessions, or when you can no longer access account services. A verified contact detail restores account, subscription and secure cloud-service access on this device. It does not open or decrypt the vault.</p><div className="recovery-channel-switch"><button type="button" className={state.channel === 'email' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'email', contact: '', message: '' }))}><Mail size={17} /> Email</button><button type="button" className={state.channel === 'sms' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'sms', contact: '', message: '' }))}><Phone size={17} /> Mobile</button></div><label>{state.channel === 'email' ? 'Verified email address' : 'Verified mobile number with country code'}<input type={state.channel === 'email' ? 'email' : 'tel'} inputMode={state.channel === 'email' ? 'email' : 'tel'} value={state.contact || ''} onChange={(event) => setState((current) => ({ ...current, contact: event.target.value, message: '' }))} placeholder={state.channel === 'email' ? 'you@example.com' : '+254712345678'} autoFocus /></label></> : <><div className="account-otp-destination"><ShieldCheck size={20} /><span><strong>Enter your recovery code</strong><small>{state.message}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" autoFocus /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
           {state.channel === 'sms' && <p className="sms-carrier-note">Standard message and carrier rates may apply.</p>}
           {state.message && state.step === 'contact' && <div className="account-modal-message">{state.message}</div>}
           <div className="master-password-boundary-note"><Lock size={20} /><span><strong>Your master password cannot be recovered</strong><small>Recovery can restore the account and subscription, but the encrypted vault remains unreadable without the correct master password.</small></span></div>
@@ -2140,7 +2140,7 @@ function App() {
   }
 
   function openAccountRecovery() {
-    setAccountRecoveryModal({ visible: true, step: 'contact', channel: 'email', contact: bootstrap.email || '', challengeId: '', code: '', testOtpCode: '', message: 'Sign in on a new device or recover account and subscription access using a verified email address or mobile number. Your master password cannot be recovered.', busy: false });
+    setAccountRecoveryModal({ visible: true, step: 'contact', channel: 'email', contact: bootstrap.email || '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false });
   }
 
   async function requestAccountRecoveryCode() {
@@ -5796,10 +5796,9 @@ function App() {
             <>
               <p className="intro">Unlock your private vault with your master password.</p>
               <div className="unlock-form" role="form" onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); unlockVault(event); } }} autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other">
-                <label htmlFor="master-password-input">Master vault password</label>
                 <div className="unlock-password-and-biometric-row">
                   <div className={`unlock-password-field ${hasLocalVault && !createMode && biometricStatus.supported && featureIncluded('secureDeviceUnlock') ? 'has-secure-device-key' : ''}`}>
-                    <input ref={masterPasswordInputRef} id="master-password-input" name="vault-local-decryption-key" type={showUnlockPassword ? 'text' : 'password'} autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!masterPasswordFieldArmed} onPointerDown={armMasterPasswordField} onFocus={armMasterPasswordField} value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter Password" />
+                    <input ref={masterPasswordInputRef} id="master-password-input" name="vault-local-decryption-key" type={showUnlockPassword ? 'text' : 'password'} aria-label="Master vault password" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!masterPasswordFieldArmed} onPointerDown={armMasterPasswordField} onFocus={armMasterPasswordField} value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter Password" />
                     <button type="button" className="unlock-password-toggle" onClick={() => setShowUnlockPassword((current) => !current)} aria-label={showUnlockPassword ? 'Hide master password' : 'Show master password'} title={showUnlockPassword ? 'Hide password' : 'Show password'}>{showUnlockPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
                     {hasLocalVault && !createMode && biometricStatus.supported && featureIncluded('secureDeviceUnlock') && (
                       <button type="button" className={`unlock-biometric-icon-button ${biometricUnlock ? 'enabled' : 'setup'}`} onClick={handleBiometricIconAction} disabled={biometricStatus.state === 'setting-up'} aria-label={biometricUnlock ? 'Open with secure device unlock' : 'Set up secure device unlock'} title={biometricUnlock ? 'Open with secure device unlock' : 'Enter password, then tap the key to set up secure device unlock'}>
@@ -5811,7 +5810,6 @@ function App() {
                 <button type="button" onClick={unlockVault}><Unlock size={18} /> Unlock Local Vault</button>
               </div>
               {passwordCheckNotice && <div className="password-check-login-notice" role="status"><AlertTriangle size={18} /><span><strong>Password check required</strong><small>{passwordCheckNotice}</small></span></div>}
-              <button type="button" className="clear-local-vault-link" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
             </>
           ) : (
             <>
@@ -5822,9 +5820,12 @@ function App() {
               </div>
             </>
           )}
-          <button type="button" className="account-recovery-link" onClick={openAccountRecovery}><UserRoundCheck size={17} /> Sign in / recover account access</button>
+          <div className="lock-account-access-actions">
+            {hasLocalVault && <button type="button" className="clear-local-vault-link" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>}
+            <button type="button" className="account-recovery-link" onClick={openAccountRecovery}><UserRoundCheck size={17} /> Recover account access</button>
+          </div>
           {message && <p className="message">{message}</p>}
-          <div className="security-note"><ShieldCheck size={18} /> Your master password opens your vault. Your phone and email help verify your account.</div>
+          <div className="security-note"><ShieldCheck size={18} /> Only your master password opens your vault.</div>
           <p className="version">{VERSION}</p>
         </section>
 

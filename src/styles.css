@@ -13060,9 +13060,9 @@ input[type="radio"] {
 }
 
 
-/* My Passwords Ver-0.045J — popup top-edge smoothing refinement.
-   Use one rounded green border ring that is fully visible across the top,
-   wraps naturally around both top corners, then fades smoothly down each side. */
+/* My Passwords Ver-0.047B — refined popup top accent.
+   No green left edge. The 3px accent fades in across the upper third,
+   wraps the top-right curve smoothly, then fades down the right side. */
 :root {
   --mp-popup-top-edge-green: #28734F;
 }
@@ -13076,7 +13076,6 @@ input[type="radio"] {
   position: relative !important;
   overflow: hidden !important;
   border: 1px solid rgba(29, 53, 87, 0.10) !important;
-  border-top: 1px solid rgba(29, 53, 87, 0.10) !important;
 }
 
 .item-popup-card::before,
@@ -13088,29 +13087,68 @@ input[type="radio"] {
   content: '' !important;
   display: block !important;
   position: absolute !important;
-  inset: 0 !important;
+  inset: -1px !important;
   z-index: 30 !important;
   box-sizing: border-box !important;
-  border: 5px solid var(--mp-popup-top-edge-green) !important;
+  border: 3px solid transparent !important;
+  border-top-color: var(--mp-popup-top-edge-green) !important;
+  border-right-color: var(--mp-popup-top-edge-green) !important;
   border-radius: inherit !important;
   background: transparent !important;
   pointer-events: none !important;
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    #000 0,
-    #000 18px,
-    rgba(0, 0, 0, 0.82) 28px,
-    rgba(0, 0, 0, 0.42) 42px,
-    transparent 58px
-  ) !important;
-  mask-image: linear-gradient(
-    to bottom,
-    #000 0,
-    #000 18px,
-    rgba(0, 0, 0, 0.82) 28px,
-    rgba(0, 0, 0, 0.42) 42px,
-    transparent 58px
-  ) !important;
+  -webkit-mask:
+    linear-gradient(to right,
+      transparent 0%,
+      transparent 28%,
+      rgba(0, 0, 0, 0.16) 33%,
+      rgba(0, 0, 0, 0.58) 38%,
+      #000 44%,
+      #000 100%) top / 100% 10px no-repeat,
+    radial-gradient(circle at 100% 0%, #000 0 46px, transparent 47px) top right / 50px 50px no-repeat,
+    linear-gradient(to bottom,
+      #000 0%,
+      #000 18%,
+      rgba(0, 0, 0, 0.72) 42%,
+      rgba(0, 0, 0, 0.28) 70%,
+      transparent 100%) top right / 10px 82px no-repeat !important;
+  mask:
+    linear-gradient(to right,
+      transparent 0%,
+      transparent 28%,
+      rgba(0, 0, 0, 0.16) 33%,
+      rgba(0, 0, 0, 0.58) 38%,
+      #000 44%,
+      #000 100%) top / 100% 10px no-repeat,
+    radial-gradient(circle at 100% 0%, #000 0 46px, transparent 47px) top right / 50px 50px no-repeat,
+    linear-gradient(to bottom,
+      #000 0%,
+      #000 18%,
+      rgba(0, 0, 0, 0.72) 42%,
+      rgba(0, 0, 0, 0.28) 70%,
+      transparent 100%) top right / 10px 82px no-repeat !important;
+}
+
+/* Keep the two account-access actions on separate lines on every screen size. */
+.lock-account-access-actions {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  margin-top: 10px;
+}
+
+.lock-account-access-actions .clear-local-vault-link,
+.lock-account-access-actions .account-recovery-link {
+  display: inline-flex;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+/* Recovery popup footer: add 3px more separation than the former inline gap. */
+.account-recovery-modal-card .item-popup-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
 }
 
 /* My Passwords Ver-0.046 — Account, session and device management */
