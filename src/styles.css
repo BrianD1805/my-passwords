@@ -13060,7 +13060,7 @@ input[type="radio"] {
 }
 
 
-/* My Passwords Ver-0.047B — refined popup top accent.
+/* My Passwords Ver-0.047C — refined popup top accent.
    No green left edge. The 3px accent fades in across the upper third,
    wraps the top-right curve smoothly, then fades down the right side. */
 :root {
@@ -13506,4 +13506,74 @@ input[type="radio"] {
 .account-security-modal-body .sms-carrier-note,
 .account-recovery-modal-body .sms-carrier-note {
   padding-inline: 2px;
+}
+
+/* My Passwords Ver-0.047C — popup focus, mobile back navigation and refined top accent. */
+.item-popup-card::before,
+.item-form.item-popup-card::before,
+.admin-plan-window::before,
+.entitlement-modal::before,
+.country-picker-panel::before,
+.verify-modal::before {
+  border-width: 6px !important;
+  border-style: solid !important;
+  border-color: transparent !important;
+  border-top-color: var(--mp-popup-top-edge-green) !important;
+  border-right-color: var(--mp-popup-top-edge-green) !important;
+  -webkit-mask:
+    linear-gradient(to right,
+      transparent 0%,
+      transparent 28%,
+      rgba(0, 0, 0, 0.12) 32%,
+      rgba(0, 0, 0, 0.48) 36%,
+      #000 42%,
+      #000 100%) top / 100% 16px no-repeat,
+    linear-gradient(to bottom,
+      #000 0px,
+      #000 16px,
+      rgba(0, 0, 0, 0.86) 24px,
+      rgba(0, 0, 0, 0.46) 38px,
+      rgba(0, 0, 0, 0.14) 50px,
+      transparent 62px) top right / 16px 62px no-repeat !important;
+  mask:
+    linear-gradient(to right,
+      transparent 0%,
+      transparent 28%,
+      rgba(0, 0, 0, 0.12) 32%,
+      rgba(0, 0, 0, 0.48) 36%,
+      #000 42%,
+      #000 100%) top / 100% 16px no-repeat,
+    linear-gradient(to bottom,
+      #000 0px,
+      #000 16px,
+      rgba(0, 0, 0, 0.86) 24px,
+      rgba(0, 0, 0, 0.46) 38px,
+      rgba(0, 0, 0, 0.14) 50px,
+      transparent 62px) top right / 16px 62px no-repeat !important;
+}
+
+.exit-app-confirmation-card {
+  width: min(540px, calc(100vw - 50px));
+}
+
+.exit-app-confirmation-body {
+  display: grid;
+  gap: 16px;
+}
+
+.exit-app-confirmation-body > p {
+  margin: 0;
+  color: #596c79;
+  line-height: 1.58;
+}
+
+.exit-app-confirmation-footer {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 520px) {
+  .exit-app-confirmation-footer > button {
+    flex: 1 1 0;
+  }
 }

@@ -158,6 +158,13 @@ export default function CustomSelect({
   }, [disabled, open]);
 
   useEffect(() => {
+    if (!open) return undefined;
+    const closeForAppBack = () => closeMenu();
+    window.addEventListener('my-passwords-close-overlay', closeForAppBack);
+    return () => window.removeEventListener('my-passwords-close-overlay', closeForAppBack);
+  }, [open]);
+
+  useEffect(() => {
     if (!open || activeIndex < 0) return;
     const activeOption = menuRef.current?.querySelector(`[data-option-index="${activeIndex}"]`);
     activeOption?.scrollIntoView({ block: 'nearest' });

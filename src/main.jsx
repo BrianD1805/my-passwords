@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.047B';
+const VERSION = 'My Passwords Ver-0.047C';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1244,6 +1244,20 @@ function CountryPicker({ countryCode, countryIso, onChange }) {
     setSearch('');
   }
 
+  useEffect(() => {
+    if (!open) return undefined;
+    window.requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) active.blur();
+    });
+    const closeForAppBack = () => {
+      setOpen(false);
+      setSearch('');
+    };
+    window.addEventListener('my-passwords-close-overlay', closeForAppBack);
+    return () => window.removeEventListener('my-passwords-close-overlay', closeForAppBack);
+  }, [open]);
+
   return (
     <div className="country-picker">
       <button
@@ -1268,7 +1282,7 @@ function CountryPicker({ countryCode, countryIso, onChange }) {
             </div>
             <div className="country-search-box">
               <Search size={17} />
-              <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search country or code" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search country or code" />
             </div>
             <div className="country-list" role="listbox">
               {filteredCountries.map((country) => (
@@ -1827,10 +1841,10 @@ function AccountSecurityModal({ state, setState, onClose, onRequestCode, onConfi
       <section className="item-popup-card account-security-modal-card">
         <header className="item-popup-header"><h2 id="account-security-modal-title"><ShieldCheck size={21} /> {state.title}</h2><button type="button" className="icon-button" onClick={onClose} disabled={state.busy} aria-label="Close"><X size={19} /></button></header>
         <div className="item-popup-body account-security-modal-body">
-          {state.mode === 'change-email' && !state.challengeId && <><p>{state.verifyExisting ? 'Send a one-time code to verify the email address already saved on this account.' : 'Enter the new email address. A one-time code will be sent there before the account is changed.'}</p><label>New email address<input type="email" value={state.newEmail || ''} onChange={(event) => setState((current) => ({ ...current, newEmail: event.target.value, message: '' }))} placeholder="new@example.com" autoFocus /></label></>}
-          {state.mode === 'change-phone' && !state.challengeId && <><p>{state.verifyExisting ? 'Send an SMS one-time code to verify the mobile number already saved on this account.' : 'Enter the new mobile number. It is changed only after a code sent by SMS is verified.'}</p><label className="combined-phone-label">New mobile number<div className="phone-combo-field"><CountryPicker countryCode={state.phoneCountryCode || '+254'} countryIso={state.phoneCountryIso || 'ke'} onChange={(country) => setState((current) => ({ ...current, phoneCountryCode: country.code, phoneCountryIso: country.iso, message: '' }))} /><input inputMode="tel" value={state.phoneNumber || ''} onChange={(event) => setState((current) => ({ ...current, phoneNumber: event.target.value, message: '' }))} placeholder="712345678" autoFocus /></div></label><p className="sms-carrier-note">Standard message and carrier rates may apply.</p></>}
+          {state.mode === 'change-email' && !state.challengeId && <><p>{state.verifyExisting ? 'Send a one-time code to verify the email address already saved on this account.' : 'Enter the new email address. A one-time code will be sent there before the account is changed.'}</p><label>New email address<input type="email" value={state.newEmail || ''} onChange={(event) => setState((current) => ({ ...current, newEmail: event.target.value, message: '' }))} placeholder="new@example.com" /></label></>}
+          {state.mode === 'change-phone' && !state.challengeId && <><p>{state.verifyExisting ? 'Send an SMS one-time code to verify the mobile number already saved on this account.' : 'Enter the new mobile number. It is changed only after a code sent by SMS is verified.'}</p><label className="combined-phone-label">New mobile number<div className="phone-combo-field"><CountryPicker countryCode={state.phoneCountryCode || '+254'} countryIso={state.phoneCountryIso || 'ke'} onChange={(country) => setState((current) => ({ ...current, phoneCountryCode: country.code, phoneCountryIso: country.iso, message: '' }))} /><input inputMode="tel" value={state.phoneNumber || ''} onChange={(event) => setState((current) => ({ ...current, phoneNumber: event.target.value, message: '' }))} placeholder="712345678" /></div></label><p className="sms-carrier-note">Standard message and carrier rates may apply.</p></>}
           {state.mode === 'delete-account' && !state.challengeId && <><div className="account-deletion-warning"><AlertTriangle size={22} /><span><strong>This is a permanent account action</strong><small>After email verification, deletion waits 14 days. When the waiting period ends, the account, encrypted cloud vault backups and stored documents are permanently removed.</small></span></div><label>Reason (optional)<textarea rows="3" value={state.reason || ''} onChange={(event) => setState((current) => ({ ...current, reason: event.target.value }))} placeholder="Optional feedback" /></label></>}
-          {needsOtp && state.challengeId && <><div className="account-otp-destination">{state.mode === 'change-phone' ? <Phone size={20} /> : <Mail size={20} />}<span><strong>Enter the verification code</strong><small>{state.message || 'The code expires in 10 minutes.'}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" autoFocus /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
+          {needsOtp && state.challengeId && <><div className="account-otp-destination">{state.mode === 'change-phone' ? <Phone size={20} /> : <Mail size={20} />}<span><strong>Enter the verification code</strong><small>{state.message || 'The code expires in 10 minutes.'}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
           {state.mode === 'remove-device' && <div className="account-deletion-warning"><MonitorSmartphone size={22} /><span><strong>Remove {state.deviceName || 'this verified device'}?</strong><small>Every account session on that device will end. This cannot remotely erase an encrypted local vault already stored there.</small></span></div>}
           {state.mode === 'end-all-sessions' && <div className="account-deletion-warning"><ShieldCheck size={22} /><span><strong>End every account session?</strong><small>All browsers and verified devices, including this one, will need a new one-time verification code before account services can be used again.</small></span></div>}
           {state.message && (!state.challengeId || confirmationOnly) && <div className="account-modal-message">{state.message}</div>}
@@ -1850,12 +1864,26 @@ function AccountRecoveryModal({ state, setState, onClose, onRequest, onVerify })
       <section className="item-popup-card account-recovery-modal-card">
         <header className="item-popup-header"><h2 id="account-recovery-title"><UserRoundCheck size={21} /> Recover account access</h2><button type="button" className="icon-button" onClick={onClose} disabled={state.busy} aria-label="Close"><X size={19} /></button></header>
         <div className="item-popup-body account-recovery-modal-body">
-          {state.step === 'contact' ? <><p>Use this when setting up a new device, after ending account sessions, or when you can no longer access account services. A verified contact detail restores account, subscription and secure cloud-service access on this device. It does not open or decrypt the vault.</p><div className="recovery-channel-switch"><button type="button" className={state.channel === 'email' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'email', contact: '', message: '' }))}><Mail size={17} /> Email</button><button type="button" className={state.channel === 'sms' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'sms', contact: '', message: '' }))}><Phone size={17} /> Mobile</button></div><label>{state.channel === 'email' ? 'Verified email address' : 'Verified mobile number with country code'}<input type={state.channel === 'email' ? 'email' : 'tel'} inputMode={state.channel === 'email' ? 'email' : 'tel'} value={state.contact || ''} onChange={(event) => setState((current) => ({ ...current, contact: event.target.value, message: '' }))} placeholder={state.channel === 'email' ? 'you@example.com' : '+254712345678'} autoFocus /></label></> : <><div className="account-otp-destination"><ShieldCheck size={20} /><span><strong>Enter your recovery code</strong><small>{state.message}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" autoFocus /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
+          {state.step === 'contact' ? <><p>Use this when setting up a new device, after ending account sessions, or when you can no longer access account services. A verified contact detail restores account, subscription and secure cloud-service access on this device. It does not open or decrypt the vault.</p><div className="recovery-channel-switch"><button type="button" className={state.channel === 'email' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'email', contact: '', message: '' }))}><Mail size={17} /> Email</button><button type="button" className={state.channel === 'sms' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'sms', contact: '', message: '' }))}><Phone size={17} /> Mobile</button></div><label>{state.channel === 'email' ? 'Verified email address' : 'Verified mobile number with country code'}<input type={state.channel === 'email' ? 'email' : 'tel'} inputMode={state.channel === 'email' ? 'email' : 'tel'} value={state.contact || ''} onChange={(event) => setState((current) => ({ ...current, contact: event.target.value, message: '' }))} placeholder={state.channel === 'email' ? 'you@example.com' : '+254712345678'} /></label></> : <><div className="account-otp-destination"><ShieldCheck size={20} /><span><strong>Enter your recovery code</strong><small>{state.message}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
           {state.channel === 'sms' && <p className="sms-carrier-note">Standard message and carrier rates may apply.</p>}
           {state.message && state.step === 'contact' && <div className="account-modal-message">{state.message}</div>}
           <div className="master-password-boundary-note"><Lock size={20} /><span><strong>Your master password cannot be recovered</strong><small>Recovery can restore the account and subscription, but the encrypted vault remains unreadable without the correct master password.</small></span></div>
         </div>
         <footer className="item-popup-footer"><button type="button" className="secondary-button" onClick={onClose} disabled={state.busy}>Cancel</button>{state.step === 'contact' ? <button type="button" className="primary-button" onClick={onRequest} disabled={state.busy}>{state.busy ? 'Sending...' : 'Send recovery code'}</button> : <button type="button" className="primary-button" onClick={onVerify} disabled={state.busy}>{state.busy ? 'Restoring...' : 'Restore account access'}</button>}</footer>
+      </section>
+    </div>
+  );
+}
+
+function ExitAppConfirmationModal({ visible, onStay, onExit }) {
+  if (!visible) return null;
+  return (
+    <div className="item-popup-layer exit-app-confirmation-layer" role="presentation">
+      <button type="button" className="item-popup-backdrop" onClick={onStay} aria-label="Stay in My Passwords" />
+      <section className="item-popup-card exit-app-confirmation-card" role="dialog" aria-modal="true" aria-labelledby="exit-app-confirmation-title">
+        <header className="item-popup-header"><h2 id="exit-app-confirmation-title"><ShieldCheck size={21} /> Leave My Passwords?</h2><button type="button" className="icon-button" onClick={onStay} aria-label="Close"><X size={19} /></button></header>
+        <div className="item-popup-body exit-app-confirmation-body"><p>You are already on the Passwords home page. Do you want to leave the app?</p><div className="master-password-boundary-note compact"><Lock size={18} /><span><strong>Your vault remains locked when you leave</strong><small>Unsaved popup changes should be completed or cancelled before exiting.</small></span></div></div>
+        <footer className="item-popup-footer exit-app-confirmation-footer"><button type="button" className="secondary-button" onClick={onStay}>Stay in app</button><button type="button" className="primary-button" onClick={onExit}>Exit app</button></footer>
       </section>
     </div>
   );
@@ -1922,6 +1950,9 @@ function App() {
   const [activePage, setActivePage] = useState('home');
   const [activeSettingsSection, setActiveSettingsSection] = useState('overview');
   const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = useState(false);
+  const [exitAppConfirmationOpen, setExitAppConfirmationOpen] = useState(false);
+  const backNavigationStateRef = useRef({});
+  const allowBrowserExitRef = useRef(false);
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
@@ -2885,9 +2916,17 @@ function App() {
   }, [locked, items]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible);
+    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || exitAppConfirmationOpen;
+    document.body.classList.toggle('app-popup-open', popupOpen);
+    if (popupOpen) {
+      window.requestAnimationFrame(() => {
+        const active = document.activeElement;
+        const editable = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement || active?.getAttribute?.('contenteditable') === 'true';
+        if (editable) active.blur();
+      });
+    }
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountRecoveryModal.visible]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, exitAppConfirmationOpen]);
 
   useEffect(() => {
     if (locked || !featureIncluded('cloudBackupSync') || !syncSafety.pending || syncing || syncPromptShown || syncSafetyModal.visible || deviceVerificationModal.visible) return undefined;
@@ -4451,6 +4490,86 @@ function App() {
   const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute;
 
   useEffect(() => {
+    backNavigationStateRef.current = {
+      locked,
+      activePage,
+      mobileHeaderMenuOpen,
+      exitAppConfirmationOpen,
+      accountSecurityModalVisible: accountSecurityModal.visible,
+      accountRecoveryModalVisible: accountRecoveryModal.visible,
+      entitlementModalVisible: entitlementModal.visible,
+      deviceVerificationModalVisible: deviceVerificationModal.visible,
+      syncSafetyModalVisible: syncSafetyModal.visible,
+      subscriptionActionModalVisible: subscriptionActionModal.visible,
+      verifyOverlayVisible: verifyOverlay.visible,
+      pendingDeleteItemId: Boolean(pendingDeleteItemId),
+      viewItemId: Boolean(viewItemId),
+      isItemPopupOpen,
+      isFolderPopupOpen,
+      isFolderListPopupOpen,
+      isCreateVaultPopupOpen
+    };
+  }, [locked, activePage, mobileHeaderMenuOpen, exitAppConfirmationOpen, accountSecurityModal.visible, accountRecoveryModal.visible, entitlementModal.visible, deviceVerificationModal.visible, syncSafetyModal.visible, subscriptionActionModal.visible, verifyOverlay.visible, pendingDeleteItemId, viewItemId, isItemPopupOpen, isFolderPopupOpen, isFolderListPopupOpen, isCreateVaultPopupOpen]);
+
+  useEffect(() => {
+    if (!isVaultRoute) return undefined;
+    const guardKey = 'myPasswordsBackGuard';
+    const currentState = window.history.state || {};
+    if (currentState[guardKey] !== 'guard') {
+      window.history.replaceState({ ...currentState, [guardKey]: 'base' }, document.title, window.location.href);
+      window.history.pushState({ [guardKey]: 'guard' }, document.title, window.location.href);
+    }
+
+    const restoreGuard = () => window.history.pushState({ [guardKey]: 'guard' }, document.title, window.location.href);
+    const handleMobileBack = () => {
+      if (allowBrowserExitRef.current) {
+        allowBrowserExitRef.current = false;
+        window.history.back();
+        return;
+      }
+
+      restoreGuard();
+      const state = backNavigationStateRef.current;
+
+      if (document.querySelector('.custom-select-menu, .country-picker-layer')) {
+        window.dispatchEvent(new CustomEvent('my-passwords-close-overlay'));
+        return;
+      }
+      if (state.exitAppConfirmationOpen) { setExitAppConfirmationOpen(false); return; }
+      if (state.accountSecurityModalVisible) { closeAccountSecurityModal(); return; }
+      if (state.accountRecoveryModalVisible) { setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false }); return; }
+      if (state.entitlementModalVisible) { setEntitlementModal({ visible: false, feature: '', title: '', message: '' }); return; }
+      if (state.deviceVerificationModalVisible) { setDeviceVerificationModal({ visible: false, purpose: '' }); return; }
+      if (state.syncSafetyModalVisible) { closeSyncSafetyModal(); return; }
+      if (state.subscriptionActionModalVisible) { setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' }); return; }
+      if (state.verifyOverlayVisible) { hideVerifyOverlay(); return; }
+      if (state.pendingDeleteItemId) { cancelDeleteItem(); return; }
+      if (state.viewItemId) { closeViewItem(); return; }
+      if (state.isItemPopupOpen) { closeItemPopup(); return; }
+      if (state.isFolderPopupOpen) { closeFolderPopup(); return; }
+      if (state.isFolderListPopupOpen) { setIsFolderListPopupOpen(false); return; }
+      if (state.isCreateVaultPopupOpen) { setIsCreateVaultPopupOpen(false); return; }
+      if (state.mobileHeaderMenuOpen) { setMobileHeaderMenuOpen(false); return; }
+      if (!state.locked && state.activePage !== 'home') {
+        setActivePage('home');
+        setActiveSettingsSection('overview');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      setExitAppConfirmationOpen(true);
+    };
+
+    window.addEventListener('popstate', handleMobileBack);
+    return () => window.removeEventListener('popstate', handleMobileBack);
+  }, [isVaultRoute]);
+
+  function confirmExitApp() {
+    setExitAppConfirmationOpen(false);
+    allowBrowserExitRef.current = true;
+    window.history.back();
+  }
+
+  useEffect(() => {
     if (!isVaultRoute) return undefined;
     let touchStartY = 0;
 
@@ -5900,6 +6019,7 @@ function App() {
         <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} phone={bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)} channel={otpChannel} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onChannelChange={chooseOtpChannel} onSend={() => requestSelectedOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
         <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
+        <ExitAppConfirmationModal visible={exitAppConfirmationOpen} onStay={() => setExitAppConfirmationOpen(false)} onExit={confirmExitApp} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
     );
@@ -6281,7 +6401,7 @@ function App() {
                 </div>
                 <div className="item-popup-body">
                   <p className="form-helper">Create your own folder and it will appear in the folder row above.</p>
-                  <label>Folder name<input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="e.g. Family, Travel, Clients" autoFocus /></label>
+                  <label>Folder name<input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="e.g. Family, Travel, Clients" /></label>
                   <div className="folder-popup-note"><ShieldCheck size={16} /><span>Folder names are saved inside your encrypted vault backup.</span></div>
                 </div>
                 <div className="item-popup-footer form-buttons">
@@ -7043,6 +7163,7 @@ function App() {
       <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} phone={bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)} channel={otpChannel} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onChannelChange={chooseOtpChannel} onSend={() => requestSelectedOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
+      <ExitAppConfirmationModal visible={exitAppConfirmationOpen} onStay={() => setExitAppConfirmationOpen(false)} onExit={confirmExitApp} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <footer className="app-version-footer"><span>{VERSION}</span><span className="app-version-footer-separator"> · </span><span>secure private vault</span></footer>
     </main>
