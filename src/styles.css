@@ -13060,34 +13060,55 @@ input[type="radio"] {
 }
 
 
-/* My Passwords Ver-0.045G — continuous vault-login-style popup border. */
+/* My Passwords Ver-0.045J — popup top-edge smoothing refinement.
+   Use one rounded green border ring that is fully visible across the top,
+   wraps naturally around both top corners, then fades smoothly down each side. */
 :root {
-  --mp-popup-border-green: rgba(40, 115, 79, .34);
+  --mp-popup-top-edge-green: #28734F;
 }
 
-/* Remove the previous partial accent edge completely. */
-.item-popup-card::before,
-.item-form.item-popup-card::before,
-.admin-plan-window::before,
-.entitlement-modal::before,
-.country-picker-panel::before,
-.verify-modal::before,
-.item-popup-header::before,
-.admin-plan-window-header::before,
-.entitlement-modal > header::before {
-  content: none !important;
-  display: none !important;
-  border: 0 !important;
-  -webkit-mask-image: none !important;
-  mask-image: none !important;
-}
-
-/* Match the vault login card's single clean outer edge, using green. */
 .item-popup-card,
 .item-form.item-popup-card,
 .admin-plan-window,
 .entitlement-modal,
 .country-picker-panel,
 .verify-modal {
-  border: 1px solid var(--mp-popup-border-green) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(29, 53, 87, 0.10) !important;
+  border-top: 1px solid rgba(29, 53, 87, 0.10) !important;
+}
+
+.item-popup-card::before,
+.item-form.item-popup-card::before,
+.admin-plan-window::before,
+.entitlement-modal::before,
+.country-picker-panel::before,
+.verify-modal::before {
+  content: '' !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 30 !important;
+  box-sizing: border-box !important;
+  border: 5px solid var(--mp-popup-top-edge-green) !important;
+  border-radius: inherit !important;
+  background: transparent !important;
+  pointer-events: none !important;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 18px,
+    rgba(0, 0, 0, 0.82) 28px,
+    rgba(0, 0, 0, 0.42) 42px,
+    transparent 58px
+  ) !important;
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 18px,
+    rgba(0, 0, 0, 0.82) 28px,
+    rgba(0, 0, 0, 0.42) 42px,
+    transparent 58px
+  ) !important;
 }
