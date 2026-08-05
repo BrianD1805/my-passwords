@@ -13444,3 +13444,28 @@ input[type="radio"] {
     width: calc(100vw - 50px);
   }
 }
+
+/* My Passwords Ver-0.047 — production SMS verification */
+.sms-carrier-note {
+  margin: 0;
+  color: #6b7d8a;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.device-verification-channel-switch,
+.onboarding-verification-channel {
+  width: 100%;
+}
+
+.device-verification-channel-switch button:disabled,
+.onboarding-verification-channel button:disabled {
+  cursor: default;
+  opacity: 0.66;
+}
+
+.account-security-modal-body .sms-carrier-note,
+.account-recovery-modal-body .sms-carrier-note {
+  padding-inline: 2px;
+}

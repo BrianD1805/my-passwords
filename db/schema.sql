@@ -369,3 +369,33 @@ grant execute on function public.save_vault_snapshot_if_current(
 -- Apply db/migrations/2026-08-05_account_session_device_management_ver_0_046.sql
 -- to add verified devices, revocable server-side sessions, verified contact changes,
 -- account recovery tracking and delayed/cancellable account deletion.
+
+-- My Passwords Ver-0.047
+-- Production SMS integration delivery log.
+create table if not exists public.sms_delivery_log (
+  id text primary key,
+  tenant_id text not null references public.tenants(id) on delete cascade,
+  user_id text not null references public.users(id) on delete cascade,
+  challenge_id text references public.otp_challenges(id) on delete set null,
+  provider text not null default 'twilio',
+  provider_reference text,
+  purpose text not null,
+  destination_masked text,
+  status text not null default 'pending',
+  error_code text,
+  error_message text,
+  sent_at timestamptz,
+  delivered_at timestamptz,
+  failed_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.sms_delivery_log enable row level security;
+create index if not exists idx_sms_delivery_log_tenant_created on public.sms_delivery_log(tenant_id, created_at desc);
+create index if not exists idx_sms_delivery_log_user_created on public.sms_delivery_log(user_id, created_at desc);
+create index if not exists idx_sms_delivery_log_challenge on public.sms_delivery_log(challenge_id);
+create index if not exists idx_sms_delivery_log_provider_reference on public.sms_delivery_log(provider, provider_reference);
+create index if not exists idx_sms_delivery_log_status_created on public.sms_delivery_log(status, created_at desc);
+grant select, insert, update, delete on public.sms_delivery_log to service_role;

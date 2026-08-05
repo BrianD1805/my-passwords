@@ -1,4 +1,4 @@
-export const APP_VERSION = 'My Passwords Ver-0.046';
+export const APP_VERSION = 'My Passwords Ver-0.047';
 
 export function jsonResponse(statusCode, body, extraHeaders = {}) {
   return {
@@ -25,7 +25,12 @@ export function getEnvironmentFlags() {
     has_SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     has_NETLIFY: Boolean(process.env.NETLIFY),
     has_CONTEXT: Boolean(process.env.CONTEXT),
-    has_URL: Boolean(process.env.URL)
+    has_URL: Boolean(process.env.URL),
+    has_TWILIO_ACCOUNT_SID: Boolean(process.env.TWILIO_ACCOUNT_SID),
+    has_TWILIO_AUTH_TOKEN: Boolean(process.env.TWILIO_AUTH_TOKEN),
+    has_TWILIO_VERIFY_SERVICE_SID: Boolean(process.env.TWILIO_VERIFY_SERVICE_SID),
+    has_TWILIO_MESSAGING_SERVICE_SID: Boolean(process.env.TWILIO_MESSAGING_SERVICE_SID),
+    has_TWILIO_FROM_NUMBER: Boolean(process.env.TWILIO_FROM_NUMBER)
   };
 }
 

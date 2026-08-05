@@ -2,15 +2,10 @@ import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost,
 import { createVerifiedCustomerSession } from './_account-session.js';
 import { evaluateTenantAccess, isFounderTenant, recordLifecycleEvent, upsertTrialSubscription } from './_trial.js';
 import { resolveTenantEntitlements } from './_entitlements.js';
-import { createHash } from 'node:crypto';
+import { verifyAccountOtp } from './_account-otp.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
-}
-
-function hashOtp(challengeId, code) {
-  const secret = process.env.OTP_TEST_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'my-passwords-test-otp-foundation';
-  return createHash('sha256').update(`${challengeId}:${code}:${secret}`).digest('hex');
 }
 
 function formatDate(value) {
@@ -53,35 +48,9 @@ export async function handler(event) {
   if (!challengeId || code.length !== 6) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A valid challenge ID and 6-digit OTP code are required.' });
 
   try {
-    const rows = await selectRows('otp_challenges', `select=*&id=${eq(challengeId)}&limit=1`);
-    const challenge = rows?.[0];
-    if (!challenge) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'OTP challenge was not found.' });
-    if (!String(challenge.status || '').startsWith('pending')) return jsonResponse(409, { ok: false, version: APP_VERSION, message: `OTP challenge is already ${challenge.status}.` });
-
-    if (new Date(challenge.expires_at).getTime() < Date.now()) {
-      await updateRow('otp_challenges', `id=${eq(challengeId)}`, { status: 'expired', updated_at: new Date().toISOString() });
-      return jsonResponse(410, { ok: false, version: APP_VERSION, message: 'This code has expired. Request another code.' });
-    }
-
-    const attempts = Number(challenge.attempts || 0) + 1;
-    if (String(challenge.otp_hash || '') !== hashOtp(challengeId, code)) {
-      const locked = attempts >= 5;
-      await updateRow('otp_challenges', `id=${eq(challengeId)}`, {
-        attempts,
-        status: locked ? 'failed_too_many_attempts' : challenge.status,
-        updated_at: new Date().toISOString()
-      });
-      return jsonResponse(401, { ok: false, version: APP_VERSION, attempts, message: locked ? 'Too many incorrect attempts. Request another code.' : 'OTP code did not match.' });
-    }
-
-    const now = new Date().toISOString();
+    const challenge = await verifyAccountOtp({ challengeId, code });
+    const now = challenge.verified_at || new Date().toISOString();
     const isEmail = String(challenge.delivery_channel || '').includes('email');
-    await updateRow('otp_challenges', `id=${eq(challengeId)}`, {
-      attempts,
-      status: isEmail ? 'verified_email' : 'verified_sms',
-      verified_at: now,
-      updated_at: now
-    });
 
     const users = await selectRows('users', `select=id,tenant_id,role,status,email,display_name,email_verified,phone_verified,welcome_email_sent_at&id=${eq(challenge.user_id)}&tenant_id=${eq(challenge.tenant_id)}&limit=1`);
     const tenants = await selectRows('tenants', `select=id,account_name,name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at,onboarding_completed_at&id=${eq(challenge.tenant_id)}&limit=1`);
@@ -157,7 +126,7 @@ export async function handler(event) {
       otp_test_status: isEmail ? 'verified_email' : 'verified_sms',
       last_login_at: now,
       onboarding_status: firstActivation ? 'onboarding_complete' : 'active_account_verified',
-      last_onboarding_step: firstActivation ? 'email_verified_trial_started' : 'device_verified',
+      last_onboarding_step: firstActivation ? (isEmail ? 'email_verified_trial_started' : 'mobile_verified_trial_started') : 'device_verified',
       onboarding_completed_at: firstActivation ? now : undefined,
       updated_at: now
     };
@@ -233,7 +202,7 @@ export async function handler(event) {
     return jsonResponse(200, {
       ok: true,
       version: APP_VERSION,
-      testMode: process.env.OTP_TEST_MODE === 'true',
+      testMode: process.env.CONTEXT !== 'production' && (process.env.SMS_TEST_MODE === 'true' || process.env.OTP_TEST_MODE === 'true' || process.env.CONTEXT === 'dev'),
       challengeId,
       tenantId: tenant.id,
       userId: user.id,
@@ -262,6 +231,6 @@ export async function handler(event) {
       'set-cookie': verifiedSession.cookie
     });
   } catch (error) {
-    return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not verify the code.', error: error.message, details: error.details || null });
+    return jsonResponse(error.status || 500, { ok: false, version: APP_VERSION, message: error.message || 'Could not verify the code.', error: error.status ? undefined : error.message, details: error.details || null });
   }
 }

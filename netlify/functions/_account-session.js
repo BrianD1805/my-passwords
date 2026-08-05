@@ -96,7 +96,7 @@ export async function createVerifiedCustomerSession(event, { tenantId, userId, r
     expires_at: expiresAt,
     last_seen_at: now,
     user_agent: details.userAgent,
-    metadata: { ip_hash: requestFingerprint(event) || null, app_version: '0.046' }
+    metadata: { ip_hash: requestFingerprint(event) || null, app_version: '0.047' }
   });
 
   return {

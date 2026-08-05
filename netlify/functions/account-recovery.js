@@ -22,7 +22,7 @@ export async function handler(event) {
     if (action === 'request') {
       const channel = body.channel === 'sms' ? 'sms' : 'email';
       const destination = channel === 'sms' ? normalisePhone(body.phoneE164 || body.contact) : safeText(body.email || body.contact, 254).toLowerCase();
-      if (!destination || (channel === 'email' && !destination.includes('@'))) return jsonResponse(400, { ok: false, version: APP_VERSION, message: channel === 'sms' ? 'Enter a valid verified mobile number.' : 'Enter a valid verified email address.' });
+      if ((channel === 'sms' && !/^\+[1-9]\d{7,14}$/.test(destination)) || (channel === 'email' && !destination.includes('@'))) return jsonResponse(400, { ok: false, version: APP_VERSION, message: channel === 'sms' ? 'Enter a valid verified mobile number.' : 'Enter a valid verified email address.' });
       const query = channel === 'sms'
         ? `select=id,tenant_id,status,phone_verified&phone_e164=${eq(destination)}&phone_verified=${eq(true)}&limit=1`
         : `select=id,tenant_id,status,email_verified&email=${eq(destination)}&email_verified=${eq(true)}&limit=1`;

@@ -110,7 +110,7 @@ export async function handler(event) {
       const phoneCountryCode = normaliseCountryCode(body.phoneCountryCode);
       const phoneNumber = normaliseLocalPhone(body.phoneNumber);
       const phoneE164 = buildPhoneE164(phoneCountryCode, phoneNumber);
-      if (!phoneE164) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Enter a valid mobile number with country code.' });
+      if (!/^\+[1-9]\d{7,14}$/.test(phoneE164)) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Enter a valid mobile number with country code.' });
       const verifyingExistingPhone = phoneE164 === user.phone_e164;
       if (verifyingExistingPhone && user.phone_verified) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'That mobile number is already verified on your account.' });
       const matches = await selectRows('users', `select=id&phone_e164=${eq(phoneE164)}&id=neq.${encodeURIComponent(user.id)}&limit=1`);
