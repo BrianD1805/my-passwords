@@ -13058,3 +13058,36 @@ input[type="radio"] {
   filter: none !important;
   transform: none !important;
 }
+
+
+/* My Passwords Ver-0.045G — continuous vault-login-style popup border. */
+:root {
+  --mp-popup-border-green: rgba(40, 115, 79, .34);
+}
+
+/* Remove the previous partial accent edge completely. */
+.item-popup-card::before,
+.item-form.item-popup-card::before,
+.admin-plan-window::before,
+.entitlement-modal::before,
+.country-picker-panel::before,
+.verify-modal::before,
+.item-popup-header::before,
+.admin-plan-window-header::before,
+.entitlement-modal > header::before {
+  content: none !important;
+  display: none !important;
+  border: 0 !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+
+/* Match the vault login card's single clean outer edge, using green. */
+.item-popup-card,
+.item-form.item-popup-card,
+.admin-plan-window,
+.entitlement-modal,
+.country-picker-panel,
+.verify-modal {
+  border: 1px solid var(--mp-popup-border-green) !important;
+}
