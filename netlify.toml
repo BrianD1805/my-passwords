@@ -34,3 +34,6 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+[functions."account-deletion-process"]
+  schedule = "0 3 * * *"

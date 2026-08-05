@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.045J';
+const VERSION = 'My Passwords Ver-0.046';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -21,6 +21,32 @@ const SYNC_SAFETY_KEY = 'my-passwords-sync-safety-v1';
 const SYNC_DEVICE_ID_KEY = 'my-passwords-sync-device-id-v1';
 const ENTITLEMENTS_CACHE_KEY = 'my-passwords-entitlements-v1';
 const PENDING_DOCUMENT_DELETIONS_KEY = 'my-passwords-pending-document-deletions-v1';
+const ACCOUNT_DEVICE_INSTALL_KEY = 'my-passwords-account-device-install-v1';
+
+function readAccountDeviceInstallId() {
+  let value = localStorage.getItem(ACCOUNT_DEVICE_INSTALL_KEY) || '';
+  if (!value) {
+    value = `install_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
+    localStorage.setItem(ACCOUNT_DEVICE_INSTALL_KEY, value);
+  }
+  return value;
+}
+
+function accountDeviceMetadata() {
+  const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+  const platform = typeof navigator !== 'undefined' ? navigator.userAgentData?.platform || navigator.platform || '' : '';
+  const mobile = /Mobile|Android|iPhone|iPad/i.test(userAgent);
+  const browser = /Edg\//i.test(userAgent) ? 'Microsoft Edge' : /Chrome\//i.test(userAgent) ? 'Google Chrome' : /Firefox\//i.test(userAgent) ? 'Mozilla Firefox' : /Safari\//i.test(userAgent) ? 'Safari' : 'Web browser';
+  const platformLabel = /Android/i.test(userAgent) ? 'Android' : /iPhone|iPad/i.test(userAgent) ? 'Apple mobile' : /Windows/i.test(userAgent) ? 'Windows' : /Macintosh|Mac OS/i.test(userAgent) ? 'macOS' : platform || 'Unknown platform';
+  return {
+    clientDeviceId: readAccountDeviceInstallId(),
+    deviceName: `${platformLabel} ${mobile ? 'device' : 'computer'} · ${browser}`,
+    deviceType: mobile ? 'mobile' : 'computer',
+    platform: platformLabel,
+    browser,
+    userAgent
+  };
+}
 const DEFAULT_ENTITLEMENTS = Object.freeze({
   version: 1,
   planCode: 'personal',
@@ -1782,6 +1808,50 @@ function PlanEntitlementModal({ state, entitlements, onClose, onOpenSubscription
   );
 }
 
+
+function AccountSecurityModal({ state, setState, onClose, onRequestCode, onConfirmCode, onRemoveDevice, onEndAllSessions }) {
+  if (!state?.visible) return null;
+  const needsOtp = ['change-email', 'change-phone', 'delete-account'].includes(state.mode);
+  const confirmationOnly = ['remove-device', 'end-all-sessions'].includes(state.mode);
+  return (
+    <div className="item-popup-layer account-security-modal-layer" role="dialog" aria-modal="true" aria-labelledby="account-security-modal-title">
+      <button type="button" className="item-popup-backdrop" onClick={state.busy ? undefined : onClose} aria-label="Close account security popup" />
+      <section className="item-popup-card account-security-modal-card">
+        <header className="item-popup-header"><h2 id="account-security-modal-title"><ShieldCheck size={21} /> {state.title}</h2><button type="button" className="icon-button" onClick={onClose} disabled={state.busy} aria-label="Close"><X size={19} /></button></header>
+        <div className="item-popup-body account-security-modal-body">
+          {state.mode === 'change-email' && !state.challengeId && <><p>{state.verifyExisting ? 'Send a one-time code to verify the email address already saved on this account.' : 'Enter the new email address. A one-time code will be sent there before the account is changed.'}</p><label>New email address<input type="email" value={state.newEmail || ''} onChange={(event) => setState((current) => ({ ...current, newEmail: event.target.value, message: '' }))} placeholder="new@example.com" autoFocus /></label></>}
+          {state.mode === 'change-phone' && !state.challengeId && <><p>{state.verifyExisting ? 'Send an SMS one-time code to verify the mobile number already saved on this account.' : 'Enter the new mobile number. It is changed only after a code sent by SMS is verified.'}</p><label className="combined-phone-label">New mobile number<div className="phone-combo-field"><CountryPicker countryCode={state.phoneCountryCode || '+254'} countryIso={state.phoneCountryIso || 'ke'} onChange={(country) => setState((current) => ({ ...current, phoneCountryCode: country.code, phoneCountryIso: country.iso, message: '' }))} /><input inputMode="tel" value={state.phoneNumber || ''} onChange={(event) => setState((current) => ({ ...current, phoneNumber: event.target.value, message: '' }))} placeholder="712345678" autoFocus /></div></label></>}
+          {state.mode === 'delete-account' && !state.challengeId && <><div className="account-deletion-warning"><AlertTriangle size={22} /><span><strong>This is a permanent account action</strong><small>After email verification, deletion waits 14 days. When the waiting period ends, the account, encrypted cloud vault backups and stored documents are permanently removed.</small></span></div><label>Reason (optional)<textarea rows="3" value={state.reason || ''} onChange={(event) => setState((current) => ({ ...current, reason: event.target.value }))} placeholder="Optional feedback" /></label></>}
+          {needsOtp && state.challengeId && <><div className="account-otp-destination"><Mail size={20} /><span><strong>Enter the verification code</strong><small>{state.message || 'The code expires in 10 minutes.'}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" autoFocus /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
+          {state.mode === 'remove-device' && <div className="account-deletion-warning"><MonitorSmartphone size={22} /><span><strong>Remove {state.deviceName || 'this verified device'}?</strong><small>Every account session on that device will end. This cannot remotely erase an encrypted local vault already stored there.</small></span></div>}
+          {state.mode === 'end-all-sessions' && <div className="account-deletion-warning"><ShieldCheck size={22} /><span><strong>End every account session?</strong><small>All browsers and verified devices, including this one, will need a new one-time verification code before account services can be used again.</small></span></div>}
+          {state.message && (!state.challengeId || confirmationOnly) && <div className="account-modal-message">{state.message}</div>}
+          <div className="master-password-boundary-note compact"><Lock size={18} /><span><strong>Vault encryption stays separate</strong><small>These actions never recover, reveal or reset the master password.</small></span></div>
+        </div>
+        <footer className="item-popup-footer"><button type="button" className="secondary-button" onClick={onClose} disabled={state.busy}>Cancel</button>{needsOtp && !state.challengeId && <button type="button" className={state.mode === 'delete-account' ? 'primary-button danger-primary-button' : 'primary-button'} onClick={onRequestCode} disabled={state.busy}>{state.busy ? 'Sending...' : 'Send verification code'}</button>}{needsOtp && state.challengeId && <button type="button" className={state.mode === 'delete-account' ? 'primary-button danger-primary-button' : 'primary-button'} onClick={onConfirmCode} disabled={state.busy}>{state.busy ? 'Confirming...' : state.mode === 'delete-account' ? 'Schedule deletion' : 'Verify and update'}</button>}{state.mode === 'remove-device' && <button type="button" className="primary-button danger-primary-button" onClick={onRemoveDevice} disabled={state.busy}>{state.busy ? 'Removing...' : 'Remove device'}</button>}{state.mode === 'end-all-sessions' && <button type="button" className="primary-button danger-primary-button" onClick={onEndAllSessions} disabled={state.busy}>{state.busy ? 'Ending...' : 'End all sessions'}</button>}</footer>
+      </section>
+    </div>
+  );
+}
+
+function AccountRecoveryModal({ state, setState, onClose, onRequest, onVerify }) {
+  if (!state?.visible) return null;
+  return (
+    <div className="item-popup-layer account-recovery-modal-layer" role="dialog" aria-modal="true" aria-labelledby="account-recovery-title">
+      <button type="button" className="item-popup-backdrop" onClick={state.busy ? undefined : onClose} aria-label="Close account recovery" />
+      <section className="item-popup-card account-recovery-modal-card">
+        <header className="item-popup-header"><h2 id="account-recovery-title"><UserRoundCheck size={21} /> Sign in or recover account access</h2><button type="button" className="icon-button" onClick={onClose} disabled={state.busy} aria-label="Close"><X size={19} /></button></header>
+        <div className="item-popup-body account-recovery-modal-body">
+          {state.step === 'contact' ? <><p>Use a verified contact detail to restore access to your account, subscription and secure cloud services on this device.</p><div className="recovery-channel-switch"><button type="button" className={state.channel === 'email' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'email', contact: '', message: '' }))}><Mail size={17} /> Email</button><button type="button" className={state.channel === 'sms' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'sms', contact: '', message: '' }))}><Phone size={17} /> Mobile</button></div><label>{state.channel === 'email' ? 'Verified email address' : 'Verified mobile number with country code'}<input type={state.channel === 'email' ? 'email' : 'tel'} inputMode={state.channel === 'email' ? 'email' : 'tel'} value={state.contact || ''} onChange={(event) => setState((current) => ({ ...current, contact: event.target.value, message: '' }))} placeholder={state.channel === 'email' ? 'you@example.com' : '+254712345678'} autoFocus /></label></> : <><div className="account-otp-destination"><ShieldCheck size={20} /><span><strong>Enter your recovery code</strong><small>{state.message}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" autoFocus /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
+          {state.message && state.step === 'contact' && <div className="account-modal-message">{state.message}</div>}
+          <div className="master-password-boundary-note"><Lock size={20} /><span><strong>Your master password cannot be recovered</strong><small>Recovery can restore the account and subscription, but the encrypted vault remains unreadable without the correct master password.</small></span></div>
+        </div>
+        <footer className="item-popup-footer"><button type="button" className="secondary-button" onClick={onClose} disabled={state.busy}>Cancel</button>{state.step === 'contact' ? <button type="button" className="primary-button" onClick={onRequest} disabled={state.busy}>{state.busy ? 'Sending...' : 'Send recovery code'}</button> : <button type="button" className="primary-button" onClick={onVerify} disabled={state.busy}>{state.busy ? 'Restoring...' : 'Restore account access'}</button>}</footer>
+      </section>
+    </div>
+  );
+}
+
 function App() {
   const [locked, setLocked] = useState(true);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -1806,6 +1876,9 @@ function App() {
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
   const [accountStatus, setAccountStatus] = useState({ state: 'local-first', message: 'Your account details help you recover your vault on a new device.' });
   const [customerSession, setCustomerSession] = useState({ checked: false, authenticated: false, cloudAccess: false, accessCode: '', message: 'Device verification has not been checked yet.' });
+  const [accountSecurity, setAccountSecurity] = useState({ loaded: false, loading: false, message: '', user: null, devices: [], sessions: [], deletion: null, currentDeviceId: '', currentSessionId: '', sessionExpiresAt: '' });
+  const [accountSecurityModal, setAccountSecurityModal] = useState({ visible: false, mode: '', title: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false, newEmail: '', phoneCountryCode: '+254', phoneCountryIso: 'ke', phoneNumber: '', reason: '' });
+  const [accountRecoveryModal, setAccountRecoveryModal] = useState({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false });
   const [entitlements, setEntitlements] = useState(() => readCachedEntitlements());
   const [entitlementModal, setEntitlementModal] = useState({ visible: false, feature: '', title: '', message: '' });
   const [publicPlans, setPublicPlans] = useState(FALLBACK_SAAS_PLANS);
@@ -1909,6 +1982,187 @@ function App() {
     openSettingsSection('subscription');
   }
 
+  async function loadAccountSecurity({ silent = false } = {}) {
+    if (!customerSession.authenticated) {
+      setAccountSecurity((current) => ({ ...current, loaded: false, loading: false, message: 'Verify this device to manage account sessions and devices.' }));
+      return null;
+    }
+    setAccountSecurity((current) => ({ ...current, loading: true, message: silent ? current.message : 'Loading account security...' }));
+    try {
+      const response = await fetch('/.netlify/functions/account-security', { credentials: 'same-origin', cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.message || 'Account security details could not be loaded.');
+      setAccountSecurity({ loaded: true, loading: false, message: '', user: result.user || null, devices: result.devices || [], sessions: result.sessions || [], deletion: result.deletion || null, currentDeviceId: result.currentDeviceId || '', currentSessionId: result.currentSessionId || '', sessionExpiresAt: result.sessionExpiresAt || '' });
+      return result;
+    } catch (error) {
+      setAccountSecurity((current) => ({ ...current, loading: false, message: error.message || 'Account security details could not be loaded.' }));
+      if (!silent) showMessage(error.message || 'Account security details could not be loaded.', 'error');
+      return null;
+    }
+  }
+
+  function closeAccountSecurityModal() {
+    setAccountSecurityModal({ visible: false, mode: '', title: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false, newEmail: '', phoneCountryCode: '+254', phoneCountryIso: 'ke', phoneNumber: '', reason: '' });
+  }
+
+  function openAccountSecurityAction(mode, details = {}) {
+    const titles = {
+      'change-email': 'Change email address',
+      'change-phone': 'Change mobile number',
+      'remove-device': 'Remove verified device?',
+      'end-all-sessions': 'End all account sessions?',
+      'delete-account': 'Request account deletion'
+    };
+    setAccountSecurityModal({ visible: true, mode, title: titles[mode] || 'Account security', challengeId: '', code: '', testOtpCode: '', message: '', busy: false, newEmail: '', phoneCountryCode: accountSecurity.user?.phoneCountryCode || bootstrap.phoneCountryCode || '+254', phoneCountryIso: bootstrap.phoneCountryIso || 'ke', phoneNumber: '', reason: '', ...details });
+  }
+
+  async function requestAccountSecurityOtp() {
+    const modal = accountSecurityModal;
+    let action = '';
+    let payload = {};
+    if (modal.mode === 'change-email') {
+      action = 'request_email_change';
+      payload = { newEmail: modal.newEmail };
+    } else if (modal.mode === 'change-phone') {
+      action = 'request_phone_change';
+      payload = { phoneCountryCode: modal.phoneCountryCode, phoneNumber: modal.phoneNumber };
+    } else if (modal.mode === 'delete-account') {
+      action = 'request_deletion_code';
+    } else return;
+    setAccountSecurityModal((current) => ({ ...current, busy: true, message: 'Sending verification code...' }));
+    const result = await postJson('/.netlify/functions/account-security', { action, ...payload });
+    if (!result.ok) {
+      setAccountSecurityModal((current) => ({ ...current, busy: false, message: result.message || 'The verification code could not be sent.' }));
+      return;
+    }
+    setAccountSecurityModal((current) => ({ ...current, busy: false, challengeId: result.challengeId || '', testOtpCode: result.testOtpCode || '', message: result.message || 'Enter the verification code to continue.' }));
+  }
+
+  async function confirmAccountSecurityOtp() {
+    const modal = accountSecurityModal;
+    const code = String(modal.code || '').replace(/\D/g, '');
+    if (!modal.challengeId || code.length !== 6) {
+      setAccountSecurityModal((current) => ({ ...current, message: 'Enter the six-digit verification code.' }));
+      return;
+    }
+    const action = modal.mode === 'change-email' ? 'confirm_email_change' : modal.mode === 'change-phone' ? 'confirm_phone_change' : modal.mode === 'delete-account' ? 'confirm_deletion' : '';
+    if (!action) return;
+    setAccountSecurityModal((current) => ({ ...current, busy: true, message: 'Confirming...' }));
+    const result = await postJson('/.netlify/functions/account-security', { action, challengeId: modal.challengeId, code, reason: modal.reason });
+    if (!result.ok) {
+      setAccountSecurityModal((current) => ({ ...current, busy: false, message: result.message || 'The account change could not be confirmed.' }));
+      return;
+    }
+    if (modal.mode === 'change-email') {
+      const next = { ...bootstrap, email: result.email || modal.newEmail };
+      setBootstrap(next);
+      localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next));
+    }
+    if (modal.mode === 'change-phone') {
+      const next = { ...bootstrap, phoneCountryCode: result.phoneCountryCode || modal.phoneCountryCode, phoneNumber: result.phoneNumber || modal.phoneNumber, phoneE164: result.phoneE164 || buildPhoneE164(modal.phoneCountryCode, modal.phoneNumber) };
+      setBootstrap(next);
+      localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next));
+    }
+    closeAccountSecurityModal();
+    await loadAccountSecurity({ silent: true });
+    showMessage(result.message || 'Account security updated.', 'success');
+  }
+
+  async function confirmRemoveVerifiedDevice() {
+    const deviceId = accountSecurityModal.deviceId || '';
+    setAccountSecurityModal((current) => ({ ...current, busy: true, message: 'Removing verified device...' }));
+    const result = await postJson('/.netlify/functions/account-security', { action: 'revoke_device', deviceId });
+    if (!result.ok) {
+      setAccountSecurityModal((current) => ({ ...current, busy: false, message: result.message || 'The device could not be removed.' }));
+      return;
+    }
+    closeAccountSecurityModal();
+    if (result.currentSessionEnded) {
+      setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', message: result.message });
+    } else {
+      await loadAccountSecurity({ silent: true });
+    }
+    showMessage(result.message, 'success');
+  }
+
+  async function confirmEndAllSessions() {
+    setAccountSecurityModal((current) => ({ ...current, busy: true, message: 'Ending account sessions...' }));
+    const result = await postJson('/.netlify/functions/account-security', { action: 'revoke_all_sessions' });
+    if (!result.ok) {
+      setAccountSecurityModal((current) => ({ ...current, busy: false, message: result.message || 'Account sessions could not be ended.' }));
+      return;
+    }
+    closeAccountSecurityModal();
+    setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', message: result.message });
+    setAccountSecurity((current) => ({ ...current, loaded: false, devices: [], sessions: [] }));
+    showMessage(result.message, 'success');
+  }
+
+  async function cancelAccountDeletion() {
+    const result = await postJson('/.netlify/functions/account-security', { action: 'cancel_deletion' });
+    if (!result.ok) return showMessage(result.message || 'The deletion request could not be cancelled.', 'error');
+    await loadAccountSecurity({ silent: true });
+    showMessage(result.message, 'success');
+  }
+
+  async function downloadAccountInformation() {
+    try {
+      const response = await fetch('/.netlify/functions/account-export', { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.message || 'The account export could not be prepared.');
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = match?.[1] || `my-passwords-account-export-${new Date().toISOString().slice(0, 10)}.json`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showMessage('Your personal account information export has been downloaded.', 'success');
+    } catch (error) {
+      showMessage(error.message || 'The account export could not be downloaded.', 'error');
+    }
+  }
+
+  function openAccountRecovery() {
+    setAccountRecoveryModal({ visible: true, step: 'contact', channel: 'email', contact: bootstrap.email || '', challengeId: '', code: '', testOtpCode: '', message: 'Sign in on a new device or recover account and subscription access using a verified email address or mobile number. Your master password cannot be recovered.', busy: false });
+  }
+
+  async function requestAccountRecoveryCode() {
+    const state = accountRecoveryModal;
+    setAccountRecoveryModal((current) => ({ ...current, busy: true, message: 'Sending recovery code...' }));
+    const result = await postJson('/.netlify/functions/account-recovery', { action: 'request', channel: state.channel, contact: state.contact, email: state.channel === 'email' ? state.contact : '', phoneE164: state.channel === 'sms' ? state.contact : '' });
+    if (!result.ok) {
+      setAccountRecoveryModal((current) => ({ ...current, busy: false, message: result.message || 'The recovery code could not be sent.' }));
+      return;
+    }
+    setAccountRecoveryModal((current) => ({ ...current, busy: false, step: 'code', challengeId: result.challengeId, testOtpCode: result.testOtpCode || '', message: result.message || 'Enter the recovery code.' }));
+  }
+
+  async function verifyAccountRecoveryCode() {
+    const code = String(accountRecoveryModal.code || '').replace(/\D/g, '');
+    if (code.length !== 6) return setAccountRecoveryModal((current) => ({ ...current, message: 'Enter the six-digit recovery code.' }));
+    setAccountRecoveryModal((current) => ({ ...current, busy: true, message: 'Restoring account access...' }));
+    const result = await postJson('/.netlify/functions/account-recovery', { action: 'verify', challengeId: accountRecoveryModal.challengeId, code, ...accountDeviceMetadata() });
+    if (!result.ok) {
+      setAccountRecoveryModal((current) => ({ ...current, busy: false, message: result.message || 'Account access could not be restored.' }));
+      return;
+    }
+    const next = { ...bootstrap, tenantId: result.tenantId, userId: result.userId, displayName: result.account?.displayName || bootstrap.displayName, email: result.account?.email || bootstrap.email, phoneCountryCode: result.account?.phoneCountryCode || bootstrap.phoneCountryCode, phoneNumber: result.account?.phoneNumber || bootstrap.phoneNumber, phoneE164: result.account?.phoneE164 || bootstrap.phoneE164, accountName: result.account?.accountName || bootstrap.accountName, tenantName: result.account?.accountName || bootstrap.tenantName, planCode: result.account?.planCode || bootstrap.planCode, planStatus: result.account?.planStatus || bootstrap.planStatus, accountStatus: result.account?.accountStatus || bootstrap.accountStatus, tenantRole: result.account?.tenantRole || bootstrap.tenantRole, trialStartedAt: result.account?.trialStartedAt || '', trialEndsAt: result.account?.trialEndsAt || '', accountVerified: true, otpStatus: 'Device verified' };
+    setBootstrap(next);
+    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next));
+    if (result.entitlements) updateEntitlements(result.entitlements);
+    setCustomerSession({ checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: '', message: result.message, session: { deviceId: result.deviceId, expiresAt: result.sessionExpiresAt } });
+    setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false });
+    showMessage(result.message, 'success');
+  }
+
   useEffect(() => {
     if (!mobileHeaderMenuOpen) return undefined;
     const closeOnEscape = (event) => {
@@ -1943,6 +2197,12 @@ function App() {
     // Refresh once when the customer opens My Subscription. Further refreshes are manual.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSettingsSection, customerSession.authenticated, billing.loaded]);
+
+  useEffect(() => {
+    if (activeSettingsSection !== 'account' || !customerSession.authenticated || accountSecurity.loading || accountSecurity.loaded) return;
+    loadAccountSecurity({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSettingsSection, customerSession.authenticated, accountSecurity.loaded, accountSecurity.loading]);
 
   function applySubscriptionResult(result, options = {}) {
     const account = result?.account || {};
@@ -2506,7 +2766,7 @@ function App() {
     let cancelled = false;
     async function checkSecureSession() {
       try {
-        const response = await fetch('/.netlify/functions/session-status', { credentials: 'same-origin' });
+        const response = await fetch('/.netlify/functions/session-status', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'status', ...accountDeviceMetadata() }) });
         const result = await response.json();
         if (cancelled) return;
         if (result?.authenticated) {
@@ -2533,7 +2793,7 @@ function App() {
           setBootstrap(next);
           if (result.entitlements) updateEntitlements(result.entitlements);
           const cloudAccess = result.cloudAccess !== false;
-          setCustomerSession({ checked: true, authenticated: true, cloudAccess, accessCode: result.accessCode || '', message: result.message || (cloudAccess ? 'This device is verified for secure backup and syncing.' : 'Cloud features are paused for this account.'), subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured) });
+          setCustomerSession({ checked: true, authenticated: true, cloudAccess, accessCode: result.accessCode || '', message: result.message || (cloudAccess ? 'This device is verified for secure backup and syncing.' : 'Cloud features are paused for this account.'), subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), session: result.session || null, deletion: result.deletion || null });
           setBilling((current) => ({ ...current, subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), planCode: result.subscription?.planCode || result.account?.planCode || current.planCode || 'personal' }));
           setAccountStatus({ state: cloudAccess ? 'ready' : 'access-paused', message: result.message || (cloudAccess ? 'Cloud backup and secure syncing are active on this device.' : 'Cloud backup and syncing are currently paused.') });
         } else {
@@ -2544,11 +2804,20 @@ function App() {
         if (!cancelled) setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_CHECK_FAILED', message: 'Device verification could not be checked.' });
       }
     }
+    const refreshVisibleSession = () => {
+      if (document.visibilityState === 'visible') checkSecureSession();
+    };
+    const renewalTimer = window.setInterval(checkSecureSession, 6 * 60 * 60 * 1000);
     checkSecureSession();
     window.addEventListener('online', checkSecureSession);
+    window.addEventListener('focus', checkSecureSession);
+    document.addEventListener('visibilitychange', refreshVisibleSession);
     return () => {
       cancelled = true;
+      window.clearInterval(renewalTimer);
       window.removeEventListener('online', checkSecureSession);
+      window.removeEventListener('focus', checkSecureSession);
+      document.removeEventListener('visibilitychange', refreshVisibleSession);
     };
     // The saved local account identity is used only to refresh this device's
     // signed session when connectivity returns.
@@ -2593,9 +2862,9 @@ function App() {
   }, [locked, items]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible);
+    document.body.classList.toggle('app-popup-open', isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible);
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountRecoveryModal.visible]);
 
   useEffect(() => {
     if (locked || !featureIncluded('cloudBackupSync') || !syncSafety.pending || syncing || syncPromptShown || syncSafetyModal.visible || deviceVerificationModal.visible) return undefined;
@@ -2917,7 +3186,8 @@ function App() {
     try {
       const result = await postJson('/.netlify/functions/verify-otp-test', {
         challengeId: otpTest.challengeId,
-        code
+        code,
+        ...accountDeviceMetadata()
       });
       if (!result.ok) throw new Error(result.message || 'Code verification failed.');
       const nextAccount = {
@@ -4340,7 +4610,7 @@ function App() {
     }
     setLandingOtp((current) => ({ ...current, status: 'verifying', message: 'Verifying your account...' }));
     try {
-      const result = await postJson('/.netlify/functions/verify-otp-test', { challengeId: landingOtp.challengeId, code });
+      const result = await postJson('/.netlify/functions/verify-otp-test', { challengeId: landingOtp.challengeId, code, ...accountDeviceMetadata() });
       if (!result.ok) throw new Error(result.message || 'The code could not be verified.');
       const nextAccount = {
         ...bootstrap,
@@ -5494,6 +5764,7 @@ function App() {
               </div>
             </>
           )}
+          <button type="button" className="account-recovery-link" onClick={openAccountRecovery}><UserRoundCheck size={17} /> Sign in / recover account access</button>
           {message && <p className="message">{message}</p>}
           <div className="security-note"><ShieldCheck size={18} /> Your master password opens your vault. Your phone and email help verify your account.</div>
           <p className="version">{VERSION}</p>
@@ -5565,6 +5836,7 @@ function App() {
             </section>
           </div>
         )}
+        <AccountRecoveryModal state={accountRecoveryModal} setState={setAccountRecoveryModal} onClose={() => setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false })} onRequest={requestAccountRecoveryCode} onVerify={verifyAccountRecoveryCode} />
         <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={focusMasterPassword} />
         <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
@@ -6072,31 +6344,63 @@ function App() {
               <div className={`account-status-card ${accountStatus.state}`}>
                 <div className="account-status-heading"><Phone size={18} /><strong>Verification details</strong></div>
                 <span>{accountStatus.message}</span>
-                <small>Phone: {maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'not set'}{bootstrap.email ? ` · Email: ${maskEmail(bootstrap.email)}` : ''}</small>
+                <small>Phone: {maskPhone(accountSecurity.user?.phoneE164 || bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'not set'}{(accountSecurity.user?.email || bootstrap.email) ? ` · Email: ${maskEmail(accountSecurity.user?.email || bootstrap.email)}` : ''}</small>
               </div>
 
+              <section className="account-contact-card settings-inner-card">
+                <div className="account-management-heading"><div><p className="eyebrow">Verified contact details</p><h3>Account recovery contacts</h3></div>{customerSession.authenticated && <button type="button" className="icon-button" onClick={() => loadAccountSecurity()} disabled={accountSecurity.loading} aria-label="Refresh account security"><RefreshCw size={18} className={accountSecurity.loading ? 'is-rotating' : ''} /></button>}</div>
+                <p>Changes are completed only after a one-time code verifies the new contact detail.</p>
+                <div className="account-contact-list">
+                  <article><span className="account-contact-icon"><Mail size={20} /></span><div><strong>{accountSecurity.user?.email || bootstrap.email || 'Email not set'}</strong><small>{accountSecurity.user?.emailVerified === false ? 'Verification required' : 'Verified recovery email'}</small></div><button type="button" className="secondary-button" onClick={() => openAccountSecurityAction('change-email', { newEmail: accountSecurity.user?.email || bootstrap.email || '', verifyExisting: accountSecurity.user?.emailVerified === false })} disabled={!customerSession.authenticated}>{accountSecurity.user?.emailVerified === false ? 'Verify' : 'Change'}</button></article>
+                  <article><span className="account-contact-icon"><Phone size={20} /></span><div><strong>{accountSecurity.user?.phoneMasked || maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'Mobile not set'}</strong><small>{accountSecurity.user?.phoneVerified === false ? 'Verification required' : 'Verified recovery mobile'}</small></div><button type="button" className="secondary-button" onClick={() => openAccountSecurityAction('change-phone', { phoneCountryCode: accountSecurity.user?.phoneCountryCode || bootstrap.phoneCountryCode || '+254', phoneNumber: accountSecurity.user?.phoneNumber || bootstrap.phoneNumber || '', verifyExisting: accountSecurity.user?.phoneVerified === false })} disabled={!customerSession.authenticated}>{accountSecurity.user?.phoneVerified === false ? 'Verify' : 'Change'}</button></article>
+                </div>
+              </section>
+
               <div className={`secure-session-card ${customerSession.authenticated ? 'active' : 'inactive'}`}>
-                <div><ShieldCheck size={19} /><span><strong>{customerSession.authenticated ? 'Device verified' : 'Device verification required'}</strong><small>{customerSession.message}</small></span></div>
+                <div><ShieldCheck size={19} /><span><strong>{customerSession.authenticated ? 'Account session active' : 'Device verification required'}</strong><small>{customerSession.authenticated && accountSecurity.sessionExpiresAt ? `Renews securely during use · expires ${formatAccountDate(accountSecurity.sessionExpiresAt, true)}` : customerSession.message}</small></span></div>
                 {customerSession.authenticated
-                  ? <button type="button" className="secondary-button" onClick={endCustomerSession}>Remove verification</button>
+                  ? <button type="button" className="secondary-button" onClick={endCustomerSession}>End this session</button>
                   : <button type="button" className="secondary-button" onClick={openDeviceVerification}>Verify this device</button>}
               </div>
 
-              <form className="bootstrap-grid settings-inner-card" onSubmit={bootstrapAdmin}>
-                <label className="combined-phone-label">Mobile number
-                  <div className="phone-combo-field">
-                    <CountryPicker countryCode={bootstrap.phoneCountryCode || '+254'} countryIso={bootstrap.phoneCountryIso || 'ke'} onChange={(country) => setBootstrap({ ...bootstrap, phoneCountryCode: country.code, phoneCountryIso: country.iso, phoneE164: buildPhoneE164(country.code, bootstrap.phoneNumber) })} />
-                    <input inputMode="tel" value={bootstrap.phoneNumber || ''} onChange={(e) => setBootstrap({ ...bootstrap, phoneNumber: e.target.value, phoneE164: buildPhoneE164(bootstrap.phoneCountryCode, e.target.value) })} placeholder="712345678" />
-                  </div>
-                </label>
-                <label>Email<input type="email" value={bootstrap.email} onChange={(e) => setBootstrap({ ...bootstrap, email: e.target.value })} placeholder="you@example.com" /></label>
+              <section className="verified-devices-card settings-inner-card">
+                <div className="account-management-heading"><div><p className="eyebrow">Verified devices</p><h3><MonitorSmartphone size={20} /> Devices and sessions</h3></div><span>{accountSecurity.devices.filter((device) => !device.revoked_at).length} active</span></div>
+                <p>Remove a lost or old device to end every account session linked to it. This does not remotely erase an encrypted local vault copy already stored on that device.</p>
+                {!customerSession.authenticated && <div className="account-security-empty">Verify this device to view and manage account devices.</div>}
+                {customerSession.authenticated && accountSecurity.loading && <div className="account-security-empty">Loading verified devices...</div>}
+                {customerSession.authenticated && !accountSecurity.loading && accountSecurity.devices.filter((device) => !device.revoked_at).map((device) => <article className={`verified-device-row ${device.current ? 'current' : ''}`} key={device.id}>
+                  <span className="verified-device-icon"><MonitorSmartphone size={21} /></span>
+                  <div><strong>{device.device_name || 'Verified device'}{device.current ? ' · This device' : ''}</strong><small>{device.platform || device.device_type || 'Browser'}{device.browser ? ` · ${device.browser}` : ''}</small><small>Last used {formatAccountDate(device.last_seen_at, true)} · {device.activeSessions} active session{device.activeSessions === 1 ? '' : 's'}</small></div>
+                  <button type="button" className="secondary-button danger-soft" onClick={() => openAccountSecurityAction('remove-device', { deviceId: device.id, deviceName: device.device_name || 'this device' })}>Remove</button>
+                </article>)}
+                {customerSession.authenticated && !accountSecurity.loading && !accountSecurity.devices.filter((device) => !device.revoked_at).length && <div className="account-security-empty">No verified devices were found yet.</div>}
+              </section>
+
+              <form className="bootstrap-grid settings-inner-card account-name-form" onSubmit={bootstrapAdmin}>
                 <label>Display name<input value={bootstrap.displayName} onChange={(e) => setBootstrap({ ...bootstrap, displayName: e.target.value })} /></label>
                 <label>Account name<input value={bootstrap.accountName || bootstrap.tenantName || ''} onChange={(e) => setBootstrap({ ...bootstrap, accountName: e.target.value, tenantName: e.target.value })} /></label>
-                <div className="account-managed-field"><span>Plan</span><strong>{planDisplayName(bootstrap.planCode)}</strong><small>Plans and subscription status are controlled by My Passwords Admin and verified billing events.</small></div>
-                <div className="button-stack">
-                  <button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Save account details</button>
-                </div>
+                <div className="account-managed-field"><span>Plan</span><strong>{planDisplayName(bootstrap.planCode)}</strong><small>Plans and subscription status are controlled by verified billing events.</small></div>
+                <div className="button-stack"><button type="submit" className="primary-button" disabled={syncing}><UserRoundCheck size={18} /> Save names</button></div>
               </form>
+
+              <section className="account-data-actions settings-inner-card">
+                <div className="account-management-heading"><div><p className="eyebrow">Account controls</p><h3>Sessions and personal information</h3></div></div>
+                <button type="button" className="settings-tool-card" onClick={downloadAccountInformation} disabled={!customerSession.authenticated}><Download size={20} /><strong>Download personal account information</strong><span>Export account, subscription, device and activity information. Decrypted vault contents are not included.</span></button>
+                <button type="button" className="settings-tool-card danger-account-action" onClick={() => openAccountSecurityAction('end-all-sessions')} disabled={!customerSession.authenticated}><ShieldCheck size={20} /><strong>End all account sessions</strong><span>Sign out every verified browser and device, including this one.</span></button>
+              </section>
+
+              <section className={`account-deletion-card settings-inner-card ${accountSecurity.deletion?.status === 'pending' ? 'pending' : ''}`}>
+                <div className="account-management-heading"><div><p className="eyebrow">Account deletion</p><h3><Trash2 size={20} /> Delete account and encrypted data</h3></div></div>
+                {accountSecurity.deletion?.status === 'pending' ? <>
+                  <p>Deletion is scheduled for <strong>{formatAccountDate(accountSecurity.deletion.scheduled_for, true)}</strong>. Until then, you can cancel this request and keep the account.</p>
+                  <button type="button" className="secondary-button" onClick={cancelAccountDeletion}>Cancel account deletion</button>
+                </> : <>
+                  <p>A verified email code is required. Deletion then waits 14 days before the account, encrypted vault backups and stored documents are permanently removed.</p>
+                  <button type="button" className="secondary-button danger-soft" onClick={() => openAccountSecurityAction('delete-account')} disabled={!customerSession.authenticated}><Trash2 size={17} /> Request account deletion</button>
+                </>}
+              </section>
+
+              <div className="master-password-boundary-note"><Lock size={20} /><span><strong>The master password remains unrecoverable</strong><small>Account recovery restores the account, subscription and verified-device access only. It cannot decrypt or reset an encrypted vault without the correct master password.</small></span></div>
 
               {!featureIncluded('secureDeviceUnlock') && <div className="plan-feature-unavailable"><KeyRound size={21} /><span><strong>Secure device unlock is not included</strong><small>Your master password still opens the encrypted vault normally. Upgrade or ask Admin for an entitlement override to enable quick unlock on this device.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('secureDeviceUnlock')}>Review plan</button></div>}
               <section className={`biometric-settings-card settings-inner-card ${biometricUnlock ? 'enabled' : ''} ${!featureIncluded('secureDeviceUnlock') ? 'feature-disabled' : ''}`}>
@@ -6676,6 +6980,7 @@ function App() {
         </div>
       )}
 
+      <AccountSecurityModal state={accountSecurityModal} setState={setAccountSecurityModal} onClose={closeAccountSecurityModal} onRequestCode={requestAccountSecurityOtp} onConfirmCode={confirmAccountSecurityOtp} onRemoveDevice={confirmRemoveVerifiedDevice} onEndAllSessions={confirmEndAllSessions} />
       <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onSend={() => requestEmailOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />

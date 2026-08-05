@@ -1,4 +1,4 @@
-import { readCustomerSession } from './_auth.js';
+import { validateCustomerSession } from './_account-session.js';
 import { selectRows } from './_db.js';
 import { isFounderTenant, loadTenantSubscription } from './_trial.js';
 
@@ -7,8 +7,9 @@ function eq(value) {
 }
 
 export async function getBillingContext(event) {
-  const session = readCustomerSession(event);
-  if (!session?.tenantId || !session?.userId) return { ok: false, code: 'SESSION_REQUIRED', message: 'Verify this device before managing a subscription.' };
+  const validation = await validateCustomerSession(event, { touch: true });
+  if (!validation.ok) return { ok: false, code: validation.code || 'SESSION_REQUIRED', message: validation.message || 'Verify this device before managing a subscription.' };
+  const session = validation.session;
   const [users, tenants, subscription] = await Promise.all([
     selectRows('users', `select=id,tenant_id,email,display_name,role,status&id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}&limit=1`),
     selectRows('tenants', `select=id,name,account_name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at&id=${eq(session.tenantId)}&limit=1`),

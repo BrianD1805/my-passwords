@@ -364,3 +364,8 @@ grant execute on function public.save_vault_snapshot_if_current(
 -- Apply db/migrations/2026-08-04_plan_entitlements_enforcement_ver_0_044.sql
 -- to add structured plan feature flags, purchased entitlement snapshots,
 -- Admin overrides and server-enforced plan limits.
+
+-- My Passwords Ver-0.046
+-- Apply db/migrations/2026-08-05_account_session_device_management_ver_0_046.sql
+-- to add verified devices, revocable server-side sessions, verified contact changes,
+-- account recovery tracking and delayed/cancellable account deletion.

@@ -1,5 +1,5 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, updateRow } from './_db.js';
-import { issueCustomerSession } from './_auth.js';
+import { createVerifiedCustomerSession } from './_account-session.js';
 import { evaluateTenantAccess, isFounderTenant, recordLifecycleEvent, upsertTrialSubscription } from './_trial.js';
 import { resolveTenantEntitlements } from './_entitlements.js';
 import { createHash } from 'node:crypto';
@@ -195,6 +195,18 @@ export async function handler(event) {
       }
     }).catch(() => null);
 
+    const verifiedSession = await createVerifiedCustomerSession(event, {
+      tenantId: tenant.id,
+      userId: user.id,
+      role: user.role || 'administrator',
+      clientDeviceId: String(body.clientDeviceId || '').trim(),
+      deviceName: String(body.deviceName || '').trim(),
+      deviceType: String(body.deviceType || '').trim(),
+      platform: String(body.platform || '').trim(),
+      browser: String(body.browser || '').trim(),
+      userAgent: String(body.userAgent || '').trim()
+    });
+
     const lifecycle = await evaluateTenantAccess({
       ...tenant,
       plan_status: planStatus,
@@ -243,9 +255,11 @@ export async function handler(event) {
         trialStartedAt,
         trialEndsAt
       },
+      deviceId: verifiedSession.device.id,
+      sessionExpiresAt: verifiedSession.expiresAt,
       message
     }, {
-      'set-cookie': issueCustomerSession(event, { tenantId: tenant.id, userId: user.id, role: user.role || 'administrator' })
+      'set-cookie': verifiedSession.cookie
     });
   } catch (error) {
     return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not verify the code.', error: error.message, details: error.details || null });

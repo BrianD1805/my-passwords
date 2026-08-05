@@ -82,17 +82,23 @@ function clearCookieHeader(name, event) {
   return `${name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure}`;
 }
 
-export function issueCustomerSession(event, { tenantId, userId, role = 'member' }) {
+export function issueCustomerSession(event, { tenantId, userId, role = 'member', sessionId = '', deviceId = '', sessionGeneration = 1, expiresAt = '' }) {
   const now = Math.floor(Date.now() / 1000);
+  const requestedExpiry = expiresAt ? Math.floor(new Date(expiresAt).getTime() / 1000) : 0;
+  const exp = Number.isFinite(requestedExpiry) && requestedExpiry > now ? requestedExpiry : now + CUSTOMER_SESSION_SECONDS;
+  const maxAge = Math.max(0, exp - now);
   const token = encodeSession({
     kind: 'customer',
     tenantId,
     userId,
     role,
+    sessionId,
+    deviceId,
+    sessionGeneration: Number(sessionGeneration || 1),
     iat: now,
-    exp: now + CUSTOMER_SESSION_SECONDS
+    exp
   }, 'customer');
-  return cookieHeader(CUSTOMER_COOKIE, token, event, CUSTOMER_SESSION_SECONDS);
+  return cookieHeader(CUSTOMER_COOKIE, token, event, maxAge);
 }
 
 export function readCustomerSession(event) {

@@ -1,5 +1,5 @@
 import { selectRows } from './_db.js';
-import { readCustomerSession } from './_auth.js';
+import { validateCustomerSession } from './_account-session.js';
 import { evaluateTenantAccess } from './_trial.js';
 import { resolveTenantEntitlements } from './_entitlements.js';
 
@@ -8,10 +8,11 @@ function eq(value) {
 }
 
 export async function getCustomerAccess(event) {
-  const session = readCustomerSession(event);
-  if (!session?.tenantId || !session?.userId) {
-    return { ok: false, code: 'SESSION_REQUIRED', message: 'Verify this device to use secure cloud features.' };
+  const validation = await validateCustomerSession(event, { touch: true });
+  if (!validation.ok) {
+    return { ok: false, code: validation.code || 'SESSION_REQUIRED', message: validation.message || 'Verify this device to use secure cloud features.' };
   }
+  const session = validation.session;
 
   const users = await selectRows('users', `select=id,tenant_id,role,status&id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}&limit=1`);
   const tenants = await selectRows('tenants', `select=id,account_status,plan_status,plan_code,tenant_role,trial_started_at,trial_ends_at&id=${eq(session.tenantId)}&limit=1`);

@@ -1,34 +1,16 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow } from './_db.js';
-import { readCustomerSession } from './_auth.js';
+import { validateCustomerSession } from './_account-session.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
 }
 
-function cleanDigits(value) {
-  return String(value || '').replace(/\D/g, '');
-}
-
-function normaliseCountryCode(value) {
-  const digits = cleanDigits(value);
-  return digits ? `+${digits}` : '';
-}
-
-function normaliseLocalPhone(value) {
-  return cleanDigits(value).replace(/^0+/, '');
-}
-
-function buildPhoneE164(countryCode, phoneNumber) {
-  const code = normaliseCountryCode(countryCode);
-  const local = normaliseLocalPhone(phoneNumber);
-  return code && local ? `${code}${local}` : '';
-}
-
 export async function handler(event) {
-  const session = readCustomerSession(event);
-  if (!session?.tenantId || !session?.userId) {
-    return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify your account to update these details.' });
+  const validation = await validateCustomerSession(event, { touch: true });
+  if (!validation.ok) {
+    return jsonResponse(401, { ok: false, version: APP_VERSION, code: validation.code || 'SESSION_REQUIRED', message: validation.message || 'Verify your account to update these details.' });
   }
+  const session = validation.session;
 
   if (event.httpMethod === 'GET') {
     try {
@@ -46,46 +28,29 @@ export async function handler(event) {
   const body = parseBody(event);
   const displayName = String(body.displayName || '').trim();
   const accountName = String(body.accountName || '').trim();
-  const email = String(body.email || '').trim().toLowerCase();
-  const phoneCountryCode = normaliseCountryCode(body.phoneCountryCode || '');
-  const phoneNumber = normaliseLocalPhone(body.phoneNumber || '');
-  const phoneE164 = buildPhoneE164(phoneCountryCode, phoneNumber);
-
-  if (!displayName || !accountName || !phoneE164) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Display name, account name and mobile number are required.' });
-  if (email && !email.includes('@')) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Enter a valid email address.' });
+  if (!displayName || !accountName) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Display name and account name are required.' });
 
   try {
-    const emailMatches = email ? await selectRows('users', `select=id&email=${eq(email)}&id=neq.${encodeURIComponent(session.userId)}&limit=1`) : [];
-    if (emailMatches?.[0]) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'That email address is already linked to another account.' });
-    const phoneMatches = await selectRows('users', `select=id&phone_e164=${eq(phoneE164)}&id=neq.${encodeURIComponent(session.userId)}&limit=1`);
-    if (phoneMatches?.[0]) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'That mobile number is already linked to another account.' });
+    const currentRows = await selectRows('users', `select=email,phone_country_code,phone_number,phone_e164,email_verified,phone_verified&id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}&limit=1`);
+    const currentUser = currentRows?.[0];
+    if (!currentUser) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Account profile was not found.' });
 
-    const currentRows = await selectRows('users', `select=email,phone_e164,email_verified,phone_verified&id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}&limit=1`);
-    const currentUser = currentRows?.[0] || {};
-    const emailChanged = String(currentUser.email || '').toLowerCase() !== email;
-    const phoneChanged = String(currentUser.phone_e164 || '') !== phoneE164;
-    if (emailChanged || phoneChanged) {
-      return jsonResponse(409, {
-        ok: false,
-        version: APP_VERSION,
-        message: 'Recovery email and mobile changes require a new verification flow. Keep the current verified details for now; display name and account name can be updated.'
-      });
-    }
+    const now = new Date().toISOString();
     const user = await updateRow('users', `id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}`, {
       display_name: displayName,
-      updated_at: new Date().toISOString()
+      updated_at: now
     });
     const tenant = await updateRow('tenants', `id=${eq(session.tenantId)}`, {
       name: accountName,
       account_name: accountName,
-      updated_at: new Date().toISOString()
+      updated_at: now
     });
     await insertRow('audit_log', {
       id: publicId('audit'),
       tenant_id: session.tenantId,
       user_id: session.userId,
       action: 'account_profile_updated',
-      metadata: { version: APP_VERSION }
+      metadata: { version: APP_VERSION, fields: ['display_name', 'account_name'] }
     });
 
     return jsonResponse(200, {
@@ -93,11 +58,15 @@ export async function handler(event) {
       version: APP_VERSION,
       tenantId: session.tenantId,
       userId: session.userId,
-      phoneE164,
-      email,
+      phoneCountryCode: currentUser.phone_country_code || '',
+      phoneNumber: currentUser.phone_number || '',
+      phoneE164: currentUser.phone_e164 || '',
+      phoneVerified: Boolean(currentUser.phone_verified),
+      email: currentUser.email || '',
+      emailVerified: Boolean(currentUser.email_verified),
       accountName: tenant?.account_name || accountName,
       displayName: user?.display_name || displayName,
-      message: 'Account details updated securely. Plan and subscription status remain admin-controlled.'
+      message: 'Account names updated. Verified email and mobile details remain unchanged.'
     });
   } catch (error) {
     return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not update the account profile.', error: error.message, details: error.details || null });

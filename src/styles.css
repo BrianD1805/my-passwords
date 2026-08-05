@@ -13112,3 +13112,335 @@ input[type="radio"] {
     transparent 58px
   ) !important;
 }
+
+/* My Passwords Ver-0.046 — Account, session and device management */
+.account-recovery-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 14px auto 0;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: #2f678f;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.account-recovery-link:hover,
+.account-recovery-link:focus-visible {
+  color: #214f73;
+  outline: none;
+}
+
+.account-management-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.account-management-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 3px 0 0;
+}
+
+.account-management-heading > span {
+  flex: 0 0 auto;
+  border: 1px solid #cfe0ea;
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: #365d78;
+  background: #f3f8fb;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.account-contact-card > p,
+.verified-devices-card > p,
+.account-deletion-card > p {
+  margin: 0 0 16px;
+  color: #5d6d79;
+  line-height: 1.55;
+}
+
+.account-contact-list {
+  display: grid;
+  gap: 10px;
+}
+
+.account-contact-list article,
+.verified-device-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dbe5ea;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.account-contact-icon,
+.verified-device-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  color: #2f678f;
+  background: #eef5f9;
+}
+
+.account-contact-list article > div,
+.verified-device-row > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.account-contact-list strong,
+.verified-device-row strong {
+  overflow-wrap: anywhere;
+  color: #203548;
+}
+
+.account-contact-list small,
+.verified-device-row small {
+  color: #637583;
+  line-height: 1.4;
+}
+
+.verified-devices-card {
+  overflow: hidden;
+}
+
+.verified-device-row + .verified-device-row {
+  margin-top: 10px;
+}
+
+.verified-device-row.current {
+  border-color: #9bc9b2;
+  background: linear-gradient(135deg, #f5fbf7 0%, #ffffff 72%);
+}
+
+.verified-device-row.current .verified-device-icon {
+  color: #28734f;
+  background: #e1f2e8;
+}
+
+.account-security-empty {
+  padding: 18px;
+  border: 1px dashed #cad7df;
+  border-radius: 16px;
+  color: #657782;
+  text-align: center;
+  background: #f8fafb;
+}
+
+.account-name-form {
+  align-items: end;
+}
+
+.account-data-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.account-data-actions .account-management-heading {
+  margin-bottom: 2px;
+}
+
+.account-data-actions .settings-tool-card {
+  width: 100%;
+}
+
+.danger-account-action,
+.account-deletion-card.pending {
+  border-color: #efb8b8 !important;
+  background: #fff6f6 !important;
+}
+
+.danger-account-action > svg,
+.danger-account-action strong {
+  color: #bc272d;
+}
+
+.account-deletion-card {
+  border-color: #efb8b8 !important;
+}
+
+.account-deletion-card .account-management-heading h3,
+.account-deletion-card .account-management-heading h3 svg {
+  color: #b7252c;
+}
+
+.master-password-boundary-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #c8dce9;
+  border-radius: 18px;
+  color: #274d68;
+  background: linear-gradient(135deg, #f1f7fb 0%, #ffffff 78%);
+}
+
+.master-password-boundary-note > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.master-password-boundary-note > span {
+  display: grid;
+  gap: 4px;
+}
+
+.master-password-boundary-note small {
+  color: #5c7180;
+  line-height: 1.45;
+}
+
+.master-password-boundary-note.compact {
+  padding: 13px;
+  border-radius: 15px;
+}
+
+.account-security-modal-card,
+.account-recovery-modal-card {
+  width: min(650px, calc(100vw - 50px));
+}
+
+.account-security-modal-body,
+.account-recovery-modal-body {
+  display: grid;
+  gap: 16px;
+}
+
+.account-security-modal-body > p,
+.account-recovery-modal-body > p {
+  margin: 0;
+  color: #596c79;
+  line-height: 1.58;
+}
+
+.account-deletion-warning,
+.account-otp-destination {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 15px;
+  border-radius: 17px;
+}
+
+.account-deletion-warning {
+  border: 1px solid #efb8b8;
+  color: #a92229;
+  background: #fff1f1;
+}
+
+.account-otp-destination {
+  border: 1px solid #bcd8c8;
+  color: #245c40;
+  background: #eef8f2;
+}
+
+.account-deletion-warning > svg,
+.account-otp-destination > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.account-deletion-warning > span,
+.account-otp-destination > span {
+  display: grid;
+  gap: 4px;
+}
+
+.account-deletion-warning small,
+.account-otp-destination small {
+  color: inherit;
+  opacity: 0.86;
+  line-height: 1.45;
+}
+
+.account-modal-message {
+  padding: 12px 14px;
+  border: 1px solid #d7e2e9;
+  border-radius: 14px;
+  color: #4d6575;
+  background: #f7fafc;
+}
+
+.recovery-channel-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid #d4e0e7;
+  border-radius: 16px;
+  background: #f2f6f8;
+}
+
+.recovery-channel-switch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  color: #536b7b;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.recovery-channel-switch button.active {
+  color: #245c40;
+  background: #fff;
+  box-shadow: 0 2px 9px rgba(33, 67, 86, 0.1);
+}
+
+.danger-primary-button {
+  border-color: #bf262d !important;
+  background: #c92b32 !important;
+  color: #fff !important;
+}
+
+.danger-primary-button:hover,
+.danger-primary-button:focus-visible {
+  background: #ad2027 !important;
+}
+
+@media (max-width: 720px) {
+  .account-contact-list article,
+  .verified-device-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .account-contact-list article > button,
+  .verified-device-row > button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .account-management-heading {
+    gap: 10px;
+  }
+
+  .account-security-modal-card,
+  .account-recovery-modal-card {
+    width: calc(100vw - 50px);
+  }
+}
