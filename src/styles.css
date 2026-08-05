@@ -12099,7 +12099,7 @@ input[type="radio"] {
   }
 }
 
-/* My Passwords Ver-0.045D — unified red risk states, status alignment and full search focus. */
+/* My Passwords Ver-0.045E — unified red risk states, status alignment and full search focus. */
 :root {
   --mp-warning: #C92A2A;
   --mp-error: #C92A2A;
@@ -12351,4 +12351,500 @@ input[type="radio"] {
 .secure-session-card.inactive svg {
   background: var(--mp-risk-soft) !important;
   color: var(--mp-risk) !important;
+}
+
+
+/* My Passwords Ver-0.045E — popup trim, note cards, search polish, billing width and in-app password suggestion. */
+
+/* Search focus ring stays crisp on both sides. */
+.search-box.hero-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  padding-right: 16px;
+  border-radius: 22px;
+}
+
+.search-box.hero-search > svg {
+  flex: 0 0 auto;
+}
+
+.search-box.hero-search input,
+.search-box.hero-search input:focus,
+.search-box.hero-search input:focus-visible {
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Popup highlight line starts after the left corner and wraps around the top-right corner. */
+.item-popup-header,
+.admin-plan-window-header,
+.entitlement-modal > header {
+  position: relative;
+  overflow: visible;
+}
+
+.item-popup-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 24px;
+  right: -1px;
+  height: 24px;
+  border-top: 4px solid var(--mp-primary);
+  border-right: 4px solid var(--mp-primary);
+  border-top-right-radius: 28px;
+  background: transparent !important;
+  pointer-events: none;
+}
+
+/* Dropdown scrolling sits inside the popup/menu instead of touching the edges. */
+.custom-select-menu {
+  padding: 7px !important;
+  overflow: hidden !important;
+}
+
+.custom-select-scroll {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  max-height: inherit;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #aebfce transparent;
+}
+
+.custom-select-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+
+.custom-select-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 10px;
+}
+
+.custom-select-scroll::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: #aebfce;
+  background-clip: padding-box;
+}
+
+.custom-select-scroll::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* A compact tasteful note replaces the loud backup/offline banner on the vault home screen. */
+.vault-status-note {
+  margin: 12px 0 0;
+}
+
+.vault-status-note-button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid #d9e5ee;
+  border-radius: 18px;
+  background: #ffffff;
+  color: var(--mp-text);
+  text-align: left;
+}
+
+.vault-status-note-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #eef4f8;
+  color: var(--mp-primary);
+}
+
+.vault-status-note-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.vault-status-note-copy strong {
+  color: var(--mp-text);
+  font-size: 0.95rem;
+  font-weight: 850;
+}
+
+.vault-status-note-copy small {
+  color: #617285;
+  line-height: 1.38;
+}
+
+.vault-status-note-link {
+  color: var(--mp-primary);
+  font-size: 0.84rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.vault-status-note.pending .vault-status-note-button,
+.vault-status-note.verification .vault-status-note-button,
+.vault-status-note.offline .vault-status-note-button {
+  border-color: var(--mp-risk-border);
+  background: #fffdfd;
+}
+
+.vault-status-note.pending .vault-status-note-icon,
+.vault-status-note.verification .vault-status-note-icon,
+.vault-status-note.offline .vault-status-note-icon {
+  background: var(--mp-risk-soft);
+  color: var(--mp-risk);
+}
+
+/* Risk status tile keeps the icon visible. */
+.topbar-sync-button.pending .topbar-sync-icon svg,
+.topbar-sync-button.conflict .topbar-sync-icon svg,
+.topbar-sync-button.offline .topbar-sync-icon svg,
+.topbar-sync-button.plan-local-only .topbar-sync-icon svg {
+  color: #FFFFFF !important;
+  stroke: #FFFFFF !important;
+}
+
+/* In-app password suggestion controls. */
+.secret-input-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+}
+
+.secret-input-actions {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.secret-generate-button {
+  gap: 6px;
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+
+.secret-generate-button span {
+  display: inline-block;
+}
+
+/* Subscription layout refinements. */
+.subscription-change-card {
+  padding: 22px 16px !important;
+}
+
+.subscription-card-heading {
+  gap: 10px;
+}
+
+.subscription-card-heading > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.subscription-change-card .subscription-card-heading p:last-child,
+.subscription-selection-summary small,
+.subscription-disclosure > summary small {
+  max-width: none;
+}
+
+.subscription-selection-summary {
+  padding: 15px 14px;
+}
+
+.subscription-lifecycle-card {
+  padding-left: 22px !important;
+}
+
+.subscription-disclosure,
+.subscription-status-grid,
+.subscription-scheduled-change,
+.subscription-cancellation-note,
+.subscription-payment-warning {
+  margin-left: 6px;
+}
+
+.subscription-refresh-icon-button {
+  align-self: flex-start;
+}
+
+.primary-button:disabled,
+.subscription-change-button:disabled,
+.subscription-checkout-button:disabled {
+  opacity: 1 !important;
+  background: #d6dee6 !important;
+  border-color: #d6dee6 !important;
+  color: #556476 !important;
+  box-shadow: none !important;
+}
+
+.primary-button:disabled *,
+.subscription-change-button:disabled *,
+.subscription-checkout-button:disabled * {
+  color: #556476 !important;
+}
+
+@media (max-width: 680px) {
+  .subscription-change-card {
+    padding-inline: 14px !important;
+  }
+
+  .subscription-card-heading {
+    gap: 9px;
+  }
+
+  .vault-status-note-button {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .vault-status-note-link {
+    grid-column: 2;
+  }
+
+  .secret-generate-button span {
+    display: none;
+  }
+
+  .secret-generate-button {
+    padding-inline: 10px;
+  }
+}
+
+/* Ver-0.045E final refinement pass. */
+
+/* Keep the complete search focus ring symmetrical and clipped to one clean shape. */
+.search-box.hero-search {
+  box-sizing: border-box;
+  isolation: isolate;
+}
+
+.search-box.hero-search input {
+  box-sizing: border-box;
+  min-height: 54px;
+}
+
+/* Apply the wrapped top-right accent consistently to every popup family. */
+.item-popup-header,
+.admin-plan-window-header,
+.entitlement-modal > header,
+.country-picker-panel,
+.verify-modal {
+  position: relative;
+}
+
+.admin-plan-window-header,
+.entitlement-modal > header {
+  border-top: 0 !important;
+}
+
+.item-popup-header::before,
+.admin-plan-window-header::before,
+.entitlement-modal > header::before,
+.country-picker-panel::before,
+.verify-modal::before {
+  content: '';
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 24px;
+  right: -1px;
+  height: 24px;
+  border-top: 4px solid var(--mp-primary);
+  border-right: 4px solid var(--mp-primary);
+  border-top-right-radius: 28px;
+  background: transparent !important;
+  pointer-events: none;
+}
+
+.country-picker-panel,
+.verify-modal {
+  overflow: hidden;
+}
+
+.country-picker-panel::before,
+.verify-modal::before {
+  left: 20px;
+  right: 0;
+  border-top-right-radius: 22px;
+}
+
+/* The scrollbar has its own inset scrolling viewport and never touches menu edges. */
+.custom-select-scroll {
+  min-height: 0;
+  padding-block: 2px;
+  padding-right: 4px;
+}
+
+/* Only a compact note remains on the home screen; its message opens in a popup. */
+.vault-status-note {
+  width: fit-content;
+  max-width: 100%;
+  margin: 10px 0 0;
+}
+
+.vault-status-note-button {
+  width: auto;
+  max-width: 100%;
+  grid-template-columns: auto minmax(0, auto) auto;
+  gap: 9px;
+  min-height: 44px;
+  padding: 6px 10px 6px 7px;
+  border-radius: 15px;
+  box-shadow: 0 7px 18px rgba(29, 53, 87, .07);
+}
+
+.vault-status-note-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.vault-status-note-copy {
+  gap: 0;
+}
+
+.vault-status-note-copy strong {
+  font-size: .88rem;
+}
+
+.vault-status-note-copy small {
+  font-size: .76rem;
+}
+
+.vault-status-note-chevron {
+  color: var(--mp-primary);
+}
+
+.vault-status-note.pending .vault-status-note-button,
+.vault-status-note.verification .vault-status-note-button,
+.vault-status-note.conflict .vault-status-note-button,
+.vault-status-note.offline .vault-status-note-button {
+  border-color: var(--mp-risk-border);
+  background: #fffdfd;
+}
+
+.vault-status-note.pending .vault-status-note-icon,
+.vault-status-note.verification .vault-status-note-icon,
+.vault-status-note.conflict .vault-status-note-icon,
+.vault-status-note.offline .vault-status-note-icon,
+.vault-status-note.pending .vault-status-note-chevron,
+.vault-status-note.verification .vault-status-note-chevron,
+.vault-status-note.conflict .vault-status-note-chevron,
+.vault-status-note.offline .vault-status-note-chevron {
+  background: var(--mp-risk-soft);
+  color: var(--mp-risk);
+}
+
+.vault-status-note.pending .vault-status-note-chevron,
+.vault-status-note.verification .vault-status-note-chevron,
+.vault-status-note.conflict .vault-status-note-chevron,
+.vault-status-note.offline .vault-status-note-chevron {
+  background: transparent;
+}
+
+/* Keep Add Item secrets visually hidden without advertising a password field to Google. */
+.item-secret-entry.is-concealed {
+  -webkit-text-security: disc;
+}
+
+.item-secret-entry.is-visible {
+  -webkit-text-security: none;
+}
+
+.secret-input-actions .mini-button {
+  min-width: 44px;
+}
+
+/* Let all subscription heading copy use the available card width. */
+.subscription-card-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 10px;
+  row-gap: 6px;
+  align-items: start;
+}
+
+.subscription-card-heading > div {
+  display: contents;
+}
+
+.subscription-card-heading > div > .eyebrow {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.subscription-card-heading > div > h3 {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.subscription-card-heading > div > p:last-child {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  width: 100%;
+}
+
+.subscription-card-heading > span {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: start;
+}
+
+/* Keep all lifecycle content clear of the coloured left status line. */
+.subscription-lifecycle-card {
+  padding-left: 28px !important;
+}
+
+.subscription-lifecycle-card > * {
+  min-width: 0;
+}
+
+.subscription-lifecycle-card .subscription-disclosure,
+.subscription-lifecycle-card .subscription-status-grid,
+.subscription-lifecycle-card .subscription-scheduled-change,
+.subscription-lifecycle-card .subscription-cancellation-note,
+.subscription-lifecycle-card .subscription-payment-warning {
+  margin-left: 0;
+}
+
+@media (max-width: 680px) {
+  .vault-status-note-button {
+    grid-template-columns: auto minmax(0, auto) auto;
+  }
+
+  .secret-generate-button span {
+    display: inline-block;
+  }
+
+  .subscription-change-card {
+    padding-inline: 12px !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .secret-input-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .secret-input-actions {
+    justify-content: flex-end;
+  }
 }

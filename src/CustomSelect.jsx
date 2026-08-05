@@ -187,11 +187,8 @@ export default function CustomSelect({
 
       {open && typeof document !== 'undefined' && createPortal(
         <div
-          ref={menuRef}
-          id={listboxId}
           className={`custom-select-menu ${position.openUpward ? 'opens-upward' : 'opens-downward'}`}
-          role="listbox"
-          aria-label={ariaLabel}
+          role="presentation"
           style={{
             top: `${position.top}px`,
             left: `${position.left}px`,
@@ -199,28 +196,37 @@ export default function CustomSelect({
             maxHeight: `${position.maxHeight}px`
           }}
         >
-          {normalisedOptions.map((option, index) => {
-            const selected = option.value === String(value ?? '');
-            const active = index === activeIndex;
-            return (
-              <button
-                key={`${option.value}-${index}`}
-                id={`${listboxId}-option-${index}`}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                aria-disabled={option.disabled || undefined}
-                disabled={option.disabled}
-                data-option-index={index}
-                className={`custom-select-option ${selected ? 'selected' : ''} ${active ? 'active' : ''}`.trim()}
-                onMouseEnter={() => !option.disabled && setActiveIndex(index)}
-                onClick={() => chooseOption(option, index)}
-              >
-                <span>{option.label}</span>
-                {selected ? <Check size={17} aria-hidden="true" /> : <span className="custom-select-check-space" aria-hidden="true" />}
-              </button>
-            );
-          })}
+          <div
+            id={listboxId}
+            ref={menuRef}
+            className="custom-select-scroll"
+            role="listbox"
+            aria-label={ariaLabel}
+            style={{ maxHeight: `${Math.max(80, position.maxHeight - 14)}px` }}
+          >
+            {normalisedOptions.map((option, index) => {
+              const selected = option.value === String(value ?? '');
+              const active = index === activeIndex;
+              return (
+                <button
+                  key={`${option.value}-${index}`}
+                  id={`${listboxId}-option-${index}`}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  aria-disabled={option.disabled || undefined}
+                  disabled={option.disabled}
+                  data-option-index={index}
+                  className={`custom-select-option ${selected ? 'selected' : ''} ${active ? 'active' : ''}`.trim()}
+                  onMouseEnter={() => !option.disabled && setActiveIndex(index)}
+                  onClick={() => chooseOption(option, index)}
+                >
+                  <span>{option.label}</span>
+                  {selected ? <Check size={17} aria-hidden="true" /> : <span className="custom-select-check-space" aria-hidden="true" />}
+                </button>
+              );
+            })}
+          </div>
         </div>,
         document.body
       )}

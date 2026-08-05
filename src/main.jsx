@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.045D';
+const VERSION = 'My Passwords Ver-0.045E';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -30,6 +30,41 @@ const DEFAULT_ENTITLEMENTS = Object.freeze({
   usage: { users: 1, documents: 0, storageBytes: 0, storageMb: 0 },
   remaining: { users: 0, documents: null, storageBytes: null }
 });
+
+function randomIndex(max) {
+  if (max <= 0) return 0;
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const values = new Uint32Array(1);
+    crypto.getRandomValues(values);
+    return values[0] % max;
+  }
+  return Math.floor(Math.random() * max);
+}
+
+function pickCharacter(pool) {
+  return pool.charAt(randomIndex(pool.length));
+}
+
+function shuffleCharacters(values = []) {
+  const list = [...values];
+  for (let index = list.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomIndex(index + 1);
+    [list[index], list[swapIndex]] = [list[swapIndex], list[index]];
+  }
+  return list;
+}
+
+function generateStrongPassword(length = 18) {
+  const safeLength = Math.max(14, Math.min(32, Number(length) || 18));
+  const lower = 'abcdefghjkmnpqrstuvwxyz';
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const numbers = '23456789';
+  const specials = '!@#$%&*?-_+';
+  const all = `${lower}${upper}${numbers}${specials}`;
+  const seeded = [pickCharacter(lower), pickCharacter(upper), pickCharacter(numbers), pickCharacter(specials)];
+  while (seeded.length < safeLength) seeded.push(pickCharacter(all));
+  return shuffleCharacters(seeded).join('');
+}
 
 function normaliseClientEntitlements(value = {}) {
   const source = value && typeof value === 'object' ? value : {};
@@ -5617,6 +5652,73 @@ function App() {
             ? <Cloud size={22} />
             : <ShieldCheck size={22} />;
 
+  const homeStatusNote = activePage === 'home'
+    ? (!isOnline
+      ? {
+          variant: 'offline',
+          title: 'Offline details',
+          message: hasLocalVault
+            ? 'You are offline. Your vault saved on this device can still open and backup will resume when the internet returns.'
+            : 'You are offline. Reconnect to verify this device or restore an existing secure vault copy.'
+        }
+      : (cloudBackupIncluded && (syncSafety.pending || syncSafety.conflict))
+        ? {
+            variant: syncSafety.conflict ? 'conflict' : syncSafety.sessionRequired ? 'verification' : 'pending',
+            title: syncSafety.conflict ? 'Vault review details' : 'Backup details',
+            message: syncSafety.message || (syncSafety.sessionRequired ? 'Verify this device to finish backing up your latest changes.' : 'Your latest changes are still waiting for backup.')
+          }
+        : null)
+    : null;
+
+  function openHomeStatusNote() {
+    if (!homeStatusNote) return;
+    if (homeStatusNote.variant === 'offline') {
+      setSyncSafetyModal({
+        visible: true,
+        mode: hasLocalVault ? 'offline-saved' : 'offline',
+        title: 'You are offline',
+        message: homeStatusNote.message,
+        details: {}
+      });
+      return;
+    }
+    if (syncSafety.conflict) {
+      setSyncSafetyModal({
+        visible: true,
+        mode: 'conflict-reminder',
+        title: 'Different vault changes need review',
+        message: homeStatusNote.message,
+        details: {}
+      });
+      return;
+    }
+    if (syncSafety.sessionRequired) {
+      setSyncSafetyModal({
+        visible: true,
+        mode: 'verification-required',
+        title: 'Verify this device to finish backup',
+        message: homeStatusNote.message,
+        details: { itemCount: syncSafety.itemCount }
+      });
+      return;
+    }
+    setSyncSafetyModal({
+      visible: true,
+      mode: 'backup-failed',
+      title: 'Your latest changes still need backup',
+      message: homeStatusNote.message,
+      details: { itemCount: syncSafety.itemCount }
+    });
+  }
+
+  function suggestStrongItemPassword() {
+    const suggestion = generateStrongPassword(18);
+    setItemCredentialFieldsArmed((current) => ({ ...current, password: true }));
+    setForm((current) => ({ ...current, password: suggestion }));
+    setShowFormSecret(true);
+    showMessage('Strong password suggested inside the app.', 'success');
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar app-home-topbar">
@@ -5647,9 +5749,19 @@ function App() {
         </>}
       </header>
 
-      {!isOnline && <NetworkStatusNotice context="vault" hasLocalVault />}
+      {homeStatusNote && (
+        <section className={`vault-status-note ${homeStatusNote.variant}`} role="note">
+          <button type="button" className="vault-status-note-button" onClick={openHomeStatusNote} aria-label={`${homeStatusNote.title}. Open message.`}>
+            <span className="vault-status-note-icon" aria-hidden="true"><FileText size={18} /></span>
+            <span className="vault-status-note-copy"><strong>{homeStatusNote.title}</strong><small>Open message</small></span>
+            <ChevronRight size={18} className="vault-status-note-chevron" aria-hidden="true" />
+          </button>
+        </section>
+      )}
 
-      {cloudBackupIncluded && syncSafety.pending && (
+      {!isOnline && activePage !== 'home' && <NetworkStatusNotice context="vault" hasLocalVault />}
+
+      {activePage !== 'home' && cloudBackupIncluded && syncSafety.pending && (
         <section className={`sync-warning-banner ${syncSafety.conflict ? 'conflict' : syncSafety.sessionRequired ? 'verification' : 'pending'}`} role="alert">
           <div>{syncSafety.conflict ? <AlertTriangle size={21} /> : <Cloud size={21} />}<span><strong>{syncSafety.conflict ? 'Different vault changes need review' : syncSafety.sessionRequired ? 'Verify this device to finish backup' : 'Your latest changes are saved on this device only'}</strong><small>{syncSafety.message || 'Open Vault Safety to protect the latest changes.'}</small></span></div>
           <button type="button" className="secondary-button" onClick={() => {
@@ -5801,8 +5913,11 @@ function App() {
                         <label>Username / Reference<input name="vault-item-reference" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" readOnly={!editingItemId && !itemCredentialFieldsArmed.username} onPointerDown={() => setItemCredentialFieldsArmed((current) => ({ ...current, username: true }))} onFocus={() => setItemCredentialFieldsArmed((current) => ({ ...current, username: true }))} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder={activeHint.username} /></label>
                         <label>Password / Secret
                           <div className="secret-input-row">
-                            <input name="vault-item-secret" type={showFormSecret ? 'text' : 'password'} autoComplete="new-password" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" readOnly={!editingItemId && !itemCredentialFieldsArmed.password} onPointerDown={() => setItemCredentialFieldsArmed((current) => ({ ...current, password: true }))} onFocus={() => setItemCredentialFieldsArmed((current) => ({ ...current, password: true }))} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={activeHint.secret} />
-                            <button type="button" className="mini-button" onClick={() => setShowFormSecret(!showFormSecret)}>{showFormSecret ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+                            <input name="vault-item-secret-entry" className={showFormSecret ? 'item-secret-entry is-visible' : 'item-secret-entry is-concealed'} type="text" autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck="false" inputMode="text" aria-autocomplete="none" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!editingItemId && !itemCredentialFieldsArmed.password} onPointerDown={() => setItemCredentialFieldsArmed((current) => ({ ...current, password: true }))} onFocus={() => setItemCredentialFieldsArmed((current) => ({ ...current, password: true }))} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={activeHint.secret} />
+                            <div className="secret-input-actions">
+                              <button type="button" className="mini-button secret-generate-button" onClick={suggestStrongItemPassword}><Sparkles size={15} /> <span>Suggest</span></button>
+                              <button type="button" className="mini-button" onClick={() => setShowFormSecret(!showFormSecret)} aria-label={showFormSecret ? 'Hide password' : 'Show password'}>{showFormSecret ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+                            </div>
                           </div>
                         </label>
                       </>
