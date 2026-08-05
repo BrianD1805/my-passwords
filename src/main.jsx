@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.045E';
+const VERSION = 'My Passwords Ver-0.045F';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1672,6 +1672,7 @@ function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKe
   const isDanger = state.mode === 'danger';
   const isOffline = state.mode === 'offline';
   const isOfflineSaved = state.mode === 'offline-saved';
+  const isStatusInfo = state.mode === 'status-info';
   return (
     <div className="item-popup-layer sync-safety-popup-layer" role="dialog" aria-modal="true" aria-labelledby="sync-safety-title">
       <button type="button" className="item-popup-backdrop" onClick={onClose} aria-label="Close vault safety message" />
@@ -1708,7 +1709,7 @@ function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKe
           {isConflict && <><button type="button" className="secondary-button" onClick={onClose}>Decide later</button><button type="button" className="secondary-button" onClick={onUseCloud}>Use secure backup</button><button type="button" className="primary-button" onClick={onKeepDevice}>Keep this device</button></>}
           {isConflictReminder && <><button type="button" className="secondary-button" onClick={onClose}>Close</button><button type="button" className="primary-button" onClick={onOpenSafety}>Open Vault Safety</button></>}
           {isDanger && <><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="button" className="danger-button" onClick={onConfirmDanger}>Continue anyway</button></>}
-          {(isOffline || isOfflineSaved) && <button type="button" className="primary-button" onClick={onClose}>Close</button>}
+          {(isOffline || isOfflineSaved || isStatusInfo) && <button type="button" className="primary-button" onClick={onClose}>Close</button>}
         </footer>
       </section>
     </div>
@@ -5652,61 +5653,56 @@ function App() {
             ? <Cloud size={22} />
             : <ShieldCheck size={22} />;
 
-  const homeStatusNote = activePage === 'home'
-    ? (!isOnline
+  const vaultStatusDetails = vaultSafetyClass === 'safe'
+    ? null
+    : !isOnline
       ? {
-          variant: 'offline',
-          title: 'Offline details',
+          mode: hasLocalVault ? 'offline-saved' : 'offline',
+          title: 'You are offline',
           message: hasLocalVault
-            ? 'You are offline. Your vault saved on this device can still open and backup will resume when the internet returns.'
-            : 'You are offline. Reconnect to verify this device or restore an existing secure vault copy.'
+            ? 'Your encrypted vault saved on this device remains available. Secure backup and syncing will resume automatically when the internet connection returns.'
+            : 'Reconnect to verify this device or restore an existing secure vault copy.'
         }
-      : (cloudBackupIncluded && (syncSafety.pending || syncSafety.conflict))
+      : !cloudBackupIncluded
         ? {
-            variant: syncSafety.conflict ? 'conflict' : syncSafety.sessionRequired ? 'verification' : 'pending',
-            title: syncSafety.conflict ? 'Vault review details' : 'Backup details',
-            message: syncSafety.message || (syncSafety.sessionRequired ? 'Verify this device to finish backing up your latest changes.' : 'Your latest changes are still waiting for backup.')
+            mode: 'status-info',
+            title: 'This vault is stored locally',
+            message: 'Your vault remains encrypted on this device. Cloud backup and access from another verified device are not included in the current plan.'
           }
-        : null)
-    : null;
+        : syncing || syncSafety.state === 'backing-up'
+          ? {
+              mode: 'status-info',
+              title: 'Vault backup is in progress',
+              message: 'My Passwords is securely protecting the latest changes from this device. Keep the app open until the status updates.'
+            }
+          : syncSafety.conflict
+            ? {
+                mode: 'conflict-reminder',
+                title: 'Different vault changes need review',
+                message: syncSafety.message || 'Different vault changes were found. Nothing will be replaced automatically until you choose which copy to keep.'
+              }
+            : syncSafety.pending
+              ? {
+                  mode: syncSafety.sessionRequired ? 'verification-required' : 'backup-failed',
+                  title: syncSafety.sessionRequired ? 'Verify this device to finish backup' : 'Your latest changes still need backup',
+                  message: syncSafety.message || (syncSafety.sessionRequired ? 'Verify this device to finish backing up your latest changes.' : 'Your latest changes are safe on this device but are not yet available elsewhere.')
+                }
+              : {
+                  mode: 'status-info',
+                  title: 'Vault safety has not been checked',
+                  message: 'Open Vault Safety and run a check to confirm that the latest encrypted vault copy is protected.'
+                };
 
-  function openHomeStatusNote() {
-    if (!homeStatusNote) return;
-    if (homeStatusNote.variant === 'offline') {
-      setSyncSafetyModal({
-        visible: true,
-        mode: hasLocalVault ? 'offline-saved' : 'offline',
-        title: 'You are offline',
-        message: homeStatusNote.message,
-        details: {}
-      });
-      return;
-    }
-    if (syncSafety.conflict) {
-      setSyncSafetyModal({
-        visible: true,
-        mode: 'conflict-reminder',
-        title: 'Different vault changes need review',
-        message: homeStatusNote.message,
-        details: {}
-      });
-      return;
-    }
-    if (syncSafety.sessionRequired) {
-      setSyncSafetyModal({
-        visible: true,
-        mode: 'verification-required',
-        title: 'Verify this device to finish backup',
-        message: homeStatusNote.message,
-        details: { itemCount: syncSafety.itemCount }
-      });
+  function openVaultStatusDetails() {
+    if (!vaultStatusDetails) {
+      openVaultSafetySettings();
       return;
     }
     setSyncSafetyModal({
       visible: true,
-      mode: 'backup-failed',
-      title: 'Your latest changes still need backup',
-      message: homeStatusNote.message,
+      mode: vaultStatusDetails.mode,
+      title: vaultStatusDetails.title,
+      message: vaultStatusDetails.message,
       details: { itemCount: syncSafety.itemCount }
     });
   }
@@ -5728,10 +5724,15 @@ function App() {
         </div>
         <button type="button" className="mobile-top-menu-button" onClick={() => setMobileHeaderMenuOpen((open) => !open)} aria-label="Open vault menu" aria-expanded={mobileHeaderMenuOpen ? 'true' : 'false'}><MoreHorizontal size={22} /></button>
         <div className="topbar-actions">
-          <button type="button" className={`topbar-sync-button ${vaultSafetyClass}`} onClick={openVaultSafetySettings} aria-label={`Vault Safety: ${vaultSafetyLabel}`} title="Open Vault Safety">
-            <span className="topbar-sync-icon" aria-hidden="true">{vaultSafetyIcon}</span>
-            <span className="topbar-sync-copy"><small>Vault status</small><strong>{vaultSafetyLabel}</strong></span>
-          </button>
+          <div className={`topbar-sync-button ${vaultSafetyClass}`} role="group" aria-label={`Vault Safety: ${vaultSafetyLabel}`}>
+            <button type="button" className="topbar-sync-main" onClick={openVaultSafetySettings} aria-label={`Open Vault Safety. Current status: ${vaultSafetyLabel}.`}>
+              <span className="topbar-sync-icon" aria-hidden="true">{vaultSafetyIcon}</span>
+              <span className="topbar-sync-copy"><small>Vault status</small><strong>{vaultSafetyLabel}</strong></span>
+            </button>
+            <button type="button" className={`topbar-sync-detail ${vaultStatusDetails ? 'has-details' : 'complete'}`} onClick={openVaultStatusDetails} aria-label={vaultStatusDetails ? `Explain ${vaultSafetyLabel} status` : 'Vault is up to date'} title={vaultStatusDetails ? 'Open status explanation' : 'Vault is up to date'}>
+              {vaultStatusDetails ? <FileText size={18} /> : <Check size={19} />}
+            </button>
+          </div>
           <button type="button" className="mobile-vault-refresh-button" onClick={refreshVaultAndBackup} disabled={syncing} aria-label="Refresh vault and back up changes" title="Refresh vault and back up changes"><RefreshCw size={20} className={syncing ? 'sync-button-spinner' : ''} /></button>
           <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'topbar-help-button active' : 'topbar-help-button'} onClick={openFaqSettings} aria-label="Open frequently asked questions" title="Help and FAQs"><CircleHelp size={20} /></button>
           <button type="button" className={activePage === 'home' ? 'nav-pill vault-nav-pill active' : 'nav-pill vault-nav-pill'} onClick={() => setActivePage('home')}><KeyRound size={17} /> Vault</button>
@@ -5749,15 +5750,6 @@ function App() {
         </>}
       </header>
 
-      {homeStatusNote && (
-        <section className={`vault-status-note ${homeStatusNote.variant}`} role="note">
-          <button type="button" className="vault-status-note-button" onClick={openHomeStatusNote} aria-label={`${homeStatusNote.title}. Open message.`}>
-            <span className="vault-status-note-icon" aria-hidden="true"><FileText size={18} /></span>
-            <span className="vault-status-note-copy"><strong>{homeStatusNote.title}</strong><small>Open message</small></span>
-            <ChevronRight size={18} className="vault-status-note-chevron" aria-hidden="true" />
-          </button>
-        </section>
-      )}
 
       {!isOnline && activePage !== 'home' && <NetworkStatusNotice context="vault" hasLocalVault />}
 
@@ -5915,7 +5907,7 @@ function App() {
                           <div className="secret-input-row">
                             <input name="vault-item-secret-entry" className={showFormSecret ? 'item-secret-entry is-visible' : 'item-secret-entry is-concealed'} type="text" autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck="false" inputMode="text" aria-autocomplete="none" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!editingItemId && !itemCredentialFieldsArmed.password} onPointerDown={() => setItemCredentialFieldsArmed((current) => ({ ...current, password: true }))} onFocus={() => setItemCredentialFieldsArmed((current) => ({ ...current, password: true }))} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={activeHint.secret} />
                             <div className="secret-input-actions">
-                              <button type="button" className="mini-button secret-generate-button" onClick={suggestStrongItemPassword}><Sparkles size={15} /> <span>Suggest</span></button>
+                              <button type="button" className="mini-button secret-generate-button" onClick={suggestStrongItemPassword}><Sparkles size={13} /> <span>Suggest</span></button>
                               <button type="button" className="mini-button" onClick={() => setShowFormSecret(!showFormSecret)} aria-label={showFormSecret ? 'Hide password' : 'Show password'}>{showFormSecret ? <EyeOff size={15} /> : <Eye size={15} />}</button>
                             </div>
                           </div>

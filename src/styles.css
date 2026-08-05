@@ -12848,3 +12848,213 @@ input[type="radio"] {
     justify-content: flex-end;
   }
 }
+
+
+/* My Passwords Ver-0.045F — integrated status details, green popup edge and compact password suggestion. */
+:root {
+  --mp-popup-accent: #28734F;
+}
+
+/* Status explanation now lives inside the Vault Status control. */
+.topbar-sync-button {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch !important;
+  gap: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.topbar-sync-main,
+.topbar-sync-detail {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.topbar-sync-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 11px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.topbar-sync-detail {
+  align-self: center;
+  width: 42px;
+  height: 42px;
+  margin: 7px 7px 7px 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .58);
+  opacity: .9;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
+  transition: background 140ms ease, opacity 140ms ease, transform 140ms ease;
+}
+
+.topbar-sync-detail.complete {
+  color: #28734F;
+  background: rgba(232, 247, 238, .9);
+  border-color: rgba(40, 115, 79, .28);
+}
+
+.topbar-sync-detail:hover,
+.topbar-sync-detail:focus-visible {
+  opacity: 1;
+  background: rgba(255, 255, 255, .9);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.topbar-sync-main:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 3px rgba(51, 102, 153, .14);
+}
+
+.topbar-sync-detail svg {
+  display: block !important;
+  width: 18px !important;
+  height: 18px !important;
+  stroke-width: 2.35;
+}
+
+@media (max-width: 860px) {
+  .topbar-sync-main {
+    gap: 10px;
+    padding: 7px 6px 7px 7px;
+  }
+
+  .topbar-sync-detail {
+    width: 39px;
+    height: 39px;
+    margin: 7px 7px 7px 0;
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 390px) {
+  .topbar-sync-main {
+    gap: 8px;
+    padding-left: 6px;
+  }
+
+  .topbar-sync-detail {
+    width: 36px;
+    height: 36px;
+    margin-right: 6px;
+  }
+}
+
+/* Remove the separate home-screen status note completely. */
+.vault-status-note {
+  display: none !important;
+}
+
+/* Replace the old blue popup trim with a thicker dark-green edge.
+   It fades in from the top-left, rounds the top-right corner, and fades out halfway down the right side. */
+.item-popup-header::before,
+.admin-plan-window-header::before,
+.entitlement-modal > header::before,
+.country-picker-panel::before,
+.verify-modal::before {
+  display: none !important;
+}
+
+.item-popup-card,
+.item-form.item-popup-card,
+.admin-plan-window,
+.entitlement-modal,
+.country-picker-panel,
+.verify-modal {
+  position: relative !important;
+  isolation: isolate;
+}
+
+.item-popup-card::before,
+.item-form.item-popup-card::before,
+.admin-plan-window::before,
+.entitlement-modal::before,
+.country-picker-panel::before,
+.verify-modal::before {
+  content: '';
+  position: absolute;
+  z-index: 20;
+  top: -1px;
+  left: 20px;
+  right: -2px;
+  height: 52%;
+  box-sizing: border-box;
+  border-top: 6px solid var(--mp-popup-accent);
+  border-right: 6px solid var(--mp-popup-accent);
+  border-top-right-radius: inherit;
+  pointer-events: none;
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, rgba(0,0,0,.24) 6%, #000 17%, #000 100%),
+    linear-gradient(180deg, #000 0%, #000 77%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0%, rgba(0,0,0,.24) 6%, #000 17%, #000 100%),
+    linear-gradient(180deg, #000 0%, #000 77%, transparent 100%);
+  mask-composite: intersect;
+}
+
+.admin-plan-window,
+.entitlement-modal,
+.country-picker-panel,
+.verify-modal {
+  overflow: hidden;
+}
+
+/* Give the selected option three more pixels of breathing room beside the scrollbar. */
+.custom-select-scroll {
+  padding-right: 7px !important;
+}
+
+/* Smaller, lighter password suggestion button with no blue press flash. */
+.secret-generate-button {
+  min-width: 0 !important;
+  min-height: 36px !important;
+  gap: 4px !important;
+  padding: 6px 8px !important;
+  border-color: var(--mp-border) !important;
+  background: var(--mp-surface) !important;
+  color: var(--mp-primary) !important;
+  font-size: .78rem !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+.secret-generate-button svg {
+  width: 13px !important;
+  height: 13px !important;
+  flex: 0 0 13px;
+  stroke-width: 2;
+}
+
+.secret-generate-button span {
+  font-weight: 500 !important;
+}
+
+.secret-generate-button:hover:not(:disabled),
+.secret-generate-button:focus-visible,
+.secret-generate-button:active:not(:disabled) {
+  background: var(--mp-background) !important;
+  border-color: var(--mp-border) !important;
+  color: var(--mp-primary) !important;
+  box-shadow: none !important;
+  outline: none !important;
+  filter: none !important;
+  transform: none !important;
+}
