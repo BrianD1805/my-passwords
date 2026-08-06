@@ -13577,3 +13577,200 @@ input[type="radio"] {
     flex: 1 1 0;
   }
 }
+
+
+/* My Passwords Ver-0.047D — reliable home Back handling, refined popup accent,
+   subtle result interaction and safe custom-folder management. */
+
+/* The green accent is 9px thick, has no pale top edge, and fades down the
+   right side to approximately half the popup height. */
+.item-popup-card,
+.item-form.item-popup-card,
+.admin-plan-window,
+.entitlement-modal,
+.country-picker-panel,
+.verify-modal {
+  border-top-color: transparent !important;
+}
+
+.item-popup-card::before,
+.item-form.item-popup-card::before,
+.admin-plan-window::before,
+.entitlement-modal::before,
+.country-picker-panel::before,
+.verify-modal::before {
+  inset: -1px !important;
+  border-width: 9px !important;
+  border-style: solid !important;
+  border-color: transparent !important;
+  border-top-color: var(--mp-popup-top-edge-green) !important;
+  border-right-color: var(--mp-popup-top-edge-green) !important;
+  border-radius: inherit !important;
+  -webkit-mask:
+    linear-gradient(to right,
+      transparent 0%,
+      transparent 28%,
+      rgba(0, 0, 0, 0.16) 32%,
+      rgba(0, 0, 0, 0.62) 37%,
+      #000 43%,
+      #000 100%) top / 100% 22px no-repeat,
+    linear-gradient(to bottom,
+      #000 0%,
+      #000 18%,
+      rgba(0, 0, 0, 0.96) 30%,
+      rgba(0, 0, 0, 0.72) 55%,
+      rgba(0, 0, 0, 0.34) 78%,
+      transparent 100%) top right / 22px 52% no-repeat !important;
+  mask:
+    linear-gradient(to right,
+      transparent 0%,
+      transparent 28%,
+      rgba(0, 0, 0, 0.16) 32%,
+      rgba(0, 0, 0, 0.62) 37%,
+      #000 43%,
+      #000 100%) top / 100% 22px no-repeat,
+    linear-gradient(to bottom,
+      #000 0%,
+      #000 18%,
+      rgba(0, 0, 0, 0.96) 30%,
+      rgba(0, 0, 0, 0.72) 55%,
+      rgba(0, 0, 0, 0.34) 78%,
+      transparent 100%) top right / 22px 52% no-repeat !important;
+}
+
+/* Search results use a quiet premium cue instead of the old solid-blue fill. */
+.vault-result-row,
+.vault-result-row:hover,
+.vault-result-row:focus-visible,
+.vault-result-row:active {
+  color: #17283d !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.vault-result-row:hover,
+.vault-result-row:focus-visible {
+  background: rgba(232, 241, 248, 0.72) !important;
+  border-color: rgba(49, 93, 126, 0.24) !important;
+  outline: 2px solid rgba(49, 93, 126, 0.10) !important;
+  outline-offset: 1px;
+}
+
+.vault-result-row:active {
+  background: rgba(220, 234, 244, 0.82) !important;
+  border-color: rgba(49, 93, 126, 0.28) !important;
+  outline: none !important;
+}
+
+.vault-result-row:hover .vault-result-name,
+.vault-result-row:focus-visible .vault-result-name,
+.vault-result-row:active .vault-result-name,
+.vault-result-row:hover .vault-result-subline,
+.vault-result-row:focus-visible .vault-result-subline,
+.vault-result-row:active .vault-result-subline {
+  color: #17283d !important;
+}
+
+.vault-result-row:hover .vault-result-open,
+.vault-result-row:focus-visible .vault-result-open,
+.vault-result-row:active .vault-result-open {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(49, 93, 126, 0.20) !important;
+  color: #315d7e !important;
+}
+
+/* Folder management is available from the existing more-folders control on
+   desktop and mobile. */
+.folder-list-popup-layer,
+.premium-more-folder-button {
+  display: grid !important;
+}
+
+.folder-picker-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.folder-manage-button {
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px solid rgba(49, 93, 126, 0.14);
+  background: rgba(255, 255, 255, 0.92);
+  color: #315d7e;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.folder-manage-button:hover,
+.folder-manage-button:focus-visible {
+  background: rgba(232, 241, 248, 0.86);
+  border-color: rgba(49, 93, 126, 0.26);
+  outline: none;
+}
+
+.folder-manager-popup-card {
+  width: min(620px, calc(100vw - 50px));
+}
+
+.folder-manager-popup-body {
+  display: grid;
+  gap: 16px;
+}
+
+.folder-manager-summary,
+.folder-delete-warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  border-radius: 16px;
+  padding: 13px 14px;
+}
+
+.folder-manager-summary {
+  color: #315d7e;
+  background: rgba(232, 241, 248, 0.70);
+  border: 1px solid rgba(49, 93, 126, 0.14);
+}
+
+.folder-delete-warning {
+  color: #b91c1c;
+  background: #fff0f0;
+  border: 1px solid rgba(185, 28, 28, 0.18);
+}
+
+.folder-manager-summary span,
+.folder-delete-warning span {
+  display: grid;
+  gap: 3px;
+}
+
+.folder-manager-summary small,
+.folder-delete-warning small {
+  color: inherit;
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.45;
+  opacity: 0.82;
+}
+
+.folder-manager-popup-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 13px;
+}
+
+.folder-manager-popup-footer > button {
+  flex: 1 1 0;
+}
+
+@media (max-width: 520px) {
+  .folder-manager-popup-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}

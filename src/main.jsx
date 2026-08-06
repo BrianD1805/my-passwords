@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.047C';
+const VERSION = 'My Passwords Ver-0.047D';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1414,6 +1414,29 @@ function folderExists(folder, folders) {
   return folders.some((entry) => entry.toLowerCase() === target);
 }
 
+const VAULT_RESULT_COLLATOR = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+
+function vaultResultDisplayName(item) {
+  return String(item?.category === CARDS_CATEGORY ? (item?.payload?.cardNickname || item?.title || '') : (item?.title || '')).trim();
+}
+
+function vaultResultSortGroup(label) {
+  const firstCharacter = Array.from(String(label || '').trim())[0] || '';
+  if (!firstCharacter) return 2;
+  const isLetter = firstCharacter.toLocaleUpperCase() !== firstCharacter.toLocaleLowerCase();
+  return isLetter ? 0 : 1;
+}
+
+function compareVaultResults(left, right) {
+  const leftLabel = vaultResultDisplayName(left);
+  const rightLabel = vaultResultDisplayName(right);
+  const groupDifference = vaultResultSortGroup(leftLabel) - vaultResultSortGroup(rightLabel);
+  if (groupDifference) return groupDifference;
+  const labelDifference = VAULT_RESULT_COLLATOR.compare(leftLabel, rightLabel);
+  if (labelDifference) return labelDifference;
+  return VAULT_RESULT_COLLATOR.compare(String(left?.category || ''), String(right?.category || ''));
+}
+
 function emptyEmergencyAccessPlan() {
   return {
     contactName: '',
@@ -1953,6 +1976,7 @@ function App() {
   const [exitAppConfirmationOpen, setExitAppConfirmationOpen] = useState(false);
   const backNavigationStateRef = useRef({});
   const allowBrowserExitRef = useRef(false);
+  const suppressNextPopstateRef = useRef(false);
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
@@ -1967,6 +1991,7 @@ function App() {
   const [isFolderPopupOpen, setIsFolderPopupOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isSavingFolder, setIsSavingFolder] = useState(false);
+  const [folderManager, setFolderManager] = useState({ visible: false, originalName: '', name: '', itemCount: 0, busy: false, confirmDelete: false, message: '' });
   const [draggedFolderName, setDraggedFolderName] = useState('');
   const [touchReorderFolder, setTouchReorderFolder] = useState('');
   const [touchDropTargetFolder, setTouchDropTargetFolder] = useState('');
@@ -2916,7 +2941,7 @@ function App() {
   }, [locked, items]);
 
   useEffect(() => {
-    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || exitAppConfirmationOpen;
+    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || exitAppConfirmationOpen;
     document.body.classList.toggle('app-popup-open', popupOpen);
     if (popupOpen) {
       window.requestAnimationFrame(() => {
@@ -2926,7 +2951,7 @@ function App() {
       });
     }
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, exitAppConfirmationOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, exitAppConfirmationOpen]);
 
   useEffect(() => {
     if (locked || !featureIncluded('cloudBackupSync') || !syncSafety.pending || syncing || syncPromptShown || syncSafetyModal.visible || deviceVerificationModal.visible) return undefined;
@@ -4457,7 +4482,7 @@ function App() {
       const matchesSearch = activeSearch ? text.includes(activeSearch) : true;
       const matchesFolder = activeSearch ? true : (!category ? true : category === 'All' ? true : item.category === category);
       return matchesSearch && matchesFolder;
-    }).sort((a, b) => Number(b.favourite) - Number(a.favourite) || new Date(b.updatedAt) - new Date(a.updatedAt));
+    }).sort(compareVaultResults);
   }, [visibleItems, query, category]);
 
   const folderChips = useMemo(() => {
@@ -4507,29 +4532,48 @@ function App() {
       isItemPopupOpen,
       isFolderPopupOpen,
       isFolderListPopupOpen,
+      folderManagerVisible: folderManager.visible,
       isCreateVaultPopupOpen
     };
-  }, [locked, activePage, mobileHeaderMenuOpen, exitAppConfirmationOpen, accountSecurityModal.visible, accountRecoveryModal.visible, entitlementModal.visible, deviceVerificationModal.visible, syncSafetyModal.visible, subscriptionActionModal.visible, verifyOverlay.visible, pendingDeleteItemId, viewItemId, isItemPopupOpen, isFolderPopupOpen, isFolderListPopupOpen, isCreateVaultPopupOpen]);
+  }, [locked, activePage, mobileHeaderMenuOpen, exitAppConfirmationOpen, accountSecurityModal.visible, accountRecoveryModal.visible, entitlementModal.visible, deviceVerificationModal.visible, syncSafetyModal.visible, subscriptionActionModal.visible, verifyOverlay.visible, pendingDeleteItemId, viewItemId, isItemPopupOpen, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateVaultPopupOpen]);
 
   useEffect(() => {
     if (!isVaultRoute) return undefined;
     const guardKey = 'myPasswordsBackGuard';
-    const currentState = window.history.state || {};
-    if (currentState[guardKey] !== 'guard') {
-      window.history.replaceState({ ...currentState, [guardKey]: 'base' }, document.title, window.location.href);
-      window.history.pushState({ [guardKey]: 'guard' }, document.title, window.location.href);
-    }
+    const baseState = { ...(window.history.state || {}), [guardKey]: 'base' };
+    window.history.replaceState(baseState, document.title, window.location.href);
+    window.history.pushState({ ...baseState, [guardKey]: 'guard' }, document.title, window.location.href);
 
-    const restoreGuard = () => window.history.pushState({ [guardKey]: 'guard' }, document.title, window.location.href);
+    const restoreGuard = () => {
+      if (window.history.state?.[guardKey] !== 'guard') {
+        window.history.pushState({ ...baseState, [guardKey]: 'guard' }, document.title, window.location.href);
+      }
+    };
+
     const handleMobileBack = () => {
+      if (suppressNextPopstateRef.current) {
+        suppressNextPopstateRef.current = false;
+        return;
+      }
+
       if (allowBrowserExitRef.current) {
         allowBrowserExitRef.current = false;
+        suppressNextPopstateRef.current = true;
+        window.history.back();
+        return;
+      }
+
+      const state = backNavigationStateRef.current;
+
+      // The locked vault screen is an entry screen, not the Passwords home page.
+      // A device Back press may leave it normally and must never show the home exit popup.
+      if (state.locked) {
+        suppressNextPopstateRef.current = true;
         window.history.back();
         return;
       }
 
       restoreGuard();
-      const state = backNavigationStateRef.current;
 
       if (document.querySelector('.custom-select-menu, .country-picker-layer')) {
         window.dispatchEvent(new CustomEvent('my-passwords-close-overlay'));
@@ -4547,15 +4591,18 @@ function App() {
       if (state.viewItemId) { closeViewItem(); return; }
       if (state.isItemPopupOpen) { closeItemPopup(); return; }
       if (state.isFolderPopupOpen) { closeFolderPopup(); return; }
+      if (state.folderManagerVisible) { closeFolderManager(); return; }
       if (state.isFolderListPopupOpen) { setIsFolderListPopupOpen(false); return; }
       if (state.isCreateVaultPopupOpen) { setIsCreateVaultPopupOpen(false); return; }
       if (state.mobileHeaderMenuOpen) { setMobileHeaderMenuOpen(false); return; }
-      if (!state.locked && state.activePage !== 'home') {
+      if (state.activePage !== 'home') {
         setActivePage('home');
         setActiveSettingsSection('overview');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
+
+      // This is the actual Passwords home page: show the confirmation on the first press.
       setExitAppConfirmationOpen(true);
     };
 
@@ -4901,6 +4948,90 @@ function App() {
     const currentOrder = folderChips.map((folder) => folder.name).filter((name) => name !== 'All');
     const next = upsertFolderMetaItem(items, customFolders, currentOrder, nextFavourites);
     await saveItems(next, { autoSync: true, silentAutoSync: true });
+  }
+
+  function openFolderManager(folder) {
+    if (!folder?.custom) return;
+    setIsFolderListPopupOpen(false);
+    setFolderManager({ visible: true, originalName: folder.name, name: folder.name, itemCount: Number(folder.count || 0), busy: false, confirmDelete: false, message: '' });
+  }
+
+  function closeFolderManager() {
+    setFolderManager({ visible: false, originalName: '', name: '', itemCount: 0, busy: false, confirmDelete: false, message: '' });
+  }
+
+  async function renameCustomFolder(event) {
+    event.preventDefault();
+    if (folderManager.busy) return;
+    const originalName = normaliseFolderName(folderManager.originalName);
+    const nextName = normaliseFolderName(folderManager.name);
+    if (!originalName || !customFolders.some((folder) => folder.toLowerCase() === originalName.toLowerCase())) {
+      setFolderManager((current) => ({ ...current, message: 'This custom folder could not be found.' }));
+      return;
+    }
+    if (!nextName) {
+      setFolderManager((current) => ({ ...current, message: 'Enter a folder name first.' }));
+      return;
+    }
+    const otherFolders = [...BUILT_IN_CATEGORIES, ...customFolders.filter((folder) => folder.toLowerCase() !== originalName.toLowerCase())];
+    if (folderExists(nextName, otherFolders)) {
+      setFolderManager((current) => ({ ...current, message: 'That folder name is already in use.' }));
+      return;
+    }
+    if (nextName === originalName) {
+      closeFolderManager();
+      return;
+    }
+
+    setFolderManager((current) => ({ ...current, busy: true, message: '' }));
+    try {
+      const now = new Date().toISOString();
+      const renamedItems = items.map((item) => !isInternalMetaItem(item) && String(item.category || '').toLowerCase() === originalName.toLowerCase()
+        ? { ...item, category: nextName, updatedAt: now }
+        : item);
+      const nextFolders = customFolders.map((folder) => folder.toLowerCase() === originalName.toLowerCase() ? nextName : folder);
+      const nextOrder = savedFolderOrder.map((folder) => folder.toLowerCase() === originalName.toLowerCase() ? nextName : folder);
+      const nextFavourites = favouriteFolderNames.map((folder) => folder.toLowerCase() === originalName.toLowerCase() ? nextName : folder);
+      const next = upsertFolderMetaItem(renamedItems, nextFolders, nextOrder, nextFavourites);
+      await saveItems(next, { autoSync: true, silentAutoSync: true });
+      if (String(category || '').toLowerCase() === originalName.toLowerCase()) setCategory(nextName);
+      closeFolderManager();
+      showMessage('Folder renamed successfully.', 'success');
+    } catch (error) {
+      setFolderManager((current) => ({ ...current, busy: false, message: 'The folder could not be renamed. Please try again.' }));
+    }
+  }
+
+  async function deleteCustomFolder() {
+    if (folderManager.busy) return;
+    if (!folderManager.confirmDelete) {
+      setFolderManager((current) => ({ ...current, confirmDelete: true, message: '' }));
+      return;
+    }
+
+    const originalName = normaliseFolderName(folderManager.originalName);
+    setFolderManager((current) => ({ ...current, busy: true, message: '' }));
+    try {
+      const now = new Date().toISOString();
+      let movedItemCount = 0;
+      const reassignedItems = items.map((item) => {
+        if (!isInternalMetaItem(item) && String(item.category || '').toLowerCase() === originalName.toLowerCase()) {
+          movedItemCount += 1;
+          return { ...item, category: 'Passwords', updatedAt: now };
+        }
+        return item;
+      });
+      const nextFolders = customFolders.filter((folder) => folder.toLowerCase() !== originalName.toLowerCase());
+      const nextOrder = savedFolderOrder.filter((folder) => folder.toLowerCase() !== originalName.toLowerCase());
+      const nextFavourites = favouriteFolderNames.filter((folder) => folder.toLowerCase() !== originalName.toLowerCase());
+      const next = upsertFolderMetaItem(reassignedItems, nextFolders, nextOrder, nextFavourites);
+      await saveItems(next, { autoSync: true, silentAutoSync: true });
+      if (String(category || '').toLowerCase() === originalName.toLowerCase()) setCategory('Passwords');
+      closeFolderManager();
+      showMessage(movedItemCount ? `Folder deleted. ${movedItemCount} item${movedItemCount === 1 ? '' : 's'} moved safely to Passwords.` : 'Folder deleted.', 'success');
+    } catch (error) {
+      setFolderManager((current) => ({ ...current, busy: false, message: 'The folder could not be deleted. Please try again.' }));
+    }
   }
 
 
@@ -6270,7 +6401,7 @@ function App() {
               <span><strong>{visibleItems.filter((item) => item.favourite).length}</strong> favourite item{visibleItems.filter((item) => item.favourite).length === 1 ? '' : 's'}</span>
               <div className="folder-action-group">
                 <button type="button" className="summary-action add-folder-chip" onClick={() => setIsFolderPopupOpen(true)}><Plus size={14} /> New folder</button>
-                <button type="button" className="premium-more-folder-button" onClick={() => setIsFolderListPopupOpen(true)} aria-label="Manage home folders"><MoreHorizontal size={21} /></button>
+                <button type="button" className="premium-more-folder-button" onClick={() => setIsFolderListPopupOpen(true)} aria-label="Manage folders"><MoreHorizontal size={21} /></button>
               </div>
             </div>
           </section>
@@ -6279,15 +6410,15 @@ function App() {
 
 
           {isFolderListPopupOpen && (
-            <div className="item-popup-layer folder-list-popup-layer" role="dialog" aria-modal="true" aria-label="Home folders">
-              <button type="button" className="item-popup-backdrop" onClick={() => setIsFolderListPopupOpen(false)} aria-label="Close home folders" />
+            <div className="item-popup-layer folder-list-popup-layer" role="dialog" aria-modal="true" aria-label="Manage folders">
+              <button type="button" className="item-popup-backdrop" onClick={() => setIsFolderListPopupOpen(false)} aria-label="Close folder management" />
               <div className="item-popup-card folder-list-popup-card">
                 <div className="item-popup-header">
-                  <h2>Home folders</h2>
+                  <h2>Manage folders</h2>
                   <button type="button" className="icon-button" onClick={() => setIsFolderListPopupOpen(false)} aria-label="Close"><X size={18} /></button>
                 </div>
                 <div className="item-popup-body folder-list-popup-body">
-                  <p className="folder-list-popup-note"><Home size={16} /> Highlighted folders will be added to home folders.</p>
+                  <p className="folder-list-popup-note"><Home size={16} /> Highlight folders for the home page. Use the pencil to rename or delete a custom folder.</p>
                   <div className="vault-result-list folder-list-popup-list">
                     {folderChips.map((folder) => {
                       const isDragging = touchReorderFolder === folder.name;
@@ -6307,21 +6438,46 @@ function App() {
                             <span className="vault-result-name folder-picker-name">{folder.name}</span>
                             <span className="folder-picker-count">{folder.count}</span>
                           </button>
-                          <button
-                            type="button"
-                            className={isHomeFolder ? 'folder-home-button active' : 'folder-home-button'}
-                            onClick={(event) => { event.stopPropagation(); if (folder.name !== 'All') toggleFolderFavourite(folder.name); }}
-                            disabled={folder.name === 'All'}
-                            aria-label={folder.name === 'All' ? 'All passwords always stays in home folders' : isHomeFolder ? `Remove ${folder.name} from home folders` : `Highlight ${folder.name} as a home folder`}
-                          >
-                            <Home size={18} fill={isHomeFolder ? 'currentColor' : 'none'} />
-                          </button>
+                          <div className="folder-picker-actions">
+                            <button
+                              type="button"
+                              className={isHomeFolder ? 'folder-home-button active' : 'folder-home-button'}
+                              onClick={(event) => { event.stopPropagation(); if (folder.name !== 'All') toggleFolderFavourite(folder.name); }}
+                              disabled={folder.name === 'All'}
+                              aria-label={folder.name === 'All' ? 'All passwords always stays in home folders' : isHomeFolder ? `Remove ${folder.name} from home folders` : `Highlight ${folder.name} as a home folder`}
+                            >
+                              <Home size={18} fill={isHomeFolder ? 'currentColor' : 'none'} />
+                            </button>
+                            {folder.custom && <button type="button" className="folder-manage-button" onClick={(event) => { event.stopPropagation(); openFolderManager(folder); }} aria-label={`Rename or delete ${folder.name}`} title="Rename or delete folder"><Pencil size={17} /></button>}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {folderManager.visible && (
+            <div className="item-popup-layer folder-manager-popup-layer" role="dialog" aria-modal="true" aria-labelledby="folder-manager-title">
+              <button type="button" className="item-popup-backdrop" onClick={folderManager.busy ? undefined : closeFolderManager} aria-label="Close folder management" />
+              <form className="item-popup-card folder-manager-popup-card" onSubmit={renameCustomFolder}>
+                <div className="item-popup-header">
+                  <h2 id="folder-manager-title"><Pencil size={20} /> Edit folder</h2>
+                  <button type="button" className="icon-button" onClick={closeFolderManager} disabled={folderManager.busy} aria-label="Close"><X size={18} /></button>
+                </div>
+                <div className="item-popup-body folder-manager-popup-body">
+                  <label>Folder name<input value={folderManager.name} onChange={(event) => setFolderManager((current) => ({ ...current, name: event.target.value, confirmDelete: false, message: '' }))} placeholder="Folder name" /></label>
+                  <div className="folder-manager-summary"><FileText size={18} /><span><strong>{folderManager.itemCount} item{folderManager.itemCount === 1 ? '' : 's'} in this folder</strong><small>Renaming keeps every item in the folder.</small></span></div>
+                  {folderManager.confirmDelete && <div className="folder-delete-warning"><AlertTriangle size={20} /><span><strong>Delete this custom folder?</strong><small>No passwords will be deleted. Its items will move safely to the Passwords folder.</small></span></div>}
+                  {folderManager.message && <div className="account-modal-message">{folderManager.message}</div>}
+                </div>
+                <div className="item-popup-footer folder-manager-popup-footer">
+                  <button type="button" className={folderManager.confirmDelete ? 'secondary-button danger-soft' : 'secondary-button'} onClick={deleteCustomFolder} disabled={folderManager.busy}><Trash2 size={16} /> {folderManager.confirmDelete ? 'Confirm delete folder' : 'Delete folder'}</button>
+                  <button type="submit" className="primary-button" disabled={folderManager.busy}>{folderManager.busy ? 'Saving...' : 'Save folder name'}</button>
+                </div>
+              </form>
             </div>
           )}
 
