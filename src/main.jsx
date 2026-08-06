@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.047I';
+const VERSION = 'My Passwords Ver-0.047J';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -24,159 +24,49 @@ const PENDING_DOCUMENT_DELETIONS_KEY = 'my-passwords-pending-document-deletions-
 const ACCOUNT_DEVICE_INSTALL_KEY = 'my-passwords-account-device-install-v1';
 
 
-const VAULT_DEVICE_BACK_EVENT = 'my-passwords-device-back';
-const VAULT_BACK_STATE_KEY = 'myPasswordsBackController';
-const VAULT_BACK_SESSION_KEY = 'myPasswordsBackSession';
-const LEGACY_VAULT_BACK_STATE_KEY = 'myPasswordsBackGuard';
-const LEGACY_VAULT_BACK_SESSION_KEY = 'myPasswordsBackGuardSession';
+const LEGACY_VAULT_BACK_MARKER_KEYS = [
+  'myPasswordsBackController',
+  'myPasswordsBackSession',
+  'myPasswordsBackGuard',
+  'myPasswordsBackGuardSession'
+];
 const LEGACY_VAULT_BACK_HASH = '#my-passwords-back-guard';
 
-function isVaultAppPathname(pathname = window.location.pathname) {
-  const normalised = String(pathname || '/').length > 1
-    ? String(pathname || '/').replace(/\/+$/, '')
-    : String(pathname || '/');
-  return ['/vault', '/app', '/login'].includes(normalised);
-}
+// Ver-0.047J no longer creates or consumes artificial browser-history entries.
+// Remove only the current entry's markers left by the previous Back controllers
+// so they cannot interfere with billing URL cleanup or later app navigation.
+function clearLegacyVaultBackMarkers() {
+  if (typeof window === 'undefined') return;
 
-// Install the Android/PWA Back bridge before React renders. The controller owns
-// one permanent same-document history guard and re-arms it synchronously on
-// every Back traversal. React only decides which app action the Back press
-// should perform. This keeps the hardware Back event alive even while the app
-// is restoring, rendering, or changing popup/page state.
-const vaultDeviceBackController = (() => {
-  if (typeof window === 'undefined') {
-    return {
-      setEnabled() {},
-      setReady() {},
-      ensure() { return false; },
-      exitApp() {}
-    };
+  try {
+    LEGACY_VAULT_BACK_MARKER_KEYS.forEach((key) => window.sessionStorage.removeItem(key));
+  } catch {
+    // Session storage may be unavailable in a restricted browser context.
   }
 
-  let enabled = isVaultAppPathname();
-  let ready = false;
-  let pendingBack = false;
-  let exiting = false;
-  let exitStepsRemaining = 0;
-  let exitResetTimer = null;
-  let sessionId = `vault-back-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const currentState = window.history.state;
+  const nextState = currentState && typeof currentState === 'object' ? { ...currentState } : {};
+  let stateChanged = false;
 
-  const currentUrl = () => `${window.location.pathname}${window.location.search}${window.location.hash === LEGACY_VAULT_BACK_HASH ? '' : window.location.hash}`;
-  const isGuardEntry = (state = window.history.state) => state?.[VAULT_BACK_STATE_KEY] === 'guard'
-    && state?.[VAULT_BACK_SESSION_KEY] === sessionId;
-
-  function clearExitResetTimer() {
-    if (!exitResetTimer) return;
-    window.clearTimeout(exitResetTimer);
-    exitResetTimer = null;
-  }
-
-  function ensureGuard() {
-    if (!enabled || exiting || !isVaultAppPathname()) return false;
-    if (isGuardEntry()) return true;
-
-    const baseState = { ...(window.history.state || {}) };
-    delete baseState[LEGACY_VAULT_BACK_STATE_KEY];
-    delete baseState[LEGACY_VAULT_BACK_SESSION_KEY];
-    baseState[VAULT_BACK_STATE_KEY] = 'base';
-    baseState[VAULT_BACK_SESSION_KEY] = sessionId;
-
-    try {
-      window.history.replaceState(baseState, document.title, currentUrl());
-      window.history.pushState({
-        ...baseState,
-        [VAULT_BACK_STATE_KEY]: 'guard'
-      }, document.title, currentUrl());
-      return true;
-    } catch {
-      return false;
+  LEGACY_VAULT_BACK_MARKER_KEYS.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(nextState, key)) {
+      delete nextState[key];
+      stateChanged = true;
     }
-  }
-
-  function emitBackPress() {
-    if (!ready) {
-      pendingBack = true;
-      return;
-    }
-    window.dispatchEvent(new CustomEvent(VAULT_DEVICE_BACK_EVENT));
-  }
-
-  function finishExitFallback() {
-    exiting = false;
-    exitStepsRemaining = 0;
-    enabled = isVaultAppPathname();
-    if (enabled) ensureGuard();
-  }
-
-  function handlePopState() {
-    if (exiting) {
-      exitStepsRemaining -= 1;
-      if (isVaultAppPathname() && exitStepsRemaining > 0) {
-        window.setTimeout(() => window.history.back(), 0);
-      } else {
-        clearExitResetTimer();
-        exitResetTimer = window.setTimeout(finishExitFallback, 1200);
-      }
-      return;
-    }
-
-    if (!enabled || !isVaultAppPathname()) return;
-
-    // Re-arm immediately while the browser is still in this document. This is
-    // intentionally done before React handles the Back action, so a second tap
-    // can never fall through and close the PWA while a popup/page update renders.
-    ensureGuard();
-    emitBackPress();
-  }
-
-  function maintainGuard(event) {
-    if (event?.persisted) {
-      sessionId = `vault-back-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    }
-    if (enabled && !exiting) window.setTimeout(ensureGuard, 0);
-  }
-
-  window.addEventListener('popstate', handlePopState, true);
-  window.addEventListener('pageshow', maintainGuard);
-  window.addEventListener('focus', maintainGuard);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') maintainGuard();
   });
 
-  window.setTimeout(ensureGuard, 0);
+  const hasLegacyHash = window.location.hash === LEGACY_VAULT_BACK_HASH;
+  if (!stateChanged && !hasLegacyHash) return;
 
-  return {
-    setEnabled(nextEnabled) {
-      enabled = Boolean(nextEnabled) && isVaultAppPathname();
-      if (enabled && !exiting) ensureGuard();
-    },
-    setReady(nextReady) {
-      ready = Boolean(nextReady);
-      if (ready && pendingBack) {
-        pendingBack = false;
-        window.setTimeout(emitBackPress, 0);
-      }
-    },
-    ensure: ensureGuard,
-    exitApp() {
-      if (exiting) return;
-      clearExitResetTimer();
-      exiting = true;
-      enabled = false;
-      pendingBack = false;
-      // Continue through any same-document guard entries left by older builds.
-      // The document unloads as soon as the traversal reaches the page outside
-      // the vault app, so this never walks through unrelated external history.
-      exitStepsRemaining = 12;
-      try {
-        window.history.back();
-      } catch {
-        finishExitFallback();
-      }
-      exitResetTimer = window.setTimeout(finishExitFallback, 2200);
-    }
-  };
-})();
+  const cleanUrl = `${window.location.pathname}${window.location.search}${hasLegacyHash ? '' : window.location.hash}`;
+  try {
+    window.history.replaceState(nextState, document.title, cleanUrl);
+  } catch {
+    // Marker cleanup is defensive and must never block the app from starting.
+  }
+}
+
+clearLegacyVaultBackMarkers();
 
 function readAccountDeviceInstallId() {
   let value = localStorage.getItem(ACCOUNT_DEVICE_INSTALL_KEY) || '';
@@ -2131,6 +2021,8 @@ function App() {
   const [exitAppConfirmationOpen, setExitAppConfirmationOpen] = useState(false);
   const backNavigationStateRef = useRef({});
   const consumeVaultBackActionRef = useRef(() => false);
+  const vaultCloseWatcherRef = useRef(null);
+  const vaultCloseWatcherEnabledRef = useRef(false);
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
@@ -3067,7 +2959,6 @@ function App() {
     setBilling((current) => ({ ...current, returnState, status: returnState === 'success' ? 'processing' : 'ready', message: returnState === 'success' ? 'Stripe is confirming your subscription...' : returnState === 'cancelled' ? 'Checkout was cancelled. No subscription change was made.' : 'Billing details were updated.' }));
     openSubscriptionSettings();
     window.history.replaceState(window.history.state || {}, document.title, window.location.pathname);
-    window.setTimeout(() => vaultDeviceBackController.ensure(), 0);
 
     if (returnState === 'success' && sessionId) {
       let cancelled = false;
@@ -3578,7 +3469,6 @@ function App() {
             backNavigationStateRef.current.locked = false;
             backNavigationStateRef.current.activePage = 'home';
             setLocked(false);
-            window.setTimeout(() => vaultDeviceBackController.ensure(), 0);
             if (!fromBiometric) confirmSecureDevicePasswordCheck();
             showVerifyOverlay('success', 'Vault updated', 'The latest protected vault copy has been loaded on this device.');
             showMessage(`Latest cloud changes loaded. ${cloudCheckResult.items.length} item(s) are now available on this device.`, 'success');
@@ -3622,7 +3512,6 @@ function App() {
         backNavigationStateRef.current.locked = false;
         backNavigationStateRef.current.activePage = 'home';
         setLocked(false);
-        window.setTimeout(() => vaultDeviceBackController.ensure(), 0);
         if (cloudCheckResult?.conflict) {
           hideVerifyOverlay();
           showMessage('Vault opened from this device. Different changes were found elsewhere, so nothing was replaced.', 'warning');
@@ -3670,7 +3559,6 @@ function App() {
       backNavigationStateRef.current.locked = false;
       backNavigationStateRef.current.activePage = 'home';
       setLocked(false);
-      window.setTimeout(() => vaultDeviceBackController.ensure(), 0);
       showVerifyOverlay('success', 'Vault created', 'Your encrypted vault has been created on this device.');
       if (cloudBackupAvailable) {
         const initialBackup = await syncEncryptedVault({ envelope: newVaultEnvelope, nextItems: starterItems, silent: true });
@@ -4770,34 +4658,114 @@ function App() {
 
   consumeVaultBackActionRef.current = consumeVaultBackAction;
 
-  useEffect(() => {
-    const shouldControlBack = isVaultRoute && !isEmergencyInviteRoute;
-    vaultDeviceBackController.setEnabled(shouldControlBack);
+  function destroyVaultCloseWatcher() {
+    const watcher = vaultCloseWatcherRef.current;
+    vaultCloseWatcherRef.current = null;
+    if (!watcher) return;
+    try {
+      watcher.destroy();
+    } catch {
+      // A watcher can already be inactive after dispatching its close event.
+    }
+  }
 
-    if (!shouldControlBack) {
-      vaultDeviceBackController.setReady(false);
+  function armVaultCloseWatcher() {
+    if (!vaultCloseWatcherEnabledRef.current || vaultCloseWatcherRef.current || typeof window.CloseWatcher !== 'function') return false;
+
+    try {
+      const watcher = new window.CloseWatcher();
+      vaultCloseWatcherRef.current = watcher;
+
+      watcher.addEventListener('close', () => {
+        if (vaultCloseWatcherRef.current === watcher) vaultCloseWatcherRef.current = null;
+        if (!vaultCloseWatcherEnabledRef.current) return;
+
+        const consumed = consumeVaultBackActionRef.current();
+        if (!consumed) {
+          vaultCloseWatcherEnabledRef.current = false;
+          try {
+            window.history.back();
+          } catch {
+            // With no dismissible app state, the next native Back request exits.
+          }
+          return;
+        }
+
+        // The HTML standard deactivates this watcher after its close handler
+        // returns. Re-arm in a microtask so the replacement is independent,
+        // rather than being grouped with the watcher that is still closing.
+        // Microtasks run before another hardware Back request can be delivered.
+        window.queueMicrotask(() => {
+          if (vaultCloseWatcherEnabledRef.current) armVaultCloseWatcher();
+        });
+      }, { once: true });
+
+      return true;
+    } catch {
+      vaultCloseWatcherRef.current = null;
+      return false;
+    }
+  }
+
+  const shouldControlVaultCloseRequest = isVaultRoute
+    && !isEmergencyInviteRoute
+    && (!locked || hasBackDismissibleLayer);
+
+  useLayoutEffect(() => {
+    vaultCloseWatcherEnabledRef.current = shouldControlVaultCloseRequest;
+
+    if (!shouldControlVaultCloseRequest) {
+      destroyVaultCloseWatcher();
       return undefined;
     }
 
-    const handleDeviceBack = () => {
+    if (typeof window.CloseWatcher === 'function') {
+      armVaultCloseWatcher();
+      return () => {
+        vaultCloseWatcherEnabledRef.current = false;
+        destroyVaultCloseWatcher();
+      };
+    }
+
+    // Older desktop browsers still get an Escape-key fallback. No History API
+    // guard is installed, so unsupported Android browsers keep native Back.
+    const handleEscapeFallback = (event) => {
+      if (event.key !== 'Escape') return;
       const consumed = consumeVaultBackActionRef.current();
-      if (!consumed) vaultDeviceBackController.exitApp();
+      if (consumed) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
     };
 
-    window.addEventListener(VAULT_DEVICE_BACK_EVENT, handleDeviceBack);
-    vaultDeviceBackController.setReady(true);
-    vaultDeviceBackController.ensure();
-
+    document.addEventListener('keydown', handleEscapeFallback, true);
     return () => {
-      vaultDeviceBackController.setReady(false);
-      window.removeEventListener(VAULT_DEVICE_BACK_EVENT, handleDeviceBack);
+      vaultCloseWatcherEnabledRef.current = false;
+      document.removeEventListener('keydown', handleEscapeFallback, true);
     };
-  }, [isEmergencyInviteRoute, isVaultRoute]);
+  }, [shouldControlVaultCloseRequest]);
 
   function confirmExitApp() {
     backNavigationStateRef.current.exitAppConfirmationOpen = false;
     setExitAppConfirmationOpen(false);
-    vaultDeviceBackController.exitApp();
+    vaultCloseWatcherEnabledRef.current = false;
+    destroyVaultCloseWatcher();
+
+    // Installed PWAs may permit window.close(); normal browser tabs usually do
+    // not, so fall back to real browser history without adding guard entries.
+    try {
+      window.close();
+    } catch {
+      // Continue to the history fallback below.
+    }
+    window.setTimeout(() => {
+      if (document.visibilityState === 'hidden') return;
+      try {
+        window.history.back();
+      } catch {
+        // The user can use native Back again if the platform blocks both methods.
+      }
+    }, 80);
   }
 
   useEffect(() => {
