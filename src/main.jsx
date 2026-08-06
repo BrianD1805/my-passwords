@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.047F';
+const VERSION = 'My Passwords Ver-0.047G';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1978,6 +1978,8 @@ function App() {
   const allowBrowserExitRef = useRef(false);
   const browserExitStepsRef = useRef(0);
   const browserExitResetTimerRef = useRef(null);
+  const backGuardSessionRef = useRef(`vault-back-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const backGuardArmedRef = useRef(false);
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
@@ -2912,7 +2914,9 @@ function App() {
     const sessionId = params.get('session_id') || '';
     setBilling((current) => ({ ...current, returnState, status: returnState === 'success' ? 'processing' : 'ready', message: returnState === 'success' ? 'Stripe is confirming your subscription...' : returnState === 'cancelled' ? 'Checkout was cancelled. No subscription change was made.' : 'Billing details were updated.' }));
     openSubscriptionSettings();
-    window.history.replaceState({}, document.title, window.location.pathname);
+    window.history.replaceState(window.history.state || {}, document.title, window.location.pathname);
+    backGuardArmedRef.current = false;
+    ensureVaultBackGuard({ forceFresh: true });
 
     if (returnState === 'success' && sessionId) {
       let cancelled = false;
@@ -4520,8 +4524,9 @@ function App() {
   const hasActiveVaultFilter = Boolean(query.trim() || category);
   const viewedItem = viewItemId ? visibleItems.find((item) => item.id === viewItemId) : null;
   const routePath = typeof window !== 'undefined' ? window.location.pathname : '/vault';
-  const isVaultRoute = ['/vault', '/app', '/login'].includes(routePath);
-  const isEmergencyInviteRoute = routePath === '/emergency-invite';
+  const normalisedRoutePath = routePath.length > 1 ? routePath.replace(/\/+$/, '') : routePath;
+  const isVaultRoute = ['/vault', '/app', '/login'].includes(normalisedRoutePath);
+  const isEmergencyInviteRoute = normalisedRoutePath === '/emergency-invite';
   const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute;
 
   const hasBackDismissibleLayer = Boolean(
@@ -4567,17 +4572,39 @@ function App() {
     folderManagerVisible: folderManager.visible,
     isCreateAccountPopupOpen,
     isCreateVaultPopupOpen,
-    hasBackDismissibleLayer
+    hasBackDismissibleLayer,
+    isVaultRoute
   };
 
   const vaultBackGuardKey = 'myPasswordsBackGuard';
+  const vaultBackGuardSessionKey = 'myPasswordsBackGuardSession';
 
-  function ensureVaultBackGuard() {
+  function isCurrentVaultGuardEntry(historyState = window.history.state) {
+    return historyState?.[vaultBackGuardKey] === 'guard'
+      && historyState?.[vaultBackGuardSessionKey] === backGuardSessionRef.current;
+  }
+
+  function ensureVaultBackGuard(options = {}) {
+    const forceFresh = options.forceFresh === true;
     const currentState = window.history.state || {};
-    if (currentState[vaultBackGuardKey] === 'guard') return;
-    const baseState = { ...currentState, [vaultBackGuardKey]: 'base' };
+
+    // Never trust a guard marker left behind by an earlier page load or restored
+    // PWA session. It may no longer have its paired base entry, which makes the
+    // first Android Back press appear to do nothing and the second exit the app.
+    if (!forceFresh && backGuardArmedRef.current && isCurrentVaultGuardEntry(currentState)) return;
+
+    const sessionId = backGuardSessionRef.current;
+    const baseState = {
+      ...currentState,
+      [vaultBackGuardKey]: 'base',
+      [vaultBackGuardSessionKey]: sessionId
+    };
     window.history.replaceState(baseState, document.title, window.location.href);
-    window.history.pushState({ ...baseState, [vaultBackGuardKey]: 'guard' }, document.title, window.location.href);
+    window.history.pushState({
+      ...baseState,
+      [vaultBackGuardKey]: 'guard'
+    }, document.title, window.location.href);
+    backGuardArmedRef.current = true;
   }
 
   function resetBrowserExitSequence() {
@@ -4598,7 +4625,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (!isVaultRoute) return undefined;
+    if (isEmergencyInviteRoute) return undefined;
 
     const handleMobileBack = (event) => {
       if (allowBrowserExitRef.current) {
@@ -4612,6 +4639,9 @@ function App() {
       }
 
       const state = backNavigationStateRef.current;
+      const backControlEnabled = !state.locked || state.hasBackDismissibleLayer || state.isVaultRoute;
+      if (!backControlEnabled) return;
+
       const customOverlayOpen = Boolean(document.querySelector('.custom-select-menu, .country-picker-layer'));
       const hasInternalLayer = customOverlayOpen || state.hasBackDismissibleLayer;
 
@@ -4663,9 +4693,12 @@ function App() {
       setExitAppConfirmationOpen(true);
     };
 
-    const maintainBackGuard = () => {
+    const maintainBackGuard = (event) => {
       const state = backNavigationStateRef.current;
-      if (!state.locked || state.hasBackDismissibleLayer) ensureVaultBackGuard();
+      if (!state.locked || state.hasBackDismissibleLayer || state.isVaultRoute) {
+        if (event?.persisted) backGuardArmedRef.current = false;
+        ensureVaultBackGuard({ forceFresh: Boolean(event?.persisted) });
+      }
     };
 
     window.addEventListener('popstate', handleMobileBack);
@@ -4674,12 +4707,12 @@ function App() {
       window.removeEventListener('popstate', handleMobileBack);
       window.removeEventListener('pageshow', maintainBackGuard);
     };
-  }, [isVaultRoute]);
+  }, [isEmergencyInviteRoute]);
 
   useEffect(() => {
-    if (!isVaultRoute || (locked && !hasBackDismissibleLayer)) return;
+    if (isEmergencyInviteRoute || (locked && !hasBackDismissibleLayer)) return;
     ensureVaultBackGuard();
-  }, [isVaultRoute, locked, hasBackDismissibleLayer]);
+  }, [isEmergencyInviteRoute, locked, hasBackDismissibleLayer]);
 
   function confirmExitApp() {
     backNavigationStateRef.current.exitAppConfirmationOpen = false;
@@ -4689,7 +4722,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (!isVaultRoute) return undefined;
+    if (isEmergencyInviteRoute || (locked && !hasBackDismissibleLayer && !isVaultRoute)) return undefined;
     let touchStartY = 0;
 
     const rememberTouchStart = (event) => {
@@ -4708,7 +4741,7 @@ function App() {
       document.removeEventListener('touchstart', rememberTouchStart);
       document.removeEventListener('touchmove', stopPullToRefresh);
     };
-  }, [isVaultRoute]);
+  }, [isEmergencyInviteRoute, isVaultRoute, locked, hasBackDismissibleLayer]);
 
   useEffect(() => {
     if (!isPublicLandingRoute) {
