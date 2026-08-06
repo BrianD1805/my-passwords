@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.047H';
+const VERSION = 'My Passwords Ver-0.047I';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -22,6 +22,161 @@ const SYNC_DEVICE_ID_KEY = 'my-passwords-sync-device-id-v1';
 const ENTITLEMENTS_CACHE_KEY = 'my-passwords-entitlements-v1';
 const PENDING_DOCUMENT_DELETIONS_KEY = 'my-passwords-pending-document-deletions-v1';
 const ACCOUNT_DEVICE_INSTALL_KEY = 'my-passwords-account-device-install-v1';
+
+
+const VAULT_DEVICE_BACK_EVENT = 'my-passwords-device-back';
+const VAULT_BACK_STATE_KEY = 'myPasswordsBackController';
+const VAULT_BACK_SESSION_KEY = 'myPasswordsBackSession';
+const LEGACY_VAULT_BACK_STATE_KEY = 'myPasswordsBackGuard';
+const LEGACY_VAULT_BACK_SESSION_KEY = 'myPasswordsBackGuardSession';
+const LEGACY_VAULT_BACK_HASH = '#my-passwords-back-guard';
+
+function isVaultAppPathname(pathname = window.location.pathname) {
+  const normalised = String(pathname || '/').length > 1
+    ? String(pathname || '/').replace(/\/+$/, '')
+    : String(pathname || '/');
+  return ['/vault', '/app', '/login'].includes(normalised);
+}
+
+// Install the Android/PWA Back bridge before React renders. The controller owns
+// one permanent same-document history guard and re-arms it synchronously on
+// every Back traversal. React only decides which app action the Back press
+// should perform. This keeps the hardware Back event alive even while the app
+// is restoring, rendering, or changing popup/page state.
+const vaultDeviceBackController = (() => {
+  if (typeof window === 'undefined') {
+    return {
+      setEnabled() {},
+      setReady() {},
+      ensure() { return false; },
+      exitApp() {}
+    };
+  }
+
+  let enabled = isVaultAppPathname();
+  let ready = false;
+  let pendingBack = false;
+  let exiting = false;
+  let exitStepsRemaining = 0;
+  let exitResetTimer = null;
+  let sessionId = `vault-back-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const currentUrl = () => `${window.location.pathname}${window.location.search}${window.location.hash === LEGACY_VAULT_BACK_HASH ? '' : window.location.hash}`;
+  const isGuardEntry = (state = window.history.state) => state?.[VAULT_BACK_STATE_KEY] === 'guard'
+    && state?.[VAULT_BACK_SESSION_KEY] === sessionId;
+
+  function clearExitResetTimer() {
+    if (!exitResetTimer) return;
+    window.clearTimeout(exitResetTimer);
+    exitResetTimer = null;
+  }
+
+  function ensureGuard() {
+    if (!enabled || exiting || !isVaultAppPathname()) return false;
+    if (isGuardEntry()) return true;
+
+    const baseState = { ...(window.history.state || {}) };
+    delete baseState[LEGACY_VAULT_BACK_STATE_KEY];
+    delete baseState[LEGACY_VAULT_BACK_SESSION_KEY];
+    baseState[VAULT_BACK_STATE_KEY] = 'base';
+    baseState[VAULT_BACK_SESSION_KEY] = sessionId;
+
+    try {
+      window.history.replaceState(baseState, document.title, currentUrl());
+      window.history.pushState({
+        ...baseState,
+        [VAULT_BACK_STATE_KEY]: 'guard'
+      }, document.title, currentUrl());
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function emitBackPress() {
+    if (!ready) {
+      pendingBack = true;
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(VAULT_DEVICE_BACK_EVENT));
+  }
+
+  function finishExitFallback() {
+    exiting = false;
+    exitStepsRemaining = 0;
+    enabled = isVaultAppPathname();
+    if (enabled) ensureGuard();
+  }
+
+  function handlePopState() {
+    if (exiting) {
+      exitStepsRemaining -= 1;
+      if (isVaultAppPathname() && exitStepsRemaining > 0) {
+        window.setTimeout(() => window.history.back(), 0);
+      } else {
+        clearExitResetTimer();
+        exitResetTimer = window.setTimeout(finishExitFallback, 1200);
+      }
+      return;
+    }
+
+    if (!enabled || !isVaultAppPathname()) return;
+
+    // Re-arm immediately while the browser is still in this document. This is
+    // intentionally done before React handles the Back action, so a second tap
+    // can never fall through and close the PWA while a popup/page update renders.
+    ensureGuard();
+    emitBackPress();
+  }
+
+  function maintainGuard(event) {
+    if (event?.persisted) {
+      sessionId = `vault-back-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+    if (enabled && !exiting) window.setTimeout(ensureGuard, 0);
+  }
+
+  window.addEventListener('popstate', handlePopState, true);
+  window.addEventListener('pageshow', maintainGuard);
+  window.addEventListener('focus', maintainGuard);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') maintainGuard();
+  });
+
+  window.setTimeout(ensureGuard, 0);
+
+  return {
+    setEnabled(nextEnabled) {
+      enabled = Boolean(nextEnabled) && isVaultAppPathname();
+      if (enabled && !exiting) ensureGuard();
+    },
+    setReady(nextReady) {
+      ready = Boolean(nextReady);
+      if (ready && pendingBack) {
+        pendingBack = false;
+        window.setTimeout(emitBackPress, 0);
+      }
+    },
+    ensure: ensureGuard,
+    exitApp() {
+      if (exiting) return;
+      clearExitResetTimer();
+      exiting = true;
+      enabled = false;
+      pendingBack = false;
+      // Continue through any same-document guard entries left by older builds.
+      // The document unloads as soon as the traversal reaches the page outside
+      // the vault app, so this never walks through unrelated external history.
+      exitStepsRemaining = 12;
+      try {
+        window.history.back();
+      } catch {
+        finishExitFallback();
+      }
+      exitResetTimer = window.setTimeout(finishExitFallback, 2200);
+    }
+  };
+})();
 
 function readAccountDeviceInstallId() {
   let value = localStorage.getItem(ACCOUNT_DEVICE_INSTALL_KEY) || '';
@@ -1975,19 +2130,7 @@ function App() {
   const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = useState(false);
   const [exitAppConfirmationOpen, setExitAppConfirmationOpen] = useState(false);
   const backNavigationStateRef = useRef({});
-  const allowBrowserExitRef = useRef(false);
-  const browserExitStepsRef = useRef(0);
-  const browserExitResetTimerRef = useRef(null);
-  const backGuardSessionRef = useRef(`vault-back-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  const backGuardRestoringRef = useRef(false);
-  const backGuardReleaseRef = useRef(false);
-  const backGuardHandlingRef = useRef(false);
-  const backGuardFallbackTimerRef = useRef(null);
-  const backGuardHashFallbackTimerRef = useRef(null);
-  const backGuardNavigationFallbackTimerRef = useRef(null);
-  const backGuardNavigationInterceptRef = useRef(false);
-  const backGuardIntegrityTimerRef = useRef(null);
-  const backGuardLockedReleaseTimerRef = useRef(null);
+  const consumeVaultBackActionRef = useRef(() => false);
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
@@ -2793,7 +2936,8 @@ function App() {
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return undefined;
-    const registerWorker = () => navigator.serviceWorker.register('/sw.js').then((registration) => registration.update().catch(() => null)).catch(() => null);
+    const workerUrl = `/sw.js?v=${encodeURIComponent(VERSION)}`;
+    const registerWorker = () => navigator.serviceWorker.register(workerUrl, { updateViaCache: 'none' }).then((registration) => registration.update().catch(() => null)).catch(() => null);
     registerWorker();
     window.addEventListener('online', registerWorker);
     return () => window.removeEventListener('online', registerWorker);
@@ -2923,7 +3067,7 @@ function App() {
     setBilling((current) => ({ ...current, returnState, status: returnState === 'success' ? 'processing' : 'ready', message: returnState === 'success' ? 'Stripe is confirming your subscription...' : returnState === 'cancelled' ? 'Checkout was cancelled. No subscription change was made.' : 'Billing details were updated.' }));
     openSubscriptionSettings();
     window.history.replaceState(window.history.state || {}, document.title, window.location.pathname);
-    window.setTimeout(() => ensureVaultBackGuard(), 0);
+    window.setTimeout(() => vaultDeviceBackController.ensure(), 0);
 
     if (returnState === 'success' && sessionId) {
       let cancelled = false;
@@ -3434,7 +3578,7 @@ function App() {
             backNavigationStateRef.current.locked = false;
             backNavigationStateRef.current.activePage = 'home';
             setLocked(false);
-            window.setTimeout(() => ensureVaultBackGuard(), 0);
+            window.setTimeout(() => vaultDeviceBackController.ensure(), 0);
             if (!fromBiometric) confirmSecureDevicePasswordCheck();
             showVerifyOverlay('success', 'Vault updated', 'The latest protected vault copy has been loaded on this device.');
             showMessage(`Latest cloud changes loaded. ${cloudCheckResult.items.length} item(s) are now available on this device.`, 'success');
@@ -3478,7 +3622,7 @@ function App() {
         backNavigationStateRef.current.locked = false;
         backNavigationStateRef.current.activePage = 'home';
         setLocked(false);
-        window.setTimeout(() => ensureVaultBackGuard(), 0);
+        window.setTimeout(() => vaultDeviceBackController.ensure(), 0);
         if (cloudCheckResult?.conflict) {
           hideVerifyOverlay();
           showMessage('Vault opened from this device. Different changes were found elsewhere, so nothing was replaced.', 'warning');
@@ -3526,7 +3670,7 @@ function App() {
       backNavigationStateRef.current.locked = false;
       backNavigationStateRef.current.activePage = 'home';
       setLocked(false);
-      window.setTimeout(() => ensureVaultBackGuard(), 0);
+      window.setTimeout(() => vaultDeviceBackController.ensure(), 0);
       showVerifyOverlay('success', 'Vault created', 'Your encrypted vault has been created on this device.');
       if (cloudBackupAvailable) {
         const initialBackup = await syncEncryptedVault({ envelope: newVaultEnvelope, nextItems: starterItems, silent: true });
@@ -4583,135 +4727,6 @@ function App() {
     isVaultRoute
   };
 
-  const vaultBackGuardKey = 'myPasswordsBackGuard';
-  const vaultBackGuardSessionKey = 'myPasswordsBackGuardSession';
-  const vaultBackGuardHash = '#my-passwords-back-guard';
-
-  function clearBackGuardTimer(timerRef) {
-    if (!timerRef.current) return;
-    window.clearTimeout(timerRef.current);
-    timerRef.current = null;
-  }
-
-  function getVaultBackBaseUrl() {
-    const url = new URL(window.location.href);
-    url.hash = '';
-    return `${url.pathname}${url.search}`;
-  }
-
-  function getVaultBackGuardUrl() {
-    return `${getVaultBackBaseUrl()}${vaultBackGuardHash}`;
-  }
-
-  function isCurrentVaultBaseEntry(historyState = window.history.state) {
-    return historyState?.[vaultBackGuardKey] === 'base'
-      && historyState?.[vaultBackGuardSessionKey] === backGuardSessionRef.current;
-  }
-
-  function isCurrentVaultGuardEntry(historyState = window.history.state) {
-    return historyState?.[vaultBackGuardKey] === 'guard'
-      && historyState?.[vaultBackGuardSessionKey] === backGuardSessionRef.current
-      && window.location.hash === vaultBackGuardHash;
-  }
-
-  function ensureVaultBackGuard() {
-    if (isCurrentVaultGuardEntry()) return true;
-
-    const sessionId = backGuardSessionRef.current;
-    const currentState = window.history.state || {};
-    const baseState = {
-      ...currentState,
-      [vaultBackGuardKey]: 'base',
-      [vaultBackGuardSessionKey]: sessionId
-    };
-
-    try {
-      window.history.replaceState(baseState, document.title, getVaultBackBaseUrl());
-      window.history.pushState({
-        ...baseState,
-        [vaultBackGuardKey]: 'guard'
-      }, document.title, getVaultBackGuardUrl());
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  function resetBrowserExitSequence() {
-    allowBrowserExitRef.current = false;
-    browserExitStepsRef.current = 0;
-    if (browserExitResetTimerRef.current) {
-      window.clearTimeout(browserExitResetTimerRef.current);
-      browserExitResetTimerRef.current = null;
-    }
-  }
-
-  function startBrowserExit(steps = 1) {
-    resetBrowserExitSequence();
-    allowBrowserExitRef.current = true;
-    browserExitStepsRef.current = Math.max(1, Number(steps) || 1);
-    window.history.back();
-    browserExitResetTimerRef.current = window.setTimeout(resetBrowserExitSequence, 1600);
-  }
-
-  function releaseVaultBackGuardForLockedScreen() {
-    const state = backNavigationStateRef.current;
-    if (!state.locked || state.hasBackDismissibleLayer || !isCurrentVaultGuardEntry() || backGuardReleaseRef.current) return false;
-
-    backGuardReleaseRef.current = true;
-    backGuardHandlingRef.current = true;
-    backGuardRestoringRef.current = false;
-    clearBackGuardTimer(backGuardFallbackTimerRef);
-    try {
-      window.history.back();
-      return true;
-    } catch {
-      backGuardReleaseRef.current = false;
-      backGuardHandlingRef.current = false;
-      return false;
-    }
-  }
-
-  function finishVaultBackRestore() {
-    clearBackGuardTimer(backGuardFallbackTimerRef);
-    clearBackGuardTimer(backGuardNavigationFallbackTimerRef);
-    backGuardNavigationInterceptRef.current = false;
-    backGuardRestoringRef.current = false;
-    backGuardHandlingRef.current = false;
-    clearBackGuardTimer(backGuardLockedReleaseTimerRef);
-    backGuardLockedReleaseTimerRef.current = window.setTimeout(() => {
-      releaseVaultBackGuardForLockedScreen();
-    }, 40);
-  }
-
-  function restoreVaultBackGuardAfterAction() {
-    if (backGuardRestoringRef.current) return;
-    backGuardRestoringRef.current = true;
-
-    window.setTimeout(() => {
-      if (isCurrentVaultGuardEntry()) {
-        finishVaultBackRestore();
-        return;
-      }
-
-      if (isCurrentVaultBaseEntry()) {
-        try {
-          window.history.forward();
-        } catch {
-          // The fallback below recreates the guard if forward traversal fails.
-        }
-        backGuardFallbackTimerRef.current = window.setTimeout(() => {
-          if (!isCurrentVaultGuardEntry()) ensureVaultBackGuard();
-          finishVaultBackRestore();
-        }, 180);
-        return;
-      }
-
-      ensureVaultBackGuard();
-      finishVaultBackRestore();
-    }, 0);
-  }
-
   function consumeVaultBackAction() {
     const state = backNavigationStateRef.current;
     const customOverlayOpen = Boolean(document.querySelector('.custom-select-menu, .country-picker-layer'));
@@ -4753,179 +4768,36 @@ function App() {
     return true;
   }
 
-  useEffect(() => {
-    if (isEmergencyInviteRoute) return undefined;
-
-    const isBackControlEnabled = () => {
-      const state = backNavigationStateRef.current;
-      return !state.locked || state.hasBackDismissibleLayer;
-    };
-
-    const completeBackAction = () => {
-      const consumed = consumeVaultBackAction();
-      if (consumed) restoreVaultBackGuardAfterAction();
-      else {
-        backGuardHandlingRef.current = false;
-        backGuardNavigationInterceptRef.current = false;
-      }
-      return consumed;
-    };
-
-    const handleCommittedBackTraversal = (event) => {
-      if (allowBrowserExitRef.current) {
-        browserExitStepsRef.current -= 1;
-        if (browserExitStepsRef.current > 0) window.history.back();
-        else resetBrowserExitSequence();
-        return;
-      }
-
-      if (backGuardReleaseRef.current) {
-        backGuardReleaseRef.current = false;
-        backGuardHandlingRef.current = false;
-        backGuardRestoringRef.current = false;
-        backGuardNavigationInterceptRef.current = false;
-        clearBackGuardTimer(backGuardFallbackTimerRef);
-        clearBackGuardTimer(backGuardLockedReleaseTimerRef);
-        return;
-      }
-
-      if (backGuardRestoringRef.current && isCurrentVaultGuardEntry(event?.state || window.history.state)) {
-        backGuardNavigationInterceptRef.current = false;
-        finishVaultBackRestore();
-        return;
-      }
-
-      if (isCurrentVaultGuardEntry(event?.state || window.history.state)) return;
-      if (backGuardHandlingRef.current || backGuardNavigationInterceptRef.current) return;
-      if (!isBackControlEnabled()) return;
-
-      const crossedGuardBoundary = isCurrentVaultBaseEntry(event?.state || window.history.state)
-        || window.location.hash !== vaultBackGuardHash;
-      if (!crossedGuardBoundary) return;
-
-      backGuardHandlingRef.current = true;
-      completeBackAction();
-    };
-
-    // Chrome/Android exposes the navigation before the history traversal is
-    // committed. Intercepting the guard-to-base traversal gives the app a
-    // direct hardware-Back path; popstate and hashchange remain fallbacks for
-    // browsers that do not expose the Navigation API.
-    const handleNavigationTraversal = (event) => {
-      if (event?.navigationType !== 'traverse' || event?.userInitiated !== true) return;
-      if (allowBrowserExitRef.current || backGuardReleaseRef.current || backGuardRestoringRef.current) return;
-      if (backGuardHandlingRef.current || backGuardNavigationInterceptRef.current || !isBackControlEnabled()) return;
-
-      let destinationUrl;
-      try {
-        destinationUrl = new URL(event.destination.url);
-      } catch {
-        return;
-      }
-
-      const currentUrl = new URL(window.location.href);
-      const isSameVaultDocument = destinationUrl.origin === currentUrl.origin
-        && destinationUrl.pathname === currentUrl.pathname
-        && destinationUrl.search === currentUrl.search;
-      const crossesBackGuard = isSameVaultDocument
-        && currentUrl.hash === vaultBackGuardHash
-        && destinationUrl.hash !== vaultBackGuardHash;
-      if (!crossesBackGuard || event.canIntercept !== true) return;
-
-      backGuardNavigationInterceptRef.current = true;
-      backGuardHandlingRef.current = true;
-      clearBackGuardTimer(backGuardNavigationFallbackTimerRef);
-
-      try {
-        event.intercept({
-          focusReset: 'manual',
-          scroll: 'manual',
-          handler: async () => {
-            backGuardNavigationInterceptRef.current = false;
-            completeBackAction();
-          }
-        });
-
-        // A defensive fallback handles a browser that accepts intercept() but
-        // does not invoke its handler after the PWA Back gesture.
-        backGuardNavigationFallbackTimerRef.current = window.setTimeout(() => {
-          if (!backGuardNavigationInterceptRef.current) return;
-          const traversalCommitted = isCurrentVaultBaseEntry() || window.location.hash !== vaultBackGuardHash;
-          backGuardNavigationInterceptRef.current = false;
-          if (traversalCommitted) completeBackAction();
-          else backGuardHandlingRef.current = false;
-        }, 180);
-      } catch {
-        backGuardNavigationInterceptRef.current = false;
-        backGuardHandlingRef.current = false;
-      }
-    };
-
-    const handleHashBackFallback = () => {
-      clearBackGuardTimer(backGuardHashFallbackTimerRef);
-      backGuardHashFallbackTimerRef.current = window.setTimeout(() => {
-        if (!backGuardHandlingRef.current && !backGuardRestoringRef.current && window.location.hash !== vaultBackGuardHash) {
-          handleCommittedBackTraversal({ type: 'hashchange-fallback', state: window.history.state });
-        }
-      }, 30);
-    };
-
-    const maintainBackGuard = () => {
-      if (allowBrowserExitRef.current || backGuardReleaseRef.current || backGuardRestoringRef.current || backGuardHandlingRef.current) return;
-      if (isBackControlEnabled()) ensureVaultBackGuard();
-    };
-
-    const maintainVisibleBackGuard = () => {
-      if (document.visibilityState === 'visible') window.setTimeout(maintainBackGuard, 0);
-    };
-
-    window.addEventListener('popstate', handleCommittedBackTraversal);
-    window.addEventListener('hashchange', handleHashBackFallback);
-    window.addEventListener('pageshow', maintainBackGuard);
-    window.addEventListener('focus', maintainBackGuard);
-    document.addEventListener('visibilitychange', maintainVisibleBackGuard);
-    window.navigation?.addEventListener?.('navigate', handleNavigationTraversal);
-
-    // Keep a lightweight integrity check while the app is open. It repairs a
-    // guard removed by a browser/PWA resume without changing app UI state.
-    backGuardIntegrityTimerRef.current = window.setInterval(maintainBackGuard, 1500);
-
-    return () => {
-      window.removeEventListener('popstate', handleCommittedBackTraversal);
-      window.removeEventListener('hashchange', handleHashBackFallback);
-      window.removeEventListener('pageshow', maintainBackGuard);
-      window.removeEventListener('focus', maintainBackGuard);
-      document.removeEventListener('visibilitychange', maintainVisibleBackGuard);
-      window.navigation?.removeEventListener?.('navigate', handleNavigationTraversal);
-      clearBackGuardTimer(backGuardHashFallbackTimerRef);
-      clearBackGuardTimer(backGuardNavigationFallbackTimerRef);
-      clearBackGuardTimer(backGuardFallbackTimerRef);
-      clearBackGuardTimer(backGuardLockedReleaseTimerRef);
-      if (backGuardIntegrityTimerRef.current) {
-        window.clearInterval(backGuardIntegrityTimerRef.current);
-        backGuardIntegrityTimerRef.current = null;
-      }
-      backGuardNavigationInterceptRef.current = false;
-    };
-  }, [isEmergencyInviteRoute]);
+  consumeVaultBackActionRef.current = consumeVaultBackAction;
 
   useEffect(() => {
-    if (isEmergencyInviteRoute) return undefined;
+    const shouldControlBack = isVaultRoute && !isEmergencyInviteRoute;
+    vaultDeviceBackController.setEnabled(shouldControlBack);
 
-    if (!locked || hasBackDismissibleLayer) {
-      const timer = window.setTimeout(() => ensureVaultBackGuard(), 0);
-      return () => window.clearTimeout(timer);
+    if (!shouldControlBack) {
+      vaultDeviceBackController.setReady(false);
+      return undefined;
     }
 
-    releaseVaultBackGuardForLockedScreen();
-    return undefined;
-  }, [isEmergencyInviteRoute, locked, hasBackDismissibleLayer]);
+    const handleDeviceBack = () => {
+      const consumed = consumeVaultBackActionRef.current();
+      if (!consumed) vaultDeviceBackController.exitApp();
+    };
+
+    window.addEventListener(VAULT_DEVICE_BACK_EVENT, handleDeviceBack);
+    vaultDeviceBackController.setReady(true);
+    vaultDeviceBackController.ensure();
+
+    return () => {
+      vaultDeviceBackController.setReady(false);
+      window.removeEventListener(VAULT_DEVICE_BACK_EVENT, handleDeviceBack);
+    };
+  }, [isEmergencyInviteRoute, isVaultRoute]);
 
   function confirmExitApp() {
     backNavigationStateRef.current.exitAppConfirmationOpen = false;
     setExitAppConfirmationOpen(false);
-    const steps = isCurrentVaultGuardEntry() ? 2 : 1;
-    startBrowserExit(steps);
+    vaultDeviceBackController.exitApp();
   }
 
   useEffect(() => {
