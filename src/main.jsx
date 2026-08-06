@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.047D';
+const VERSION = 'My Passwords Ver-0.047F';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1976,7 +1976,8 @@ function App() {
   const [exitAppConfirmationOpen, setExitAppConfirmationOpen] = useState(false);
   const backNavigationStateRef = useRef({});
   const allowBrowserExitRef = useRef(false);
-  const suppressNextPopstateRef = useRef(false);
+  const browserExitStepsRef = useRef(0);
+  const browserExitResetTimerRef = useRef(null);
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
@@ -3419,6 +3420,9 @@ function App() {
           cloudCheckResult = await restoreLatestCloudVault(password, { showSuccess: false, reason: 'unlock', account: activeAccount, forceCloud: false });
           if (cloudCheckResult.restored) {
             setMasterPassword(password);
+            ensureVaultBackGuard();
+            backNavigationStateRef.current.locked = false;
+            backNavigationStateRef.current.activePage = 'home';
             setLocked(false);
             if (!fromBiometric) confirmSecureDevicePasswordCheck();
             showVerifyOverlay('success', 'Vault updated', 'The latest protected vault copy has been loaded on this device.');
@@ -3460,6 +3464,9 @@ function App() {
           source: cloudCheckResult?.conflict ? 'conflict-protected' : cloudCheckResult?.localNewer ? 'newer-local-vault-protected' : fromBiometric ? 'secure-device-local-vault' : 'local-vault'
         }));
         if (!fromBiometric) confirmSecureDevicePasswordCheck();
+        ensureVaultBackGuard();
+        backNavigationStateRef.current.locked = false;
+        backNavigationStateRef.current.activePage = 'home';
         setLocked(false);
         if (cloudCheckResult?.conflict) {
           hideVerifyOverlay();
@@ -3505,6 +3512,9 @@ function App() {
         ? { state: 'backup-pending', pending: true, conflict: false, sessionRequired: !customerSession.authenticated, message: 'Your new vault is saved on this device and is waiting to be backed up.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' }
         : { state: 'plan-local-only', pending: false, conflict: false, sessionRequired: false, message: 'Your new encrypted vault is saved locally. Cloud backup and sync are not included in the current plan.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' });
       if (!fromBiometric) confirmSecureDevicePasswordCheck();
+      ensureVaultBackGuard();
+      backNavigationStateRef.current.locked = false;
+      backNavigationStateRef.current.activePage = 'home';
       setLocked(false);
       showVerifyOverlay('success', 'Vault created', 'Your encrypted vault has been created on this device.');
       if (cloudBackupAvailable) {
@@ -4514,106 +4524,168 @@ function App() {
   const isEmergencyInviteRoute = routePath === '/emergency-invite';
   const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute;
 
-  useEffect(() => {
-    backNavigationStateRef.current = {
-      locked,
-      activePage,
-      mobileHeaderMenuOpen,
-      exitAppConfirmationOpen,
-      accountSecurityModalVisible: accountSecurityModal.visible,
-      accountRecoveryModalVisible: accountRecoveryModal.visible,
-      entitlementModalVisible: entitlementModal.visible,
-      deviceVerificationModalVisible: deviceVerificationModal.visible,
-      syncSafetyModalVisible: syncSafetyModal.visible,
-      subscriptionActionModalVisible: subscriptionActionModal.visible,
-      verifyOverlayVisible: verifyOverlay.visible,
-      pendingDeleteItemId: Boolean(pendingDeleteItemId),
-      viewItemId: Boolean(viewItemId),
-      isItemPopupOpen,
-      isFolderPopupOpen,
-      isFolderListPopupOpen,
-      folderManagerVisible: folderManager.visible,
-      isCreateVaultPopupOpen
-    };
-  }, [locked, activePage, mobileHeaderMenuOpen, exitAppConfirmationOpen, accountSecurityModal.visible, accountRecoveryModal.visible, entitlementModal.visible, deviceVerificationModal.visible, syncSafetyModal.visible, subscriptionActionModal.visible, verifyOverlay.visible, pendingDeleteItemId, viewItemId, isItemPopupOpen, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateVaultPopupOpen]);
+  const hasBackDismissibleLayer = Boolean(
+    mobileHeaderMenuOpen
+    || exitAppConfirmationOpen
+    || accountSecurityModal.visible
+    || accountRecoveryModal.visible
+    || entitlementModal.visible
+    || deviceVerificationModal.visible
+    || syncSafetyModal.visible
+    || subscriptionActionModal.visible
+    || verifyOverlay.visible
+    || pendingDeleteItemId
+    || viewItemId
+    || isItemPopupOpen
+    || isFolderPopupOpen
+    || isFolderListPopupOpen
+    || folderManager.visible
+    || isCreateAccountPopupOpen
+    || isCreateVaultPopupOpen
+  );
+
+  // Keep the Back handler on the latest rendered UI state immediately. A passive
+  // effect can be one render behind when Android dispatches Back during a fast
+  // unlock, popup close or Settings-to-home transition.
+  backNavigationStateRef.current = {
+    locked,
+    activePage,
+    mobileHeaderMenuOpen,
+    exitAppConfirmationOpen,
+    accountSecurityModalVisible: accountSecurityModal.visible,
+    accountRecoveryModalVisible: accountRecoveryModal.visible,
+    entitlementModalVisible: entitlementModal.visible,
+    deviceVerificationModalVisible: deviceVerificationModal.visible,
+    syncSafetyModalVisible: syncSafetyModal.visible,
+    subscriptionActionModalVisible: subscriptionActionModal.visible,
+    verifyOverlayVisible: verifyOverlay.visible,
+    pendingDeleteItemId: Boolean(pendingDeleteItemId),
+    viewItemId: Boolean(viewItemId),
+    isItemPopupOpen,
+    isFolderPopupOpen,
+    isFolderListPopupOpen,
+    folderManagerVisible: folderManager.visible,
+    isCreateAccountPopupOpen,
+    isCreateVaultPopupOpen,
+    hasBackDismissibleLayer
+  };
+
+  const vaultBackGuardKey = 'myPasswordsBackGuard';
+
+  function ensureVaultBackGuard() {
+    const currentState = window.history.state || {};
+    if (currentState[vaultBackGuardKey] === 'guard') return;
+    const baseState = { ...currentState, [vaultBackGuardKey]: 'base' };
+    window.history.replaceState(baseState, document.title, window.location.href);
+    window.history.pushState({ ...baseState, [vaultBackGuardKey]: 'guard' }, document.title, window.location.href);
+  }
+
+  function resetBrowserExitSequence() {
+    allowBrowserExitRef.current = false;
+    browserExitStepsRef.current = 0;
+    if (browserExitResetTimerRef.current) {
+      window.clearTimeout(browserExitResetTimerRef.current);
+      browserExitResetTimerRef.current = null;
+    }
+  }
+
+  function startBrowserExit(steps = 1) {
+    resetBrowserExitSequence();
+    allowBrowserExitRef.current = true;
+    browserExitStepsRef.current = Math.max(1, Number(steps) || 1);
+    window.history.back();
+    browserExitResetTimerRef.current = window.setTimeout(resetBrowserExitSequence, 1600);
+  }
 
   useEffect(() => {
     if (!isVaultRoute) return undefined;
-    const guardKey = 'myPasswordsBackGuard';
-    const baseState = { ...(window.history.state || {}), [guardKey]: 'base' };
-    window.history.replaceState(baseState, document.title, window.location.href);
-    window.history.pushState({ ...baseState, [guardKey]: 'guard' }, document.title, window.location.href);
 
-    const restoreGuard = () => {
-      if (window.history.state?.[guardKey] !== 'guard') {
-        window.history.pushState({ ...baseState, [guardKey]: 'guard' }, document.title, window.location.href);
-      }
-    };
-
-    const handleMobileBack = () => {
-      if (suppressNextPopstateRef.current) {
-        suppressNextPopstateRef.current = false;
-        return;
-      }
-
+    const handleMobileBack = (event) => {
       if (allowBrowserExitRef.current) {
-        allowBrowserExitRef.current = false;
-        suppressNextPopstateRef.current = true;
-        window.history.back();
+        browserExitStepsRef.current -= 1;
+        if (browserExitStepsRef.current > 0) {
+          window.history.back();
+        } else {
+          resetBrowserExitSequence();
+        }
         return;
       }
 
       const state = backNavigationStateRef.current;
+      const customOverlayOpen = Boolean(document.querySelector('.custom-select-menu, .country-picker-layer'));
+      const hasInternalLayer = customOverlayOpen || state.hasBackDismissibleLayer;
 
-      // The locked vault screen is an entry screen, not the Passwords home page.
-      // A device Back press may leave it normally and must never show the home exit popup.
-      if (state.locked) {
-        suppressNextPopstateRef.current = true;
-        window.history.back();
-        return;
-      }
+      // Every unlocked app screen, and every dismissible layer on the locked
+      // screen, gets a fresh same-page guard before any UI state is changed.
+      if (!state.locked || hasInternalLayer) ensureVaultBackGuard();
 
-      restoreGuard();
-
-      if (document.querySelector('.custom-select-menu, .country-picker-layer')) {
+      if (customOverlayOpen) {
         window.dispatchEvent(new CustomEvent('my-passwords-close-overlay'));
         return;
       }
-      if (state.exitAppConfirmationOpen) { setExitAppConfirmationOpen(false); return; }
-      if (state.accountSecurityModalVisible) { closeAccountSecurityModal(); return; }
-      if (state.accountRecoveryModalVisible) { setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false }); return; }
-      if (state.entitlementModalVisible) { setEntitlementModal({ visible: false, feature: '', title: '', message: '' }); return; }
-      if (state.deviceVerificationModalVisible) { setDeviceVerificationModal({ visible: false, purpose: '' }); return; }
-      if (state.syncSafetyModalVisible) { closeSyncSafetyModal(); return; }
-      if (state.subscriptionActionModalVisible) { setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' }); return; }
-      if (state.verifyOverlayVisible) { hideVerifyOverlay(); return; }
-      if (state.pendingDeleteItemId) { cancelDeleteItem(); return; }
-      if (state.viewItemId) { closeViewItem(); return; }
-      if (state.isItemPopupOpen) { closeItemPopup(); return; }
-      if (state.isFolderPopupOpen) { closeFolderPopup(); return; }
-      if (state.folderManagerVisible) { closeFolderManager(); return; }
-      if (state.isFolderListPopupOpen) { setIsFolderListPopupOpen(false); return; }
-      if (state.isCreateVaultPopupOpen) { setIsCreateVaultPopupOpen(false); return; }
-      if (state.mobileHeaderMenuOpen) { setMobileHeaderMenuOpen(false); return; }
+      if (state.exitAppConfirmationOpen) { backNavigationStateRef.current.exitAppConfirmationOpen = false; setExitAppConfirmationOpen(false); return; }
+      if (state.accountSecurityModalVisible) { backNavigationStateRef.current.accountSecurityModalVisible = false; closeAccountSecurityModal(); return; }
+      if (state.accountRecoveryModalVisible) { backNavigationStateRef.current.accountRecoveryModalVisible = false; setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false }); return; }
+      if (state.entitlementModalVisible) { backNavigationStateRef.current.entitlementModalVisible = false; setEntitlementModal({ visible: false, feature: '', title: '', message: '' }); return; }
+      if (state.deviceVerificationModalVisible) { backNavigationStateRef.current.deviceVerificationModalVisible = false; setDeviceVerificationModal({ visible: false, purpose: '' }); return; }
+      if (state.syncSafetyModalVisible) { backNavigationStateRef.current.syncSafetyModalVisible = false; closeSyncSafetyModal(); return; }
+      if (state.subscriptionActionModalVisible) { backNavigationStateRef.current.subscriptionActionModalVisible = false; setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' }); return; }
+      if (state.verifyOverlayVisible) { backNavigationStateRef.current.verifyOverlayVisible = false; hideVerifyOverlay(); return; }
+      if (state.pendingDeleteItemId) { backNavigationStateRef.current.pendingDeleteItemId = false; cancelDeleteItem(); return; }
+      if (state.viewItemId) { backNavigationStateRef.current.viewItemId = false; closeViewItem(); return; }
+      if (state.isItemPopupOpen) { backNavigationStateRef.current.isItemPopupOpen = false; closeItemPopup(); return; }
+      if (state.isFolderPopupOpen) { backNavigationStateRef.current.isFolderPopupOpen = false; closeFolderPopup(); return; }
+      if (state.folderManagerVisible) { backNavigationStateRef.current.folderManagerVisible = false; closeFolderManager(); return; }
+      if (state.isFolderListPopupOpen) { backNavigationStateRef.current.isFolderListPopupOpen = false; setIsFolderListPopupOpen(false); return; }
+      if (state.isCreateAccountPopupOpen) { backNavigationStateRef.current.isCreateAccountPopupOpen = false; setIsCreateAccountPopupOpen(false); return; }
+      if (state.isCreateVaultPopupOpen) { backNavigationStateRef.current.isCreateVaultPopupOpen = false; setIsCreateVaultPopupOpen(false); return; }
+      if (state.mobileHeaderMenuOpen) { backNavigationStateRef.current.mobileHeaderMenuOpen = false; setMobileHeaderMenuOpen(false); return; }
+
+      // The locked vault page is not the Passwords home page. If a guard entry
+      // exists from an earlier unlocked session, consume it and continue the
+      // native Back action without ever showing the leave-app popup.
+      if (state.locked) {
+        if (event.state?.[vaultBackGuardKey] === 'base') startBrowserExit(1);
+        return;
+      }
+
       if (state.activePage !== 'home') {
+        backNavigationStateRef.current.activePage = 'home';
         setActivePage('home');
         setActiveSettingsSection('overview');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
-      // This is the actual Passwords home page: show the confirmation on the first press.
+      // The unlocked password-search screen is the one and only app home. Its
+      // first device Back press always opens the leave confirmation.
+      backNavigationStateRef.current.exitAppConfirmationOpen = true;
       setExitAppConfirmationOpen(true);
     };
 
+    const maintainBackGuard = () => {
+      const state = backNavigationStateRef.current;
+      if (!state.locked || state.hasBackDismissibleLayer) ensureVaultBackGuard();
+    };
+
     window.addEventListener('popstate', handleMobileBack);
-    return () => window.removeEventListener('popstate', handleMobileBack);
+    window.addEventListener('pageshow', maintainBackGuard);
+    return () => {
+      window.removeEventListener('popstate', handleMobileBack);
+      window.removeEventListener('pageshow', maintainBackGuard);
+    };
   }, [isVaultRoute]);
 
+  useEffect(() => {
+    if (!isVaultRoute || (locked && !hasBackDismissibleLayer)) return;
+    ensureVaultBackGuard();
+  }, [isVaultRoute, locked, hasBackDismissibleLayer]);
+
   function confirmExitApp() {
+    backNavigationStateRef.current.exitAppConfirmationOpen = false;
     setExitAppConfirmationOpen(false);
-    allowBrowserExitRef.current = true;
-    window.history.back();
+    const steps = window.history.state?.[vaultBackGuardKey] === 'guard' ? 2 : 1;
+    startBrowserExit(steps);
   }
 
   useEffect(() => {
@@ -6436,9 +6508,12 @@ function App() {
                         >
                           <button type="button" className="folder-picker-main" onClick={() => !touchReorderFolder && openVaultSection(folder.name)}>
                             <span className="vault-result-name folder-picker-name">{folder.name}</span>
-                            <span className="folder-picker-count">{folder.count}</span>
                           </button>
                           <div className="folder-picker-actions">
+                            {folder.custom
+                              ? <button type="button" className="folder-manage-button" onClick={(event) => { event.stopPropagation(); openFolderManager(folder); }} aria-label={`Rename or delete ${folder.name}`} title="Rename or delete folder"><Pencil size={17} /></button>
+                              : <span className="folder-manage-placeholder" aria-hidden="true" />}
+                            <span className="folder-picker-count" aria-label={`${folder.count} item${folder.count === 1 ? '' : 's'}`}>{folder.count}</span>
                             <button
                               type="button"
                               className={isHomeFolder ? 'folder-home-button active' : 'folder-home-button'}
@@ -6448,7 +6523,6 @@ function App() {
                             >
                               <Home size={18} fill={isHomeFolder ? 'currentColor' : 'none'} />
                             </button>
-                            {folder.custom && <button type="button" className="folder-manage-button" onClick={(event) => { event.stopPropagation(); openFolderManager(folder); }} aria-label={`Rename or delete ${folder.name}`} title="Rename or delete folder"><Pencil size={17} /></button>}
                           </div>
                         </div>
                       );

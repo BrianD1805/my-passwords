@@ -1,13 +1,13 @@
 {
   "name": "my-passwords",
   "private": true,
-  "version": "0.0.47-d",
+  "version": "0.0.47-f",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "node ./node_modules/vite/bin/vite.js build",
     "preview": "vite preview",
-    "netlify:dev": "netlify dev"
+    "netlify:dev": "netlify dev --no-open"
   },
   "dependencies": {
     "lucide-react": "1.16.0",
