@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.047G';
+const VERSION = 'My Passwords Ver-0.047H';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1979,7 +1979,15 @@ function App() {
   const browserExitStepsRef = useRef(0);
   const browserExitResetTimerRef = useRef(null);
   const backGuardSessionRef = useRef(`vault-back-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  const backGuardArmedRef = useRef(false);
+  const backGuardRestoringRef = useRef(false);
+  const backGuardReleaseRef = useRef(false);
+  const backGuardHandlingRef = useRef(false);
+  const backGuardFallbackTimerRef = useRef(null);
+  const backGuardHashFallbackTimerRef = useRef(null);
+  const backGuardNavigationFallbackTimerRef = useRef(null);
+  const backGuardNavigationInterceptRef = useRef(false);
+  const backGuardIntegrityTimerRef = useRef(null);
+  const backGuardLockedReleaseTimerRef = useRef(null);
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
@@ -2915,8 +2923,7 @@ function App() {
     setBilling((current) => ({ ...current, returnState, status: returnState === 'success' ? 'processing' : 'ready', message: returnState === 'success' ? 'Stripe is confirming your subscription...' : returnState === 'cancelled' ? 'Checkout was cancelled. No subscription change was made.' : 'Billing details were updated.' }));
     openSubscriptionSettings();
     window.history.replaceState(window.history.state || {}, document.title, window.location.pathname);
-    backGuardArmedRef.current = false;
-    ensureVaultBackGuard({ forceFresh: true });
+    window.setTimeout(() => ensureVaultBackGuard(), 0);
 
     if (returnState === 'success' && sessionId) {
       let cancelled = false;
@@ -3424,10 +3431,10 @@ function App() {
           cloudCheckResult = await restoreLatestCloudVault(password, { showSuccess: false, reason: 'unlock', account: activeAccount, forceCloud: false });
           if (cloudCheckResult.restored) {
             setMasterPassword(password);
-            ensureVaultBackGuard();
             backNavigationStateRef.current.locked = false;
             backNavigationStateRef.current.activePage = 'home';
             setLocked(false);
+            window.setTimeout(() => ensureVaultBackGuard(), 0);
             if (!fromBiometric) confirmSecureDevicePasswordCheck();
             showVerifyOverlay('success', 'Vault updated', 'The latest protected vault copy has been loaded on this device.');
             showMessage(`Latest cloud changes loaded. ${cloudCheckResult.items.length} item(s) are now available on this device.`, 'success');
@@ -3468,10 +3475,10 @@ function App() {
           source: cloudCheckResult?.conflict ? 'conflict-protected' : cloudCheckResult?.localNewer ? 'newer-local-vault-protected' : fromBiometric ? 'secure-device-local-vault' : 'local-vault'
         }));
         if (!fromBiometric) confirmSecureDevicePasswordCheck();
-        ensureVaultBackGuard();
         backNavigationStateRef.current.locked = false;
         backNavigationStateRef.current.activePage = 'home';
         setLocked(false);
+        window.setTimeout(() => ensureVaultBackGuard(), 0);
         if (cloudCheckResult?.conflict) {
           hideVerifyOverlay();
           showMessage('Vault opened from this device. Different changes were found elsewhere, so nothing was replaced.', 'warning');
@@ -3516,10 +3523,10 @@ function App() {
         ? { state: 'backup-pending', pending: true, conflict: false, sessionRequired: !customerSession.authenticated, message: 'Your new vault is saved on this device and is waiting to be backed up.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' }
         : { state: 'plan-local-only', pending: false, conflict: false, sessionRequired: false, message: 'Your new encrypted vault is saved locally. Cloud backup and sync are not included in the current plan.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' });
       if (!fromBiometric) confirmSecureDevicePasswordCheck();
-      ensureVaultBackGuard();
       backNavigationStateRef.current.locked = false;
       backNavigationStateRef.current.activePage = 'home';
       setLocked(false);
+      window.setTimeout(() => ensureVaultBackGuard(), 0);
       showVerifyOverlay('success', 'Vault created', 'Your encrypted vault has been created on this device.');
       if (cloudBackupAvailable) {
         const initialBackup = await syncEncryptedVault({ envelope: newVaultEnvelope, nextItems: starterItems, silent: true });
@@ -4578,33 +4585,56 @@ function App() {
 
   const vaultBackGuardKey = 'myPasswordsBackGuard';
   const vaultBackGuardSessionKey = 'myPasswordsBackGuardSession';
+  const vaultBackGuardHash = '#my-passwords-back-guard';
 
-  function isCurrentVaultGuardEntry(historyState = window.history.state) {
-    return historyState?.[vaultBackGuardKey] === 'guard'
+  function clearBackGuardTimer(timerRef) {
+    if (!timerRef.current) return;
+    window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }
+
+  function getVaultBackBaseUrl() {
+    const url = new URL(window.location.href);
+    url.hash = '';
+    return `${url.pathname}${url.search}`;
+  }
+
+  function getVaultBackGuardUrl() {
+    return `${getVaultBackBaseUrl()}${vaultBackGuardHash}`;
+  }
+
+  function isCurrentVaultBaseEntry(historyState = window.history.state) {
+    return historyState?.[vaultBackGuardKey] === 'base'
       && historyState?.[vaultBackGuardSessionKey] === backGuardSessionRef.current;
   }
 
-  function ensureVaultBackGuard(options = {}) {
-    const forceFresh = options.forceFresh === true;
-    const currentState = window.history.state || {};
+  function isCurrentVaultGuardEntry(historyState = window.history.state) {
+    return historyState?.[vaultBackGuardKey] === 'guard'
+      && historyState?.[vaultBackGuardSessionKey] === backGuardSessionRef.current
+      && window.location.hash === vaultBackGuardHash;
+  }
 
-    // Never trust a guard marker left behind by an earlier page load or restored
-    // PWA session. It may no longer have its paired base entry, which makes the
-    // first Android Back press appear to do nothing and the second exit the app.
-    if (!forceFresh && backGuardArmedRef.current && isCurrentVaultGuardEntry(currentState)) return;
+  function ensureVaultBackGuard() {
+    if (isCurrentVaultGuardEntry()) return true;
 
     const sessionId = backGuardSessionRef.current;
+    const currentState = window.history.state || {};
     const baseState = {
       ...currentState,
       [vaultBackGuardKey]: 'base',
       [vaultBackGuardSessionKey]: sessionId
     };
-    window.history.replaceState(baseState, document.title, window.location.href);
-    window.history.pushState({
-      ...baseState,
-      [vaultBackGuardKey]: 'guard'
-    }, document.title, window.location.href);
-    backGuardArmedRef.current = true;
+
+    try {
+      window.history.replaceState(baseState, document.title, getVaultBackBaseUrl());
+      window.history.pushState({
+        ...baseState,
+        [vaultBackGuardKey]: 'guard'
+      }, document.title, getVaultBackGuardUrl());
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function resetBrowserExitSequence() {
@@ -4624,100 +4654,277 @@ function App() {
     browserExitResetTimerRef.current = window.setTimeout(resetBrowserExitSequence, 1600);
   }
 
+  function releaseVaultBackGuardForLockedScreen() {
+    const state = backNavigationStateRef.current;
+    if (!state.locked || state.hasBackDismissibleLayer || !isCurrentVaultGuardEntry() || backGuardReleaseRef.current) return false;
+
+    backGuardReleaseRef.current = true;
+    backGuardHandlingRef.current = true;
+    backGuardRestoringRef.current = false;
+    clearBackGuardTimer(backGuardFallbackTimerRef);
+    try {
+      window.history.back();
+      return true;
+    } catch {
+      backGuardReleaseRef.current = false;
+      backGuardHandlingRef.current = false;
+      return false;
+    }
+  }
+
+  function finishVaultBackRestore() {
+    clearBackGuardTimer(backGuardFallbackTimerRef);
+    clearBackGuardTimer(backGuardNavigationFallbackTimerRef);
+    backGuardNavigationInterceptRef.current = false;
+    backGuardRestoringRef.current = false;
+    backGuardHandlingRef.current = false;
+    clearBackGuardTimer(backGuardLockedReleaseTimerRef);
+    backGuardLockedReleaseTimerRef.current = window.setTimeout(() => {
+      releaseVaultBackGuardForLockedScreen();
+    }, 40);
+  }
+
+  function restoreVaultBackGuardAfterAction() {
+    if (backGuardRestoringRef.current) return;
+    backGuardRestoringRef.current = true;
+
+    window.setTimeout(() => {
+      if (isCurrentVaultGuardEntry()) {
+        finishVaultBackRestore();
+        return;
+      }
+
+      if (isCurrentVaultBaseEntry()) {
+        try {
+          window.history.forward();
+        } catch {
+          // The fallback below recreates the guard if forward traversal fails.
+        }
+        backGuardFallbackTimerRef.current = window.setTimeout(() => {
+          if (!isCurrentVaultGuardEntry()) ensureVaultBackGuard();
+          finishVaultBackRestore();
+        }, 180);
+        return;
+      }
+
+      ensureVaultBackGuard();
+      finishVaultBackRestore();
+    }, 0);
+  }
+
+  function consumeVaultBackAction() {
+    const state = backNavigationStateRef.current;
+    const customOverlayOpen = Boolean(document.querySelector('.custom-select-menu, .country-picker-layer'));
+
+    if (customOverlayOpen) {
+      window.dispatchEvent(new CustomEvent('my-passwords-close-overlay'));
+      return true;
+    }
+    if (state.exitAppConfirmationOpen) { backNavigationStateRef.current.exitAppConfirmationOpen = false; setExitAppConfirmationOpen(false); return true; }
+    if (state.accountSecurityModalVisible) { backNavigationStateRef.current.accountSecurityModalVisible = false; closeAccountSecurityModal(); return true; }
+    if (state.accountRecoveryModalVisible) { backNavigationStateRef.current.accountRecoveryModalVisible = false; setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false }); return true; }
+    if (state.entitlementModalVisible) { backNavigationStateRef.current.entitlementModalVisible = false; setEntitlementModal({ visible: false, feature: '', title: '', message: '' }); return true; }
+    if (state.deviceVerificationModalVisible) { backNavigationStateRef.current.deviceVerificationModalVisible = false; setDeviceVerificationModal({ visible: false, purpose: '' }); return true; }
+    if (state.syncSafetyModalVisible) { backNavigationStateRef.current.syncSafetyModalVisible = false; closeSyncSafetyModal(); return true; }
+    if (state.subscriptionActionModalVisible) { backNavigationStateRef.current.subscriptionActionModalVisible = false; setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' }); return true; }
+    if (state.verifyOverlayVisible) { backNavigationStateRef.current.verifyOverlayVisible = false; hideVerifyOverlay(); return true; }
+    if (state.pendingDeleteItemId) { backNavigationStateRef.current.pendingDeleteItemId = false; cancelDeleteItem(); return true; }
+    if (state.viewItemId) { backNavigationStateRef.current.viewItemId = false; closeViewItem(); return true; }
+    if (state.isItemPopupOpen) { backNavigationStateRef.current.isItemPopupOpen = false; closeItemPopup(); return true; }
+    if (state.isFolderPopupOpen) { backNavigationStateRef.current.isFolderPopupOpen = false; closeFolderPopup(); return true; }
+    if (state.folderManagerVisible) { backNavigationStateRef.current.folderManagerVisible = false; closeFolderManager(); return true; }
+    if (state.isFolderListPopupOpen) { backNavigationStateRef.current.isFolderListPopupOpen = false; setIsFolderListPopupOpen(false); return true; }
+    if (state.isCreateAccountPopupOpen) { backNavigationStateRef.current.isCreateAccountPopupOpen = false; setIsCreateAccountPopupOpen(false); return true; }
+    if (state.isCreateVaultPopupOpen) { backNavigationStateRef.current.isCreateVaultPopupOpen = false; setIsCreateVaultPopupOpen(false); return true; }
+    if (state.mobileHeaderMenuOpen) { backNavigationStateRef.current.mobileHeaderMenuOpen = false; setMobileHeaderMenuOpen(false); return true; }
+
+    if (state.locked) return false;
+
+    if (state.activePage !== 'home') {
+      backNavigationStateRef.current.activePage = 'home';
+      setActivePage('home');
+      setActiveSettingsSection('overview');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return true;
+    }
+
+    backNavigationStateRef.current.exitAppConfirmationOpen = true;
+    setExitAppConfirmationOpen(true);
+    return true;
+  }
+
   useEffect(() => {
     if (isEmergencyInviteRoute) return undefined;
 
-    const handleMobileBack = (event) => {
+    const isBackControlEnabled = () => {
+      const state = backNavigationStateRef.current;
+      return !state.locked || state.hasBackDismissibleLayer;
+    };
+
+    const completeBackAction = () => {
+      const consumed = consumeVaultBackAction();
+      if (consumed) restoreVaultBackGuardAfterAction();
+      else {
+        backGuardHandlingRef.current = false;
+        backGuardNavigationInterceptRef.current = false;
+      }
+      return consumed;
+    };
+
+    const handleCommittedBackTraversal = (event) => {
       if (allowBrowserExitRef.current) {
         browserExitStepsRef.current -= 1;
-        if (browserExitStepsRef.current > 0) {
-          window.history.back();
-        } else {
-          resetBrowserExitSequence();
+        if (browserExitStepsRef.current > 0) window.history.back();
+        else resetBrowserExitSequence();
+        return;
+      }
+
+      if (backGuardReleaseRef.current) {
+        backGuardReleaseRef.current = false;
+        backGuardHandlingRef.current = false;
+        backGuardRestoringRef.current = false;
+        backGuardNavigationInterceptRef.current = false;
+        clearBackGuardTimer(backGuardFallbackTimerRef);
+        clearBackGuardTimer(backGuardLockedReleaseTimerRef);
+        return;
+      }
+
+      if (backGuardRestoringRef.current && isCurrentVaultGuardEntry(event?.state || window.history.state)) {
+        backGuardNavigationInterceptRef.current = false;
+        finishVaultBackRestore();
+        return;
+      }
+
+      if (isCurrentVaultGuardEntry(event?.state || window.history.state)) return;
+      if (backGuardHandlingRef.current || backGuardNavigationInterceptRef.current) return;
+      if (!isBackControlEnabled()) return;
+
+      const crossedGuardBoundary = isCurrentVaultBaseEntry(event?.state || window.history.state)
+        || window.location.hash !== vaultBackGuardHash;
+      if (!crossedGuardBoundary) return;
+
+      backGuardHandlingRef.current = true;
+      completeBackAction();
+    };
+
+    // Chrome/Android exposes the navigation before the history traversal is
+    // committed. Intercepting the guard-to-base traversal gives the app a
+    // direct hardware-Back path; popstate and hashchange remain fallbacks for
+    // browsers that do not expose the Navigation API.
+    const handleNavigationTraversal = (event) => {
+      if (event?.navigationType !== 'traverse' || event?.userInitiated !== true) return;
+      if (allowBrowserExitRef.current || backGuardReleaseRef.current || backGuardRestoringRef.current) return;
+      if (backGuardHandlingRef.current || backGuardNavigationInterceptRef.current || !isBackControlEnabled()) return;
+
+      let destinationUrl;
+      try {
+        destinationUrl = new URL(event.destination.url);
+      } catch {
+        return;
+      }
+
+      const currentUrl = new URL(window.location.href);
+      const isSameVaultDocument = destinationUrl.origin === currentUrl.origin
+        && destinationUrl.pathname === currentUrl.pathname
+        && destinationUrl.search === currentUrl.search;
+      const crossesBackGuard = isSameVaultDocument
+        && currentUrl.hash === vaultBackGuardHash
+        && destinationUrl.hash !== vaultBackGuardHash;
+      if (!crossesBackGuard || event.canIntercept !== true) return;
+
+      backGuardNavigationInterceptRef.current = true;
+      backGuardHandlingRef.current = true;
+      clearBackGuardTimer(backGuardNavigationFallbackTimerRef);
+
+      try {
+        event.intercept({
+          focusReset: 'manual',
+          scroll: 'manual',
+          handler: async () => {
+            backGuardNavigationInterceptRef.current = false;
+            completeBackAction();
+          }
+        });
+
+        // A defensive fallback handles a browser that accepts intercept() but
+        // does not invoke its handler after the PWA Back gesture.
+        backGuardNavigationFallbackTimerRef.current = window.setTimeout(() => {
+          if (!backGuardNavigationInterceptRef.current) return;
+          const traversalCommitted = isCurrentVaultBaseEntry() || window.location.hash !== vaultBackGuardHash;
+          backGuardNavigationInterceptRef.current = false;
+          if (traversalCommitted) completeBackAction();
+          else backGuardHandlingRef.current = false;
+        }, 180);
+      } catch {
+        backGuardNavigationInterceptRef.current = false;
+        backGuardHandlingRef.current = false;
+      }
+    };
+
+    const handleHashBackFallback = () => {
+      clearBackGuardTimer(backGuardHashFallbackTimerRef);
+      backGuardHashFallbackTimerRef.current = window.setTimeout(() => {
+        if (!backGuardHandlingRef.current && !backGuardRestoringRef.current && window.location.hash !== vaultBackGuardHash) {
+          handleCommittedBackTraversal({ type: 'hashchange-fallback', state: window.history.state });
         }
-        return;
-      }
-
-      const state = backNavigationStateRef.current;
-      const backControlEnabled = !state.locked || state.hasBackDismissibleLayer || state.isVaultRoute;
-      if (!backControlEnabled) return;
-
-      const customOverlayOpen = Boolean(document.querySelector('.custom-select-menu, .country-picker-layer'));
-      const hasInternalLayer = customOverlayOpen || state.hasBackDismissibleLayer;
-
-      // Every unlocked app screen, and every dismissible layer on the locked
-      // screen, gets a fresh same-page guard before any UI state is changed.
-      if (!state.locked || hasInternalLayer) ensureVaultBackGuard();
-
-      if (customOverlayOpen) {
-        window.dispatchEvent(new CustomEvent('my-passwords-close-overlay'));
-        return;
-      }
-      if (state.exitAppConfirmationOpen) { backNavigationStateRef.current.exitAppConfirmationOpen = false; setExitAppConfirmationOpen(false); return; }
-      if (state.accountSecurityModalVisible) { backNavigationStateRef.current.accountSecurityModalVisible = false; closeAccountSecurityModal(); return; }
-      if (state.accountRecoveryModalVisible) { backNavigationStateRef.current.accountRecoveryModalVisible = false; setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false }); return; }
-      if (state.entitlementModalVisible) { backNavigationStateRef.current.entitlementModalVisible = false; setEntitlementModal({ visible: false, feature: '', title: '', message: '' }); return; }
-      if (state.deviceVerificationModalVisible) { backNavigationStateRef.current.deviceVerificationModalVisible = false; setDeviceVerificationModal({ visible: false, purpose: '' }); return; }
-      if (state.syncSafetyModalVisible) { backNavigationStateRef.current.syncSafetyModalVisible = false; closeSyncSafetyModal(); return; }
-      if (state.subscriptionActionModalVisible) { backNavigationStateRef.current.subscriptionActionModalVisible = false; setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' }); return; }
-      if (state.verifyOverlayVisible) { backNavigationStateRef.current.verifyOverlayVisible = false; hideVerifyOverlay(); return; }
-      if (state.pendingDeleteItemId) { backNavigationStateRef.current.pendingDeleteItemId = false; cancelDeleteItem(); return; }
-      if (state.viewItemId) { backNavigationStateRef.current.viewItemId = false; closeViewItem(); return; }
-      if (state.isItemPopupOpen) { backNavigationStateRef.current.isItemPopupOpen = false; closeItemPopup(); return; }
-      if (state.isFolderPopupOpen) { backNavigationStateRef.current.isFolderPopupOpen = false; closeFolderPopup(); return; }
-      if (state.folderManagerVisible) { backNavigationStateRef.current.folderManagerVisible = false; closeFolderManager(); return; }
-      if (state.isFolderListPopupOpen) { backNavigationStateRef.current.isFolderListPopupOpen = false; setIsFolderListPopupOpen(false); return; }
-      if (state.isCreateAccountPopupOpen) { backNavigationStateRef.current.isCreateAccountPopupOpen = false; setIsCreateAccountPopupOpen(false); return; }
-      if (state.isCreateVaultPopupOpen) { backNavigationStateRef.current.isCreateVaultPopupOpen = false; setIsCreateVaultPopupOpen(false); return; }
-      if (state.mobileHeaderMenuOpen) { backNavigationStateRef.current.mobileHeaderMenuOpen = false; setMobileHeaderMenuOpen(false); return; }
-
-      // The locked vault page is not the Passwords home page. If a guard entry
-      // exists from an earlier unlocked session, consume it and continue the
-      // native Back action without ever showing the leave-app popup.
-      if (state.locked) {
-        if (event.state?.[vaultBackGuardKey] === 'base') startBrowserExit(1);
-        return;
-      }
-
-      if (state.activePage !== 'home') {
-        backNavigationStateRef.current.activePage = 'home';
-        setActivePage('home');
-        setActiveSettingsSection('overview');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      }
-
-      // The unlocked password-search screen is the one and only app home. Its
-      // first device Back press always opens the leave confirmation.
-      backNavigationStateRef.current.exitAppConfirmationOpen = true;
-      setExitAppConfirmationOpen(true);
+      }, 30);
     };
 
-    const maintainBackGuard = (event) => {
-      const state = backNavigationStateRef.current;
-      if (!state.locked || state.hasBackDismissibleLayer || state.isVaultRoute) {
-        if (event?.persisted) backGuardArmedRef.current = false;
-        ensureVaultBackGuard({ forceFresh: Boolean(event?.persisted) });
-      }
+    const maintainBackGuard = () => {
+      if (allowBrowserExitRef.current || backGuardReleaseRef.current || backGuardRestoringRef.current || backGuardHandlingRef.current) return;
+      if (isBackControlEnabled()) ensureVaultBackGuard();
     };
 
-    window.addEventListener('popstate', handleMobileBack);
+    const maintainVisibleBackGuard = () => {
+      if (document.visibilityState === 'visible') window.setTimeout(maintainBackGuard, 0);
+    };
+
+    window.addEventListener('popstate', handleCommittedBackTraversal);
+    window.addEventListener('hashchange', handleHashBackFallback);
     window.addEventListener('pageshow', maintainBackGuard);
+    window.addEventListener('focus', maintainBackGuard);
+    document.addEventListener('visibilitychange', maintainVisibleBackGuard);
+    window.navigation?.addEventListener?.('navigate', handleNavigationTraversal);
+
+    // Keep a lightweight integrity check while the app is open. It repairs a
+    // guard removed by a browser/PWA resume without changing app UI state.
+    backGuardIntegrityTimerRef.current = window.setInterval(maintainBackGuard, 1500);
+
     return () => {
-      window.removeEventListener('popstate', handleMobileBack);
+      window.removeEventListener('popstate', handleCommittedBackTraversal);
+      window.removeEventListener('hashchange', handleHashBackFallback);
       window.removeEventListener('pageshow', maintainBackGuard);
+      window.removeEventListener('focus', maintainBackGuard);
+      document.removeEventListener('visibilitychange', maintainVisibleBackGuard);
+      window.navigation?.removeEventListener?.('navigate', handleNavigationTraversal);
+      clearBackGuardTimer(backGuardHashFallbackTimerRef);
+      clearBackGuardTimer(backGuardNavigationFallbackTimerRef);
+      clearBackGuardTimer(backGuardFallbackTimerRef);
+      clearBackGuardTimer(backGuardLockedReleaseTimerRef);
+      if (backGuardIntegrityTimerRef.current) {
+        window.clearInterval(backGuardIntegrityTimerRef.current);
+        backGuardIntegrityTimerRef.current = null;
+      }
+      backGuardNavigationInterceptRef.current = false;
     };
   }, [isEmergencyInviteRoute]);
 
   useEffect(() => {
-    if (isEmergencyInviteRoute || (locked && !hasBackDismissibleLayer)) return;
-    ensureVaultBackGuard();
+    if (isEmergencyInviteRoute) return undefined;
+
+    if (!locked || hasBackDismissibleLayer) {
+      const timer = window.setTimeout(() => ensureVaultBackGuard(), 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    releaseVaultBackGuardForLockedScreen();
+    return undefined;
   }, [isEmergencyInviteRoute, locked, hasBackDismissibleLayer]);
 
   function confirmExitApp() {
     backNavigationStateRef.current.exitAppConfirmationOpen = false;
     setExitAppConfirmationOpen(false);
-    const steps = window.history.state?.[vaultBackGuardKey] === 'guard' ? 2 : 1;
+    const steps = isCurrentVaultGuardEntry() ? 2 : 1;
     startBrowserExit(steps);
   }
 
