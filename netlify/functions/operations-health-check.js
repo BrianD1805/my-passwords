@@ -4,18 +4,36 @@ import { finishScheduledCheck, recordFunctionFailure, recordOperationalEvent, re
 import { sendOperationalAlert } from './_operational-alert.js';
 
 function gte(value) { return `gte.${encodeURIComponent(value)}`; }
+function gt(value) { return `gt.${encodeURIComponent(value)}`; }
+
+export function latestSyncConflictWindowStart(since24h, resolvedAt = '') {
+  const sinceMs = new Date(since24h).getTime();
+  const resolvedMs = resolvedAt ? new Date(resolvedAt).getTime() : NaN;
+  if (Number.isFinite(resolvedMs) && (!Number.isFinite(sinceMs) || resolvedMs > sinceMs)) return new Date(resolvedMs).toISOString();
+  return new Date(sinceMs).toISOString();
+}
 
 export async function runOperationsHealthCheck({ triggerSource = 'scheduled' } = {}) {
   const run = await startScheduledCheck('operations_health', triggerSource);
   const since24h = new Date(Date.now() - 24 * 3600000).toISOString();
   try {
+    // A resolved aggregate sync-conflict alert is an acknowledgement checkpoint.
+    // Historical conflict rows at or before that checkpoint stay in the audit log,
+    // but must not reopen the same warning on every 24-hour health sweep.
+    const resolvedSyncConflictAlerts = await selectRows(
+      'operational_events',
+      'select=id,resolved_at&source=eq.vault_sync&event_type=eq.sync_conflicts&status=eq.resolved&order=resolved_at.desc&limit=1'
+    ).catch(() => []);
+    const latestResolvedSyncConflictAt = resolvedSyncConflictAlerts?.[0]?.resolved_at || '';
+    const syncConflictWindowStart = latestSyncConflictWindowStart(since24h, latestResolvedSyncConflictAt);
+
     const [dbProbe, failedWebhooks, failedCustomerEmails, failedAdminEmails, backupFailures, syncConflicts, functionFailures, processorRuns] = await Promise.all([
       selectRows('tenants', 'select=id&limit=1').then(() => true).catch(() => false),
       selectRows('stripe_webhook_events', 'select=id,event_id,event_type,attempts,error_message,updated_at&status=eq.failed&order=updated_at.desc&limit=100'),
       selectRows('customer_email_log', `select=id,status,email_type,last_attempt_at&status=eq.failed&last_attempt_at=${gte(since24h)}&limit=500`),
       selectRows('admin_email_log', `select=id,status,email_type,created_at&status=eq.failed&created_at=${gte(since24h)}&limit=500`),
       selectRows('vault_sync_events', `select=id,event_type,status,created_at&status=eq.error&created_at=${gte(since24h)}&limit=500`),
-      selectRows('vault_sync_events', `select=id,event_type,status,created_at&event_type=eq.backup_conflict_blocked&created_at=${gte(since24h)}&limit=500`),
+      selectRows('vault_sync_events', `select=id,event_type,status,created_at&event_type=eq.backup_conflict_blocked&created_at=${gt(syncConflictWindowStart)}&limit=500`),
       selectRows('operational_events', `select=id,source,event_type,severity,last_seen_at&event_type=eq.function_failure&status=eq.open&last_seen_at=${gte(since24h)}&limit=500`),
       selectRows('email_processor_runs', 'select=processor_type,status,finished_at,started_at&order=started_at.desc&limit=50')
     ]);
@@ -38,7 +56,10 @@ export async function runOperationsHealthCheck({ triggerSource = 'scheduled' } =
 
     for (const alert of alerts) {
       if (alert.condition) {
-        const eventRow = await recordOperationalEvent({ source: alert.source, eventType: alert.type, severity: alert.severity, errorCode: alert.code, message: alert.message });
+        const eventRow = await recordOperationalEvent({
+          source: alert.source, eventType: alert.type, severity: alert.severity, errorCode: alert.code, message: alert.message,
+          incrementOccurrenceOnDedupe: alert.type !== 'sync_conflicts'
+        });
         if (alert.type === 'stripe_webhook_failure_alert' && eventRow?.id && process.env.OPS_ALERT_EMAIL) {
           const metadata = eventRow.metadata && typeof eventRow.metadata === 'object' ? eventRow.metadata : {};
           const lastAttemptMs = metadata.alertEmailLastAttemptAt ? new Date(metadata.alertEmailLastAttemptAt).getTime() : 0;
@@ -79,6 +100,7 @@ export async function runOperationsHealthCheck({ triggerSource = 'scheduled' } =
       resendFailures24h: emailFailures,
       backupFailures24h: backupFailures.length,
       syncConflicts24h: syncConflicts.length,
+      syncConflictAcknowledgedThrough: latestResolvedSyncConflictAt || null,
       functionFailures24h: functionFailures.length,
       lifecycleProcessorStale: lifecycleStale,
       emergencyProcessorStale: emergencyStale

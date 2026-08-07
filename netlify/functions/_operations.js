@@ -57,7 +57,8 @@ export async function recordOperationalEvent({
   userId = null,
   metadata = {},
   fingerprint = '',
-  dedupe = true
+  dedupe = true,
+  incrementOccurrenceOnDedupe = true
 }) {
   const safeSeverity = ['info', 'warning', 'error', 'critical'].includes(String(severity)) ? String(severity) : 'info';
   const safeStatus = status === 'resolved' ? 'resolved' : 'open';
@@ -76,7 +77,7 @@ export async function recordOperationalEvent({
         severity: safeSeverity,
         error_code: safeErrorCode || null,
         message: safeMessage,
-        occurrence_count: Number(existing[0].occurrence_count || 1) + 1,
+        occurrence_count: incrementOccurrenceOnDedupe ? Number(existing[0].occurrence_count || 1) + 1 : Number(existing[0].occurrence_count || 1),
         metadata: sanitiseOperationalMetadata({ ...(existing[0].metadata || {}), ...safeMetadata }),
         last_seen_at: now,
         retention_until: retentionDate(safeSeverity),
