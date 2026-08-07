@@ -1,6 +1,7 @@
-export const APP_VERSION = 'My Passwords Ver-0.050';
+export const APP_VERSION = 'My Passwords Ver-0.051';
 
 export function jsonResponse(statusCode, body, extraHeaders = {}) {
+  if (Number(statusCode) >= 500) queueFunctionFailureResponse(statusCode, body);
   return {
     statusCode,
     headers: {
@@ -15,6 +16,21 @@ export function jsonResponse(statusCode, body, extraHeaders = {}) {
     body: JSON.stringify(body, null, 2)
   };
 }
+
+function queueFunctionFailureResponse(statusCode, body = {}) {
+  const source = String(process.env.NETLIFY_FUNCTION_NAME || process.env.AWS_LAMBDA_FUNCTION_NAME || 'server_function')
+    .replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 160);
+  const errorCode = String(body?.code || body?.errorCode || 'HTTP_5XX').replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 120);
+  Promise.resolve().then(async () => {
+    const { recordOperationalEvent } = await import('./_operations.js');
+    await recordOperationalEvent({
+      source, eventType: 'function_failure', severity: 'error', errorCode,
+      message: 'A server function returned an HTTP 5xx response.',
+      metadata: { httpStatus: Number(statusCode || 500) }
+    });
+  }).catch(() => null);
+}
+
 
 export function getSupabaseConfig() {
   return {
@@ -36,6 +52,9 @@ export function getEnvironmentFlags() {
     has_URL: Boolean(process.env.URL),
     has_RESEND_API_KEY: Boolean(process.env.RESEND_API_KEY),
     has_OTP_EMAIL_FROM: Boolean(process.env.OTP_EMAIL_FROM),
+    has_OPS_ALERT_EMAIL: Boolean(process.env.OPS_ALERT_EMAIL),
+    has_SUPABASE_ACCESS_TOKEN: Boolean(process.env.SUPABASE_ACCESS_TOKEN),
+    has_SUPABASE_PROJECT_REF: Boolean(process.env.SUPABASE_PROJECT_REF),
     has_TWILIO_ACCOUNT_SID: Boolean(process.env.TWILIO_ACCOUNT_SID),
     has_TWILIO_AUTH_TOKEN: Boolean(process.env.TWILIO_AUTH_TOKEN),
     has_TWILIO_VERIFY_SERVICE_SID: Boolean(process.env.TWILIO_VERIFY_SERVICE_SID),

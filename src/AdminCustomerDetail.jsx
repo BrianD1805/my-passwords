@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Ban, CalendarClock, Check, Cloud, CreditCard, FileText, Mail, RefreshCw, Save, ShieldCheck, Trash2, UserRoundCheck } from 'lucide-react';
+import { ArrowLeft, Ban, CalendarClock, Check, ClipboardCopy, Cloud, CreditCard, FileText, Mail, RefreshCw, Save, ShieldCheck, Trash2, UserRoundCheck } from 'lucide-react';
 import CustomSelect from './CustomSelect.jsx';
 
 async function requestJson(url, options = {}) {
@@ -73,6 +73,7 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
   const [note, setNote] = useState('');
   const [trialDays, setTrialDays] = useState('7');
   const [emailType, setEmailType] = useState('');
+  const [supportReport, setSupportReport] = useState(null);
 
   useEffect(() => { loadDetail(); }, [customerId]);
 
@@ -127,6 +128,28 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
       setNote('');
       await loadDetail();
       if (onChanged) await onChanged();
+    }
+    return result;
+  }
+
+  async function generateDiagnostics() {
+    setBusy(true);
+    const result = await requestJson('/.netlify/functions/admin-customer-detail', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'generate_diagnostics', tenantId: customerId })
+    });
+    setBusy(false);
+    if (result.httpStatus === 401 && onSessionExpired) { onSessionExpired(result.message || 'Admin sign-in is required.'); return; }
+    setNotice(result.message || (result.ok ? 'Metadata-only support diagnostics generated.' : 'Support diagnostics could not be generated.'));
+    if (result.ok) setSupportReport(result.report || null);
+  }
+
+  async function copyDiagnostics() {
+    if (!supportReport) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(supportReport, null, 2));
+      setNotice('Support diagnostics copied.');
+    } catch {
+      setNotice('Could not copy diagnostics automatically. Select the report text and copy it manually.');
     }
   }
 
@@ -189,6 +212,13 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
       <section className="admin-security-boundary">
         <ShieldCheck size={22} />
         <div><strong>Operational access only</strong><span>{detail.securityBoundary?.message}</span></div>
+      </section>
+
+      <section className="admin-panel admin-support-diagnostics">
+        <div className="admin-panel-heading"><div><p className="eyebrow">Customer support</p><h2>Safe diagnostics report</h2></div><span className="admin-status success">Metadata only</span></div>
+        <p className="admin-panel-intro">Generate a support report for account, session, device, sync, backup, billing and operational status. Passwords, vault contents, encrypted payloads, document contents, OTPs and recovery codes are excluded.</p>
+        <div className="admin-support-diagnostics-actions"><button type="button" className="secondary-button" onClick={generateDiagnostics} disabled={busy}><FileText size={17} /> Generate diagnostics</button>{supportReport && <button type="button" className="secondary-button" onClick={copyDiagnostics} disabled={busy}><ClipboardCopy size={17} /> Copy report</button>}</div>
+        {supportReport && <pre className="admin-support-diagnostics-report">{JSON.stringify(supportReport, null, 2)}</pre>}
       </section>
 
       <div className="admin-detail-metrics">

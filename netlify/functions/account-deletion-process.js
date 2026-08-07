@@ -2,6 +2,7 @@ import { APP_VERSION, deleteRow, selectRows, updateRow } from './_db.js';
 import { stripeConfigured, stripeRequest } from './_stripe.js';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { loadCustomerEmailContext, sendCustomerLifecycleEmail } from './_customer-email.js';
+import { finishScheduledCheck, recordOperationalEvent, startScheduledCheck } from './_operations.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 function lte(value) { return `lte.${encodeURIComponent(value)}`; }
@@ -72,6 +73,7 @@ async function retryPendingCompletionEmails() {
 
 export async function handler() {
   const now = new Date().toISOString();
+  const checkRun = await startScheduledCheck('account_deletion_processing', 'scheduled');
   const due = await selectRows('account_deletion_requests', `select=*&status=${eq('pending')}&scheduled_for=${lte(now)}&order=scheduled_for.asc&limit=5`).catch(() => []);
   const results = [];
 
@@ -138,10 +140,23 @@ export async function handler() {
         metadata: { ...(request.metadata || {}), version: APP_VERSION, last_processing_error: String(error.message || error).slice(0, 800), stripe_cancellation: stripeCancellation }
       }).catch(() => null);
       results.push({ requestId: request.id, status: 'failed', error: String(error.message || error) });
+      await recordOperationalEvent({
+        source: 'account-deletion-process', eventType: 'account_deletion_processing_failure', severity: 'error',
+        errorCode: error?.code || error?.name || 'ACCOUNT_DELETION_PROCESSING_FAILED',
+        message: 'A scheduled account deletion could not complete safely and remains pending.',
+        tenantId: request.tenant_id, metadata: { requestId: request.id, stripeCancellationAttempted: stripeCancellation.attempted }
+      });
     }
   }
 
   const completionEmailRetries = await retryPendingCompletionEmails();
+  const processingFailures = results.filter((row) => row.status === 'failed').length;
+  const retryFailures = completionEmailRetries.filter((row) => !row.sent && row.reason && row.reason !== 'already_sent').length;
+  const issuesFound = processingFailures + retryFailures;
+  await finishScheduledCheck(checkRun, {
+    status: issuesFound ? 'warning' : 'success', itemsChecked: (due || []).length + completionEmailRetries.length, issuesFound,
+    summary: { due: (due || []).length, completed: results.filter((row) => row.status === 'completed').length, processingFailures, completionEmailRetryFailures: retryFailures }
+  });
   console.log(JSON.stringify({ version: APP_VERSION, checkedAt: now, processed: results.length, results, completionEmailRetries }));
   return { statusCode: 200, body: JSON.stringify({ ok: true, version: APP_VERSION, processed: results.length, results, completionEmailRetries }) };
 }

@@ -1,4 +1,5 @@
 import { APP_VERSION, insertRow, publicId, selectRows, updateRow } from './_db.js';
+import { finishScheduledCheck, recordFunctionFailure, recordOperationalEvent, startScheduledCheck } from './_operations.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 function lte(value) { return `lte.${encodeURIComponent(value)}`; }
@@ -151,18 +152,32 @@ async function finishProcessorRun(run, values) {
 export async function runEmergencyAccessReleaseProcessor({ triggerSource = 'scheduled' } = {}) {
   const checkedAt = new Date().toISOString();
   const run = await startProcessorRun('emergency_access_release', triggerSource);
+  const checkRun = await startScheduledCheck('emergency_access_release', triggerSource);
   try {
     const due = await selectRows('emergency_access_requests', `select=*&status=in.(requested,waiting,owner_notified,release_ready)&waiting_ends_at=${lte(checkedAt)}&order=waiting_ends_at.asc&limit=100`);
     const results = [];
     for (const request of due || []) results.push(await processRequest(request));
     const sent = results.filter((row) => row.email === 'sent').length;
-    const failed = results.filter((row) => row.email === 'failed').length;
+    const failedRows = results.filter((row) => row.email === 'failed');
+    const failed = failedRows.length;
     const payload = { ok: true, version: APP_VERSION, checkedAt, triggerSource, due: due.length, processed: results.length, sent, failed, results };
-    await finishProcessorRun(run, { status: 'success', items_checked: due.length, email_actions: results.length, result_summary: { sent, failed } });
+    await finishProcessorRun(run, { status: failed ? 'warning' : 'success', items_checked: due.length, email_actions: results.length, result_summary: { sent, failed } });
+    await finishScheduledCheck(checkRun, { status: failed ? 'warning' : 'success', itemsChecked: due.length, issuesFound: failed, summary: { due: due.length, processed: results.length, sent, failed } });
+    for (const failedRow of failedRows) {
+      const request = (due || []).find((candidate) => candidate.id === failedRow.requestId);
+      await recordOperationalEvent({
+        source: 'resend', eventType: 'resend_delivery_failure', severity: 'error', errorCode: 'EMERGENCY_RELEASE_EMAIL_FAILED',
+        message: 'Emergency Access release-ready email delivery failed.',
+        tenantId: request?.tenant_id || null, userId: request?.user_id || null,
+        metadata: { emailType: 'emergency_access_release_ready', processor: 'emergency_access_release', triggerSource }
+      });
+    }
     console.log(JSON.stringify(payload));
     return payload;
   } catch (error) {
     await finishProcessorRun(run, { status: 'failed', error_message: String(error.message || 'Emergency Access release processor failed.').slice(0, 1000) });
+    await finishScheduledCheck(checkRun, { status: 'failed', errorCode: error?.code || error?.name || 'EMERGENCY_ACCESS_CHECK_FAILED', errorMessage: error?.message || 'Emergency Access release processor failed.' });
+    await recordFunctionFailure('emergency-access-release-process', error, { triggerSource });
     throw error;
   }
 }

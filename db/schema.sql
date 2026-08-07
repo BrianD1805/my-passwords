@@ -501,3 +501,9 @@ grant select, insert, update, delete on public.email_processor_runs to service_r
 -- The migration enables RLS on all sensitive tables, revokes browser-role access,
 -- makes the vault-save RPC server-only and adds atomic rate limiting, idempotency,
 -- persistent Admin sessions and Stripe webhook replay protection.
+
+-- My Passwords Ver-0.051
+-- Apply db/migrations/2026-08-07_reliability_monitoring_recovery_ver_0_051.sql
+-- to add metadata-only operational events, scheduled check history and safe
+-- Stripe reconciliation preview/apply records. No vault content is stored in
+-- these operational tables.

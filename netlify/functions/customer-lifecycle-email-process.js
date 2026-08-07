@@ -2,6 +2,7 @@ import { APP_VERSION, insertRow, publicId, selectRows, updateRow } from './_db.j
 import { recordLifecycleEvent } from './_trial.js';
 import { refreshStripeSubscriptionForTenant } from './_subscription-lifecycle.js';
 import { sendCustomerLifecycleEmail } from './_customer-email.js';
+import { finishScheduledCheck, recordFunctionFailure, startScheduledCheck } from './_operations.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 
@@ -86,6 +87,7 @@ export async function runCustomerLifecycleEmailProcessor({ triggerSource = 'sche
   const startedAt = new Date().toISOString();
   const source = triggerSource === 'admin' ? 'admin_lifecycle_processor' : 'scheduled_lifecycle_processor';
   const run = await startProcessorRun('customer_lifecycle', triggerSource);
+  const checkRun = await startScheduledCheck('customer_lifecycle_email', triggerSource);
   const results = [];
   try {
     const [tenants, subscriptions, users, plans] = await Promise.all([
@@ -186,11 +188,14 @@ export async function runCustomerLifecycleEmailProcessor({ triggerSource = 'sche
     const skipped = results.filter((row) => row.skipped).length;
     const failed = results.length - sent - skipped;
     const payload = { ok: true, version: APP_VERSION, startedAt, finishedAt, triggerSource, tenantsChecked: tenants.length, emailActions: results.length, sent, skipped, failed, results };
-    await finishProcessorRun(run, { status: 'success', items_checked: tenants.length, email_actions: results.length, result_summary: { sent, skipped, failed } });
+    await finishProcessorRun(run, { status: failed ? 'warning' : 'success', items_checked: tenants.length, email_actions: results.length, result_summary: { sent, skipped, failed } });
+    await finishScheduledCheck(checkRun, { status: failed ? 'warning' : 'success', itemsChecked: tenants.length, issuesFound: failed, summary: { sent, skipped, failed, emailActions: results.length } });
     console.log(JSON.stringify(payload));
     return payload;
   } catch (error) {
     await finishProcessorRun(run, { status: 'failed', error_message: String(error.message || 'Lifecycle email processor failed.').slice(0, 1000), result_summary: { completedActions: results.length } });
+    await finishScheduledCheck(checkRun, { status: 'failed', itemsChecked: results.length, issuesFound: 1, errorCode: error?.code || error?.name || 'CUSTOMER_LIFECYCLE_PROCESSOR_FAILED', errorMessage: error?.message || 'Lifecycle email processor failed.' });
+    await recordFunctionFailure('customer-lifecycle-email-process', error, { triggerSource });
     throw error;
   }
 }

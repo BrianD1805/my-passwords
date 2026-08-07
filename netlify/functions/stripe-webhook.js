@@ -2,6 +2,7 @@ import { APP_VERSION, jsonResponse, selectRows, supabaseRequest, updateRow, upse
 import { stripeObjectId, stripeRequest, stripeTimestampToIso, stripeWebhookConfigured, verifyStripeWebhook } from './_stripe.js';
 import { processStripeInvoiceObject, syncStripeSubscriptionObject } from './_subscription-lifecycle.js';
 import { sendCustomerLifecycleEmailForTenant } from './_customer-email.js';
+import { recordFunctionFailure, recordOperationalEvent } from './_operations.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -219,7 +220,7 @@ export async function handler(event) {
   try {
     webhookClaim = await claimWebhookEvent(stripeEvent);
   } catch (error) {
-    return jsonResponse(503, { ok: false, version: APP_VERSION, code: 'WEBHOOK_REPLAY_GUARD_UNAVAILABLE', message: 'Stripe event replay protection is not available. Apply the Ver-0.050 security migration.' });
+    return jsonResponse(503, { ok: false, version: APP_VERSION, code: 'WEBHOOK_REPLAY_GUARD_UNAVAILABLE', message: 'Stripe event replay protection is not available. Apply the required database migrations through Ver-0.051.' });
   }
   if (webhookClaim.duplicate) return jsonResponse(200, { ok: true, version: APP_VERSION, duplicate: true, processing: Boolean(webhookClaim.processing), message: webhookClaim.processing ? 'Stripe event is already being processed.' : 'Stripe event already processed.' });
 
@@ -264,6 +265,10 @@ export async function handler(event) {
     return jsonResponse(200, { ok: true, version: APP_VERSION, received: true, lifecycleEmails });
   } catch (error) {
     await finishWebhookEvent(webhookClaim, 'failed', error.message || 'Stripe event processing failed.');
+    const object = stripeEvent?.data?.object || {};
+    const tenantId = String(object.client_reference_id || metadataValue(object, 'my_passwords_tenant_id') || '');
+    await recordOperationalEvent({ source: 'stripe_webhook', eventType: 'stripe_webhook_processing_failure', severity: 'critical', errorCode: error?.code || error?.name || 'STRIPE_WEBHOOK_FAILED', message: 'A verified Stripe webhook event failed during processing.', tenantId: tenantId || null, metadata: { eventType: stripeEvent?.type || '', eventId: stripeEvent?.id || '', attempts: Number(webhookClaim?.row?.attempts || 0) } });
+    await recordFunctionFailure('stripe-webhook', error, { tenantId: tenantId || null, action: stripeEvent?.type || 'stripe_event' });
     return jsonResponse(500, { ok: false, version: APP_VERSION, message: `Stripe event processing failed: ${error.message}`, details: error.details || null });
   }
 }

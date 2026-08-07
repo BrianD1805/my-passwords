@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.050';
+const VERSION = 'My Passwords Ver-0.051';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1034,6 +1034,34 @@ async function postJson(url, payload, options = {}) {
   }
   return data;
 }
+
+let lastClientErrorReportAt = 0;
+async function reportClientRuntimeError(payload) {
+  if (Date.now() - lastClientErrorReportAt < 60000) return;
+  lastClientErrorReportAt = Date.now();
+  try {
+    await postJson('/.netlify/functions/client-error-report', {
+      kind: payload.kind || 'client_runtime_error',
+      errorName: String(payload.errorName || 'Error').slice(0, 100),
+      script: String(payload.script || '').slice(0, 240),
+      line: Number(payload.line || 0),
+      column: Number(payload.column || 0),
+      route: window.location.pathname,
+      online: navigator.onLine
+    });
+  } catch {
+    // Operational reporting must never interfere with vault use.
+  }
+}
+
+window.addEventListener('error', (event) => {
+  reportClientRuntimeError({
+    kind: 'window_error', errorName: event.error?.name || 'Error', script: event.filename || '', line: event.lineno || 0, column: event.colno || 0
+  });
+});
+window.addEventListener('unhandledrejection', (event) => {
+  reportClientRuntimeError({ kind: 'unhandled_rejection', errorName: event.reason?.name || typeof event.reason || 'UnhandledRejection' });
+});
 
 function shortId(value) {
   if (!value) return '';

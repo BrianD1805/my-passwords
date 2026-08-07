@@ -10,6 +10,88 @@ function parseJson(value) { if (!value) return {}; if (typeof value === 'object'
 function dateValue(value) { const time = value ? new Date(value).getTime() : 0; return Number.isFinite(time) ? time : 0; }
 function titleCase(value) { return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
+function maskPhone(value) {
+  const phone = String(value || '').trim();
+  if (!phone) return '';
+  return phone.length <= 7 ? `${phone.slice(0, 3)}***` : `${phone.slice(0, 4)}***${phone.slice(-3)}`;
+}
+
+async function buildSupportDiagnostics(detail, tenantId) {
+  const now = new Date().toISOString();
+  const [operationalEvents, documents] = await Promise.all([
+    safeSelect('operational_events', `select=id,source,event_type,severity,status,error_code,occurrence_count,last_seen_at&tenant_id=${eq(tenantId)}&order=last_seen_at.desc&limit=100`),
+    safeSelect('document_blobs', `select=id,created_at&tenant_id=${eq(tenantId)}&limit=1000`)
+  ]);
+  const primary = detail.primaryUser || {};
+  const subscription = detail.subscription || {};
+  const latestSync = detail.syncEvents?.[0] || null;
+  const failedEmails = [...(detail.emailLog || []), ...(detail.customerEmailLog || [])].filter((row) => String(row.status || '').toLowerCase() === 'failed');
+  const syncConflicts = (detail.syncEvents || []).filter((row) => row.event_type === 'backup_conflict_blocked');
+  const activeSessions = (detail.sessions || []).filter((row) => String(row.status || '').toLowerCase() === 'active' && dateValue(row.expires_at) > Date.now());
+  const verifiedDevices = (detail.devices || []).filter((row) => !row.revoked_at);
+  return {
+    reportType: 'my_passwords_customer_support_diagnostics',
+    version: APP_VERSION,
+    generatedAt: now,
+    account: {
+      tenantId,
+      accountName: detail.tenant?.account_name || detail.tenant?.name || '',
+      accountStatus: detail.tenant?.account_status || '',
+      planCode: subscription.plan_code || detail.tenant?.plan_code || '',
+      planStatus: subscription.status || detail.tenant?.plan_status || '',
+      userCount: detail.users?.length || 0,
+      ownerEmailMasked: maskEmail(primary.email || ''),
+      ownerPhoneMasked: maskPhone(primary.phone_e164 || ''),
+      emailVerified: Boolean(primary.email_verified),
+      phoneVerified: Boolean(primary.phone_verified)
+    },
+    sessionsAndDevices: {
+      activeSessionCount: activeSessions.length,
+      verifiedDeviceCount: verifiedDevices.length,
+      lastSuccessfulSignInAt: detail.operationalSummary?.lastSignInAt || null,
+      lastVerificationAt: detail.operationalSummary?.lastVerificationAt || null
+    },
+    backupAndSync: {
+      snapshotCount: detail.snapshots?.length || 0,
+      lastSuccessfulBackupAt: detail.operationalSummary?.lastSuccessfulBackupAt || null,
+      lastSuccessfulBackupItems: Number(detail.operationalSummary?.lastSuccessfulBackupItems || 0),
+      latestSyncEventType: latestSync?.event_type || '',
+      latestSyncStatus: latestSync?.status || '',
+      latestSyncAt: latestSync?.created_at || null,
+      syncConflictCountInLoadedHistory: syncConflicts.length,
+      documentCount: documents.length
+    },
+    billing: {
+      provider: subscription.provider || '',
+      status: subscription.status || '',
+      billingInterval: subscription.billing_interval || '',
+      lastStripeSyncAt: subscription.last_stripe_sync_at || null,
+      lastStripeSyncStatus: subscription.last_stripe_sync_status || '',
+      duplicateSubscriptionCount: Number(subscription.duplicate_subscription_count || 0),
+      currentPeriodEnd: subscription.current_period_end || null,
+      cancellationScheduled: Boolean(subscription.cancel_at_period_end)
+    },
+    communications: {
+      failedEmailCountInLoadedHistory: failedEmails.length,
+      latestAutomatedEmailAt: detail.customerEmailLog?.[0]?.last_attempt_at || detail.customerEmailLog?.[0]?.created_at || null
+    },
+    operationalEvents: operationalEvents.map((row) => ({
+      id: row.id, source: row.source, eventType: row.event_type, severity: row.severity, status: row.status,
+      errorCode: row.error_code || '', occurrenceCount: Number(row.occurrence_count || 1), lastSeenAt: row.last_seen_at
+    })),
+    deletionStatus: detail.operationalSummary?.deletionStatus || 'none',
+    dataBoundary: {
+      metadataOnly: true,
+      containsPasswords: false,
+      containsVaultContents: false,
+      containsEncryptedVaultPayloads: false,
+      containsDocumentContents: false,
+      containsOtpOrRecoveryCodes: false,
+      containsProviderSecrets: false
+    }
+  };
+}
+
 async function safeSelect(table, query) {
   return selectRows(table, query).catch(() => []);
 }
@@ -220,6 +302,12 @@ export async function handler(event) {
   try {
     const detail = await loadCustomerDetail(tenantId);
     if (!detail) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Customer account was not found.' });
+
+    if (action === 'generate_diagnostics') {
+      const report = await buildSupportDiagnostics(detail, tenantId);
+      await audit(session, 'admin_customer_diagnostics_generated', { tenant_id: tenantId, message: 'Metadata-only customer support diagnostics generated.' });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, report, message: 'Metadata-only support diagnostics generated.' });
+    }
 
     if (action === 'add_note') {
       const note = safeText(body.note, 4000);

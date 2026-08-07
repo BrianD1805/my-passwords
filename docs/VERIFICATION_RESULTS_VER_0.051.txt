@@ -1,0 +1,42 @@
+My Passwords Ver-0.051 — Patch verification
+Date: 2026-08-07
+
+PASS  Vault server identity comes from validated session
+PASS  Documents are scoped to session tenant and user
+PASS  Account profile is scoped to session tenant and user
+PASS  Billing context is derived from validated customer session
+PASS  Emergency Access owner identity is overwritten from session
+PASS  Production cookies use __Host prefix and SameSite Strict
+PASS  Production session signing requires dedicated secrets
+PASS  Security HMAC controls require dedicated production session secret
+PASS  Stripe webhook has atomic replay ledger claim
+PASS  Browser no longer sends identity in sync/document URLs
+PASS  Browser sensitive POST helper sends request marker and CSRF
+PASS  Signup plan is validated against server-side published plan data
+PASS  Stripe checkout uses server-loaded plan and validated billing session
+
+All 13 security static checks passed.
+
+PASS  Ver-0.051 version and cache are aligned
+PASS  Operational monitoring tables use RLS and service-role-only grants
+PASS  Operational metadata has a sensitive-key denylist and text redaction
+PASS  Failed functions create sanitised operational events
+PASS  Stripe webhook failures create critical operational alerts
+PASS  Resend failures are tracked without storing recipient addresses in operational events
+PASS  Vault backup failures and sync conflicts feed operational monitoring
+PASS  Account/trial and Emergency Access checks have scheduled run history
+PASS  Database backup verification uses the Supabase Management API and never returns the access token
+PASS  Health dashboard is admin-session protected and mutating actions require CSRF
+PASS  Stripe reconciliation is preview-first, expires, and refreshes only the existing linked subscription
+PASS  Customer support diagnostics query metadata only
+PASS  Browser error reporting excludes exception messages and stacks
+PASS  Monitoring and cleanup schedules are configured
+PASS  Operational retention rules do not delete customer vault data
+PASS  Operations health covers database, Stripe, email, backup, sync, functions and scheduled processors
+
+All 16 reliability static checks passed.
+
+All 56 Netlify function modules imported successfully.
+All 6 JSX files passed syntax transpilation.
+
+Note: npm run build was not executed in the patch sandbox because dependencies/node_modules are intentionally not installed here. Run the documented local command block before deployment.

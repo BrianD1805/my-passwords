@@ -1,4 +1,5 @@
 import { APP_VERSION, insertRow, publicId, selectRows, updateRow } from './_db.js';
+import { recordOperationalEvent } from './_operations.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -448,6 +449,7 @@ export async function sendCustomerLifecycleEmail({
   if (!apiKey || !from) {
     const message = 'Customer email delivery is not configured.';
     await updateRow('customer_email_log', `id=${eq(log.id)}`, { status: 'failed', error_message: message, updated_at: new Date().toISOString() }).catch(() => null);
+    await recordOperationalEvent({ source: 'resend', eventType: 'resend_delivery_failure', severity: 'error', errorCode: 'RESEND_NOT_CONFIGURED', message: 'A customer email could not be sent because Resend is not configured.', tenantId: tenantId || null, userId: userId || loaded?.user?.id || null, metadata: { emailType: type } });
     return { sent: false, provider: 'resend', reason: message, logId: log.id };
   }
 
@@ -483,6 +485,7 @@ export async function sendCustomerLifecycleEmail({
       await updateRow('customer_email_log', `id=${eq(log.id)}`, {
         status: 'failed', error_message: String(reason).slice(0, 800), updated_at: new Date().toISOString()
       }).catch(() => null);
+      await recordOperationalEvent({ source: 'resend', eventType: 'resend_delivery_failure', severity: 'error', errorCode: `HTTP_${response.status}`, message: 'Resend rejected a customer email delivery request.', tenantId: tenantId || null, userId: userId || loaded?.user?.id || null, metadata: { emailType: type, httpStatus: response.status } });
       return { sent: false, provider: 'resend', reason, details: data, logId: log.id };
     }
     const sentAt = new Date().toISOString();
@@ -500,6 +503,7 @@ export async function sendCustomerLifecycleEmail({
     await updateRow('customer_email_log', `id=${eq(log.id)}`, {
       status: 'failed', error_message: String(reason).slice(0, 800), updated_at: new Date().toISOString()
     }).catch(() => null);
+    await recordOperationalEvent({ source: 'resend', eventType: 'resend_delivery_failure', severity: 'error', errorCode: error?.name || 'RESEND_DELIVERY_FAILED', message: 'A customer email delivery request failed or timed out.', tenantId: tenantId || null, userId: userId || loaded?.user?.id || null, metadata: { emailType: type } });
     return { sent: false, provider: 'resend', reason, logId: log.id };
   } finally {
     clearTimeout(timeout);

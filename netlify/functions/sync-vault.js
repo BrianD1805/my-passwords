@@ -1,6 +1,7 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, supabaseRequest } from './_db.js';
 import { getCustomerAccess } from './_session.js';
 import { assertBrowserAction } from './_security.js';
+import { recordFunctionFailure, recordOperationalEvent } from './_operations.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -59,6 +60,7 @@ export async function handler(event) {
       if (!rows.length) return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', hasSnapshot: false, version: APP_VERSION, snapshotCount: 0 });
       return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', hasSnapshot: true, version: APP_VERSION, snapshot: rows[0], snapshotCount: 1, message: 'Latest cloud backup found for the authenticated account.' });
     } catch (error) {
+      await recordFunctionFailure('sync-vault', error, { tenantId, userId, action: 'load_backup' });
       return jsonResponse(500, { ok: false, connected: true, provider: 'supabase', version: APP_VERSION, message: 'Could not load the latest cloud backup.', error: error.message, details: error.details || null });
     }
   }
@@ -108,6 +110,11 @@ export async function handler(event) {
         deviceId: body.deviceId,
         metadata: { deviceType: body.deviceType || '', latestSnapshotId: saved.latestSnapshotId || '', baseSnapshotId: body.baseSnapshotId || '' }
       });
+      await recordOperationalEvent({
+        source: 'vault_sync', eventType: 'sync_conflict', severity: 'warning', errorCode: 'VAULT_CONFLICT',
+        message: 'A stale device backup was blocked before it could replace the latest cloud copy.', tenantId, userId,
+        metadata: { itemCount, deviceType: body.deviceType || '' }
+      });
       return jsonResponse(409, {
         ok: false,
         connected: true,
@@ -131,6 +138,9 @@ export async function handler(event) {
     await recordSyncEvent({ tenantId, userId, eventType: reusedExistingBackup ? 'backup_duplicate_reused' : 'backup_success', status: 'success', itemCount, message: reusedExistingBackup ? 'Matching encrypted vault backup already existed and was reused.' : 'Encrypted vault backup saved.', deviceId: body.deviceId, metadata: { deviceType: body.deviceType || '', snapshotId: effectiveSnapshotId, baseSnapshotId: body.baseSnapshotId || '', reusedExistingBackup, forcedConflictChoice: Boolean(body.explicitConflictChoice) } });
     return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', version: APP_VERSION, snapshotId: effectiveSnapshotId, reusedExistingBackup, itemCount, clientUpdatedAt, message: reusedExistingBackup ? 'Matching secure backup already exists and is now linked to this device.' : 'Cloud backup saved for the authenticated account.' });
   } catch (error) {
+    await recordSyncEvent({ tenantId, userId, eventType: 'backup_failure', status: 'error', itemCount, message: 'Encrypted cloud backup failed.', deviceId: body.deviceId, metadata: { deviceType: body.deviceType || '', errorCode: error?.code || error?.name || 'BACKUP_FAILED' } });
+    await recordOperationalEvent({ source: 'vault_backup', eventType: 'backup_failure', severity: 'error', errorCode: error?.code || error?.name || 'BACKUP_FAILED', message: 'An encrypted vault cloud backup failed.', tenantId, userId, metadata: { itemCount, deviceType: body.deviceType || '' } });
+    await recordFunctionFailure('sync-vault', error, { tenantId, userId, action: 'save_backup' });
     return jsonResponse(500, { ok: false, connected: true, provider: 'supabase', version: APP_VERSION, message: 'Cloud backup failed.', error: error.message, details: error.details || null });
   }
 }

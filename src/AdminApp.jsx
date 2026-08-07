@@ -3,6 +3,7 @@ import { AlertTriangle, BadgePoundSterling, CalendarClock, ChevronRight, Cloud, 
 import CustomSelect from './CustomSelect.jsx';
 import AdminCustomerDetail from './AdminCustomerDetail.jsx';
 import AdminAutomatedEmails from './AdminAutomatedEmails.jsx';
+import AdminHealth from './AdminHealth.jsx';
 
 async function requestJson(url, options = {}) {
   try {
@@ -433,6 +434,7 @@ export default function AdminApp({ version }) {
         <button type="button" className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>Billing Events</button>
         <button type="button" className={activeTab === 'sync' ? 'active' : ''} onClick={() => setActiveTab('sync')}>Sync Health</button>
         <button type="button" className={activeTab === 'emails' ? 'active' : ''} onClick={() => setActiveTab('emails')}>Automated Emails</button>
+        <button type="button" className={activeTab === 'health' ? 'active' : ''} onClick={() => setActiveTab('health')}>Health</button>
         <button type="button" className={activeTab === 'audit' ? 'active' : ''} onClick={() => setActiveTab('audit')}>Admin Audit</button>
       </nav>
 
@@ -577,6 +579,13 @@ export default function AdminApp({ version }) {
         />
       )}
 
+
+      {activeTab === 'health' && (
+        <AdminHealth
+          onSessionExpired={(message) => { setAuth({ checking: false, authenticated: false, message: message || 'Admin sign-in is required.' }); setSelectedCustomerId(''); }}
+          setGlobalNotice={setNotice}
+        />
+      )}
 
       {activeTab === 'audit' && (
         <section className="admin-content">

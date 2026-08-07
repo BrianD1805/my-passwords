@@ -44,6 +44,19 @@
 [functions."emergency-access-release-process"]
   schedule = "*/5 * * * *"
 
+# Ver-0.051 reliability monitoring and recovery schedules.
+[functions."operations-health-check"]
+  schedule = "*/15 * * * *"
+
+[functions."account-trial-check"]
+  schedule = "*/30 * * * *"
+
+[functions."operational-retention-cleanup"]
+  schedule = "10 4 * * *"
+
+[functions."database-backup-verify"]
+  schedule = "30 5 * * *"
+
 # Ver-0.050 security headers. CSP deliberately permits inline CSS because the
 # current React UI uses style attributes; executable inline JavaScript is not permitted.
 [[headers]]
