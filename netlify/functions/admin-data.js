@@ -1,7 +1,7 @@
 import { APP_VERSION, deleteRow, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow } from './_db.js';
 import { readAdminSession } from './_auth.js';
 import { isFounderTenant, loadTenantSubscription, recordLifecycleEvent, upsertTrialSubscription } from './_trial.js';
-import { archiveStripePlan, stripeConfigured, syncStripePlan } from './_stripe.js';
+import { archiveStripePlan, stripeConfigured, stripeRequest, syncStripePlan } from './_stripe.js';
 import { refreshStripeSubscriptionForTenant } from './_subscription-lifecycle.js';
 import { applyEntitlementOverrides, entitlementSnapshotFromPlan, normaliseEntitlementOverrides, normalisePlanFeatureFlags, reservedPlanCannotPublish, serialiseEntitlements } from './_entitlements.js';
 
@@ -36,18 +36,24 @@ function cleanFeatures(value) {
   return String(value || '').split(/\r?\n/).map((item) => item.trim()).filter(Boolean).slice(0, 30);
 }
 
+function parseJson(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return {}; }
+}
+
 async function audit(action, metadata = {}) {
   await insertRow('audit_log', {
     id: publicId('audit'),
     tenant_id: metadata.tenant_id || null,
     user_id: null,
     action,
-    metadata: { version: APP_VERSION, ...metadata }
+    metadata: { version: APP_VERSION, actor: 'owner_admin', ...metadata }
   }).catch(() => null);
 }
 
 async function loadTenant(tenantId) {
-  const rows = await selectRows('tenants', `select=id,name,account_name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at,onboarding_completed_at&id=${eq(tenantId)}&limit=1`);
+  const rows = await selectRows('tenants', `select=id,name,account_name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at,onboarding_completed_at,deletion_status,deletion_requested_at,deletion_scheduled_for&id=${eq(tenantId)}&limit=1`);
   return rows?.[0] || null;
 }
 
@@ -63,15 +69,17 @@ async function ensureNonFounder(tenant) {
 }
 
 async function loadDashboard() {
-  const [plans, tenants, users, subscriptions, snapshots, syncEvents, billingEvents, documentBlobs] = await Promise.all([
+  const [plans, tenants, users, subscriptions, snapshots, syncEvents, billingEvents, documentBlobs, auditRows, accountSessions] = await Promise.all([
     selectRows('subscription_plans', 'select=*&order=display_order.asc,display_name.asc'),
-    selectRows('tenants', 'select=id,name,account_name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at,onboarding_completed_at,created_at,updated_at&order=created_at.desc&limit=250'),
-    selectRows('users', 'select=id,tenant_id,email,phone_e164,display_name,role,status,email_verified,phone_verified,onboarding_status,onboarding_completed_at,welcome_email_sent_at,created_at&order=created_at.desc&limit=500'),
-    selectRows('tenant_subscriptions', 'select=id,tenant_id,plan_code,status,billing_interval,currency,price_minor,trial_started_at,trial_ends_at,current_period_start,current_period_end,cancel_at_period_end,cancelled_at,grace_period_ends_at,admin_override,provider,provider_customer_id,provider_subscription_id,provider_price_id,checkout_session_id,latest_invoice_id,last_payment_at,last_payment_failed_at,stripe_schedule_id,scheduled_plan_code,scheduled_billing_interval,scheduled_price_id,scheduled_change_at,scheduled_change_type,scheduled_change_created_at,next_invoice_amount_minor,next_invoice_currency,next_invoice_at,last_stripe_sync_at,last_stripe_sync_status,last_stripe_sync_message,duplicate_subscription_count,duplicate_subscription_ids,entitlements_snapshot,entitlements_snapshot_at,entitlement_overrides,entitlement_override_note,entitlement_override_updated_at,entitlement_override_updated_by,updated_at&order=updated_at.desc&limit=250'),
+    selectRows('tenants', 'select=id,name,account_name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at,onboarding_completed_at,deletion_status,deletion_requested_at,deletion_scheduled_for,created_at,updated_at&order=created_at.desc&limit=1000'),
+    selectRows('users', 'select=id,tenant_id,email,phone_e164,display_name,role,status,email_verified,phone_verified,otp_test_last_verified_at,otp_test_status,last_login_at,account_recovery_last_verified_at,onboarding_status,onboarding_completed_at,welcome_email_sent_at,created_at,updated_at&order=created_at.desc&limit=2000'),
+    selectRows('tenant_subscriptions', 'select=id,tenant_id,plan_code,status,billing_interval,currency,price_minor,trial_started_at,trial_ends_at,current_period_start,current_period_end,cancel_at_period_end,cancelled_at,grace_period_ends_at,admin_override,provider,provider_customer_id,provider_subscription_id,provider_price_id,checkout_session_id,latest_invoice_id,last_payment_at,last_payment_failed_at,stripe_schedule_id,scheduled_plan_code,scheduled_billing_interval,scheduled_price_id,scheduled_change_at,scheduled_change_type,scheduled_change_created_at,next_invoice_amount_minor,next_invoice_currency,next_invoice_at,last_stripe_sync_at,last_stripe_sync_status,last_stripe_sync_message,duplicate_subscription_count,duplicate_subscription_ids,entitlements_snapshot,entitlements_snapshot_at,entitlement_overrides,entitlement_override_note,entitlement_override_updated_at,entitlement_override_updated_by,updated_at&order=updated_at.desc&limit=1000'),
     selectRows('vault_sync_snapshots', 'select=id,tenant_id,user_id,item_count,client_updated_at,created_at&order=created_at.desc&limit=1000'),
     selectRows('vault_sync_events', 'select=id,tenant_id,user_id,event_type,status,item_count,message,device_id,metadata,created_at&order=created_at.desc&limit=1000'),
     selectRows('billing_events', 'select=id,tenant_id,subscription_id,provider,provider_event_id,event_type,status,amount_minor,currency,metadata,occurred_at,created_at&order=created_at.desc&limit=500'),
-    selectRows('document_blobs', 'select=id,tenant_id,file_size,storage_bytes&limit=5000').catch(() => [])
+    selectRows('document_blobs', 'select=id,tenant_id,file_size,storage_bytes&limit=5000').catch(() => []),
+    selectRows('audit_log', 'select=id,tenant_id,user_id,action,metadata,created_at&order=created_at.desc&limit=1000').catch(() => []),
+    selectRows('account_sessions', 'select=id,tenant_id,user_id,status,issued_at,last_seen_at,expires_at&order=issued_at.desc&limit=2000').catch(() => [])
   ]);
 
   const usersByTenant = new Map();
@@ -91,12 +99,19 @@ async function loadDashboard() {
       onboardingStatus: user.onboarding_status || '',
       onboardingCompletedAt: user.onboarding_completed_at || '',
       welcomeEmailSentAt: user.welcome_email_sent_at || '',
-      createdAt: user.created_at
+      lastLoginAt: user.last_login_at || '',
+      lastVerifiedAt: user.otp_test_last_verified_at || '',
+      verificationStatus: user.otp_test_status || '',
+      accountRecoveryLastVerifiedAt: user.account_recovery_last_verified_at || '',
+      createdAt: user.created_at,
+      updatedAt: user.updated_at
     });
   }
   const subscriptionsByTenant = new Map((subscriptions || []).map((subscription) => [subscription.tenant_id, subscription]));
   const latestSnapshotByTenant = new Map();
   for (const snapshot of snapshots || []) if (!latestSnapshotByTenant.has(snapshot.tenant_id)) latestSnapshotByTenant.set(snapshot.tenant_id, snapshot);
+  const latestSessionByTenant = new Map();
+  for (const session of accountSessions || []) if (!latestSessionByTenant.has(session.tenant_id)) latestSessionByTenant.set(session.tenant_id, session);
   const latestSyncEventByTenant = new Map();
   const syncEventCountsByTenant = new Map();
   for (const syncEvent of syncEvents || []) {
@@ -114,22 +129,25 @@ async function loadDashboard() {
   const customerRows = (tenants || []).map((tenant) => {
     const subscription = subscriptionsByTenant.get(tenant.id) || null;
     const customerUsers = usersByTenant.get(tenant.id) || [];
-    const plan = plansByCode.get(String(subscription?.plan_code || tenant.plan_code || 'personal').toLowerCase()) || null;
+    const primaryCustomerUser = customerUsers.find((user) => ['administrator', 'owner'].includes(String(user.role || '').toLowerCase())) || customerUsers[0] || null;
+    const effectivePlanCode = subscription?.plan_code || tenant.plan_code || 'personal';
+    const plan = plansByCode.get(String(effectivePlanCode).toLowerCase()) || null;
     const founder = isFounderTenant(tenant);
     const snapshot = subscription?.entitlements_snapshot?.version
       ? subscription.entitlements_snapshot
       : entitlementSnapshotFromPlan(founder ? {
           code: 'founder_private', display_name: 'Founder Plan', max_users: 1, document_limit: 0, storage_limit_mb: 0,
           feature_flags: { documents: true, emergencyAccess: true, secureDeviceUnlock: true, cloudBackupSync: true, multiUser: false, sharing: false }
-        } : (plan || { code: tenant.plan_code || 'personal', display_name: tenant.plan_code || 'Personal', max_users: 1 }));
+        } : (plan || { code: effectivePlanCode, display_name: effectivePlanCode.replace(/_/g, ' '), max_users: 1 }));
     const effectiveEntitlements = applyEntitlementOverrides(snapshot, subscription?.entitlement_overrides || {});
     const documentUsage = documentUsageByTenant.get(tenant.id) || { documents: 0, storageBytes: 0 };
     const usage = { users: customerUsers.filter((user) => !['cancelled', 'deleted'].includes(String(user.status || '').toLowerCase())).length, ...documentUsage };
     return {
       id: tenant.id,
       accountName: tenant.account_name || tenant.name || '',
-      planCode: tenant.plan_code || 'personal',
-      planStatus: tenant.plan_status || 'trial_pending',
+      planCode: effectivePlanCode,
+      planName: founder ? 'Founder Plan' : (plan?.display_name || effectivePlanCode.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())),
+      planStatus: tenant.plan_status || subscription?.status || 'trial_pending',
       accountStatus: tenant.account_status || 'active',
       tenantRole: tenant.tenant_role || 'primary_owner',
       trialStartedAt: tenant.trial_started_at || subscription?.trial_started_at || '',
@@ -138,6 +156,7 @@ async function loadDashboard() {
       createdAt: tenant.created_at,
       updatedAt: tenant.updated_at,
       users: customerUsers,
+      primaryUser: primaryCustomerUser,
       subscription,
       entitlements: serialiseEntitlements(effectiveEntitlements, usage),
       entitlementOverrides: normaliseEntitlementOverrides(subscription?.entitlement_overrides || {}),
@@ -149,14 +168,32 @@ async function loadDashboard() {
         latestSnapshot: latestSnapshotByTenant.get(tenant.id) || null,
         latestEvent: latestSyncEventByTenant.get(tenant.id) || null,
         eventCount: Number(syncEventCountsByTenant.get(tenant.id) || 0)
+      },
+      verification: {
+        emailVerified: Boolean(primaryCustomerUser?.emailVerified),
+        phoneVerified: Boolean(primaryCustomerUser?.phoneVerified),
+        status: primaryCustomerUser?.emailVerified && (primaryCustomerUser?.phone ? primaryCustomerUser?.phoneVerified : true) ? 'verified' : 'attention',
+        lastVerifiedAt: primaryCustomerUser?.lastVerifiedAt || ''
+      },
+      lastSignInAt: [...customerUsers.map((user) => user.lastLoginAt), latestSessionByTenant.get(tenant.id)?.issued_at].filter(Boolean).sort().reverse()[0] || '',
+      lastSuccessfulBackupAt: latestSnapshotByTenant.get(tenant.id)?.created_at || '',
+      deletion: {
+        status: tenant.deletion_status || 'none',
+        requestedAt: tenant.deletion_requested_at || '',
+        scheduledFor: tenant.deletion_scheduled_for || ''
       }
     };
   });
+
+  const tenantNamesById = new Map((tenants || []).map((tenant) => [tenant.id, tenant.account_name || tenant.name || tenant.id]));
+  const adminAuditEvents = (auditRows || []).map((row) => ({ ...row, metadata: parseJson(row.metadata), accountName: row.tenant_id ? (tenantNamesById.get(row.tenant_id) || row.tenant_id) : 'Platform Admin' }))
+    .filter((row) => row.metadata?.actor === 'owner_admin' || /(^owner_admin_|_by_admin$|^admin_|^tenant_.*_changed$|^subscription_plan_|^stripe_.*_by_admin$)/.test(String(row.action || '')));
 
   return {
     plans: plans || [],
     customers: customerRows,
     billingEvents: billingEvents || [],
+    adminAuditEvents,
     stripeConfigured: stripeConfigured(),
     summary: {
       tenants: customerRows.length,
@@ -167,7 +204,8 @@ async function loadDashboard() {
       publishedPlans: (plans || []).filter((plan) => plan.is_public && plan.is_active).length,
       syncIssues: customerRows.filter((row) => ['warning', 'error'].includes(String(row.syncDiagnostics?.latestEvent?.status || '').toLowerCase())).length,
       paidSubscriptions: customerRows.filter((row) => row.subscription?.provider === 'stripe' && ['active', 'trialing'].includes(String(row.subscription?.status || '').toLowerCase())).length,
-      paymentProblems: customerRows.filter((row) => ['past_due', 'unpaid'].includes(String(row.subscription?.status || '').toLowerCase())).length
+      paymentProblems: customerRows.filter((row) => ['past_due', 'unpaid'].includes(String(row.subscription?.status || '').toLowerCase())).length,
+      adminActions: adminAuditEvents.length
     }
   };
 }
@@ -179,7 +217,7 @@ export async function handler(event) {
     try {
       return jsonResponse(200, { ok: true, version: APP_VERSION, ...(await loadDashboard()) });
     } catch (error) {
-      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.044.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.048.', error: error.message, details: error.details || null });
     }
   }
 
@@ -306,8 +344,8 @@ export async function handler(event) {
       const tenantCurrent = await loadTenant(tenantId);
       if (isFounderTenant(tenantCurrent) && accountStatus === 'suspended') return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The Founder account cannot be suspended.' });
       const tenant = await updateRow('tenants', `id=${eq(tenantId)}`, { account_status: accountStatus, status: accountStatus, updated_at: new Date().toISOString() });
-      await audit('tenant_account_status_changed', { tenant_id: tenantId, account_status: accountStatus });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, tenant, message: accountStatus === 'suspended' ? 'Account suspended.' : 'Account activated.' });
+      await audit('tenant_account_status_changed', { tenant_id: tenantId, previous_account_status: tenantCurrent?.account_status || '', account_status: accountStatus });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, tenant, message: accountStatus === 'suspended' ? 'Account suspended.' : 'Account reactivated.' });
     }
 
     if (['start_trial', 'extend_trial', 'activate_account', 'cancel_trial'].includes(action)) {
@@ -317,7 +355,27 @@ export async function handler(event) {
       if (!allowed.ok) return jsonResponse(409, { ok: false, version: APP_VERSION, message: allowed.message });
       const currentSubscription = await loadTenantSubscription(tenantId);
       if (currentSubscription?.provider === 'stripe' && currentSubscription?.provider_subscription_id) {
-        return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'This account is managed by Stripe Billing. Use Stripe Dashboard or the customer billing portal for subscription changes.' });
+        if (action !== 'extend_trial') {
+          return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'This account is managed by Stripe Billing. Use the customer billing portal for subscription changes.' });
+        }
+        if (!['trialing', 'trial_active'].includes(String(currentSubscription.status || '').toLowerCase())) {
+          return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'Only an active Stripe trial can be extended.' });
+        }
+        const days = Math.min(365, Math.max(1, Number(body.days || 7)));
+        const now = new Date();
+        const currentTrialEnd = currentSubscription.trial_ends_at || tenant.trial_ends_at || '';
+        const currentEnd = currentTrialEnd ? new Date(currentTrialEnd) : now;
+        const base = Number.isFinite(currentEnd.getTime()) && currentEnd.getTime() > now.getTime() ? currentEnd : now;
+        const trialEndsAt = new Date(base.getTime() + days * 86400000).toISOString();
+        await stripeRequest(`subscriptions/${encodeURIComponent(currentSubscription.provider_subscription_id)}`, {
+          params: { trial_end: Math.floor(new Date(trialEndsAt).getTime() / 1000), proration_behavior: 'none' },
+          idempotencyKey: `mp-admin-trial-extension-${tenantId}-${Math.floor(new Date(trialEndsAt).getTime() / 1000)}`
+        });
+        await updateRow('tenants', `id=${eq(tenantId)}`, { status: 'active', account_status: 'active', plan_status: 'trial_active', trial_ends_at: trialEndsAt, updated_at: now.toISOString() });
+        await updateRow('tenant_subscriptions', `id=${eq(currentSubscription.id)}`, { status: 'trialing', trial_ends_at: trialEndsAt, last_stripe_sync_status: 'admin_trial_extended', last_stripe_sync_message: `Stripe trial extended by ${days} day(s).`, updated_at: now.toISOString() });
+        await recordLifecycleEvent({ tenantId, subscriptionId: currentSubscription.id, eventType: 'stripe_trial_extended_by_admin', metadata: { days, trial_ends_at: trialEndsAt } });
+        await audit('stripe_trial_extended_by_admin', { tenant_id: tenantId, days, trial_ends_at: trialEndsAt, stripe_subscription_id: currentSubscription.provider_subscription_id });
+        return jsonResponse(200, { ok: true, version: APP_VERSION, message: `Stripe trial extended by ${days} day${days === 1 ? '' : 's'}.` });
       }
       const plan = await loadPlan(tenant.plan_code || 'personal');
       if (!plan?.code) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The customer plan could not be found.' });
@@ -336,6 +394,9 @@ export async function handler(event) {
       }
 
       if (action === 'extend_trial') {
+        const currentTrialStatus = String(currentSubscription?.status || tenant.plan_status || '').toLowerCase();
+        const hasTrialHistory = Boolean(tenant.trial_started_at || tenant.trial_ends_at || currentSubscription?.trial_started_at || currentSubscription?.trial_ends_at || currentTrialStatus.includes('trial'));
+        if (!hasTrialHistory) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'This customer does not have a trial to extend.' });
         const days = Math.min(365, Math.max(1, Number(body.days || 7)));
         const currentEnd = tenant.trial_ends_at ? new Date(tenant.trial_ends_at) : now;
         const base = currentEnd.getTime() > now.getTime() ? currentEnd : now;

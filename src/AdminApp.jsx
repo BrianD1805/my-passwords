@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BadgePoundSterling, Ban, CalendarClock, ChevronDown, ChevronUp, Cloud, CreditCard, Eye, EyeOff, LogOut, Plus, Play, RefreshCw, Save, ShieldCheck, Trash2, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, BadgePoundSterling, CalendarClock, ChevronRight, Cloud, CreditCard, Eye, EyeOff, FileText, LogOut, Plus, RefreshCw, Save, Search, ShieldCheck, Trash2, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import CustomSelect from './CustomSelect.jsx';
+import AdminCustomerDetail from './AdminCustomerDetail.jsx';
 
 async function requestJson(url, options = {}) {
   try {
@@ -37,21 +38,6 @@ function isReservedFuturePlan(code) {
   return ['family', 'business'].includes(String(code || '').trim().toLowerCase());
 }
 
-function emptyEntitlementDraft(customer = {}) {
-  const overrides = customer.entitlementOverrides || {};
-  const limits = overrides.limits || {};
-  const features = overrides.features || {};
-  return {
-    maxUsers: limits.maxUsers ?? '',
-    documentLimit: limits.documentLimit ?? '',
-    storageLimitMb: limits.storageLimitMb ?? '',
-    documents: typeof features.documents === 'boolean' ? String(features.documents) : 'plan',
-    emergencyAccess: typeof features.emergencyAccess === 'boolean' ? String(features.emergencyAccess) : 'plan',
-    secureDeviceUnlock: typeof features.secureDeviceUnlock === 'boolean' ? String(features.secureDeviceUnlock) : 'plan',
-    cloudBackupSync: typeof features.cloudBackupSync === 'boolean' ? String(features.cloudBackupSync) : 'plan',
-    note: customer.entitlementOverrideNote || ''
-  };
-}
 
 function emptyPlan() {
   return {
@@ -112,16 +98,6 @@ function dateLabel(value, includeTime = false) {
   return new Intl.DateTimeFormat('en-GB', options).format(new Date(value));
 }
 
-function trialDaysLeft(value) {
-  if (!value) return null;
-  return Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 86400000));
-}
-
-function isFounder(customer) {
-  return ['founder_private', 'private_founder'].includes(String(customer?.planCode || '').toLowerCase())
-    || String(customer?.planStatus || '').toLowerCase() === 'founder_active';
-}
-
 function planStatusDisplayName(planStatus) {
   const status = String(planStatus || '').trim().toLowerCase();
   if (status === 'founder_active') return 'Founder Active';
@@ -138,6 +114,20 @@ function planStatusDisplayName(planStatus) {
   return status ? status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Active';
 }
 
+
+function adminAuditSummary(entry) {
+  const metadata = entry?.metadata && typeof entry.metadata === 'object' ? entry.metadata : {};
+  const details = [];
+  if (metadata.account_status) details.push(`Status: ${planStatusDisplayName(metadata.account_status)}`);
+  if (metadata.previous_account_status) details.push(`Previous: ${planStatusDisplayName(metadata.previous_account_status)}`);
+  if (metadata.days) details.push(`${metadata.days} day${Number(metadata.days) === 1 ? '' : 's'}`);
+  if (metadata.plan_code) details.push(`Plan: ${planDisplayName(metadata.plan_code)}`);
+  if (metadata.email_type) details.push(`Email: ${planStatusDisplayName(metadata.email_type)}`);
+  if (metadata.stripe_sync_status) details.push(`Stripe: ${planStatusDisplayName(metadata.stripe_sync_status)}`);
+  if (metadata.message) details.push(String(metadata.message));
+  if (metadata.error) details.push(`Error: ${String(metadata.error)}`);
+  return details.join(' · ') || 'Recorded Admin action';
+}
 
 function subscriptionLifecycleLabel(customer) {
   if (String(customer?.accountStatus || '').toLowerCase() === 'suspended') return 'Suspended';
@@ -158,16 +148,16 @@ export default function AdminApp({ version }) {
   const [accessKey, setAccessKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [data, setData] = useState({ plans: [], customers: [], billingEvents: [], summary: {}, stripeConfigured: false });
+  const [data, setData] = useState({ plans: [], customers: [], billingEvents: [], adminAuditEvents: [], summary: {}, stripeConfigured: false });
   const [activeTab, setActiveTab] = useState('overview');
   const [editor, setEditor] = useState(emptyPlan());
   const [planEditorOpen, setPlanEditorOpen] = useState(false);
   const [planEditorMode, setPlanEditorMode] = useState('new');
-  const [expandedCustomerId, setExpandedCustomerId] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerFilters, setCustomerFilters] = useState({ plan: 'all', trial: 'all', payment: 'all', account: 'all' });
   const [planVisibility, setPlanVisibility] = useState('active');
   const [notice, setNotice] = useState('');
-  const [trialDays, setTrialDays] = useState({});
-  const [entitlementDrafts, setEntitlementDrafts] = useState({});
 
   const sortedPlans = useMemo(() => [...(data.plans || [])]
     .filter((plan) => String(plan?.code || '').trim() && String(plan?.display_name || '').trim())
@@ -175,6 +165,45 @@ export default function AdminApp({ version }) {
   const activePublishedPlans = useMemo(() => sortedPlans.filter((plan) => plan.is_active && plan.is_public), [sortedPlans]);
   const hiddenPlans = useMemo(() => sortedPlans.filter((plan) => !(plan.is_active && plan.is_public)), [sortedPlans]);
   const visiblePlans = planVisibility === 'active' ? activePublishedPlans : hiddenPlans;
+
+  const customerPlanOptions = useMemo(() => {
+    const namesByCode = new Map(sortedPlans.map((plan) => [String(plan.code || ''), plan.display_name]));
+    for (const customer of data.customers || []) {
+      if (customer.planCode && !namesByCode.has(String(customer.planCode))) namesByCode.set(String(customer.planCode), customer.planName || planDisplayName(customer.planCode));
+    }
+    return [{ value: 'all', label: 'All plans' }, ...[...namesByCode.entries()]
+      .filter(([code]) => code)
+      .sort((left, right) => String(left[1]).localeCompare(String(right[1]), undefined, { sensitivity: 'base', numeric: true }))
+      .map(([value, label]) => ({ value, label }))];
+  }, [sortedPlans, data.customers]);
+  const filteredCustomers = useMemo(() => {
+    const query = customerSearch.trim().toLocaleLowerCase();
+    const activeDeletionStatuses = new Set(['pending', 'requested', 'scheduled', 'processing']);
+    return (data.customers || []).filter((customer) => {
+      const owner = customer.primaryUser || customer.users?.[0] || {};
+      const searchable = [customer.accountName, customer.id, owner.displayName, owner.email, owner.phone, owner.emailMasked, owner.phoneMasked, customer.planCode, customer.planName].join(' ').toLocaleLowerCase();
+      if (query && !searchable.includes(query)) return false;
+      if (customerFilters.plan !== 'all' && String(customer.planCode) !== customerFilters.plan) return false;
+      const trialStatus = ['trial_active', 'trialing'].includes(String(customer.subscription?.status || customer.planStatus).toLowerCase())
+        ? 'active'
+        : ['trial_expired', 'expired'].includes(String(customer.planStatus || customer.subscription?.status).toLowerCase()) ? 'expired'
+          : ['trial_pending', 'signup_pending'].includes(String(customer.planStatus).toLowerCase()) ? 'pending' : 'none';
+      if (customerFilters.trial !== 'all' && trialStatus !== customerFilters.trial) return false;
+      const subscriptionStatus = String(customer.subscription?.status || '').toLowerCase();
+      const paymentStatus = ['past_due', 'unpaid', 'incomplete'].includes(subscriptionStatus) ? 'attention'
+        : customer.subscription?.cancel_at_period_end ? 'cancelling'
+          : ['cancelled', 'canceled', 'incomplete_expired'].includes(subscriptionStatus) ? 'cancelled'
+            : customer.subscription?.provider === 'stripe' && ['active', 'trialing'].includes(subscriptionStatus) ? 'paid'
+              : 'not_stripe';
+      if (customerFilters.payment !== 'all' && paymentStatus !== customerFilters.payment) return false;
+      const deletionActive = activeDeletionStatuses.has(String(customer.deletion?.status || '').toLowerCase());
+      const accountStatus = String(customer.accountStatus || 'active').toLowerCase();
+      if (customerFilters.account === 'pending_verification' && customer.verification?.status === 'verified') return false;
+      if (customerFilters.account === 'deletion' && !deletionActive) return false;
+      if (!['all', 'pending_verification', 'deletion'].includes(customerFilters.account) && accountStatus !== customerFilters.account) return false;
+      return true;
+    }).sort((left, right) => String(left.accountName || '').localeCompare(String(right.accountName || ''), undefined, { sensitivity: 'base', numeric: true }));
+  }, [data.customers, customerSearch, customerFilters]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -234,7 +263,8 @@ export default function AdminApp({ version }) {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'logout' })
     });
     setAuth({ checking: false, authenticated: false, message: 'Admin session ended.' });
-    setData({ plans: [], customers: [], billingEvents: [], summary: {}, stripeConfigured: false });
+    setData({ plans: [], customers: [], billingEvents: [], adminAuditEvents: [], summary: {}, stripeConfigured: false });
+    setSelectedCustomerId('');
   }
 
   async function loadData() {
@@ -247,8 +277,7 @@ export default function AdminApp({ version }) {
       return;
     }
     const customers = result.customers || [];
-    setData({ plans: result.plans || [], customers, billingEvents: result.billingEvents || [], summary: result.summary || {}, stripeConfigured: Boolean(result.stripeConfigured) });
-    setEntitlementDrafts(Object.fromEntries(customers.map((customer) => [customer.id, emptyEntitlementDraft(customer)])));
+    setData({ plans: result.plans || [], customers, billingEvents: result.billingEvents || [], adminAuditEvents: result.adminAuditEvents || [], summary: result.summary || {}, stripeConfigured: Boolean(result.stripeConfigured) });
     setNotice('');
   }
 
@@ -267,10 +296,6 @@ export default function AdminApp({ version }) {
   function closePlanEditor() {
     if (busy) return;
     setPlanEditorOpen(false);
-  }
-
-  function toggleCustomer(customerId) {
-    setExpandedCustomerId((current) => current === customerId ? '' : customerId);
   }
 
   async function savePlan(event) {
@@ -343,69 +368,6 @@ export default function AdminApp({ version }) {
     }
   }
 
-  async function setAccountStatus(customer, nextStatus) {
-    setBusy(true);
-    const result = await requestJson('/.netlify/functions/admin-data', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'set_account_status', tenantId: customer.id, accountStatus: nextStatus })
-    });
-    setBusy(false);
-    setNotice(result.message || (result.ok ? 'Account updated.' : 'Account update failed.'));
-    if (result.ok) await loadData();
-  }
-
-  async function manageTrial(customer, action, extra = {}) {
-    setBusy(true);
-    const result = await requestJson('/.netlify/functions/admin-data', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action, tenantId: customer.id, ...extra })
-    });
-    setBusy(false);
-    setNotice(result.message || (result.ok ? 'Trial updated.' : 'Trial update failed.'));
-    if (result.ok) await loadData();
-  }
-
-
-  async function refreshStripeCustomer(customer) {
-    setBusy(true);
-    setNotice(`Refreshing ${customer.accountName} directly from Stripe...`);
-    const result = await requestJson('/.netlify/functions/admin-data', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'refresh_stripe_subscription', tenantId: customer.id })
-    });
-    setBusy(false);
-    setNotice(result.message || (result.ok ? 'Stripe subscription refreshed.' : 'Stripe refresh failed.'));
-    if (result.ok) await loadData();
-  }
-
-  function updateEntitlementDraft(customerId, patch) {
-    setEntitlementDrafts((current) => ({ ...current, [customerId]: { ...(current[customerId] || {}), ...patch } }));
-  }
-
-  async function saveEntitlementOverrides(customer, clear = false) {
-    const draft = entitlementDrafts[customer.id] || emptyEntitlementDraft(customer);
-    const optionalNumber = (value) => value === '' || value === null || value === undefined ? null : Math.max(0, Math.round(Number(value) || 0));
-    const optionalFeature = (value) => value === 'plan' ? undefined : value === 'true';
-    const features = {};
-    for (const key of ['documents', 'emergencyAccess', 'secureDeviceUnlock', 'cloudBackupSync']) {
-      const value = optionalFeature(draft[key]);
-      if (typeof value === 'boolean') features[key] = value;
-    }
-    setBusy(true);
-    setNotice(clear ? 'Clearing entitlement overrides...' : 'Saving entitlement overrides...');
-    const result = await requestJson('/.netlify/functions/admin-data', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
-        action: 'save_entitlement_overrides', tenantId: customer.id,
-        overrides: clear ? {} : { limits: { maxUsers: optionalNumber(draft.maxUsers), documentLimit: optionalNumber(draft.documentLimit), storageLimitMb: optionalNumber(draft.storageLimitMb) }, features },
-        note: clear ? '' : draft.note
-      })
-    });
-    setBusy(false);
-    setNotice(result.message || (result.ok ? 'Entitlement overrides saved.' : 'Entitlement overrides could not be saved.'));
-    if (result.ok) await loadData();
-  }
-
   if (!isOnline) {
     return (
       <main className="admin-shell admin-centred">
@@ -461,6 +423,7 @@ export default function AdminApp({ version }) {
         <button type="button" className={activeTab === 'customers' ? 'active' : ''} onClick={() => setActiveTab('customers')}>Customers</button>
         <button type="button" className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>Billing Events</button>
         <button type="button" className={activeTab === 'sync' ? 'active' : ''} onClick={() => setActiveTab('sync')}>Sync Health</button>
+        <button type="button" className={activeTab === 'audit' ? 'active' : ''} onClick={() => setActiveTab('audit')}>Admin Audit</button>
       </nav>
 
       {notice && <div className="admin-notice">{notice}</div>}
@@ -475,6 +438,7 @@ export default function AdminApp({ version }) {
             <article><CreditCard /><strong>{data.summary?.paidSubscriptions || 0}</strong><span>Paid subscriptions</span></article>
             <article><AlertTriangle /><strong>{data.summary?.paymentProblems || 0}</strong><span>Payment problems</span></article>
             <article><AlertTriangle /><strong>{data.summary?.syncIssues || 0}</strong><span>Sync issues</span></article>
+            <article><FileText /><strong>{data.summary?.adminActions || 0}</strong><span>Recent Admin actions</span></article>
           </div>
         </section>
       )}
@@ -507,104 +471,49 @@ export default function AdminApp({ version }) {
         </section>
       )}
 
-      {activeTab === 'customers' && (
+      {activeTab === 'customers' && (selectedCustomerId ? (
+        <AdminCustomerDetail
+          customerId={selectedCustomerId}
+          onBack={() => setSelectedCustomerId('')}
+          onChanged={loadData}
+          onSessionExpired={(message) => { setAuth({ checking: false, authenticated: false, message: message || 'Admin sign-in is required.' }); setSelectedCustomerId(''); }}
+          setGlobalNotice={setNotice}
+        />
+      ) : (
         <section className="admin-content">
           <section className="admin-panel">
-            <div className="admin-panel-heading"><div><p className="eyebrow">Accounts</p><h2>Customers</h2></div><span>{data.customers?.length || 0} accounts</span></div>
-            <div className="admin-customer-list admin-customer-accordion-list">
-              {(data.customers || []).map((customer) => {
-                const founder = isFounder(customer);
-                const daysLeft = trialDaysLeft(customer.trialEndsAt);
-                const extensionDays = Number(trialDays[customer.id] || 7);
-                const stripeManaged = customer.subscription?.provider === 'stripe' && Boolean(customer.subscription?.provider_customer_id || customer.subscription?.provider_subscription_id);
-                const expanded = expandedCustomerId === customer.id;
-                const onboardingLabel = founder ? 'Founder account' : customer.onboardingCompletedAt ? `Completed ${dateLabel(customer.onboardingCompletedAt)}` : 'Pending verification';
+            <div className="admin-panel-heading"><div><p className="eyebrow">Accounts</p><h2>Customers</h2></div><span>{filteredCustomers.length} of {data.customers?.length || 0} accounts</span></div>
+            <div className="admin-customer-filters">
+              <label className="admin-customer-search"><Search size={18} /><input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Search name, email, phone or account ID" /></label>
+              <CustomSelect className="admin-custom-select" value={customerFilters.plan} ariaLabel="Filter customers by plan" options={customerPlanOptions} onChange={(value) => setCustomerFilters((current) => ({ ...current, plan: value }))} />
+              <CustomSelect className="admin-custom-select" value={customerFilters.trial} ariaLabel="Filter customers by trial status" options={[{ value: 'all', label: 'All trial statuses' }, { value: 'active', label: 'Active trial' }, { value: 'pending', label: 'Trial pending' }, { value: 'expired', label: 'Trial expired' }, { value: 'none', label: 'No trial' }]} onChange={(value) => setCustomerFilters((current) => ({ ...current, trial: value }))} />
+              <CustomSelect className="admin-custom-select" value={customerFilters.payment} ariaLabel="Filter customers by payment status" options={[{ value: 'all', label: 'All payment statuses' }, { value: 'paid', label: 'Stripe active' }, { value: 'attention', label: 'Payment attention' }, { value: 'cancelling', label: 'Cancellation scheduled' }, { value: 'cancelled', label: 'Stripe cancelled' }, { value: 'not_stripe', label: 'No Stripe subscription' }]} onChange={(value) => setCustomerFilters((current) => ({ ...current, payment: value }))} />
+              <CustomSelect className="admin-custom-select" value={customerFilters.account} ariaLabel="Filter customers by account status" options={[{ value: 'all', label: 'All account statuses' }, { value: 'active', label: 'Active' }, { value: 'pending_verification', label: 'Pending verification' }, { value: 'suspended', label: 'Suspended' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'deleted', label: 'Deleted' }, { value: 'deletion', label: 'Deletion requested' }]} onChange={(value) => setCustomerFilters((current) => ({ ...current, account: value }))} />
+              <button type="button" className="secondary-button" onClick={() => { setCustomerSearch(''); setCustomerFilters({ plan: 'all', trial: 'all', payment: 'all', account: 'all' }); }}>Clear filters</button>
+            </div>
+            <div className="admin-customer-directory">
+              {filteredCustomers.map((customer) => {
+                const owner = customer.primaryUser || customer.users?.[0] || {};
+                const paymentStatus = ['past_due', 'unpaid', 'incomplete'].includes(String(customer.subscription?.status || '').toLowerCase()) ? 'Payment attention' : customer.subscription?.provider === 'stripe' ? subscriptionLifecycleLabel(customer) : 'No Stripe subscription';
                 return (
-                  <article key={customer.id} className={`admin-customer-accordion ${expanded ? 'open' : ''}`}>
-                    <button type="button" className="admin-customer-summary" onClick={() => toggleCustomer(customer.id)} aria-expanded={expanded}>
-                      <span className="admin-customer-main">
-                        <strong>{customer.accountName}</strong>
-                        <span>{planDisplayName(customer.planCode)} · {subscriptionLifecycleLabel(customer)}</span>
-                        <small>{customer.users?.[0]?.displayName || 'Owner'} · {customer.users?.[0]?.email || customer.users?.[0]?.emailMasked || 'No email'} · {customer.users?.[0]?.phone || customer.users?.[0]?.phoneMasked || 'No phone'}</small>
-                      </span>
-                      <span className="admin-customer-meta">
-                        <span className={`admin-status ${customer.accountStatus}`}>{customer.accountStatus}</span>
-                        <small>Created {dateLabel(customer.createdAt)}</small>
-                      </span>
-                      <span className="admin-accordion-chevron">{expanded ? <ChevronUp size={21} /> : <ChevronDown size={21} />}</span>
-                    </button>
-                    {expanded && (
-                      <div className="admin-customer-details">
-                        <div className="admin-trial-summary">
-                          <span><strong>Trial started</strong>{dateLabel(customer.trialStartedAt, true)}</span>
-                          <span><strong>Trial ends</strong>{founder ? 'No expiry' : dateLabel(customer.trialEndsAt, true)}</span>
-                          <span><strong>Time remaining</strong>{founder ? 'Founder access' : daysLeft === null ? 'No active trial' : `${daysLeft} day${daysLeft === 1 ? '' : 's'}`}</span>
-                          <span><strong>Onboarding</strong>{onboardingLabel}</span>
-                        </div>
-                        {!founder && customer.subscription?.provider === 'stripe' && (
-                          <div className="admin-billing-summary admin-billing-summary-wide">
-                            <div className="admin-billing-summary-heading"><CreditCard size={20} /><span><strong>{subscriptionLifecycleLabel(customer)}</strong><small>{customer.subscription.billing_interval || 'interval pending'} · {money(customer.subscription.price_minor || 0)}{customer.subscription.current_period_end ? ` · renews/ends ${dateLabel(customer.subscription.current_period_end)}` : ''}</small></span></div>
-                            <div className="admin-subscription-lifecycle-grid">
-                              <span><small>Next renewal amount</small><strong>{customer.subscription.next_invoice_amount_minor !== null && customer.subscription.next_invoice_amount_minor !== undefined ? money(customer.subscription.next_invoice_amount_minor) : money(customer.subscription.price_minor || 0)}</strong></span>
-                              <span><small>Next renewal date</small><strong>{dateLabel(customer.subscription.next_invoice_at || customer.subscription.current_period_end, true)}</strong></span>
-                              <span><small>Scheduled change</small><strong>{customer.subscription.scheduled_change_at ? `${planDisplayName(customer.subscription.scheduled_plan_code)} · ${customer.subscription.scheduled_billing_interval || 'billing'} · ${dateLabel(customer.subscription.scheduled_change_at)}` : 'None'}</strong></span>
-                              <span><small>Last Stripe refresh</small><strong>{dateLabel(customer.subscription.last_stripe_sync_at, true)}</strong></span>
-                            </div>
-                            {Number(customer.subscription.duplicate_subscription_count || 0) > 1 && <div className="admin-subscription-warning"><AlertTriangle size={18} /><span><strong>Overlapping subscriptions detected</strong><small>{(customer.subscription.duplicate_subscription_ids || []).join(', ')}</small></span></div>}
-                            <div className="admin-stripe-reference-grid">
-                              <span><small>Stripe customer reference</small><code>{customer.subscription.provider_customer_id || 'Pending'}</code></span>
-                              <span><small>Stripe subscription reference</small><code>{customer.subscription.provider_subscription_id || 'Pending'}</code></span>
-                            </div>
-                          </div>
-                        )}
-                        {!founder && customer.entitlements && (
-                          <div className="admin-entitlement-panel">
-                            <div className="admin-entitlement-heading"><ShieldCheck size={20} /><span><strong>Purchased plan entitlements</strong><small>Server-enforced limits stay attached to the purchased plan unless an Admin override is saved.</small></span></div>
-                            <div className="admin-entitlement-usage">
-                              <span><small>Users</small><strong>{customer.entitlements.usage?.users || 0} / {customer.entitlements.limits?.maxUsers || 'Unlimited'}</strong></span>
-                              <span><small>Documents</small><strong>{customer.entitlements.usage?.documents || 0} / {customer.entitlements.limits?.documentLimit || 'Unlimited'}</strong></span>
-                              <span><small>Storage</small><strong>{customer.entitlements.usage?.storageMb || 0} MB / {customer.entitlements.limits?.storageLimitMb || 'Unlimited'}</strong></span>
-                            </div>
-                            <div className="admin-entitlement-overrides">
-                              <label>Maximum users override<input type="number" min="1" placeholder="Use purchased plan" value={(entitlementDrafts[customer.id] || {}).maxUsers ?? ''} onChange={(e) => updateEntitlementDraft(customer.id, { maxUsers: e.target.value })} /></label>
-                              <label>Document limit override<input type="number" min="0" placeholder="Use purchased plan" value={(entitlementDrafts[customer.id] || {}).documentLimit ?? ''} onChange={(e) => updateEntitlementDraft(customer.id, { documentLimit: e.target.value })} /></label>
-                              <label>Storage MB override<input type="number" min="0" placeholder="Use purchased plan" value={(entitlementDrafts[customer.id] || {}).storageLimitMb ?? ''} onChange={(e) => updateEntitlementDraft(customer.id, { storageLimitMb: e.target.value })} /></label>
-                              {['documents', 'emergencyAccess', 'secureDeviceUnlock', 'cloudBackupSync'].map((feature) => <label key={`${customer.id}-${feature}`}>{feature.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase())}<CustomSelect className="admin-custom-select" value={(entitlementDrafts[customer.id] || {})[feature] || 'plan'} ariaLabel={`Choose ${feature.replace(/([A-Z])/g, ' $1')} entitlement`} options={[{ value: 'plan', label: 'Use purchased plan' }, { value: 'true', label: 'Enabled' }, { value: 'false', label: 'Disabled' }]} onChange={(nextValue) => updateEntitlementDraft(customer.id, { [feature]: nextValue })} /></label>)}
-                              <label className="admin-full">Override note<textarea rows="2" value={(entitlementDrafts[customer.id] || {}).note || ''} onChange={(e) => updateEntitlementDraft(customer.id, { note: e.target.value })} placeholder="Reason for the override" /></label>
-                            </div>
-                            <div className="admin-entitlement-actions"><button type="button" className="secondary-button" onClick={() => saveEntitlementOverrides(customer)} disabled={busy}><Save size={16} /> Save overrides</button><button type="button" className="secondary-button danger-soft" onClick={() => saveEntitlementOverrides(customer, true)} disabled={busy}>Clear overrides</button></div>
-                          </div>
-                        )}
-                        {!founder && !stripeManaged && (
-                          <div className="admin-trial-controls">
-                            <label>Days<input type="number" min="1" max="365" value={extensionDays} onChange={(event) => setTrialDays((current) => ({ ...current, [customer.id]: event.target.value }))} /></label>
-                            <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'start_trial', { days: extensionDays })} disabled={busy}><Play size={16} /> Start trial</button>
-                            <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'extend_trial', { days: extensionDays })} disabled={busy}><CalendarClock size={16} /> Extend</button>
-                            <button type="button" className="secondary-button" onClick={() => manageTrial(customer, 'activate_account')} disabled={busy}><UserRoundCheck size={16} /> Activate</button>
-                            <button type="button" className="secondary-button danger-soft" onClick={() => manageTrial(customer, 'cancel_trial')} disabled={busy}><Ban size={16} /> Cancel trial</button>
-                            {customer.accountStatus === 'suspended'
-                              ? <button type="button" className="secondary-button" onClick={() => setAccountStatus(customer, 'active')} disabled={busy}>Remove suspension</button>
-                              : <button type="button" className="secondary-button danger-soft" onClick={() => setAccountStatus(customer, 'suspended')} disabled={busy}>Suspend</button>}
-                          </div>
-                        )}
-                        {!founder && stripeManaged && (
-                          <div className="admin-stripe-account-actions">
-                            <button type="button" className="secondary-button" onClick={() => refreshStripeCustomer(customer)} disabled={busy}><RefreshCw size={16} /> Refresh from Stripe</button>
-                            {customer.accountStatus === 'suspended'
-                              ? <button type="button" className="secondary-button" onClick={() => setAccountStatus(customer, 'active')} disabled={busy}>Remove suspension</button>
-                              : <button type="button" className="secondary-button danger-soft" onClick={() => setAccountStatus(customer, 'suspended')} disabled={busy}>Suspend</button>}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </article>
+                  <button type="button" className="admin-customer-directory-card" key={customer.id} onClick={() => setSelectedCustomerId(customer.id)}>
+                    <span className="admin-customer-main">
+                      <strong>{customer.accountName}</strong>
+                      <span>{owner.displayName || 'Owner'} · {owner.email || owner.emailMasked || 'No email'} · {owner.phone || owner.phoneMasked || 'No mobile'}</span>
+                      <small>{customer.id}</small>
+                    </span>
+                    <span className="admin-customer-directory-plan"><small>Plan</small><strong>{customer.planName || planDisplayName(customer.planCode)}</strong><em>{paymentStatus}</em></span>
+                    <span className="admin-customer-directory-health"><small>Last sign-in</small><strong>{dateLabel(customer.lastSignInAt, true)}</strong><em>Backup {dateLabel(customer.lastSuccessfulBackupAt, true)}</em></span>
+                    <span className="admin-customer-directory-status"><span className={`admin-status ${customer.accountStatus}`}>{planStatusDisplayName(customer.accountStatus)}</span><span className={`admin-status ${customer.verification?.status === 'verified' ? 'success' : 'warning'}`}>{customer.verification?.status === 'verified' ? 'Verified' : 'Verify'}</span></span>
+                    <ChevronRight size={22} />
+                  </button>
                 );
               })}
-              {!data.customers?.length && <div className="admin-empty">No customer accounts were returned.</div>}
+              {!filteredCustomers.length && <div className="admin-empty">No customer accounts match the selected search and filters.</div>}
             </div>
           </section>
         </section>
-      )}
+      ))}
 
 
       {activeTab === 'billing' && (
@@ -644,6 +553,26 @@ export default function AdminApp({ version }) {
                 );
               })}
               {!data.customers?.length && <div className="admin-empty">No customer sync diagnostics were returned.</div>}
+            </div>
+          </section>
+        </section>
+      )}
+
+
+      {activeTab === 'audit' && (
+        <section className="admin-content">
+          <section className="admin-panel">
+            <div className="admin-panel-heading"><div><p className="eyebrow">Security and accountability</p><h2>Admin audit log</h2></div><span>{data.adminAuditEvents?.length || 0} recent action(s)</span></div>
+            <p className="admin-panel-intro">Customer changes, plan operations, Stripe refreshes, account emails, notes, customer-detail views and Admin sign-in events are recorded here.</p>
+            <div className="admin-audit-list">
+              {(data.adminAuditEvents || []).map((entry) => (
+                <article key={entry.id}>
+                  <FileText size={18} />
+                  <div><strong>{planStatusDisplayName(entry.action)}</strong><span>{entry.accountName || entry.tenant_id || 'Platform Admin'} · {adminAuditSummary(entry)}</span><small>{dateLabel(entry.created_at, true)}{entry.tenant_id ? ` · ${entry.tenant_id}` : ''}</small></div>
+                  {entry.tenant_id && <button type="button" className="admin-audit-open-customer" onClick={() => { setSelectedCustomerId(entry.tenant_id); setActiveTab('customers'); }} aria-label={`Open ${entry.accountName || 'customer'} details`}><ChevronRight size={18} /></button>}
+                </article>
+              ))}
+              {!data.adminAuditEvents?.length && <div className="admin-empty">No Admin actions have been recorded yet.</div>}
             </div>
           </section>
         </section>

@@ -8,6 +8,13 @@ export async function handler(event) {
   const action = String(body.action || (event.httpMethod === 'GET' ? 'status' : 'login')).trim();
 
   if (action === 'logout') {
+    const session = readAdminSession(event);
+    if (session) {
+      await insertRow('audit_log', {
+        id: publicId('audit'), tenant_id: null, user_id: null, action: 'owner_admin_logout',
+        metadata: { version: APP_VERSION, actor: 'owner_admin', admin_session_issued_at: session.iat ? new Date(Number(session.iat) * 1000).toISOString() : null }
+      }).catch(() => null);
+    }
     return jsonResponse(200, { ok: true, version: APP_VERSION, authenticated: false, message: 'Admin session ended.' }, {
       'set-cookie': clearAdminSession(event)
     });
@@ -36,7 +43,7 @@ export async function handler(event) {
       tenant_id: null,
       user_id: null,
       action: 'owner_admin_login',
-      metadata: { version: APP_VERSION }
+      metadata: { version: APP_VERSION, actor: 'owner_admin' }
     }).catch(() => null);
   } catch {
     // Admin authentication must not fail only because audit logging is unavailable.
