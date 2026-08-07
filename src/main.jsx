@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'My Passwords Ver-0.052';
+const VERSION = 'My Passwords Ver-0.052A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2080,6 +2080,7 @@ function App() {
   const [isFolderListPopupOpen, setIsFolderListPopupOpen] = useState(false);
   const [showOnboardingDetails, setShowOnboardingDetails] = useState(() => !Boolean(readStoredVault()));
   const [isCreateAccountPopupOpen, setIsCreateAccountPopupOpen] = useState(false);
+  const [signupLegalModal, setSignupLegalModal] = useState({ visible: false, page: 'terms' });
   const [isCreateVaultPopupOpen, setIsCreateVaultPopupOpen] = useState(false);
   const [landingOnboardingStep, setLandingOnboardingStep] = useState(1);
   const [landingAccountDraft, setLandingAccountDraft] = useState({
@@ -4625,6 +4626,7 @@ function App() {
     || isFolderPopupOpen
     || isFolderListPopupOpen
     || folderManager.visible
+    || signupLegalModal.visible
     || isCreateAccountPopupOpen
     || isCreateVaultPopupOpen
   );
@@ -4650,6 +4652,7 @@ function App() {
     isFolderPopupOpen,
     isFolderListPopupOpen,
     folderManagerVisible: folderManager.visible,
+    signupLegalModalVisible: signupLegalModal.visible,
     isCreateAccountPopupOpen,
     isCreateVaultPopupOpen,
     hasBackDismissibleLayer,
@@ -4678,6 +4681,7 @@ function App() {
     if (state.isFolderPopupOpen) { backNavigationStateRef.current.isFolderPopupOpen = false; closeFolderPopup(); return true; }
     if (state.folderManagerVisible) { backNavigationStateRef.current.folderManagerVisible = false; closeFolderManager(); return true; }
     if (state.isFolderListPopupOpen) { backNavigationStateRef.current.isFolderListPopupOpen = false; setIsFolderListPopupOpen(false); return true; }
+    if (state.signupLegalModalVisible) { backNavigationStateRef.current.signupLegalModalVisible = false; setSignupLegalModal((current) => ({ ...current, visible: false })); return true; }
     if (state.isCreateAccountPopupOpen) { backNavigationStateRef.current.isCreateAccountPopupOpen = false; setIsCreateAccountPopupOpen(false); return true; }
     if (state.isCreateVaultPopupOpen) { backNavigationStateRef.current.isCreateVaultPopupOpen = false; setIsCreateVaultPopupOpen(false); return true; }
     if (state.mobileHeaderMenuOpen) { backNavigationStateRef.current.mobileHeaderMenuOpen = false; setMobileHeaderMenuOpen(false); return true; }
@@ -4865,6 +4869,7 @@ function App() {
   }
 
   function openCreateAccountPopup(preselectedPlanCode = '') {
+    setSignupLegalModal({ visible: false, page: 'terms' });
     const preferredPlan = publicPlans.find((plan) => plan.code === preselectedPlanCode)
       || publicPlans[Math.floor(publicPlans.length / 2)]
       || publicPlans[0]
@@ -4887,9 +4892,28 @@ function App() {
   }
 
   function closeCreateAccountPopup() {
+    setSignupLegalModal({ visible: false, page: 'terms' });
     setIsCreateAccountPopupOpen(false);
     setLandingOnboardingStep(1);
     setLandingOtp({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
+  }
+
+  function openSignupLegalDocument(page) {
+    const safePage = ['terms', 'privacy', 'billing'].includes(page) ? page : 'terms';
+    setSignupLegalModal({ visible: true, page: safePage });
+  }
+
+  function closeSignupLegalDocument() {
+    setSignupLegalModal((current) => ({ ...current, visible: false }));
+  }
+
+  function handleSignupLegalDocumentClick(event) {
+    const anchor = event.target?.closest?.('a[href]');
+    if (!anchor) return;
+    const page = legalPageForPath(anchor.getAttribute('href') || '');
+    if (!page) return;
+    event.preventDefault();
+    setSignupLegalModal({ visible: true, page });
   }
 
   function updateLandingDraft(patch) {
@@ -6145,6 +6169,10 @@ function App() {
                       <input inputMode="tel" value={landingAccountDraft.phoneNumber || ''} onChange={(e) => updateLandingDraft({ phoneNumber: e.target.value })} placeholder="712345678" />
                     </div>
                     <label>Vault name<input value={landingAccountDraft.accountName} onChange={(e) => updateLandingDraft({ accountName: e.target.value })} placeholder="e.g. My Private Vault" /></label>
+                    <div className="legal-consent-row">
+                      <input id="signup-legal-consent" type="checkbox" checked={Boolean(landingAccountDraft.legalAccepted)} onChange={(event) => updateLandingDraft({ legalAccepted: event.target.checked })} aria-labelledby="signup-legal-consent-text" />
+                      <span id="signup-legal-consent-text">I agree to the <button type="button" className="legal-inline-link" onClick={() => openSignupLegalDocument('terms')}>Terms of Service</button>, acknowledge the <button type="button" className="legal-inline-link" onClick={() => openSignupLegalDocument('privacy')}>Privacy Policy</button>, and accept the <button type="button" className="legal-inline-link" onClick={() => openSignupLegalDocument('billing')}>Subscription, Cancellation &amp; Refund Policy</button>.</span>
+                    </div>
                   </div>
                 )}
 
@@ -6157,10 +6185,6 @@ function App() {
                       {!publicPlans.length && <div className="no-public-plans"><AlertTriangle size={18} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
                     </div>
                     <div className="saas-inline-note"><ShieldCheck size={16} /><span>Your selected trial starts only after successful contact verification. Creating the trial does not start a paid subscription.</span></div>
-                    <label className="legal-consent-row">
-                      <input type="checkbox" checked={Boolean(landingAccountDraft.legalAccepted)} onChange={(event) => updateLandingDraft({ legalAccepted: event.target.checked })} />
-                      <span>I agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms of Service</a>, acknowledge the <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>, and accept the <a href="/billing-terms" target="_blank" rel="noreferrer">Subscription, Cancellation & Refund Policy</a>.</span>
-                    </label>
                     <p className="landing-commercial-note">Prices are shown in GBP. Any tax that the seller is required and configured to collect must be shown in the Stripe payment flow before payment.</p>
                   </div>
                 )}
@@ -6225,6 +6249,28 @@ function App() {
             </section>
           </div>
         )}
+
+        {signupLegalModal.visible && isCreateAccountPopupOpen && (
+          <div className="item-popup-layer signup-legal-popup-layer" role="dialog" aria-modal="true" aria-labelledby="signup-legal-popup-title">
+            <button type="button" className="item-popup-backdrop" onClick={closeSignupLegalDocument} aria-label="Close legal document" />
+            <section className="item-popup-card signup-legal-popup-card">
+              <header className="item-popup-header">
+                <div>
+                  <p className="eyebrow">Legal</p>
+                  <h2 id="signup-legal-popup-title"><FileText size={20} /> {signupLegalModal.page === 'privacy' ? 'Privacy Policy' : signupLegalModal.page === 'billing' ? 'Billing & Refund Terms' : 'Terms of Service'}</h2>
+                </div>
+                <button type="button" className="icon-button" onClick={closeSignupLegalDocument} aria-label="Close legal document"><X size={18} /></button>
+              </header>
+              <div className="item-popup-body signup-legal-popup-body" onClickCapture={handleSignupLegalDocumentClick}>
+                <LegalPage page={signupLegalModal.page} embedded />
+              </div>
+              <footer className="item-popup-footer signup-legal-popup-footer">
+                <button type="button" className="primary-button" onClick={closeSignupLegalDocument}>Back to signup</button>
+              </footer>
+            </section>
+          </div>
+        )}
+
 
       <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} phone={bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)} channel={otpChannel} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onChannelChange={chooseOtpChannel} onSend={() => requestSelectedOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />

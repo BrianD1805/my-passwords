@@ -16,12 +16,31 @@ export function legalPageForPath(pathname = '') {
   return legalRoutes[String(pathname || '').replace(/\/+$/, '') || '/'] || '';
 }
 
-function LegalShell({ title, eyebrow, intro, children }) {
+function LegalShell({ title, eyebrow, intro, children, embedded = false }) {
   useEffect(() => {
+    if (embedded) return;
     document.title = `${title} | My Passwords`;
     const meta = document.querySelector('meta[name="description"]');
     if (meta) meta.setAttribute('content', intro);
-  }, [title, intro]);
+  }, [title, intro, embedded]);
+
+  const documentContent = (
+    <>
+      <div className="legal-document-heading">
+        <p className="eyebrow">{eyebrow}</p>
+        <h1>{title}</h1>
+        <p>{intro}</p>
+        <div className="legal-effective-row"><span>Effective {LEGAL_EFFECTIVE_DATE}</span><span>Document version {LEGAL_VERSION}</span></div>
+      </div>
+      {children}
+      <section className="legal-contact-card">
+        <Mail size={21} />
+        <div><strong>Questions or privacy requests</strong><p>My Passwords is a {BUSINESS_NAME} project. Contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. Never send your master password, vault contents, recovery codes or secret keys to support.</p></div>
+      </section>
+    </>
+  );
+
+  if (embedded) return <article className="legal-document legal-embedded-document">{documentContent}</article>;
 
   return (
     <main className="legal-page-shell">
@@ -33,19 +52,7 @@ function LegalShell({ title, eyebrow, intro, children }) {
           <small>A {BUSINESS_NAME} project</small>
         </div>
       </header>
-      <article className="legal-document">
-        <div className="legal-document-heading">
-          <p className="eyebrow">{eyebrow}</p>
-          <h1>{title}</h1>
-          <p>{intro}</p>
-          <div className="legal-effective-row"><span>Effective {LEGAL_EFFECTIVE_DATE}</span><span>Document version {LEGAL_VERSION}</span></div>
-        </div>
-        {children}
-        <section className="legal-contact-card">
-          <Mail size={21} />
-          <div><strong>Questions or privacy requests</strong><p>My Passwords is a {BUSINESS_NAME} project. Contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. Never send your master password, vault contents, recovery codes or secret keys to support.</p></div>
-        </section>
-      </article>
+      <article className="legal-document">{documentContent}</article>
       <footer className="legal-page-footer">
         <span>© 2026 My Passwords · A {BUSINESS_NAME} project</span>
         <nav><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/billing-terms">Billing & refunds</a></nav>
@@ -54,12 +61,13 @@ function LegalShell({ title, eyebrow, intro, children }) {
   );
 }
 
-function TermsPage() {
+function TermsPage({ embedded = false }) {
   return (
     <LegalShell
       eyebrow="Legal"
       title="Terms of Service"
       intro="These Terms explain the rules for using My Passwords, including account access, encrypted vault services, subscriptions and Emergency Access. Mandatory consumer rights that apply where you live are not excluded by these Terms."
+      embedded={embedded}
     >
       <section><h2>1. Service and operator</h2><p>My Passwords is a password-vault service operated as a {BUSINESS_NAME} project. The service includes a local encrypted vault, optional encrypted cloud backup and syncing, account verification, subscription management, encrypted document storage where included in the plan, and Emergency Access where enabled.</p></section>
       <section><h2>2. Your account</h2><p>You must provide accurate account contact information and keep access to your verified email address and, where used, mobile number. You are responsible for activity performed through your verified devices and for keeping those devices reasonably secure.</p><p>The Personal plan is intended for one account owner. Family and Business functionality is not part of the initial public launch unless it is expressly shown as available in the service.</p></section>
@@ -78,12 +86,13 @@ function TermsPage() {
   );
 }
 
-function PrivacyPage() {
+function PrivacyPage({ embedded = false }) {
   return (
     <LegalShell
       eyebrow="Privacy"
       title="Privacy Policy"
       intro="This Policy explains what personal data My Passwords processes, why it is needed, what is encrypted, which service providers are involved, and how to request access, correction or deletion."
+      embedded={embedded}
     >
       <section><h2>1. Who handles your data</h2><p>My Passwords is a {BUSINESS_NAME} project. For account, support and service-administration data, {BUSINESS_NAME} acts as the service operator. Contact privacy and support requests at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p></section>
       <section><h2>2. Data we process</h2><div className="legal-data-grid"><div><strong>Account data</strong><p>Name, email, mobile number, account/vault name, verification state, plan and account status.</p></div><div><strong>Device and security metadata</strong><p>Verified-device identifiers, browser/platform information, session dates, security events and masked delivery destinations.</p></div><div><strong>Billing metadata</strong><p>Stripe customer/subscription identifiers, plan, billing period, amounts, invoice references and payment status. Full card details are handled by Stripe.</p></div><div><strong>Operational metadata</strong><p>Sync status, backup status, item/document counts, timestamps, error codes and service-health events designed not to contain decrypted vault contents.</p></div><div><strong>Communications</strong><p>Email/SMS delivery status and support information you choose to send. Do not send support your master password or vault contents.</p></div><div><strong>Emergency Access metadata</strong><p>Trusted-person contact details, waiting period, request/release status and the separately encrypted owner-prepared emergency package.</p></div></div></section>
@@ -100,12 +109,13 @@ function PrivacyPage() {
   );
 }
 
-function BillingTermsPage() {
+function BillingTermsPage({ embedded = false }) {
   return (
     <LegalShell
       eyebrow="Subscriptions"
       title="Subscription, Cancellation & Refund Policy"
       intro="This Policy explains trials, recurring billing, subscription changes, cancellation, refunds, taxes, invoices and payment records for My Passwords."
+      embedded={embedded}
     >
       <section><h2>1. Trial</h2><p>The public Personal plan may include a free trial for the number of days shown at signup. The trial starts after successful contact verification. No charge is made merely for creating the trial account, and a card is not required until you deliberately start a paid subscription through Stripe Checkout.</p></section>
       <section><h2>2. Prices and recurring billing</h2><p>Prices are shown in GBP unless the checkout expressly states otherwise. When you start a paid subscription, Stripe Checkout shows the price, billing frequency and payment details before you confirm. The subscription then renews automatically at the selected interval until cancellation takes effect.</p><p>Bank or card statements use the statement descriptor configured on the Stripe merchant account. The Stripe receipt or invoice is the authoritative payment record for the charge.</p></section>
@@ -120,8 +130,8 @@ function BillingTermsPage() {
   );
 }
 
-export default function LegalPage({ page }) {
-  if (page === 'privacy') return <PrivacyPage />;
-  if (page === 'billing') return <BillingTermsPage />;
-  return <TermsPage />;
+export default function LegalPage({ page, embedded = false }) {
+  if (page === 'privacy') return <PrivacyPage embedded={embedded} />;
+  if (page === 'billing') return <BillingTermsPage embedded={embedded} />;
+  return <TermsPage embedded={embedded} />;
 }
