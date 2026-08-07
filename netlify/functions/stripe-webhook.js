@@ -1,4 +1,4 @@
-import { APP_VERSION, jsonResponse, selectRows, updateRow, upsertRow } from './_db.js';
+import { APP_VERSION, jsonResponse, selectRows, supabaseRequest, updateRow, upsertRow } from './_db.js';
 import { stripeObjectId, stripeRequest, stripeTimestampToIso, stripeWebhookConfigured, verifyStripeWebhook } from './_stripe.js';
 import { processStripeInvoiceObject, syncStripeSubscriptionObject } from './_subscription-lifecycle.js';
 import { sendCustomerLifecycleEmailForTenant } from './_customer-email.js';
@@ -16,10 +16,8 @@ function metadataValue(object, key) {
 }
 
 async function findSubscriptionRow({ tenantId = '', subscriptionId = '', customerId = '' }) {
-  if (tenantId) {
-    const rows = await selectRows('tenant_subscriptions', `select=*&tenant_id=${eq(tenantId)}&limit=1`);
-    if (rows?.[0]) return rows[0];
-  }
+  // Provider identifiers are authoritative for an existing Stripe relationship.
+  // Tenant metadata is only a fallback for the first event before a provider ID has been stored.
   if (subscriptionId) {
     const rows = await selectRows('tenant_subscriptions', `select=*&provider_subscription_id=${eq(subscriptionId)}&limit=1`);
     if (rows?.[0]) return rows[0];
@@ -28,7 +26,34 @@ async function findSubscriptionRow({ tenantId = '', subscriptionId = '', custome
     const rows = await selectRows('tenant_subscriptions', `select=*&provider_customer_id=${eq(customerId)}&limit=1`);
     if (rows?.[0]) return rows[0];
   }
+  if (tenantId) {
+    const rows = await selectRows('tenant_subscriptions', `select=*&tenant_id=${eq(tenantId)}&limit=1`);
+    if (rows?.[0]) return rows[0];
+  }
   return null;
+}
+
+async function claimWebhookEvent(stripeEvent) {
+  const result = await supabaseRequest('rpc/claim_stripe_webhook_event', {
+    method: 'POST',
+    body: JSON.stringify({ p_event_id: stripeEvent.id, p_event_type: stripeEvent.type, p_stale_seconds: 300 })
+  });
+  const claim = Array.isArray(result) ? result[0] : result;
+  if (!claim?.row_id) throw new Error('Stripe webhook replay claim did not return a row ID.');
+  return {
+    duplicate: !claim.claimed,
+    processing: claim.reason === 'processing',
+    row: { id: claim.row_id }
+  };
+}
+
+async function finishWebhookEvent(claim, status, errorMessage = '') {
+  if (!claim?.row?.id) return;
+  const now = new Date().toISOString();
+  await updateRow('stripe_webhook_events', `id=${eq(claim.row.id)}`, {
+    status, error_message: errorMessage ? String(errorMessage).slice(0, 1000) : null,
+    processed_at: status === 'succeeded' ? now : null, updated_at: now
+  }).catch(() => null);
 }
 
 async function processCheckoutSession(session) {
@@ -190,8 +215,13 @@ export async function handler(event) {
     return jsonResponse(400, { ok: false, version: APP_VERSION, message: error.message });
   }
 
-  const duplicate = await selectRows('billing_events', `select=id,status&provider=eq.stripe&provider_event_id=${eq(stripeEvent.id)}&limit=1`).catch(() => []);
-  if (duplicate?.[0]?.id && duplicate[0].status === 'processed') return jsonResponse(200, { ok: true, version: APP_VERSION, duplicate: true, message: 'Stripe event already processed.' });
+  let webhookClaim;
+  try {
+    webhookClaim = await claimWebhookEvent(stripeEvent);
+  } catch (error) {
+    return jsonResponse(503, { ok: false, version: APP_VERSION, code: 'WEBHOOK_REPLAY_GUARD_UNAVAILABLE', message: 'Stripe event replay protection is not available. Apply the Ver-0.050 security migration.' });
+  }
+  if (webhookClaim.duplicate) return jsonResponse(200, { ok: true, version: APP_VERSION, duplicate: true, processing: Boolean(webhookClaim.processing), message: webhookClaim.processing ? 'Stripe event is already being processed.' : 'Stripe event already processed.' });
 
   try {
     const object = stripeEvent.data?.object || {};
@@ -230,8 +260,10 @@ export async function handler(event) {
       created_at: now
     }, 'id');
     const lifecycleEmails = await sendStripeLifecycleEmails({ stripeEvent, object, before, after: subscriptionRow });
+    await finishWebhookEvent(webhookClaim, 'succeeded');
     return jsonResponse(200, { ok: true, version: APP_VERSION, received: true, lifecycleEmails });
   } catch (error) {
+    await finishWebhookEvent(webhookClaim, 'failed', error.message || 'Stripe event processing failed.');
     return jsonResponse(500, { ok: false, version: APP_VERSION, message: `Stripe event processing failed: ${error.message}`, details: error.details || null });
   }
 }

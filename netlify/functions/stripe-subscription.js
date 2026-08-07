@@ -3,6 +3,7 @@ import { getBillingContext } from './_billing.js';
 import { stripeConfigured } from './_stripe.js';
 import { resolveTenantEntitlements } from './_entitlements.js';
 import { sendCustomerLifecycleEmailForTenant } from './_customer-email.js';
+import { assertBrowserAction, claimIdempotency, completeIdempotency, securityErrorResponseHeaders } from './_security.js';
 import {
   cancelStripeSubscriptionAtPeriodEnd,
   changeStripeSubscription,
@@ -41,6 +42,7 @@ export async function handler(event) {
     return jsonResponse(status, { ok: false, version: APP_VERSION, code: context.code, founder: Boolean(context.founder), message: context.message, subscription: serializeSubscription(context.subscription), account: accountPayload(context) });
   }
 
+  let idempotencyClaim = null;
   try {
     let result;
     let action = 'refresh';
@@ -48,9 +50,15 @@ export async function handler(event) {
     if (event.httpMethod === 'GET') {
       result = await refreshStripeSubscriptionForContext(context, { recordEvent: true });
     } else {
+      assertBrowserAction(event, { session: context.session, kind: 'customer', csrf: true });
       const body = parseBody(event);
       actionBody = body;
       action = String(body.action || 'refresh').trim().toLowerCase();
+      idempotencyClaim = await claimIdempotency({
+        scope: `stripe_subscription_${action}`,
+        requestId: String(body.requestId || ''), tenantId: context.tenant.id, userId: context.user.id,
+        payload: { action, planCode: body.planCode || '', billingInterval: body.billingInterval || '' }
+      });
       if (action === 'refresh') result = await refreshStripeSubscriptionForContext(context, { recordEvent: true });
       else if (action === 'change_subscription') result = await changeStripeSubscription(context, { planCode: body.planCode, billingInterval: body.billingInterval, requestId: body.requestId });
       else if (action === 'cancel_at_period_end') result = await cancelStripeSubscriptionAtPeriodEnd(context, { requestId: body.requestId });
@@ -89,6 +97,7 @@ export async function handler(event) {
     }
 
     const entitlementContext = await resolveTenantEntitlements(context.tenant.id);
+    await completeIdempotency(idempotencyClaim, 'completed');
     return jsonResponse(200, {
       ok: true,
       version: APP_VERSION,
@@ -102,13 +111,14 @@ export async function handler(event) {
       message: result.message || 'Subscription updated.'
     });
   } catch (error) {
-    return jsonResponse(responseStatus(error), {
+    await completeIdempotency(idempotencyClaim, 'failed');
+    return jsonResponse(error.status || responseStatus(error), {
       ok: false,
       version: APP_VERSION,
       code: error.code || 'STRIPE_SUBSCRIPTION_ACTION_FAILED',
       duplicateSubscriptionIds: error.subscriptionIds || [],
       message: error.message || 'The subscription action could not be completed.',
       details: error.details || null
-    });
+    }, securityErrorResponseHeaders(error));
   }
 }

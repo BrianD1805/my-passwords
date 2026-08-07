@@ -1,6 +1,7 @@
 import { APP_VERSION, deleteRow, jsonResponse, parseBody, requirePost, selectRows, upsertRow } from './_db.js';
 import { getCustomerAccess } from './_session.js';
 import { limitReached, serialiseEntitlements } from './_entitlements.js';
+import { assertBrowserAction } from './_security.js';
 
 function safeEq(value) { return encodeURIComponent(String(value || '')); }
 function toInt(value) { const n = Number(value || 0); return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0; }
@@ -40,6 +41,8 @@ export async function handler(event) {
   }
 
   if (event.httpMethod === 'DELETE') {
+    try { assertBrowserAction(event, { session: access.session, kind: 'customer', csrf: true }); }
+    catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code || 'SECURE_REQUEST_REJECTED', message: error.message }); }
     const params = event.queryStringParameters || Object.fromEntries(new URLSearchParams(event.rawQuery || ''));
     const documentId = String(params.documentId || '').trim();
     if (!documentId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'documentId is required.' });
@@ -71,6 +74,8 @@ export async function handler(event) {
   }
 
   if (!requirePost(event)) return jsonResponse(405, { ok: false, version: APP_VERSION, message: 'GET, POST or DELETE required.' });
+  try { assertBrowserAction(event, { session: access.session, kind: 'customer', csrf: true }); }
+  catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code || 'SECURE_REQUEST_REJECTED', message: error.message }); }
   const body = parseBody(event);
   const documentId = String(body.documentId || '').trim();
   const encryptedBlob = String(body.encryptedBlob || '').trim();

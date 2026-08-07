@@ -7,7 +7,7 @@ export async function handler() {
     ok: true,
     app: 'My Passwords',
     version: APP_VERSION,
-    mode: 'automated-customer-emails',
+    mode: 'security-hardening',
     sms: {
       configured: smsMode !== 'unconfigured',
       providerMode: smsMode
@@ -15,6 +15,12 @@ export async function handler() {
     email: {
       configured: Boolean(process.env.RESEND_API_KEY && process.env.OTP_EMAIL_FROM),
       provider: 'resend'
+    },
+    security: {
+      customerSessionSecretConfigured: Boolean(process.env.CUSTOMER_SESSION_SECRET),
+      adminSessionSecretConfigured: Boolean(process.env.ADMIN_SESSION_SECRET),
+      adminAccessKeyConfigured: Boolean(process.env.ADMIN_ACCESS_KEY),
+      stripeWebhookSecretConfigured: Boolean(process.env.STRIPE_WEBHOOK_SECRET)
     }
   });
 }

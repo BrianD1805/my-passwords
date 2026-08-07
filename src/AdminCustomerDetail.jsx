@@ -4,8 +4,17 @@ import CustomSelect from './CustomSelect.jsx';
 
 async function requestJson(url, options = {}) {
   try {
-    const response = await fetch(url, { credentials: 'same-origin', ...options });
+    const method = String(options.method || 'GET').toUpperCase();
+    const csrfToken = sessionStorage.getItem('mp_admin_csrf') || '';
+    const headers = { ...(options.headers || {}) };
+    if (method !== 'GET' && method !== 'HEAD') {
+      headers['x-mp-request'] = '1';
+      if (csrfToken) headers['x-mp-csrf'] = csrfToken;
+    }
+    const response = await fetch(url, { credentials: 'same-origin', ...options, headers });
     const data = await response.json().catch(() => ({ ok: false, message: 'The server returned an invalid response.' }));
+    if (data?.csrfToken) sessionStorage.setItem('mp_admin_csrf', data.csrfToken);
+    if (response.status === 401) sessionStorage.removeItem('mp_admin_csrf');
     if (!response.ok) return { ...data, ok: false, httpStatus: response.status };
     return data;
   } catch {

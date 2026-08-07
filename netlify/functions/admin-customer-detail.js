@@ -1,5 +1,6 @@
 import { APP_VERSION, deleteRow, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow } from './_db.js';
-import { readAdminSession } from './_auth.js';
+import { validateAdminSession } from './_admin-session.js';
+import { assertBrowserAction } from './_security.js';
 import { createAccountOtp, maskEmail } from './_account-otp.js';
 import { adminEmailTypesForCustomer, sendAdminAccountEmail } from './_admin-email.js';
 
@@ -191,8 +192,9 @@ async function loadCustomerDetail(tenantId) {
 }
 
 export async function handler(event) {
-  const session = readAdminSession(event);
-  if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'ADMIN_SESSION_REQUIRED', message: 'Admin sign-in is required.' });
+  const validation = await validateAdminSession(event, { touch: true });
+  if (!validation.ok) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'ADMIN_SESSION_REQUIRED', message: 'Admin sign-in is required.' });
+  const session = validation.session;
 
   const tenantId = safeText(event.queryStringParameters?.tenantId || parseBody(event).tenantId, 160);
   if (!tenantId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A customer account is required.' });
@@ -211,6 +213,9 @@ export async function handler(event) {
   if (event.httpMethod !== 'POST') return jsonResponse(405, { ok: false, version: APP_VERSION, message: 'GET or POST required.' });
   const body = parseBody(event);
   const action = safeText(body.action, 80);
+  try { assertBrowserAction(event, { session, kind: 'admin', csrf: true }); } catch (error) {
+    return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code || 'SECURE_REQUEST_REJECTED', message: error.message });
+  }
 
   try {
     const detail = await loadCustomerDetail(tenantId);
@@ -292,6 +297,7 @@ export async function handler(event) {
 
     return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Unknown customer-detail action.' });
   } catch (error) {
+    await audit(session, 'admin_customer_action_failed', { tenant_id: tenantId || null, action: String(action || 'unknown').slice(0, 80), error: safeText(error.message || 'Customer operation failed.', 600) });
     return jsonResponse(error.status || 500, { ok: false, version: APP_VERSION, message: error.message || 'Customer operation failed.', details: error.details || null });
   }
 }

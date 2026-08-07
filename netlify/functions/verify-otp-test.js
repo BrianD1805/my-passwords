@@ -4,6 +4,7 @@ import { evaluateTenantAccess, isFounderTenant, recordLifecycleEvent, upsertTria
 import { resolveTenantEntitlements } from './_entitlements.js';
 import { verifyAccountOtp } from './_account-otp.js';
 import { sendCustomerLifecycleEmail } from './_customer-email.js';
+import { assertBrowserAction, consumeRateLimit, csrfTokenForSession, resetRateLimit, requestIpHash, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -13,12 +14,15 @@ export async function handler(event) {
   if (!requirePost(event)) return jsonResponse(405, { ok: false, message: 'POST required.' });
 
   const body = parseBody(event);
+  try { assertBrowserAction(event, { csrf: false }); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
   const challengeId = String(body.challengeId || '').trim();
   const code = String(body.code || '').replace(/\D/g, '');
 
   if (!challengeId || code.length !== 6) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A valid challenge ID and 6-digit OTP code are required.' });
 
   try {
+    await consumeRateLimit(event, { scope: 'otp_verify_ip', identifier: requestIpHash(event), limit: 20, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
+    await consumeRateLimit(event, { scope: 'otp_verify_challenge', identifier: challengeId, limit: 6, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
     const challenge = await verifyAccountOtp({ challengeId, code });
     const now = challenge.verified_at || new Date().toISOString();
     const isEmail = String(challenge.delivery_channel || '').includes('email');
@@ -152,6 +156,7 @@ export async function handler(event) {
       browser: String(body.browser || '').trim(),
       userAgent: String(body.userAgent || '').trim()
     });
+    await resetRateLimit(event, { scope: 'otp_verify_challenge', identifier: challengeId });
 
     const lifecycle = await evaluateTenantAccess({
       ...tenant,
@@ -185,6 +190,7 @@ export async function handler(event) {
       userId: user.id,
       role: user.role || 'administrator',
       authenticated: true,
+      csrfToken: csrfTokenForSession({ sessionId: verifiedSession.session.id }, 'customer'),
       cloudAccess,
       accessCode,
       onboardingCompleted: firstActivation,
@@ -208,6 +214,6 @@ export async function handler(event) {
       'set-cookie': verifiedSession.cookie
     });
   } catch (error) {
-    return jsonResponse(error.status || 500, { ok: false, version: APP_VERSION, message: error.message || 'Could not verify the code.', error: error.status ? undefined : error.message, details: error.details || null });
+    return jsonResponse(error.status || 500, { ok: false, version: APP_VERSION, code: error.code || 'OTP_VERIFY_FAILED', message: error.message || 'Could not verify the code.', error: error.status ? undefined : error.message, details: error.details || null }, securityErrorResponseHeaders(error));
   }
 }

@@ -1,5 +1,6 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows } from './_db.js';
 import { assertUserCapacity, entitlementSnapshotFromPlan, launchReadyPlan } from './_entitlements.js';
+import { assertBrowserAction, consumeRateLimit, requestIpHash, securityErrorResponseHeaders } from './_security.js';
 
 const defaultCategories = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
 
@@ -51,6 +52,7 @@ export async function handler(event) {
   if (!requirePost(event)) return jsonResponse(405, { ok: false, message: 'POST required.' });
 
   const body = parseBody(event);
+  try { assertBrowserAction(event, { csrf: false }); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
   const email = String(body.email || '').trim().toLowerCase();
   const phoneCountryCode = normaliseCountryCode(body.phoneCountryCode || body.countryCode || '+254');
   const phoneNumber = normaliseLocalPhone(body.phoneNumber || body.mobile || '');
@@ -63,6 +65,8 @@ export async function handler(event) {
   if (!phoneE164) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A mobile number with country code is required.' });
 
   try {
+    await consumeRateLimit(event, { scope: 'signup_ip', identifier: requestIpHash(event), limit: 8, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
+    await consumeRateLimit(event, { scope: 'signup_email', identifier: email, limit: 5, windowSeconds: 60 * 60, blockSeconds: 60 * 60 });
     const [emailUser, phoneUser] = await Promise.all([findByEmail(email), findByPhone(phoneE164)]);
     if (emailUser?.id && phoneUser?.id && emailUser.id !== phoneUser.id) {
       return jsonResponse(409, {
@@ -220,7 +224,7 @@ export async function handler(event) {
         message: error.message || 'This plan does not have capacity for another user.'
       });
     }
-    return jsonResponse(500, {
+    return jsonResponse(error.status || 500, {
       ok: false,
       connected: true,
       provider: 'supabase',
@@ -228,6 +232,6 @@ export async function handler(event) {
       message: 'Account setup did not complete. Supabase was reached, but the onboarding step failed.',
       error: error.message,
       details: error.details || null
-    });
+    }, securityErrorResponseHeaders(error));
   }
 }

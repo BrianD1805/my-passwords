@@ -1,5 +1,6 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow } from './_db.js';
-import { readAdminSession } from './_auth.js';
+import { validateAdminSession } from './_admin-session.js';
+import { assertBrowserAction } from './_security.js';
 import { sendCustomerLifecycleEmail } from './_customer-email.js';
 import { runCustomerLifecycleEmailProcessor } from './customer-lifecycle-email-process.js';
 import { runEmergencyAccessReleaseProcessor } from './emergency-access-release-process.js';
@@ -149,13 +150,14 @@ async function sendSafeTestEmail(to) {
 }
 
 export async function handler(event) {
-  const session = readAdminSession(event);
-  if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'ADMIN_SESSION_REQUIRED', message: 'Admin sign-in is required.' });
+  const validation = await validateAdminSession(event, { touch: true });
+  if (!validation.ok) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'ADMIN_SESSION_REQUIRED', message: 'Admin sign-in is required.' });
+  const session = validation.session;
   if (event.httpMethod === 'GET') {
     try {
       return jsonResponse(200, { ok: true, version: APP_VERSION, ...(await loadEmailAdminData()) });
     } catch (error) {
-      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load automated email operations. Run the Ver-0.049A Supabase migration first.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load automated email operations. Run all required Supabase migrations through Ver-0.050 first.', error: error.message, details: error.details || null });
     }
   }
   if (event.httpMethod !== 'POST') return jsonResponse(405, { ok: false, version: APP_VERSION, message: 'GET or POST required.' });
@@ -163,6 +165,7 @@ export async function handler(event) {
   const body = parseBody(event);
   const action = safeText(body.action, 80);
   try {
+    assertBrowserAction(event, { session, kind: 'admin', csrf: true });
     if (action === 'run_lifecycle_processor') {
       await audit(session, 'admin_email_lifecycle_processor_started', { message: 'Manual lifecycle email check started.' });
       const result = await runCustomerLifecycleEmailProcessor({ triggerSource: 'admin' });

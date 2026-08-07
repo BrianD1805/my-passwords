@@ -1,12 +1,15 @@
 import { APP_VERSION, jsonResponse } from './_db.js';
 import { getBillingContext } from './_billing.js';
 import { publicSiteUrl, stripeConfigured, stripeRequest } from './_stripe.js';
+import { assertBrowserAction, securityErrorResponseHeaders } from './_security.js';
 
 export async function handler(event) {
   if (event.httpMethod !== 'POST') return jsonResponse(405, { ok: false, version: APP_VERSION, message: 'POST required.' });
   if (!stripeConfigured()) return jsonResponse(503, { ok: false, version: APP_VERSION, code: 'STRIPE_NOT_CONFIGURED', message: 'Stripe Billing is not configured yet.' });
   const context = await getBillingContext(event);
   if (!context.ok) return jsonResponse(context.code === 'SESSION_REQUIRED' ? 401 : 409, { ok: false, version: APP_VERSION, code: context.code, message: context.message });
+  try { assertBrowserAction(event, { session: context.session, kind: 'customer', csrf: true }); }
+  catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code || 'SECURITY_CHECK_FAILED', message: error.message }, securityErrorResponseHeaders(error)); }
   const customerId = String(context.subscription?.provider_customer_id || '').trim();
   if (!customerId) return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'STRIPE_CUSTOMER_REQUIRED', message: 'No Stripe billing profile exists for this account yet.' });
 

@@ -1,6 +1,7 @@
-import { APP_VERSION, insertRow, jsonResponse, publicId, updateRow } from './_db.js';
+import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, updateRow } from './_db.js';
 import { getBillingContext } from './_billing.js';
 import { stripeConfigured, stripeRequest } from './_stripe.js';
+import { assertBrowserAction, claimIdempotency, completeIdempotency, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -12,8 +13,18 @@ export async function handler(event) {
 
   const context = await getBillingContext(event);
   if (!context.ok) return jsonResponse(context.code === 'SESSION_REQUIRED' ? 401 : 409, { ok: false, version: APP_VERSION, code: context.code, message: context.message });
+  try { assertBrowserAction(event, { session: context.session, kind: 'customer', csrf: true }); }
+  catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code || 'SECURITY_CHECK_FAILED', message: error.message }, securityErrorResponseHeaders(error)); }
+  const body = parseBody(event);
+  let idempotencyClaim = null;
+  try {
+    idempotencyClaim = await claimIdempotency({ scope: 'stripe_checkout_cancel', requestId: String(body.requestId || ''), tenantId: context.tenant.id, userId: context.user.id, payload: { action: 'cancel_checkout' } });
+  } catch (error) {
+    return jsonResponse(error.status || 409, { ok: false, version: APP_VERSION, code: error.code || 'SECURITY_CHECK_FAILED', message: error.message }, securityErrorResponseHeaders(error));
+  }
   const subscription = context.subscription;
   if (!subscription?.id || subscription.provider !== 'stripe' || subscription.provider_subscription_id) {
+    await completeIdempotency(idempotencyClaim, 'completed');
     return jsonResponse(200, { ok: true, version: APP_VERSION, message: 'No incomplete Stripe Checkout needs to be cancelled.' });
   }
 
@@ -47,5 +58,6 @@ export async function handler(event) {
     created_at: now
   }).catch(() => null);
 
+  await completeIdempotency(idempotencyClaim, 'completed');
   return jsonResponse(200, { ok: true, version: APP_VERSION, message: 'Checkout was cancelled. No subscription change was made.' });
 }

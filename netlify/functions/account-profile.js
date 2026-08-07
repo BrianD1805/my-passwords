@@ -1,5 +1,6 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow } from './_db.js';
 import { validateCustomerSession } from './_account-session.js';
+import { assertBrowserAction } from './_security.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -24,6 +25,8 @@ export async function handler(event) {
   }
 
   if (event.httpMethod !== 'POST') return jsonResponse(405, { ok: false, version: APP_VERSION, message: 'GET or POST required.' });
+
+  try { assertBrowserAction(event, { session, kind: 'customer', csrf: true }); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
 
   const body = parseBody(event);
   const displayName = String(body.displayName || '').trim();

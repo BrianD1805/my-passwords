@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 const CUSTOMER_COOKIE = 'mp_customer_session';
 const ADMIN_COOKIE = 'mp_admin_session';
+const SECURE_CUSTOMER_COOKIE = '__Host-mp_customer_session';
+const SECURE_ADMIN_COOKIE = '__Host-mp_admin_session';
 const CUSTOMER_SESSION_SECONDS = 60 * 60 * 24 * 30;
 const ADMIN_SESSION_SECONDS = 60 * 60 * 8;
 
@@ -14,10 +16,15 @@ function base64UrlDecode(value) {
 }
 
 function secretFor(kind) {
+  const production = process.env.CONTEXT === 'production';
   if (kind === 'admin') {
-    return process.env.ADMIN_SESSION_SECRET || process.env.CUSTOMER_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (process.env.ADMIN_SESSION_SECRET) return process.env.ADMIN_SESSION_SECRET;
+    if (!production) return process.env.CUSTOMER_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    return '';
   }
-  return process.env.CUSTOMER_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (process.env.CUSTOMER_SESSION_SECRET) return process.env.CUSTOMER_SESSION_SECRET;
+  if (!production) return process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  return '';
 }
 
 function sign(encodedPayload, secret) {
@@ -68,18 +75,26 @@ function parseCookies(event) {
 
 function isSecureRequest(event) {
   const forwardedProto = event?.headers?.['x-forwarded-proto'] || event?.headers?.['X-Forwarded-Proto'] || '';
-  if (String(forwardedProto).toLowerCase() === 'https') return true;
-  return String(process.env.URL || process.env.DEPLOY_PRIME_URL || '').startsWith('https://');
+  if (forwardedProto) return String(forwardedProto).toLowerCase() === 'https';
+  const host = String(event?.headers?.host || event?.headers?.Host || '').toLowerCase();
+  if (host.startsWith('localhost:') || host.startsWith('127.0.0.1:')) return false;
+  return String(process.env.URL || process.env.DEPLOY_PRIME_URL || process.env.DEPLOY_URL || '').startsWith('https://');
+}
+
+function cookieName(kind, event) {
+  const secure = isSecureRequest(event);
+  if (kind === 'admin') return secure ? SECURE_ADMIN_COOKIE : ADMIN_COOKIE;
+  return secure ? SECURE_CUSTOMER_COOKIE : CUSTOMER_COOKIE;
 }
 
 function cookieHeader(name, value, event, maxAge) {
   const secure = isSecureRequest(event) ? '; Secure' : '';
-  return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure}`;
+  return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}; Priority=High${secure}`;
 }
 
 function clearCookieHeader(name, event) {
   const secure = isSecureRequest(event) ? '; Secure' : '';
-  return `${name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure}`;
+  return `${name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0; Priority=High${secure}`;
 }
 
 export function issueCustomerSession(event, { tenantId, userId, role = 'member', sessionId = '', deviceId = '', sessionGeneration = 1, expiresAt = '' }) {
@@ -98,29 +113,35 @@ export function issueCustomerSession(event, { tenantId, userId, role = 'member',
     iat: now,
     exp
   }, 'customer');
-  return cookieHeader(CUSTOMER_COOKIE, token, event, maxAge);
+  return cookieHeader(cookieName('customer', event), token, event, maxAge);
 }
 
 export function readCustomerSession(event) {
-  return decodeSession(parseCookies(event)[CUSTOMER_COOKIE], 'customer');
+  const cookies = parseCookies(event);
+  if (isSecureRequest(event)) return decodeSession(cookies[SECURE_CUSTOMER_COOKIE], 'customer');
+  return decodeSession(cookies[CUSTOMER_COOKIE] || cookies[SECURE_CUSTOMER_COOKIE], 'customer');
 }
 
 export function clearCustomerSession(event) {
-  return clearCookieHeader(CUSTOMER_COOKIE, event);
+  return clearCookieHeader(cookieName('customer', event), event);
 }
 
-export function issueAdminSession(event) {
+export function issueAdminSession(event, { sessionId = '', expiresAt = '' } = {}) {
   const now = Math.floor(Date.now() / 1000);
-  const token = encodeSession({ kind: 'admin', role: 'owner_admin', iat: now, exp: now + ADMIN_SESSION_SECONDS }, 'admin');
-  return cookieHeader(ADMIN_COOKIE, token, event, ADMIN_SESSION_SECONDS);
+  const requestedExpiry = expiresAt ? Math.floor(new Date(expiresAt).getTime() / 1000) : 0;
+  const exp = Number.isFinite(requestedExpiry) && requestedExpiry > now ? requestedExpiry : now + ADMIN_SESSION_SECONDS;
+  const token = encodeSession({ kind: 'admin', role: 'owner_admin', sessionId, iat: now, exp }, 'admin');
+  return cookieHeader(cookieName('admin', event), token, event, Math.max(0, exp - now));
 }
 
 export function readAdminSession(event) {
-  return decodeSession(parseCookies(event)[ADMIN_COOKIE], 'admin');
+  const cookies = parseCookies(event);
+  if (isSecureRequest(event)) return decodeSession(cookies[SECURE_ADMIN_COOKIE], 'admin');
+  return decodeSession(cookies[ADMIN_COOKIE] || cookies[SECURE_ADMIN_COOKIE], 'admin');
 }
 
 export function clearAdminSession(event) {
-  return clearCookieHeader(ADMIN_COOKIE, event);
+  return clearCookieHeader(cookieName('admin', event), event);
 }
 
 export function constantTimeSecretMatch(submitted, expected) {

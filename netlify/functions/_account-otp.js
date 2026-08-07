@@ -19,7 +19,8 @@ export function maskPhone(value) {
 }
 
 export function hashOtp(challengeId, code) {
-  const secret = process.env.OTP_TEST_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'my-passwords-account-otp';
+  const secret = process.env.OTP_TEST_SECRET || process.env.CUSTOMER_SESSION_SECRET || (process.env.CONTEXT !== 'production' ? (process.env.SUPABASE_SERVICE_ROLE_KEY || 'my-passwords-otp-dev') : '');
+  if (!secret) throw new Error('CUSTOMER_SESSION_SECRET is required for production OTP security.');
   return createHash('sha256').update(`${challengeId}:${code}:${secret}`).digest('hex');
 }
 

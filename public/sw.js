@@ -1,7 +1,7 @@
-const CACHE_NAME = 'my-passwords-v0.049A';
+const CACHE_NAME = 'my-passwords-v0.050';
 const RUNTIME_CACHE = `${CACHE_NAME}-runtime`;
 const APP_ROUTES = ['/', '/vault', '/admin', '/index.html'];
-const STATIC_SHELL = ['/manifest.webmanifest', '/icons/icon.svg', '/images/password-encrypt-brand.png', '/offline.html'];
+const STATIC_SHELL = ['/manifest.webmanifest', '/icons/icon.svg', '/images/password-encrypt-brand.png', '/offline.html', '/offline.js'];
 
 async function putIfUsable(cache, request, response) {
   if (!response || (!response.ok && response.type !== 'opaque')) return response;

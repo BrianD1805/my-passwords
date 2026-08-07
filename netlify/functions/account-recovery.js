@@ -3,6 +3,7 @@ import { createAccountOtp, verifyAccountOtp } from './_account-otp.js';
 import { createVerifiedCustomerSession } from './_account-session.js';
 import { evaluateTenantAccess } from './_trial.js';
 import { resolveTenantEntitlements } from './_entitlements.js';
+import { assertBrowserAction, consumeRateLimit, csrfTokenForSession, resetRateLimit, requestIpHash, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 function safeText(value, max = 260) { return String(value || '').trim().slice(0, max); }
@@ -17,11 +18,14 @@ export async function handler(event) {
   if (event.httpMethod !== 'POST') return jsonResponse(405, { ok: false, version: APP_VERSION, message: 'POST required.' });
   const body = parseBody(event);
   const action = safeText(body.action, 60);
+  try { assertBrowserAction(event, { csrf: false }); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
 
   try {
     if (action === 'request') {
       const channel = body.channel === 'sms' ? 'sms' : 'email';
       const destination = channel === 'sms' ? normalisePhone(body.phoneE164 || body.contact) : safeText(body.email || body.contact, 254).toLowerCase();
+      await consumeRateLimit(event, { scope: 'account_recovery_ip', identifier: requestIpHash(event), limit: 6, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
+      await consumeRateLimit(event, { scope: 'account_recovery_destination', identifier: destination, limit: 4, windowSeconds: 30 * 60, blockSeconds: 60 * 60 });
       if ((channel === 'sms' && !/^\+[1-9]\d{7,14}$/.test(destination)) || (channel === 'email' && !destination.includes('@'))) return jsonResponse(400, { ok: false, version: APP_VERSION, message: channel === 'sms' ? 'Enter a valid verified mobile number.' : 'Enter a valid verified email address.' });
       const query = channel === 'sms'
         ? `select=id,tenant_id,status,phone_verified&phone_e164=${eq(destination)}&phone_verified=${eq(true)}&limit=1`
@@ -37,7 +41,10 @@ export async function handler(event) {
     }
 
     if (action === 'verify') {
-      const challenge = await verifyAccountOtp({ challengeId: safeText(body.challengeId, 180), code: body.code, purpose: 'account_recovery' });
+      const challengeId = safeText(body.challengeId, 180);
+      await consumeRateLimit(event, { scope: 'account_recovery_verify_ip', identifier: requestIpHash(event), limit: 12, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
+      await consumeRateLimit(event, { scope: 'account_recovery_verify_challenge', identifier: challengeId, limit: 6, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
+      const challenge = await verifyAccountOtp({ challengeId, code: body.code, purpose: 'account_recovery' });
       const [users, tenants] = await Promise.all([
         selectRows('users', `select=id,tenant_id,email,phone_country_code,phone_number,phone_e164,display_name,role,status,session_generation&id=${eq(challenge.user_id)}&tenant_id=${eq(challenge.tenant_id)}&limit=1`),
         selectRows('tenants', `select=id,name,account_name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at&id=${eq(challenge.tenant_id)}&limit=1`)
@@ -58,6 +65,7 @@ export async function handler(event) {
         browser: safeText(body.browser, 180),
         userAgent: safeText(body.userAgent, 500)
       });
+      await resetRateLimit(event, { scope: 'account_recovery_verify_challenge', identifier: challengeId });
       const now = new Date().toISOString();
       await updateRow('users', `id=${eq(user.id)}&tenant_id=${eq(tenant.id)}`, { account_recovery_last_verified_at: now, last_login_at: now, updated_at: now });
       await audit(tenant.id, user.id, 'account_access_recovered', { device_id: verified.device.id, channel: challenge.delivery_channel });
@@ -65,6 +73,7 @@ export async function handler(event) {
         ok: true,
         version: APP_VERSION,
         authenticated: true,
+        csrfToken: csrfTokenForSession({ sessionId: verified.session.id }, 'customer'),
         cloudAccess: Boolean(lifecycle.allowed && entitlementContext.effective.features.cloudBackupSync !== false),
         tenantId: tenant.id,
         userId: user.id,
@@ -91,6 +100,6 @@ export async function handler(event) {
 
     return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Unknown account recovery action.' });
   } catch (error) {
-    return jsonResponse(error.status || 500, { ok: false, version: APP_VERSION, message: error.message || 'Account recovery could not be completed.', error: error.status ? undefined : error.message, details: error.details || null });
+    return jsonResponse(error.status || 500, { ok: false, version: APP_VERSION, code: error.code || 'ACCOUNT_RECOVERY_FAILED', message: error.message || 'Account recovery could not be completed.', error: error.status ? undefined : error.message, details: error.details || null }, securityErrorResponseHeaders(error));
   }
 }

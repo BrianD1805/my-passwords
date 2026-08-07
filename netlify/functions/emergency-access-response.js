@@ -1,6 +1,7 @@
 import { APP_VERSION, jsonResponse, parseBody, requirePost, selectRows, updateRow } from './_db.js';
 import { createHash } from 'node:crypto';
 import { resolveTenantEntitlements } from './_entitlements.js';
+import { assertBrowserAction, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -88,11 +89,13 @@ async function sendAcceptedConfirmation({ to, ownerName, contactName, waitingPer
 export async function handler(event) {
   if (!requirePost(event)) return jsonResponse(405, { ok: false, message: 'POST required.' });
   const body = parseBody(event);
+  try { assertBrowserAction(event, { csrf: false }); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
   const token = String(body.token || '').trim();
   const responseStatus = String(body.response || '').trim() === 'declined' ? 'declined' : 'accepted';
   if (!token) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation token is missing.' });
 
   try {
+    await consumeRateLimit(event, { scope: 'emergency_invite_response', identifier: tokenHash(token), limit: 10, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
     const rows = await selectRows('emergency_access_invitations', `select=id,tenant_id,status,expires_at,contact_name,contact_email,invite_url,waiting_period,access_scope,metadata&invite_token_hash=${eq(tokenHash(token))}&limit=1`);
     const invitation = rows?.[0];
     if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'This invitation link was not found or has expired.' });
@@ -149,6 +152,6 @@ export async function handler(event) {
         : 'Invitation declined. No access has been granted.'
     });
   } catch (error) {
-    return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Invitation response could not be saved.', error: error.message, details: error.details || null });
+    return jsonResponse(error.status || 500, { ok: false, version: APP_VERSION, code: error.code || 'EMERGENCY_RESPONSE_FAILED', message: error.status ? error.message : 'Invitation response could not be saved.', error: error.status ? undefined : error.message, details: error.details || null }, securityErrorResponseHeaders(error));
   }
 }

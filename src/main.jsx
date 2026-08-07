@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.049A';
+const VERSION = 'My Passwords Ver-0.050';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -32,7 +32,7 @@ const LEGACY_VAULT_BACK_MARKER_KEYS = [
 ];
 const LEGACY_VAULT_BACK_HASH = '#my-passwords-back-guard';
 
-// Ver-0.049A keeps the CloseWatcher-based Back handling and removes legacy history markers only.
+// Ver-0.050 keeps the approved CloseWatcher-based Back handling while hardening server security boundaries.
 // Remove only the current entry's markers left by the previous Back controllers
 // so they cannot interfere with billing URL cleanup or later app navigation.
 function clearLegacyVaultBackMarkers() {
@@ -1004,10 +1004,15 @@ function storeCloudSnapshotLocally(snapshot) {
 }
 
 async function postJson(url, payload, options = {}) {
+  const csrfToken = sessionStorage.getItem('mp_customer_csrf') || '';
   const response = await fetch(url, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      'x-mp-request': '1',
+      ...(csrfToken ? { 'x-mp-csrf': csrfToken } : {})
+    },
     signal: options.signal,
     body: JSON.stringify(payload)
   });
@@ -1017,6 +1022,8 @@ async function postJson(url, payload, options = {}) {
   } catch (error) {
     data = { ok: false, message: 'Function returned a non-JSON response.' };
   }
+  if (data?.csrfToken) sessionStorage.setItem('mp_customer_csrf', data.csrfToken);
+  if (response.status === 401) sessionStorage.removeItem('mp_customer_csrf');
   if (!response.ok) {
     return {
       ...data,
@@ -2892,8 +2899,14 @@ function App() {
     let cancelled = false;
     async function checkSecureSession() {
       try {
-        const response = await fetch('/.netlify/functions/session-status', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'status', ...accountDeviceMetadata() }) });
+        const csrfToken = sessionStorage.getItem('mp_customer_csrf') || '';
+        const response = await fetch('/.netlify/functions/session-status', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'content-type': 'application/json', 'x-mp-request': '1', ...(csrfToken ? { 'x-mp-csrf': csrfToken } : {}) },
+          body: JSON.stringify({ action: 'status', ...accountDeviceMetadata() })
+        });
         const result = await response.json();
+        if (result?.csrfToken) sessionStorage.setItem('mp_customer_csrf', result.csrfToken);
         if (cancelled) return;
         if (result?.authenticated) {
           const next = {
@@ -2977,7 +2990,7 @@ function App() {
       return () => { cancelled = true; };
     }
     if (returnState === 'cancelled') {
-      postJson('/.netlify/functions/stripe-checkout-cancel', {}).then(() => refreshCustomerSubscription({ message: 'Checkout was cancelled. No subscription change was made.' })).catch(() => null);
+      postJson('/.netlify/functions/stripe-checkout-cancel', { requestId: crypto.randomUUID() }).then(() => refreshCustomerSubscription({ message: 'Checkout was cancelled. No subscription change was made.' })).catch(() => null);
       showMessage('Checkout cancelled. No payment was taken.', 'error');
     }
     if (returnState === 'portal-return') refreshCustomerSubscription();
@@ -3052,7 +3065,7 @@ function App() {
   async function fetchLatestCloudSnapshot(account = bootstrap) {
     if (!featureIncluded('cloudBackupSync')) return { ok: false, code: 'PLAN_FEATURE_REQUIRED', feature: 'cloudBackupSync', upgradeRequired: true, entitlements, hasSnapshot: false, message: 'Cloud backup and sync are not included in the current plan.' };
     if (!account.tenantId || !account.userId) return { ok: false, hasSnapshot: false, message: 'Account identity is not verified on this device yet.' };
-    const response = await fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(account.tenantId)}&userId=${encodeURIComponent(account.userId)}`);
+    const response = await fetch('/.netlify/functions/sync-vault');
     const result = await response.json().catch(() => ({ ok: false, message: 'Secure backup returned an invalid response.' }));
     return response.ok ? result : { ...result, ok: false, httpStatus: response.status };
   }
@@ -3145,7 +3158,7 @@ function App() {
 
   async function ensureAccountIdentity({ silent = false } = {}) {
     if (customerSession.authenticated && bootstrap.tenantId && bootstrap.userId) {
-      return { ok: true, account: bootstrap, result: { authenticated: true, tenantId: bootstrap.tenantId, userId: bootstrap.userId } };
+      return { ok: true, account: bootstrap, result: { authenticated: true } };
     }
     const checked = validateAccountIdentity(bootstrap);
     if (!checked.ok) {
@@ -3874,9 +3887,11 @@ function App() {
     if (!entry?.documentId || !entry?.tenantId || !entry?.userId) return { ok: false, message: 'Document cleanup details are incomplete.' };
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return { ok: false, offline: true, message: 'Document cleanup is waiting for an internet connection.' };
     try {
+      const csrfToken = sessionStorage.getItem('mp_customer_csrf') || '';
       const response = await fetch(`/.netlify/functions/document-blob?documentId=${encodeURIComponent(entry.documentId)}`, {
         method: 'DELETE',
-        credentials: 'same-origin'
+        credentials: 'same-origin',
+        headers: { 'x-mp-request': '1', ...(csrfToken ? { 'x-mp-csrf': csrfToken } : {}) }
       });
       const result = await response.json().catch(() => ({ ok: false, message: 'Document cleanup returned an invalid response.' }));
       if (!response.ok || !result.ok) return { ...result, ok: false, httpStatus: response.status };
@@ -3925,8 +3940,6 @@ function App() {
     }
     const encryptedFile = await encryptDocumentData(fileInfo.dataUrl, masterPassword);
     const result = await postJson('/.netlify/functions/document-blob', {
-      tenantId: bootstrap.tenantId,
-      userId: bootstrap.userId,
       documentId,
       fileName: fileInfo.name,
       fileType: fileInfo.type || 'application/octet-stream',
@@ -3972,7 +3985,7 @@ function App() {
     }
     setDownloadingDocId(item.id);
     try {
-      const response = await fetch(`/.netlify/functions/document-blob?tenantId=${encodeURIComponent(bootstrap.tenantId)}&userId=${encodeURIComponent(bootstrap.userId)}&documentId=${encodeURIComponent(documentId)}`);
+      const response = await fetch(`/.netlify/functions/document-blob?documentId=${encodeURIComponent(documentId)}`);
       const result = await response.json();
       if (!response.ok || !result.ok || !result.document) {
         throw new Error(result.message || 'Document could not be loaded.');
@@ -4276,7 +4289,7 @@ function App() {
     }
     setSnapshotHistory((current) => ({ ...current, loading: true, message: 'Loading backup history...' }));
     try {
-      const result = await fetch(`/.netlify/functions/sync-vault?tenantId=${encodeURIComponent(bootstrap.tenantId)}&userId=${encodeURIComponent(bootstrap.userId)}&history=1`).then((res) => res.json());
+      const result = await fetch('/.netlify/functions/sync-vault?history=1').then((res) => res.json());
       if (!result.ok) throw new Error(result.message || result.error || 'Could not load backup history.');
       const next = {
         loaded: true,
@@ -4333,8 +4346,6 @@ function App() {
     setSyncStatus({ state: 'syncing', message: 'Protecting your latest vault changes...', lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount, snapshotCount: snapshotHistory.total });
     try {
       const result = await postJson('/.netlify/functions/sync-vault', {
-        tenantId: activeAccount.tenantId,
-        userId: activeAccount.userId,
         encryptedBlob: envelope.encrypted,
         localSalt: envelope.salt,
         localIv: envelope.iv,
@@ -5244,8 +5255,6 @@ function App() {
     const result = await postJson('/.netlify/functions/emergency-access-invite', {
       action: 'save_package',
       invitationId: planToSave.invitationId,
-      tenantId: bootstrap.tenantId,
-      userId: bootstrap.userId,
       packageEnvelope: envelope,
       packageSummary: {
         releaseScope: releasePackage.releaseScope,
@@ -5288,8 +5297,6 @@ function App() {
       const account = { ...bootstrap };
       const result = await postJson('/.netlify/functions/emergency-access-invite', {
         action: 'send',
-        tenantId: account.tenantId,
-        userId: account.userId,
         ownerName: account.displayName || account.accountName || 'My Passwords user',
         ownerEmail: account.email || '',
         contactName: cleanPlan.contactName,
@@ -5338,7 +5345,7 @@ function App() {
     if (!emergencyDraft.invitationId) return showMessage('Send an invitation first.', 'warning');
     setEmergencyInviteState({ status: 'checking', message: 'Checking invitation status...' });
     try {
-      const result = await postJson('/.netlify/functions/emergency-access-invite', { action: 'status', invitationId: emergencyDraft.invitationId, tenantId: bootstrap.tenantId, userId: bootstrap.userId, contactEmail: emergencyDraft.contactEmail });
+      const result = await postJson('/.netlify/functions/emergency-access-invite', { action: 'status', invitationId: emergencyDraft.invitationId, contactEmail: emergencyDraft.contactEmail });
       if (!result.ok) throw new Error(result.message || 'Invitation status could not be checked.');
       const latestRequestStatus = String(result.request?.status || emergencyDraft.requestStatus || 'not_requested').toLowerCase();
       const statusHasActiveRequest = ['requested', 'waiting', 'owner_notified'].includes(latestRequestStatus) && !result.request?.cancelled_at && !result.request?.released_at;
@@ -5385,7 +5392,7 @@ function App() {
     };
     try {
       if (savedPlan.invitationId) {
-        await postJson('/.netlify/functions/emergency-access-invite', { action: 'cancel', invitationId: savedPlan.invitationId, tenantId: bootstrap.tenantId, userId: bootstrap.userId });
+        await postJson('/.netlify/functions/emergency-access-invite', { action: 'cancel', invitationId: savedPlan.invitationId });
       }
       const next = upsertEmergencyAccessMetaItem(items, savedPlan);
       await saveItems(next, { autoSync: true, silentAutoSync: true });
@@ -5437,8 +5444,6 @@ function App() {
       const result = await postJson('/.netlify/functions/emergency-access-invite', {
         action: 'reset',
         invitationId: emergencyDraft.invitationId,
-        tenantId: bootstrap.tenantId,
-        userId: bootstrap.userId,
         contactEmail: emergencyDraft.contactEmail
       });
       if (!result.ok) throw new Error(result.message || 'Invite could not be reset.');

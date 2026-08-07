@@ -5,6 +5,7 @@ import { sendCustomerLifecycleEmailForTenant } from './_customer-email.js';
 
 const SESSION_DAYS = 30;
 const RENEW_WITHIN_DAYS = 7;
+const ROTATE_AFTER_HOURS = 24;
 const TOUCH_AFTER_MINUTES = 5;
 
 function eq(value) {
@@ -20,10 +21,13 @@ function requestHeader(event, name) {
 }
 
 function requestFingerprint(event) {
+  const netlifyIp = requestHeader(event, 'x-nf-client-connection-ip');
   const forwarded = requestHeader(event, 'x-forwarded-for');
-  const ip = cleanText(String(forwarded || '').split(',')[0], 120);
+  const ip = cleanText(netlifyIp || String(forwarded || '').split(',')[0], 120);
   if (!ip) return '';
-  const secret = process.env.CUSTOMER_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'my-passwords-session-fingerprint';
+  const secret = process.env.CUSTOMER_SESSION_SECRET
+    || (process.env.CONTEXT !== 'production' ? (process.env.SUPABASE_SERVICE_ROLE_KEY || 'my-passwords-session-fingerprint-dev') : '');
+  if (!secret) throw new Error('CUSTOMER_SESSION_SECRET is required for production session security.');
   return createHash('sha256').update(`${ip}:${secret}`).digest('hex');
 }
 
@@ -102,7 +106,7 @@ export async function createVerifiedCustomerSession(event, { tenantId, userId, r
     expires_at: expiresAt,
     last_seen_at: now,
     user_agent: details.userAgent,
-    metadata: { ip_hash: requestFingerprint(event) || null, app_version: '0.049A' }
+    metadata: { ip_hash: requestFingerprint(event) || null, app_version: '0.050' }
   });
 
   if (shouldNotifyNewDevice) {
@@ -139,8 +143,8 @@ export async function validateCustomerSession(event, { touch = false } = {}) {
   const token = readCustomerSession(event);
   if (!token?.tenantId || !token?.userId) return { ok: false, code: 'SESSION_REQUIRED', message: 'Verify this device to continue.' };
 
-  // Legacy signed cookies are accepted briefly so session-status can upgrade them
-  // without forcing an existing verified customer to sign in again immediately.
+  // Legacy non-secure cookies are accepted only in local/non-HTTPS development.
+  // Production HTTPS requests accept only the __Host- session cookie.
   if (!token.sessionId || !token.deviceId) return { ok: true, session: token, legacy: true, renewRequired: true };
 
   const rows = await selectRows('account_sessions', `select=*&id=${eq(token.sessionId)}&tenant_id=${eq(token.tenantId)}&user_id=${eq(token.userId)}&limit=1`).catch(() => []);
@@ -173,13 +177,16 @@ export async function validateCustomerSession(event, { touch = false } = {}) {
   }
 
   const renewRequired = new Date(stored.expires_at).getTime() - now <= RENEW_WITHIN_DAYS * 24 * 60 * 60 * 1000;
+  const issuedAt = new Date(stored.issued_at || stored.created_at || 0).getTime();
+  const rotateRequired = !Number.isFinite(issuedAt) || now - issuedAt >= ROTATE_AFTER_HOURS * 60 * 60 * 1000;
   return {
     ok: true,
     session: { ...token, sessionId: stored.id, deviceId: device.id, sessionGeneration: generation },
     stored,
     device,
     legacy: false,
-    renewRequired
+    renewRequired,
+    rotateRequired
   };
 }
 
@@ -198,29 +205,49 @@ export async function upgradeOrRenewCustomerSession(event, validation, { role = 
       userAgent
     });
   }
-  if (!validation.renewRequired) return null;
+  if (!validation.renewRequired && !validation.rotateRequired) return null;
 
   const now = new Date().toISOString();
   const expiresAt = sessionExpiry();
+  if (validation.rotateRequired) {
+    const rotated = await insertRow('account_sessions', {
+      id: publicId('session'),
+      tenant_id: validation.session.tenantId,
+      user_id: validation.session.userId,
+      device_id: validation.device.id,
+      session_generation: validation.session.sessionGeneration,
+      status: 'active',
+      issued_at: now,
+      expires_at: expiresAt,
+      last_seen_at: now,
+      user_agent: validation.stored.user_agent || cleanText(userAgent, 500),
+      metadata: { ...(validation.stored.metadata || {}), app_version: '0.050', rotated_from: validation.stored.id },
+      updated_at: now
+    });
+    await updateRow('account_sessions', `id=${eq(validation.stored.id)}`, {
+      status: 'revoked', revoked_at: now, revoked_reason: 'rotated', renewed_at: now, updated_at: now
+    }).catch(() => null);
+    await updateRow('account_devices', `id=${eq(validation.device.id)}`, { last_seen_at: now, updated_at: now }).catch(() => null);
+    return {
+      session: rotated, device: validation.device, expiresAt, rotated: true,
+      cookie: issueCustomerSession(event, {
+        tenantId: validation.session.tenantId, userId: validation.session.userId,
+        role: role || validation.session.role || 'member', sessionId: rotated.id,
+        deviceId: validation.device.id, sessionGeneration: validation.session.sessionGeneration, expiresAt
+      })
+    };
+  }
+
   const updated = await updateRow('account_sessions', `id=${eq(validation.stored.id)}`, {
-    expires_at: expiresAt,
-    renewed_at: now,
-    last_seen_at: now,
-    updated_at: now
+    expires_at: expiresAt, renewed_at: now, last_seen_at: now, updated_at: now
   });
   await updateRow('account_devices', `id=${eq(validation.device.id)}`, { last_seen_at: now, updated_at: now }).catch(() => null);
   return {
-    session: updated,
-    device: validation.device,
-    expiresAt,
+    session: updated, device: validation.device, expiresAt, rotated: false,
     cookie: issueCustomerSession(event, {
-      tenantId: validation.session.tenantId,
-      userId: validation.session.userId,
-      role: role || validation.session.role || 'member',
-      sessionId: validation.stored.id,
-      deviceId: validation.device.id,
-      sessionGeneration: validation.session.sessionGeneration,
-      expiresAt
+      tenantId: validation.session.tenantId, userId: validation.session.userId,
+      role: role || validation.session.role || 'member', sessionId: validation.stored.id,
+      deviceId: validation.device.id, sessionGeneration: validation.session.sessionGeneration, expiresAt
     })
   };
 }

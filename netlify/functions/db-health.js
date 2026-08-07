@@ -24,8 +24,13 @@ export async function handler() {
     await selectRows('sms_delivery_log', 'select=id,status&limit=1');
     await selectRows('customer_email_log', 'select=id,status,email_type&limit=1');
     await selectRows('email_processor_runs', 'select=id,processor_type,status&limit=1');
+    await selectRows('security_rate_limits', 'select=scope,identifier_hash&limit=1');
+    await selectRows('security_idempotency_keys', 'select=id,status&limit=1');
+    await selectRows('admin_sessions', 'select=id,status&limit=1');
+    await selectRows('stripe_webhook_events', 'select=id,status&limit=1');
+    const securitySecretsReady = Boolean(process.env.CUSTOMER_SESSION_SECRET && process.env.ADMIN_SESSION_SECRET);
     return jsonResponse(200, {
-      ok: true,
+      ok: securitySecretsReady,
       connected: true,
       schema_ready: true,
       app: 'My Passwords',
@@ -35,13 +40,21 @@ export async function handler() {
       supabase,
       tenants_sample_count: Array.isArray(rows) ? rows.length : 0,
       subscription_plans_sample_count: Array.isArray(plans) ? plans.length : 0,
-      message: 'Supabase connection and schema check passed.'
+      security_ready: securitySecretsReady,
+      security: {
+        customer_session_secret_configured: Boolean(process.env.CUSTOMER_SESSION_SECRET),
+        admin_session_secret_configured: Boolean(process.env.ADMIN_SESSION_SECRET)
+      },
+      message: securitySecretsReady
+        ? 'Supabase connection, Ver-0.050 security schema and secret checks passed.'
+        : 'Supabase security schema passed, but dedicated session secrets are not fully configured.'
     });
   } catch (error) {
     const relationMissing = error.details?.code === '42P01' || String(error.message || '').toLowerCase().includes('does not exist');
     const smsMigrationMissing = /sms_delivery_log/i.test(String(error.message || ''));
     const customerEmailMigrationMissing = /customer_email_log/i.test(String(error.message || ''));
     const emailProcessorMigrationMissing = /email_processor_runs/i.test(String(error.message || ''));
+    const securityMigrationMissing = /security_rate_limits|security_idempotency_keys|admin_sessions|stripe_webhook_events/i.test(String(error.message || ''));
     const entitlementMigrationMissing = error.details?.code === '42703'
       || /feature_flags|entitlement_version|entitlements_snapshot|entitlement_overrides|storage_bytes/i.test(String(error.message || ''));
     return jsonResponse(200, {
@@ -55,8 +68,10 @@ export async function handler() {
       supabase,
       error: error.message,
       details: error.details || null,
-      message: emailProcessorMigrationMissing
-        ? 'Supabase is reachable, but the Ver-0.049A automated email processor history table is missing. Run the Ver-0.049A migration in Supabase SQL Editor.'
+      message: securityMigrationMissing
+        ? 'Supabase is reachable, but the Ver-0.050 security tables are missing. Run the Ver-0.050 security migration in Supabase SQL Editor.'
+        : emailProcessorMigrationMissing
+        ? 'Supabase is reachable, but the automated email processor history table is missing. Run all required Supabase migrations through Ver-0.050 in Supabase SQL Editor.'
         : customerEmailMigrationMissing
         ? 'Supabase is reachable, but the Ver-0.049 automated email delivery table is missing. Run the Ver-0.049 migration in Supabase SQL Editor.'
         : smsMigrationMissing

@@ -3,6 +3,7 @@ import { getBillingContext } from './_billing.js';
 import { billingIntervalDefinition, publicSiteUrl, stripeConfigured, stripeObjectId, stripeRequest, syncStripePlan } from './_stripe.js';
 import { listCustomerStripeSubscriptions, syncStripeSubscriptionObject } from './_subscription-lifecycle.js';
 import { launchReadyPlan, loadPlanEntitlementSnapshot } from './_entitlements.js';
+import { assertBrowserAction, claimIdempotency, completeIdempotency, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -66,6 +67,8 @@ export async function handler(event) {
 
   const context = await getBillingContext(event);
   if (!context.ok) return jsonResponse(context.code === 'SESSION_REQUIRED' ? 401 : 409, { ok: false, version: APP_VERSION, code: context.code, message: context.message });
+  try { assertBrowserAction(event, { session: context.session, kind: 'customer', csrf: true }); }
+  catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code || 'SECURITY_CHECK_FAILED', message: error.message }, securityErrorResponseHeaders(error)); }
   const existingSubscription = context.subscription || null;
   if (existingSubscription?.status === 'checkout_pending' && existingSubscription?.checkout_session_id) {
     const previousSession = await stripeRequest(`checkout/sessions/${encodeURIComponent(existingSubscription.checkout_session_id)}`, { method: 'GET' }).catch(() => null);
@@ -103,10 +106,15 @@ export async function handler(event) {
   const body = parseBody(event);
   const planCode = String(body.planCode || context.tenant.plan_code || 'personal').trim().toLowerCase();
   const interval = billingIntervalDefinition(body.billingInterval || 'monthly');
-  const requestId = String(body.requestId || publicId('checkout_request')).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120);
+  const requestId = String(body.requestId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120);
   if (!interval) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Choose monthly, quarterly or annual billing.' });
 
+  let idempotencyClaim = null;
   try {
+    idempotencyClaim = await claimIdempotency({
+      scope: 'stripe_checkout', requestId, tenantId: context.tenant.id, userId: context.user.id,
+      payload: { planCode, billingInterval: interval.key }
+    });
     let plan = await loadPlan(planCode);
     if (!plan?.id || !launchReadyPlan(plan.code)) return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'PLAN_NOT_AVAILABLE', message: 'That subscription plan is not currently available. Personal is the current launch plan.' });
     if (Number(plan[interval.amountColumn] || 0) <= 0) return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'PRICE_NOT_AVAILABLE', message: `${interval.label} billing has not been priced yet.` });
@@ -235,6 +243,7 @@ export async function handler(event) {
       created_at: now
     }).catch(() => null);
 
+    await completeIdempotency(idempotencyClaim, 'completed');
     return jsonResponse(200, {
       ok: true,
       version: APP_VERSION,
@@ -248,6 +257,7 @@ export async function handler(event) {
       message: 'Stripe Checkout is ready.'
     });
   } catch (error) {
-    return jsonResponse(500, { ok: false, version: APP_VERSION, code: error.code || 'STRIPE_CHECKOUT_FAILED', message: `Could not open Stripe Checkout. ${error.message}`, details: error.details || null });
+    await completeIdempotency(idempotencyClaim, 'failed');
+    return jsonResponse(error.status || 500, { ok: false, version: APP_VERSION, code: error.code || 'STRIPE_CHECKOUT_FAILED', message: `Could not open Stripe Checkout. ${error.message}`, details: error.details || null }, securityErrorResponseHeaders(error));
   }
 }

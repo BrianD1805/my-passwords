@@ -1,6 +1,7 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, updateRow } from './_db.js';
 import { getActiveCustomerSession } from './_session.js';
 import { createHash, randomBytes } from 'node:crypto';
+import { assertBrowserAction, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -254,6 +255,8 @@ export async function handler(event) {
   const sessionUserId = session.userId;
 
   try {
+    assertBrowserAction(event, { session, kind: 'customer', csrf: true });
+    await consumeRateLimit(event, { scope: 'emergency_owner_action', identifier: session.sessionId || sessionUserId, limit: 40, windowSeconds: 15 * 60, blockSeconds: 15 * 60 });
     if (action === 'save_package') {
       const invitationId = String(body.invitationId || '').trim();
       const tenantId = sessionTenantId;

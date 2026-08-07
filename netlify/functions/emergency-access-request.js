@@ -2,6 +2,7 @@ import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost,
 import { getActiveCustomerSession } from './_session.js';
 import { createHash } from 'node:crypto';
 import { resolveTenantEntitlements } from './_entitlements.js';
+import { assertBrowserAction, assertCsrf, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -109,12 +110,15 @@ export async function handler(event) {
   if (!requirePost(event)) return jsonResponse(405, { ok: false, message: 'POST required.' });
   const body = parseBody(event);
   const action = String(body.action || 'request').trim();
+  try { assertBrowserAction(event, { csrf: false }); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
 
   try {
     if (action === 'cancel_by_owner') {
       const requestId = String(body.requestId || '').trim();
       const session = await getActiveCustomerSession(event);
       if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify your account before cancelling an Emergency Access request.' });
+      try { assertCsrf(event, session, 'customer'); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
+      await consumeRateLimit(event, { scope: 'emergency_owner_cancel', identifier: session.sessionId || session.userId, limit: 20, windowSeconds: 15 * 60, blockSeconds: 15 * 60 });
       if (session.entitlements?.features?.emergencyAccess === false) return jsonResponse(403, { ok: false, version: APP_VERSION, code: 'PLAN_FEATURE_REQUIRED', feature: 'emergencyAccess', upgradeRequired: true, message: 'Emergency Access is not included in this plan.' });
       const tenantId = session.tenantId;
       const userId = session.userId;
@@ -126,6 +130,7 @@ export async function handler(event) {
     const token = String(body.token || '').trim();
     if (!token) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation token is missing.' });
 
+    await consumeRateLimit(event, { scope: 'emergency_public_token', identifier: tokenHash(token), limit: action === 'status' ? 90 : 15, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
     const rows = await selectRows('emergency_access_invitations', `select=*&invite_token_hash=${eq(tokenHash(token))}&limit=1`);
     const invitation = rows?.[0];
     if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'This invitation link was not found or has expired.' });
@@ -251,6 +256,6 @@ export async function handler(event) {
         : 'Emergency access request recorded. If the owner does not cancel before the waiting period ends, the selected emergency package will become available. No vault contents have been released yet.'
     });
   } catch (error) {
-    return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Emergency access request could not be saved.', error: error.message, details: error.details || null });
+    return jsonResponse(error.status || 500, { ok: false, version: APP_VERSION, code: error.code || 'EMERGENCY_REQUEST_FAILED', message: error.status ? error.message : 'Emergency access request could not be saved.', error: error.status ? undefined : error.message, details: error.details || null }, securityErrorResponseHeaders(error));
   }
 }

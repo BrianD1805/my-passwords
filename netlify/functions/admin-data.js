@@ -1,10 +1,12 @@
 import { APP_VERSION, deleteRow, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow } from './_db.js';
-import { readAdminSession } from './_auth.js';
+import { validateAdminSession } from './_admin-session.js';
+import { assertBrowserAction } from './_security.js';
 import { isFounderTenant, loadTenantSubscription, recordLifecycleEvent, upsertTrialSubscription } from './_trial.js';
 import { archiveStripePlan, stripeConfigured, stripeRequest, syncStripePlan } from './_stripe.js';
 import { refreshStripeSubscriptionForTenant } from './_subscription-lifecycle.js';
 import { applyEntitlementOverrides, entitlementSnapshotFromPlan, normaliseEntitlementOverrides, normalisePlanFeatureFlags, reservedPlanCannotPublish, serialiseEntitlements } from './_entitlements.js';
 import { sendCustomerLifecycleEmailForTenant } from './_customer-email.js';
+import { revokeAllCustomerSessions } from './_account-session.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -221,13 +223,15 @@ async function loadDashboard() {
 }
 
 export async function handler(event) {
-  if (!readAdminSession(event)) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'ADMIN_SESSION_REQUIRED', message: 'Admin sign-in is required.' });
+  const validation = await validateAdminSession(event, { touch: true });
+  if (!validation.ok) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'ADMIN_SESSION_REQUIRED', message: 'Admin sign-in is required.' });
+  const adminSession = validation.session;
 
   if (event.httpMethod === 'GET') {
     try {
       return jsonResponse(200, { ok: true, version: APP_VERSION, ...(await loadDashboard()) });
     } catch (error) {
-      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.049A.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.050.', error: error.message, details: error.details || null });
     }
   }
 
@@ -236,6 +240,7 @@ export async function handler(event) {
   const action = String(body.action || '').trim();
 
   try {
+    assertBrowserAction(event, { session: adminSession, kind: 'admin', csrf: true });
     if (action === 'save_plan') {
       const plan = body.plan || {};
       const code = cleanPlanCode(plan.code);
@@ -386,6 +391,15 @@ export async function handler(event) {
       const previousStatus = String(tenantCurrent?.account_status || tenantCurrent?.status || '').toLowerCase();
       const changedAt = new Date().toISOString();
       const tenant = await updateRow('tenants', `id=${eq(tenantId)}`, { account_status: accountStatus, status: accountStatus, updated_at: changedAt });
+      let revokedSessionUsers = 0;
+      if (accountStatus === 'suspended' && previousStatus !== 'suspended') {
+        const tenantUsers = await selectRows('users', `select=id&tenant_id=${eq(tenantId)}&limit=100`).catch(() => []);
+        for (const customer of tenantUsers || []) {
+          if (!customer?.id) continue;
+          await revokeAllCustomerSessions({ tenantId, userId: customer.id, reason: 'account_suspended_by_admin' }).catch(() => null);
+          revokedSessionUsers += 1;
+        }
+      }
       let customerEmail = null;
       if (previousStatus !== accountStatus) {
         const emailType = accountStatus === 'suspended' ? 'account_suspended' : 'account_reactivated';
@@ -396,7 +410,7 @@ export async function handler(event) {
           metadata: { source: 'admin_account_status_change' }
         });
       }
-      await audit('tenant_account_status_changed', { tenant_id: tenantId, previous_account_status: tenantCurrent?.account_status || '', account_status: accountStatus, customer_email_sent: Boolean(customerEmail?.sent) });
+      await audit('tenant_account_status_changed', { tenant_id: tenantId, previous_account_status: tenantCurrent?.account_status || '', account_status: accountStatus, customer_email_sent: Boolean(customerEmail?.sent), revoked_session_users: revokedSessionUsers });
       return jsonResponse(200, { ok: true, version: APP_VERSION, tenant, customerEmail, message: accountStatus === 'suspended' ? 'Account suspended.' : 'Account reactivated.' });
     }
 
@@ -486,7 +500,8 @@ export async function handler(event) {
     return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Unknown admin action.' });
   } catch (error) {
     const overlapping = error?.code === 'OVERLAPPING_SUBSCRIPTIONS';
-    return jsonResponse(overlapping ? 409 : 500, {
+    await audit('owner_admin_action_failed', { action: String(action || 'unknown').slice(0, 80), error: String(error.message || 'Admin update failed.').slice(0, 600) });
+    return jsonResponse(error.status || (overlapping ? 409 : 500), {
       ok: false,
       version: APP_VERSION,
       code: error.code || 'ADMIN_UPDATE_FAILED',

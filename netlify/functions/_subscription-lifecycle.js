@@ -193,18 +193,48 @@ export async function syncStripeSubscriptionObject(subscription, hints = {}) {
   const customerId = stripeObjectId(subscription?.customer) || hints.customerId || '';
   const price = subscriptionPrice(subscription);
   const pricePlan = await loadPlanByPrice(price.id);
-  const tenantIdFromMetadata = metadataValue(subscription, 'my_passwords_tenant_id') || hints.tenantId || '';
-  const existing = tenantIdFromMetadata ? await loadLocalSubscription(tenantIdFromMetadata) : null;
-  const resolvedTenantId = tenantIdFromMetadata || existing?.tenant_id || hints.existing?.tenant_id || '';
-  if (!resolvedTenantId) {
-    const bySubscription = subscriptionId ? await selectRows('tenant_subscriptions', `select=*&provider_subscription_id=${eq(subscriptionId)}&limit=1`).catch(() => []) : [];
-    const byCustomer = !bySubscription?.[0] && customerId ? await selectRows('tenant_subscriptions', `select=*&provider_customer_id=${eq(customerId)}&limit=1`).catch(() => []) : [];
-    const matched = bySubscription?.[0] || byCustomer?.[0] || null;
-    if (!matched?.tenant_id) throw new Error('Stripe subscription could not be matched to a My Passwords account.');
-    return syncStripeSubscriptionObject(subscription, { ...hints, tenantId: matched.tenant_id, existing: matched });
+  const metadataTenantId = metadataValue(subscription, 'my_passwords_tenant_id');
+  const hintedTenantId = String(hints.tenantId || hints.existing?.tenant_id || '');
+  const bySubscription = subscriptionId ? await selectRows('tenant_subscriptions', `select=*&provider_subscription_id=${eq(subscriptionId)}&limit=1`).catch(() => []) : [];
+  const byCustomer = !bySubscription?.[0] && customerId ? await selectRows('tenant_subscriptions', `select=*&provider_customer_id=${eq(customerId)}&limit=1`).catch(() => []) : [];
+  const providerMatched = bySubscription?.[0] || byCustomer?.[0] || null;
+
+  if (providerMatched?.tenant_id && metadataTenantId && providerMatched.tenant_id !== metadataTenantId) {
+    const error = new Error('Stripe account mapping failed a tenant-isolation check.');
+    error.code = 'STRIPE_TENANT_MISMATCH';
+    throw error;
+  }
+  if (providerMatched?.tenant_id && hintedTenantId && providerMatched.tenant_id !== hintedTenantId) {
+    const error = new Error('Stripe account mapping does not match the authenticated account.');
+    error.code = 'STRIPE_TENANT_MISMATCH';
+    throw error;
   }
 
-  const local = hints.existing || existing || await loadLocalSubscription(resolvedTenantId);
+  const resolvedTenantId = providerMatched?.tenant_id || hintedTenantId || metadataTenantId || '';
+  if (!resolvedTenantId) throw new Error('Stripe subscription could not be matched to a My Passwords account.');
+
+  const local = providerMatched || hints.existing || await loadLocalSubscription(resolvedTenantId);
+  if (local?.tenant_id && local.tenant_id !== resolvedTenantId) {
+    const error = new Error('Stripe subscription tenant mapping was rejected.');
+    error.code = 'STRIPE_TENANT_MISMATCH';
+    throw error;
+  }
+  if (local?.provider_subscription_id && subscriptionId && local.provider_subscription_id !== subscriptionId) {
+    const other = await selectRows('tenant_subscriptions', `select=id,tenant_id&provider_subscription_id=${eq(subscriptionId)}&limit=1`).catch(() => []);
+    if (other?.[0]?.tenant_id && other[0].tenant_id !== resolvedTenantId) {
+      const error = new Error('Stripe subscription is already linked to a different account.');
+      error.code = 'STRIPE_TENANT_MISMATCH';
+      throw error;
+    }
+  }
+  if (local?.provider_customer_id && customerId && local.provider_customer_id !== customerId) {
+    const other = await selectRows('tenant_subscriptions', `select=id,tenant_id&provider_customer_id=${eq(customerId)}&limit=1`).catch(() => []);
+    if (other?.[0]?.tenant_id && other[0].tenant_id !== resolvedTenantId) {
+      const error = new Error('Stripe customer is already linked to a different account.');
+      error.code = 'STRIPE_TENANT_MISMATCH';
+      throw error;
+    }
+  }
   const tenant = hints.tenant || await loadTenant(resolvedTenantId);
   const planCode = metadataValue(subscription, 'my_passwords_plan_code') || hints.planCode || pricePlan?.code || local?.plan_code || tenant?.plan_code || 'personal';
   const billingInterval = metadataValue(subscription, 'my_passwords_billing_interval') || hints.billingInterval || intervalFromPlanPrice(pricePlan, price.id) || intervalFromRecurring(price) || local?.billing_interval || null;

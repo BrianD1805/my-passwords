@@ -1,5 +1,6 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, supabaseRequest } from './_db.js';
 import { getCustomerAccess } from './_session.js';
+import { assertBrowserAction } from './_security.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -63,6 +64,7 @@ export async function handler(event) {
   }
 
   if (event.httpMethod !== 'POST') return jsonResponse(405, { ok: false, version: APP_VERSION, message: 'GET or POST required.' });
+  try { assertBrowserAction(event, { session: access.session, kind: 'customer', csrf: true }); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
   const body = parseBody(event);
   if (String(body.action || '') === 'record_event') {
     await recordSyncEvent({ tenantId, userId, eventType: body.eventType, status: body.status, itemCount: body.itemCount, message: body.message, deviceId: body.deviceId, metadata: body.metadata || {} });

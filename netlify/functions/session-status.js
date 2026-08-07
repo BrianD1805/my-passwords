@@ -5,6 +5,7 @@ import { evaluateTenantAccess, loadTenantSubscription, trialDaysRemaining } from
 import { stripeConfigured } from './_stripe.js';
 import { serializeSubscription } from './_subscription-lifecycle.js';
 import { resolveTenantEntitlements } from './_entitlements.js';
+import { assertBrowserAction, assertCsrf, csrfTokenForSession } from './_security.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 
@@ -12,10 +13,16 @@ export async function handler(event) {
   if (!['GET', 'POST'].includes(event.httpMethod)) return jsonResponse(405, { ok: false, version: APP_VERSION, message: 'GET or POST required.' });
   const body = event.httpMethod === 'POST' ? parseBody(event) : {};
   const action = String(body.action || 'status').trim();
+  if (event.httpMethod === 'POST') {
+    try { assertBrowserAction(event, { csrf: false }); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
+  }
 
   if (action === 'logout') {
     const validation = await validateCustomerSession(event, { touch: false });
-    if (validation.ok && validation.session?.sessionId) await revokeSession(validation.session.sessionId, 'ended_on_device').catch(() => null);
+    if (validation.ok && validation.session?.sessionId) {
+      try { assertCsrf(event, validation.session, 'customer'); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
+      await revokeSession(validation.session.sessionId, 'ended_on_device').catch(() => null);
+    }
     return jsonResponse(200, { ok: true, version: APP_VERSION, authenticated: false, cloudAccess: false, message: 'Device verification ended.' }, { 'set-cookie': clearCustomerSession(event) });
   }
 
@@ -62,6 +69,7 @@ export async function handler(event) {
       ok: true,
       version: APP_VERSION,
       authenticated: true,
+      csrfToken: csrfTokenForSession({ sessionId: activeSession?.id || session.sessionId || '' }, 'customer'),
       cloudAccess,
       accessCode,
       tenantId: tenant.id,

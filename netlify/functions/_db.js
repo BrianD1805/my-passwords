@@ -1,4 +1,4 @@
-export const APP_VERSION = 'My Passwords Ver-0.049A';
+export const APP_VERSION = 'My Passwords Ver-0.050';
 
 export function jsonResponse(statusCode, body, extraHeaders = {}) {
   return {
@@ -6,6 +6,10 @@ export function jsonResponse(statusCode, body, extraHeaders = {}) {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'DENY',
+      'referrer-policy': 'no-referrer',
+      'cross-origin-resource-policy': 'same-origin',
       ...extraHeaders
     },
     body: JSON.stringify(body, null, 2)
@@ -23,6 +27,10 @@ export function getEnvironmentFlags() {
   return {
     has_SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
     has_SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    has_CUSTOMER_SESSION_SECRET: Boolean(process.env.CUSTOMER_SESSION_SECRET),
+    has_ADMIN_SESSION_SECRET: Boolean(process.env.ADMIN_SESSION_SECRET),
+    has_ADMIN_ACCESS_KEY: Boolean(process.env.ADMIN_ACCESS_KEY),
+    has_STRIPE_WEBHOOK_SECRET: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
     has_NETLIFY: Boolean(process.env.NETLIFY),
     has_CONTEXT: Boolean(process.env.CONTEXT),
     has_URL: Boolean(process.env.URL),

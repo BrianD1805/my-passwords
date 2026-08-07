@@ -3,6 +3,7 @@ import { clearCustomerSession } from './_auth.js';
 import { createAccountOtp, maskEmail, maskPhone, verifyAccountOtp } from './_account-otp.js';
 import { revokeAllCustomerSessions, revokeDeviceSessions, validateCustomerSession } from './_account-session.js';
 import { sendCustomerLifecycleEmail } from './_customer-email.js';
+import { assertBrowserAction, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 function cleanDigits(value) { return String(value || '').replace(/\D/g, ''); }
@@ -81,6 +82,8 @@ export async function handler(event) {
   const body = parseBody(event);
   const action = safeText(body.action, 80);
   try {
+    assertBrowserAction(event, { session, kind: 'customer', csrf: true });
+    await consumeRateLimit(event, { scope: 'account_security_action', identifier: session.sessionId || session.userId, limit: 30, windowSeconds: 15 * 60, blockSeconds: 15 * 60 });
     if (action === 'request_email_change') {
       const newEmail = safeText(body.newEmail, 254).toLowerCase();
       if (!newEmail.includes('@')) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Enter a valid new email address.' });

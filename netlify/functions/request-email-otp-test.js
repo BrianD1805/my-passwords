@@ -1,5 +1,6 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows } from './_db.js';
 import { createHash, randomInt } from 'node:crypto';
+import { assertBrowserAction, consumeRateLimit, requestIpHash, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 function gte(value) { return `gte.${encodeURIComponent(value)}`; }
@@ -13,7 +14,8 @@ function maskEmail(value) {
 }
 
 function hashOtp(challengeId, code) {
-  const secret = process.env.OTP_TEST_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'my-passwords-test-otp-foundation';
+  const secret = process.env.OTP_TEST_SECRET || process.env.CUSTOMER_SESSION_SECRET || (process.env.CONTEXT !== 'production' ? (process.env.SUPABASE_SERVICE_ROLE_KEY || 'my-passwords-otp-dev') : '');
+  if (!secret) throw new Error('CUSTOMER_SESSION_SECRET is required for production OTP security.');
   return createHash('sha256').update(`${challengeId}:${code}:${secret}`).digest('hex');
 }
 
@@ -74,6 +76,7 @@ async function sendWithResend({ to, code, maskedEmail, purpose }) {
 export async function handler(event) {
   if (!requirePost(event)) return jsonResponse(405, { ok: false, message: 'POST required.' });
   const body = parseBody(event);
+  try { assertBrowserAction(event, { csrf: false }); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
   const email = String(body.email || '').trim().toLowerCase();
   const purpose = String(body.purpose || 'secure_customer_session').trim();
   const testMode = process.env.OTP_TEST_MODE === 'true' || process.env.CONTEXT === 'dev';
@@ -81,6 +84,8 @@ export async function handler(event) {
   if (!email || !email.includes('@')) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Enter a valid backup email before requesting an email OTP.' });
 
   try {
+    await consumeRateLimit(event, { scope: 'otp_request_ip', identifier: requestIpHash(event), limit: 8, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
+    await consumeRateLimit(event, { scope: 'otp_request_destination', identifier: email, limit: 4, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
     const user = await findUser(email);
     if (!user?.id || !user?.tenant_id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'No account was found for that email. Create the account first or check the address.' });
     if (await checkRateLimit(user.id)) return jsonResponse(429, { ok: false, version: APP_VERSION, message: 'Too many codes were requested. Wait 15 minutes before trying again.' });
@@ -123,6 +128,6 @@ export async function handler(event) {
       message: delivery.sent ? `Email code sent to ${destinationMasked}. Enter the code to continue.` : 'Local test code created because email delivery is unavailable in development mode.'
     });
   } catch (error) {
-    return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not create the email OTP challenge.', error: error.message, details: error.details || null });
+    return jsonResponse(error.status || 500, { ok: false, version: APP_VERSION, code: error.code || 'OTP_REQUEST_FAILED', message: error.status ? error.message : 'Could not create the email OTP challenge.', error: error.status ? undefined : error.message, details: error.details || null }, securityErrorResponseHeaders(error));
   }
 }
