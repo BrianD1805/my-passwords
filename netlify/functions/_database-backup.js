@@ -25,7 +25,37 @@ function unixSecondsToIso(value) {
   return Number.isFinite(time) ? new Date(time).toISOString() : null;
 }
 
-export function summariseSupabaseBackupResponse(data, checkedAt = new Date().toISOString()) {
+
+async function fetchJson(url, accessToken) {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' }
+  });
+  const data = await response.json().catch(() => ({}));
+  return { response, data };
+}
+
+async function supabaseOrganizationPlan(ref, accessToken) {
+  // Plan detection is deliberately best-effort. A normal Supabase Personal Access Token
+  // can read the project and organization. Fine-grained backup-only tokens may not have
+  // those extra read permissions, in which case backup verification falls back safely to
+  // the backup endpoint response rather than failing the health check just because plan
+  // metadata could not be read.
+  try {
+    const projectResult = await fetchJson(`https://api.supabase.com/v1/projects/${encodeURIComponent(ref)}`, accessToken);
+    if (!projectResult.response.ok) return null;
+    const organizationSlug = String(projectResult.data?.organization_slug || '').trim();
+    if (!organizationSlug) return null;
+    const organizationResult = await fetchJson(`https://api.supabase.com/v1/organizations/${encodeURIComponent(organizationSlug)}`, accessToken);
+    if (!organizationResult.response.ok) return null;
+    const plan = String(organizationResult.data?.plan || '').trim().toLowerCase();
+    return plan || null;
+  } catch {
+    return null;
+  }
+}
+
+export function summariseSupabaseBackupResponse(data, checkedAt = new Date().toISOString(), organizationPlan = null) {
   const backups = Array.isArray(data?.backups) ? data.backups : [];
   const completed = backups.filter((row) => String(row?.status || '').toUpperCase() === 'COMPLETED');
   const logicalLatestAt = completed.map(backupDate).filter(Boolean).sort().reverse()[0] || null;
@@ -34,11 +64,13 @@ export function summariseSupabaseBackupResponse(data, checkedAt = new Date().toI
   const pitrEnabled = Boolean(data?.pitr_enabled);
   const walgEnabled = Boolean(data?.walg_enabled);
 
-  // Supabase Free projects do not include managed automatic backups. The Management API
-  // can still answer successfully but return no usable backup data. That is a plan/capability
-  // limitation, not an operational failure. A paid project with queued/failed backup rows is
-  // deliberately not treated as unavailable and will continue to surface a warning.
-  const managedBackupUnavailable = !latestBackupAt && backups.length === 0 && !pitrEnabled && !walgEnabled;
+  // Supabase automatic backups are not included on the Free organization plan. Prefer
+  // the Management API's organization plan when it is available, because Free projects can
+  // still return backup metadata rows even though no managed completed backup is available.
+  // The older empty-response heuristic remains as a safe fallback for backup-only tokens that
+  // cannot read project/organization metadata.
+  const freePlan = String(organizationPlan || '').toLowerCase() === 'free';
+  const managedBackupUnavailable = freePlan || (!latestBackupAt && backups.length === 0 && !pitrEnabled && !walgEnabled);
   if (managedBackupUnavailable) {
     return {
       ok: true,
@@ -47,11 +79,14 @@ export function summariseSupabaseBackupResponse(data, checkedAt = new Date().toI
       dataPlaneReachable: true,
       managementApiConfigured: true,
       latestBackupAt: null,
-      backupCount: 0,
+      backupCount: backups.length,
       pitrEnabled,
       walgEnabled,
-      physicalBackupDataAvailable: false,
-      message: 'Managed Supabase database backups are not available for this project. This is expected on the Supabase Free plan. Use a separate manual/off-site backup until managed backups are enabled.'
+      physicalBackupDataAvailable: Boolean(physicalLatestAt),
+      organizationPlan: organizationPlan || null,
+      message: freePlan
+        ? 'Managed Supabase database backups are not available on the current Supabase Free plan. Use a separate manual/off-site backup until the project is upgraded.'
+        : 'Managed Supabase database backups are not available for this project. Use a separate manual/off-site backup until managed backups are enabled.'
     };
   }
 
@@ -108,11 +143,8 @@ export async function verifyDatabaseBackup() {
   }
 
   try {
-    const response = await fetch(`https://api.supabase.com/v1/projects/${encodeURIComponent(ref)}/database/backups`, {
-      method: 'GET',
-      headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' }
-    });
-    const data = await response.json().catch(() => ({}));
+    const organizationPlan = await supabaseOrganizationPlan(ref, accessToken);
+    const { response, data } = await fetchJson(`https://api.supabase.com/v1/projects/${encodeURIComponent(ref)}/database/backups`, accessToken);
     if (!response.ok) {
       return {
         ok: false,
@@ -126,7 +158,7 @@ export async function verifyDatabaseBackup() {
       };
     }
 
-    return summariseSupabaseBackupResponse(data, checkedAt);
+    return summariseSupabaseBackupResponse(data, checkedAt, organizationPlan);
   } catch (error) {
     return {
       ok: false,
