@@ -48,9 +48,19 @@ function providerStripeSnapshot(subscription, plans = []) {
   };
 }
 
-function reconciliationChanges(local, provider) {
+export function reconciliationValuesEqual(field, localValue, providerValue) {
+  if (field === 'currentPeriodEnd') {
+    if (!localValue && !providerValue) return true;
+    const localMs = localValue ? new Date(localValue).getTime() : NaN;
+    const providerMs = providerValue ? new Date(providerValue).getTime() : NaN;
+    return Number.isFinite(localMs) && Number.isFinite(providerMs) && localMs === providerMs;
+  }
+  return String(localValue ?? '') === String(providerValue ?? '');
+}
+
+export function reconciliationChanges(local, provider) {
   const fields = ['status', 'planCode', 'billingInterval', 'currency', 'priceMinor', 'currentPeriodEnd', 'cancelAtPeriodEnd'];
-  return fields.filter((field) => String(local?.[field] ?? '') !== String(provider?.[field] ?? '')).map((field) => ({ field, local: local?.[field] ?? null, provider: provider?.[field] ?? null }));
+  return fields.filter((field) => !reconciliationValuesEqual(field, local?.[field], provider?.[field])).map((field) => ({ field, local: local?.[field] ?? null, provider: provider?.[field] ?? null }));
 }
 
 async function loadHealthData() {
@@ -105,7 +115,7 @@ async function loadHealthData() {
       stripe: { status: !stripeConfigured() ? 'not_configured' : failedWebhooks.length ? 'error' : 'ready', label: 'Stripe and webhooks' },
       resend: { status: !(process.env.RESEND_API_KEY && process.env.OTP_EMAIL_FROM) ? 'not_configured' : (customerEmailFailures.length + adminEmailFailures.length ? 'warning' : 'ready'), label: 'Resend delivery' },
       operationalAlerts: { status: process.env.OPS_ALERT_EMAIL && process.env.RESEND_API_KEY && process.env.OTP_EMAIL_FROM ? 'ready' : 'not_configured', label: 'Operational alert email', message: process.env.OPS_ALERT_EMAIL ? 'Critical Stripe webhook alerts can be emailed to the configured operations recipient.' : 'Optional: add OPS_ALERT_EMAIL to receive Stripe webhook failure alert emails.' },
-      databaseBackup: { status: latestBackupRun?.status || 'not_checked', label: 'Database backup verification', latestBackupAt: backupSummary.latestBackupAt || null, message: backupSummary.message || '' }
+      databaseBackup: { status: backupSummary.status || latestBackupRun?.status || 'not_checked', label: 'Database backup verification', latestBackupAt: backupSummary.latestBackupAt || null, message: backupSummary.message || '' }
     },
     events: events.map((row) => ({ ...row, metadata: parseJson(row.metadata) })),
     checks: checks.map((row) => ({ ...row, result_summary: parseJson(row.result_summary) })),

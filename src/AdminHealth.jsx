@@ -34,6 +34,7 @@ function tone(value) {
   const status = String(value || '').toLowerCase();
   if (['healthy', 'ready', 'success', 'resolved', 'applied'].includes(status)) return 'success';
   if (['warning', 'not_configured', 'not_checked', 'preview'].includes(status)) return 'warning';
+  if (status === 'not_available') return 'recorded';
   if (['critical', 'attention', 'error', 'failed'].includes(status)) return 'error';
   return 'recorded';
 }

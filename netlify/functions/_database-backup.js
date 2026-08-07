@@ -18,6 +18,63 @@ function backupDate(row) {
   return Number.isFinite(time) ? new Date(time).toISOString() : null;
 }
 
+function unixSecondsToIso(value) {
+  const seconds = Number(value || 0);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  const time = seconds * 1000;
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
+
+export function summariseSupabaseBackupResponse(data, checkedAt = new Date().toISOString()) {
+  const backups = Array.isArray(data?.backups) ? data.backups : [];
+  const completed = backups.filter((row) => String(row?.status || '').toUpperCase() === 'COMPLETED');
+  const logicalLatestAt = completed.map(backupDate).filter(Boolean).sort().reverse()[0] || null;
+  const physicalLatestAt = unixSecondsToIso(data?.physical_backup_data?.latest_physical_backup_date_unix);
+  const latestBackupAt = [logicalLatestAt, physicalLatestAt].filter(Boolean).sort().reverse()[0] || null;
+  const pitrEnabled = Boolean(data?.pitr_enabled);
+  const walgEnabled = Boolean(data?.walg_enabled);
+
+  // Supabase Free projects do not include managed automatic backups. The Management API
+  // can still answer successfully but return no usable backup data. That is a plan/capability
+  // limitation, not an operational failure. A paid project with queued/failed backup rows is
+  // deliberately not treated as unavailable and will continue to surface a warning.
+  const managedBackupUnavailable = !latestBackupAt && backups.length === 0 && !pitrEnabled && !walgEnabled;
+  if (managedBackupUnavailable) {
+    return {
+      ok: true,
+      status: 'not_available',
+      checkedAt,
+      dataPlaneReachable: true,
+      managementApiConfigured: true,
+      latestBackupAt: null,
+      backupCount: 0,
+      pitrEnabled,
+      walgEnabled,
+      physicalBackupDataAvailable: false,
+      message: 'Managed Supabase database backups are not available for this project. This is expected on the Supabase Free plan. Use a separate manual/off-site backup until managed backups are enabled.'
+    };
+  }
+
+  const latestMs = latestBackupAt ? new Date(latestBackupAt).getTime() : 0;
+  const ageHours = latestMs ? (Date.now() - latestMs) / 3600000 : null;
+  const fresh = ageHours != null && ageHours <= 36;
+  return {
+    ok: fresh,
+    status: fresh ? 'success' : 'warning',
+    checkedAt,
+    dataPlaneReachable: true,
+    managementApiConfigured: true,
+    latestBackupAt,
+    backupCount: backups.length,
+    pitrEnabled,
+    walgEnabled,
+    physicalBackupDataAvailable: Boolean(physicalLatestAt),
+    message: fresh
+      ? 'The latest completed Supabase database backup is within the 36-hour verification window.'
+      : (latestBackupAt ? 'The latest completed Supabase backup is older than 36 hours.' : 'Supabase returned backup records, but no completed backup could be verified.')
+  };
+}
+
 export async function verifyDatabaseBackup() {
   const checkedAt = new Date().toISOString();
   const ref = projectRef();
@@ -69,25 +126,7 @@ export async function verifyDatabaseBackup() {
       };
     }
 
-    const backups = Array.isArray(data?.backups) ? data.backups : [];
-    const completed = backups.filter((row) => String(row?.status || '').toUpperCase() === 'COMPLETED');
-    const latestBackupAt = completed.map(backupDate).filter(Boolean).sort().reverse()[0] || null;
-    const latestMs = latestBackupAt ? new Date(latestBackupAt).getTime() : 0;
-    const ageHours = latestMs ? (Date.now() - latestMs) / 3600000 : null;
-    const fresh = ageHours != null && ageHours <= 36;
-    return {
-      ok: fresh,
-      status: fresh ? 'success' : 'warning',
-      checkedAt,
-      dataPlaneReachable: true,
-      managementApiConfigured: true,
-      latestBackupAt,
-      backupCount: backups.length,
-      pitrEnabled: Boolean(data?.pitr_enabled),
-      walgEnabled: Boolean(data?.walg_enabled),
-      physicalBackupDataAvailable: Boolean(data?.physical_backup_data),
-      message: fresh ? 'The latest completed Supabase database backup is within the 36-hour verification window.' : (latestBackupAt ? 'The latest completed Supabase backup is older than 36 hours.' : 'No completed Supabase backup was returned by the Management API.')
-    };
+    return summariseSupabaseBackupResponse(data, checkedAt);
   } catch (error) {
     return {
       ok: false,
