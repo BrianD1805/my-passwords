@@ -23,6 +23,7 @@ export async function handler() {
     await selectRows('document_blobs', 'select=id,storage_bytes&limit=1');
     await selectRows('sms_delivery_log', 'select=id,status&limit=1');
     await selectRows('customer_email_log', 'select=id,status,email_type&limit=1');
+    await selectRows('email_processor_runs', 'select=id,processor_type,status&limit=1');
     return jsonResponse(200, {
       ok: true,
       connected: true,
@@ -40,6 +41,7 @@ export async function handler() {
     const relationMissing = error.details?.code === '42P01' || String(error.message || '').toLowerCase().includes('does not exist');
     const smsMigrationMissing = /sms_delivery_log/i.test(String(error.message || ''));
     const customerEmailMigrationMissing = /customer_email_log/i.test(String(error.message || ''));
+    const emailProcessorMigrationMissing = /email_processor_runs/i.test(String(error.message || ''));
     const entitlementMigrationMissing = error.details?.code === '42703'
       || /feature_flags|entitlement_version|entitlements_snapshot|entitlement_overrides|storage_bytes/i.test(String(error.message || ''));
     return jsonResponse(200, {
@@ -53,7 +55,9 @@ export async function handler() {
       supabase,
       error: error.message,
       details: error.details || null,
-      message: customerEmailMigrationMissing
+      message: emailProcessorMigrationMissing
+        ? 'Supabase is reachable, but the Ver-0.049A automated email processor history table is missing. Run the Ver-0.049A migration in Supabase SQL Editor.'
+        : customerEmailMigrationMissing
         ? 'Supabase is reachable, but the Ver-0.049 automated email delivery table is missing. Run the Ver-0.049 migration in Supabase SQL Editor.'
         : smsMigrationMissing
         ? 'Supabase is reachable, but the Ver-0.047 SMS delivery table is missing. Run the Ver-0.047 migration in Supabase SQL Editor.'

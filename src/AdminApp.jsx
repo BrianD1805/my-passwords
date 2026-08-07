@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BadgePoundSterling, CalendarClock, ChevronRight, Cloud, CreditCard, Eye, EyeOff, FileText, LogOut, Plus, RefreshCw, Save, Search, ShieldCheck, Trash2, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import CustomSelect from './CustomSelect.jsx';
 import AdminCustomerDetail from './AdminCustomerDetail.jsx';
+import AdminAutomatedEmails from './AdminAutomatedEmails.jsx';
 
 async function requestJson(url, options = {}) {
   try {
@@ -423,6 +424,7 @@ export default function AdminApp({ version }) {
         <button type="button" className={activeTab === 'customers' ? 'active' : ''} onClick={() => setActiveTab('customers')}>Customers</button>
         <button type="button" className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>Billing Events</button>
         <button type="button" className={activeTab === 'sync' ? 'active' : ''} onClick={() => setActiveTab('sync')}>Sync Health</button>
+        <button type="button" className={activeTab === 'emails' ? 'active' : ''} onClick={() => setActiveTab('emails')}>Automated Emails</button>
         <button type="button" className={activeTab === 'audit' ? 'active' : ''} onClick={() => setActiveTab('audit')}>Admin Audit</button>
       </nav>
 
@@ -556,6 +558,15 @@ export default function AdminApp({ version }) {
             </div>
           </section>
         </section>
+      )}
+
+
+      {activeTab === 'emails' && (
+        <AdminAutomatedEmails
+          onSessionExpired={(message) => { setAuth({ checking: false, authenticated: false, message: message || 'Admin sign-in is required.' }); setSelectedCustomerId(''); }}
+          setGlobalNotice={setNotice}
+          onOpenCustomer={(tenantId) => { setSelectedCustomerId(tenantId); setActiveTab('customers'); }}
+        />
       )}
 
 
