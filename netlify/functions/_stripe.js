@@ -12,6 +12,10 @@ export function stripeWebhookConfigured() {
   return Boolean(String(process.env.STRIPE_WEBHOOK_SECRET || '').trim());
 }
 
+export function stripeAutomaticTaxEnabled() {
+  return /^(1|true|yes|on)$/i.test(String(process.env.STRIPE_AUTOMATIC_TAX || '').trim());
+}
+
 function appendFormValue(params, key, value) {
   if (value === undefined || value === null) return;
   if (Array.isArray(value)) {

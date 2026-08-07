@@ -3,6 +3,7 @@ import { assertUserCapacity, entitlementSnapshotFromPlan, launchReadyPlan } from
 import { assertBrowserAction, consumeRateLimit, requestIpHash, securityErrorResponseHeaders } from './_security.js';
 
 const defaultCategories = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
+const LEGAL_VERSION = '2026-08-07';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -60,6 +61,8 @@ export async function handler(event) {
   const displayName = String(body.displayName || '').trim() || 'Vault User';
   const accountName = String(body.accountName || body.tenantName || '').trim() || `${displayName}'s Private Vault`;
   const selectedPlanCode = requestedPlan(body.planCode || 'personal') || 'personal';
+  const legalAccepted = body.legalAccepted === true;
+  const legalVersion = String(body.legalVersion || '').trim();
 
   if (!email || !email.includes('@')) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A valid email address is required for secure account verification.' });
   if (!phoneE164) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A mobile number with country code is required.' });
@@ -106,6 +109,16 @@ export async function handler(event) {
         existingAccount: true,
         requiresOtpVerification: true,
         message: 'An account already exists for these details. Request an email code to verify this device and continue with the existing account.'
+      });
+    }
+
+    if (!legalAccepted || legalVersion !== LEGAL_VERSION) {
+      return jsonResponse(409, {
+        ok: false,
+        version: APP_VERSION,
+        code: 'LEGAL_ACCEPTANCE_REQUIRED',
+        legalVersion: LEGAL_VERSION,
+        message: 'Accept the current Terms, Privacy Policy and Billing & Refund Policy before creating a new account.'
       });
     }
 
@@ -181,7 +194,14 @@ export async function handler(event) {
         selected_plan_code: selectedPlanCode,
         selected_plan_name: plan.display_name || selectedPlanCode,
         trial_days: Number(plan.trial_days || 0),
-        entitlements: signupEntitlements
+        entitlements: signupEntitlements,
+        legal_acceptance: {
+          accepted: true,
+          accepted_at: now,
+          document_version: LEGAL_VERSION,
+          documents: ['terms_of_service', 'privacy_policy', 'subscription_cancellation_refund_policy'],
+          source: 'public_signup'
+        }
       }
     });
 
@@ -209,6 +229,7 @@ export async function handler(event) {
       reusedExistingUser: false,
       existingAccount: false,
       requiresOtpVerification: true,
+      legalVersion: LEGAL_VERSION,
       message: 'Your account and selected plan are ready. Request the email code to verify the account and start the trial.'
     });
   } catch (error) {

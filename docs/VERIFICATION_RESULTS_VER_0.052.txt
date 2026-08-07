@@ -1,0 +1,76 @@
+My Passwords Ver-0.052 — Patch verification
+Date: 2026-08-07
+
+PASS  Vault server identity comes from validated session
+PASS  Documents are scoped to session tenant and user
+PASS  Account profile is scoped to session tenant and user
+PASS  Billing context is derived from validated customer session
+PASS  Emergency Access owner identity is overwritten from session
+PASS  Production cookies use __Host prefix and SameSite Strict
+PASS  Production session signing requires dedicated secrets
+PASS  Security HMAC controls require dedicated production session secret
+PASS  Stripe webhook has atomic replay ledger claim
+PASS  Browser no longer sends identity in sync/document URLs
+PASS  Browser sensitive POST helper sends request marker and CSRF
+PASS  Signup plan is validated against server-side published plan data
+PASS  Stripe checkout uses server-loaded plan and validated billing session
+
+All 13 security static checks passed.
+
+PASS  Ver-0.052 version and cache are aligned
+PASS  Operational monitoring tables use RLS and service-role-only grants
+PASS  Operational metadata has a sensitive-key denylist and text redaction
+PASS  Failed functions create sanitised operational events
+PASS  Stripe webhook failures create critical operational alerts
+PASS  Resend failures are tracked without storing recipient addresses in operational events
+PASS  Vault backup failures and sync conflicts feed operational monitoring
+PASS  Account/trial and Emergency Access checks have scheduled run history
+PASS  Database backup verification uses the Supabase Management API and never returns the access token
+PASS  Backup verification treats unavailable managed backups as non-failing and recognises physical backup dates
+PASS  Backup verification detects the Supabase organization Free plan before judging backup rows
+PASS  Health dashboard is admin-session protected and mutating actions require CSRF
+PASS  Stripe reconciliation is preview-first, expires, and refreshes only the existing linked subscription
+PASS  Stripe reconciliation compares CurrentPeriodEnd as an instant, not raw timestamp text
+PASS  Customer support diagnostics query metadata only
+PASS  Browser error reporting excludes exception messages and stacks
+PASS  Monitoring and cleanup schedules are configured
+PASS  Operational retention rules do not delete customer vault data
+PASS  Resolved sync-conflict alerts create an acknowledgement checkpoint and are not reopened by the same historical rows
+PASS  Operations health covers database, Stripe, email, backup, sync, functions and scheduled processors
+
+All 20 reliability static checks passed.
+
+PASS  Ver-0.052 app/server/package/service-worker versions align
+PASS  Public Terms, Privacy and Billing routes are implemented and included in the PWA shell
+PASS  Public landing page links all legal policies
+PASS  New signup requires explicit current legal acceptance in browser
+PASS  Server independently enforces current legal acceptance for new accounts
+PASS  Signup audit records legal document version and acceptance timestamp
+PASS  Terms describe client-side encryption without absolute security promise
+PASS  Privacy policy explicitly avoids absolute zero-knowledge claim
+PASS  Emergency Access disclosure covers waiting period, secure link and document limitation
+PASS  Trial wording states no automatic paid conversion
+PASS  Cancellation and refund terms preserve mandatory consumer rights
+PASS  Tax wording does not falsely claim tax-inclusive pricing
+PASS  Stripe invoice and receipt wording identifies Stripe-hosted records
+PASS  Business and support identity are published
+PASS  Retention cleanup covers operational, email, SMS and deletion history metadata
+PASS  Privacy lists current infrastructure/payment/communications processors
+PASS  Customer-facing lifecycle/admin emails link Terms, Privacy and Billing policies
+PASS  Family and Business remain reserved future plans for Personal-only launch
+PASS  Secure device unlock is disclosed as local wrapped-master-password storage
+PASS  Current customer-facing code avoids absolute master-password storage/access claims
+PASS  Stripe Tax is opt-in and disabled unless the server setting is explicitly enabled
+PASS  Commercial, data-processing, claims and support launch documentation is present
+PASS  Privacy discloses essential browser storage and external font/flag resources
+
+All 23 legal/commercial readiness checks passed.
+
+PASS  56/56 Netlify Function JavaScript files pass node --check
+PASS  7/7 JSX files pass syntax transpilation
+PASS  56/56 Netlify Function modules import successfully
+PASS  Stripe automatic tax is server-opt-in and defaults OFF
+PASS  No Supabase SQL changes required for Ver-0.052
+PASS  Family and Business plans remain reserved/unpublished by server entitlements
+
+Build note: npm run build was not executed in the patch workspace because node_modules is intentionally not included/installed here. Run the supplied local verification/build command before deployment.

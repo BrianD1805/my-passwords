@@ -2,7 +2,7 @@
 
 ## Safety rule
 
-Operational recovery must preserve the zero-knowledge vault boundary. Do not request, copy, log or place into diagnostics any customer's master password, readable vault entry, decrypted document, OTP, recovery code, cookie, session token, encryption key or provider secret.
+Operational recovery must preserve the client-side encryption and vault privacy boundary. Do not request, copy, log or place into diagnostics any customer's master password, readable vault entry, decrypted document, OTP, recovery code, cookie, session token, encryption key or provider secret.
 
 Use Admin > Health and the customer **Safe diagnostics report** first. Those tools are designed to expose metadata only.
 

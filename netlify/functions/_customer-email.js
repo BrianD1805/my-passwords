@@ -92,7 +92,7 @@ function emailDefinition(type, context = {}) {
         `Hello ${displayName},`,
         `Your <strong>${accountName}</strong> account is ready and your ${planName} trial has started${trialEnd ? ` until ${escapeHtml(trialEnd)}` : ''}.`,
         'You can now create or open your private encrypted vault and use the account features included in your plan.',
-        'Only your master password opens your vault. My Passwords never stores or emails it.'
+        'My Passwords does not store a server-side copy of your master password or send it by email. A paid subscription begins only if you deliberately complete Stripe Checkout.'
       ],
       button: { label: 'Open My Passwords', url: billingUrl }
     },
@@ -103,7 +103,7 @@ function emailDefinition(type, context = {}) {
         `Hello ${displayName},`,
         `Your <strong>${accountName}</strong> account is active on the ${planName} plan.`,
         'You can now create or open your private encrypted vault and use the account features included in your plan.',
-        'Only your master password opens your vault. My Passwords never stores or emails it.'
+        'My Passwords does not store a server-side copy of your master password or send it by email. If you enable Secure device unlock, a separately protected wrapped copy is kept only on that device.'
       ],
       button: { label: 'Open My Passwords', url: billingUrl }
     },
@@ -114,7 +114,7 @@ function emailDefinition(type, context = {}) {
         `Hello ${displayName},`,
         `Your ${planName} trial for <strong>${accountName}</strong> is now active${trialEnd ? ` until ${escapeHtml(trialEnd)}` : ''}.`,
         'Your included account features remain available throughout the trial.',
-        'Your vault remains private and can only be opened with your master password.'
+        'The trial does not automatically become a paid subscription unless you deliberately complete Stripe Checkout.'
       ],
       button: { label: 'Open My Passwords', url: billingUrl }
     },
@@ -125,7 +125,7 @@ function emailDefinition(type, context = {}) {
         `Hello ${displayName},`,
         `The trial for <strong>${accountName}</strong> has been extended${trialEnd ? ` until ${escapeHtml(trialEnd)}` : ''}.`,
         'Your current plan features remain available during the extended trial period.',
-        'Your vault remains private and can only be opened with your master password.'
+        'Your vault remains encrypted. The master password is the primary secret used to decrypt it; a device you deliberately set up may also use Secure device unlock.'
       ],
       button: { label: 'Open My Passwords', url: billingUrl }
     },
@@ -319,7 +319,7 @@ function emailDefinition(type, context = {}) {
       paragraphs: [
         `Hello ${displayName},`,
         `The requested deletion of <strong>${accountName}</strong> has been completed.`,
-        'The deleted account can no longer use My Passwords cloud account services.',
+        'The deleted account can no longer use My Passwords cloud account services. Limited payment, invoice or legal records may remain with payment/service providers where retention is required.',
         `If you have any questions about this confirmation, contact ${support}.`
       ]
     }
@@ -475,8 +475,8 @@ export async function sendCustomerLifecycleEmail({
         from,
         to: recipient,
         subject: definition.subject,
-        html: `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:28px"><h1 style="margin:0 0 16px;color:#14263b;font-size:26px">${definition.heading}</h1>${paragraphs}${button}<p style="margin-top:24px;font-size:13px;line-height:1.5;color:#7b8fa3">My Passwords<br>Support: info@zippyweb.uk</p></div></div></body></html>`,
-        text: `${textParagraphs.join('\n\n')}\n\nSupport: info@zippyweb.uk`
+        html: `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:28px"><h1 style="margin:0 0 16px;color:#14263b;font-size:26px">${definition.heading}</h1>${paragraphs}${button}<p style="margin-top:24px;font-size:13px;line-height:1.5;color:#7b8fa3">My Passwords · A ZippyWeb project<br>Support: info@zippyweb.uk<br><a href="${baseUrl()}/terms" style="color:#536579">Terms</a> · <a href="${baseUrl()}/privacy" style="color:#536579">Privacy</a> · <a href="${baseUrl()}/billing-terms" style="color:#536579">Billing &amp; refunds</a></p></div></div></body></html>`,
+        text: `${textParagraphs.join('\n\n')}\n\nMy Passwords · A ZippyWeb project\nSupport: info@zippyweb.uk\nTerms: ${baseUrl()}/terms\nPrivacy: ${baseUrl()}/privacy\nBilling & refunds: ${baseUrl()}/billing-terms`
       })
     });
     const data = await response.json().catch(() => ({}));

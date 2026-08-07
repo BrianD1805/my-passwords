@@ -1,6 +1,6 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow, upsertRow } from './_db.js';
 import { getBillingContext } from './_billing.js';
-import { billingIntervalDefinition, publicSiteUrl, stripeConfigured, stripeObjectId, stripeRequest, syncStripePlan } from './_stripe.js';
+import { billingIntervalDefinition, publicSiteUrl, stripeAutomaticTaxEnabled, stripeConfigured, stripeObjectId, stripeRequest, syncStripePlan } from './_stripe.js';
 import { listCustomerStripeSubscriptions, syncStripeSubscriptionObject } from './_subscription-lifecycle.js';
 import { launchReadyPlan, loadPlanEntitlementSnapshot } from './_entitlements.js';
 import { assertBrowserAction, claimIdempotency, completeIdempotency, securityErrorResponseHeaders } from './_security.js';
@@ -152,6 +152,7 @@ export async function handler(event) {
     }
     const baseUrl = publicSiteUrl(event);
     const trialEnd = remainingTrialEnd(context.tenant);
+    const automaticTaxEnabled = stripeAutomaticTaxEnabled();
     const session = await stripeRequest('checkout/sessions', {
       idempotencyKey: `mp-checkout-${context.tenant.id}-${requestId}`,
       params: {
@@ -162,6 +163,7 @@ export async function handler(event) {
         success_url: `${baseUrl}/vault?billing=success&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/vault?billing=cancelled`,
         billing_address_collection: 'auto',
+        ...(automaticTaxEnabled ? { automatic_tax: { enabled: true }, customer_update: { address: 'auto' } } : {}),
         payment_method_collection: 'always',
         allow_promotion_codes: false,
         metadata: {
@@ -254,6 +256,7 @@ export async function handler(event) {
       amountMinor: Number(plan[interval.amountColumn] || 0),
       currency: 'GBP',
       trialPreservedUntil: trialEnd ? new Date(trialEnd * 1000).toISOString() : null,
+      automaticTaxEnabled,
       message: 'Stripe Checkout is ready.'
     });
   } catch (error) {

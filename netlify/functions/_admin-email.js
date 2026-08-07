@@ -1,5 +1,10 @@
 import { APP_VERSION } from './_db.js';
 
+function baseUrl() {
+  const raw = String(process.env.URL || 'https://password-encrypt.com').replace(/\/$/, '');
+  return /^https?:\/\//i.test(raw) ? raw : 'https://password-encrypt.com';
+}
+
 function escapeHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -32,7 +37,7 @@ function emailDefinition(type, context = {}) {
         `Hello ${name},`,
         `Your account <strong>${account}</strong> is active on the ${plan} plan.`,
         'You can now use verified devices for account services and encrypted cloud backup where included in your plan.',
-        'Your master vault password is never stored, emailed or recoverable by My Passwords.'
+        'My Passwords does not keep a server-side copy of your master password or send it by email, so support cannot recover or reset it. Secure device unlock, if enabled later, keeps a separately protected wrapped copy only on that device.'
       ]
     },
     payment_attention: {
@@ -72,7 +77,7 @@ function emailDefinition(type, context = {}) {
         `Hello ${name},`,
         `The trial for <strong>${account}</strong> has been extended${trialEnd ? ` until ${escapeHtml(trialEnd)}` : ''}.`,
         'Your current plan features remain available during the extended trial period.',
-        'Your vault remains encrypted and can only be opened with your master password.'
+        'Your vault remains encrypted. The master password is the primary secret used to decrypt it; a device you deliberately set up may also use Secure device unlock.'
       ]
     },
     deletion_status: {
@@ -96,7 +101,7 @@ function emailDefinition(type, context = {}) {
         `Hello ${name},`,
         `The current status of <strong>${account}</strong> is ${escapeHtml(context.accountStatus || 'active')}.`,
         `Your plan is ${plan}.`,
-        'Your master password remains the only way to decrypt your vault.'
+        'Your master password remains the primary encryption secret. Secure device unlock can only use a locally protected wrapped copy on a device you deliberately set up.'
       ]
     }
   };
@@ -141,8 +146,8 @@ export async function sendAdminAccountEmail({ to, type, context = {} }) {
       from,
       to,
       subject: definition.subject,
-      html: `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:28px"><h1 style="margin:0 0 16px;color:#14263b;font-size:26px">${definition.heading}</h1>${paragraphs}<p style="margin-top:22px;font-size:13px;color:#7b8fa3">My Passwords · ${APP_VERSION}<br>Support: info@zippyweb.uk</p></div></div></body></html>`,
-      text: `${plainText}\n\nSupport: info@zippyweb.uk\n${APP_VERSION}`
+      html: `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:28px"><h1 style="margin:0 0 16px;color:#14263b;font-size:26px">${definition.heading}</h1>${paragraphs}<p style="margin-top:22px;font-size:13px;line-height:1.5;color:#7b8fa3">My Passwords · A ZippyWeb project · ${APP_VERSION}<br>Support: info@zippyweb.uk<br><a href="${baseUrl()}/terms" style="color:#536579">Terms</a> · <a href="${baseUrl()}/privacy" style="color:#536579">Privacy</a> · <a href="${baseUrl()}/billing-terms" style="color:#536579">Billing &amp; refunds</a></p></div></div></body></html>`,
+      text: `${plainText}\n\nMy Passwords · A ZippyWeb project\nSupport: info@zippyweb.uk\nTerms: ${baseUrl()}/terms\nPrivacy: ${baseUrl()}/privacy\nBilling & refunds: ${baseUrl()}/billing-terms\n${APP_VERSION}`
     })
   });
   const data = await response.json().catch(() => ({}));

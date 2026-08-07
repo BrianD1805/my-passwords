@@ -5,8 +5,9 @@ import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, Check, ChevronRight, 
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
+import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'My Passwords Ver-0.051C';
+const VERSION = 'My Passwords Ver-0.052';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -232,7 +233,7 @@ const SETTINGS_FAQS = [
   {
     category: 'Master password',
     question: 'Can My Passwords recover my master password?',
-    answer: 'No. Your master password is the encryption key for the vault and is not stored by My Passwords. If it is forgotten, the encrypted vault cannot be opened unless Emergency Access was already configured for an appropriate release package.'
+    answer: 'No. Your master password is the primary encryption secret for the vault and no server-side copy is stored by My Passwords, so support cannot recover or reset it. A working Secure device unlock on a device you already configured may still provide local access until its next required password check, and Emergency Access may release information prepared in advance; neither is a master-password reset.'
   },
   {
     category: 'Master password',
@@ -242,7 +243,7 @@ const SETTINGS_FAQS = [
   {
     category: 'Security',
     question: 'Can My Passwords staff read my saved passwords?',
-    answer: 'No. Vault records are encrypted before they are stored locally or backed up. The service stores encrypted data, not readable vault contents, and the master password is not sent to the server.'
+    answer: 'During normal service operation, readable vault records are encrypted in your browser before storage or backup and the master password is not sent to the server. My Passwords therefore does not hold the information normally needed to decrypt stored vault snapshots, but no online service can promise absolute security against a compromised device, browser or future application code.'
   },
   {
     category: 'Security',
@@ -1970,7 +1971,7 @@ function AccountRecoveryModal({ state, setState, onClose, onRequest, onVerify })
           {state.step === 'contact' ? <><p>Use this when setting up a new device, after ending account sessions, or when you can no longer access account services. A verified contact detail restores account, subscription and secure cloud-service access on this device. It does not open or decrypt the vault.</p><div className="recovery-channel-switch"><button type="button" className={state.channel === 'email' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'email', contact: '', message: '' }))}><Mail size={17} /> Email</button><button type="button" className={state.channel === 'sms' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'sms', contact: '', message: '' }))}><Phone size={17} /> Mobile</button></div><label>{state.channel === 'email' ? 'Verified email address' : 'Verified mobile number with country code'}<input type={state.channel === 'email' ? 'email' : 'tel'} inputMode={state.channel === 'email' ? 'email' : 'tel'} value={state.contact || ''} onChange={(event) => setState((current) => ({ ...current, contact: event.target.value, message: '' }))} placeholder={state.channel === 'email' ? 'you@example.com' : '+254712345678'} /></label></> : <><div className="account-otp-destination"><ShieldCheck size={20} /><span><strong>Enter your recovery code</strong><small>{state.message}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
           {state.channel === 'sms' && <p className="sms-carrier-note">Standard message and carrier rates may apply.</p>}
           {state.message && state.step === 'contact' && <div className="account-modal-message">{state.message}</div>}
-          <div className="master-password-boundary-note"><Lock size={20} /><span><strong>Your master password cannot be recovered</strong><small>Recovery can restore the account and subscription, but the encrypted vault remains unreadable without the correct master password.</small></span></div>
+          <div className="master-password-boundary-note"><Lock size={20} /><span><strong>Support cannot recover or reset your master password</strong><small>Account recovery can restore the account and subscription, but it does not supply the vault encryption secret. A previously configured Secure device unlock may still provide local access until its next password check.</small></span></div>
         </div>
         <footer className="item-popup-footer"><button type="button" className="secondary-button" onClick={onClose} disabled={state.busy}>Cancel</button>{state.step === 'contact' ? <button type="button" className="primary-button" onClick={onRequest} disabled={state.busy}>{state.busy ? 'Sending...' : 'Send recovery code'}</button> : <button type="button" className="primary-button" onClick={onVerify} disabled={state.busy}>{state.busy ? 'Restoring...' : 'Restore account access'}</button>}</footer>
       </section>
@@ -2089,7 +2090,8 @@ function App() {
     phoneNumber: '',
     phoneE164: '',
     accountName: '',
-    planCode: ''
+    planCode: '',
+    legalAccepted: false
   });
   const [landingSignup, setLandingSignup] = useState({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
   const [landingOtp, setLandingOtp] = useState({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
@@ -4878,7 +4880,8 @@ function App() {
       phoneNumber: '',
       phoneE164: '',
       accountName: '',
-      planCode: preferredPlan?.code || ''
+      planCode: preferredPlan?.code || '',
+      legalAccepted: false
     });
     setIsCreateAccountPopupOpen(true);
   }
@@ -4907,7 +4910,9 @@ function App() {
       displayName: String(landingAccountDraft.displayName || '').trim(),
       accountName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
       tenantName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
-      planCode: landingAccountDraft.planCode || 'personal'
+      planCode: landingAccountDraft.planCode || 'personal',
+      legalAccepted: Boolean(landingAccountDraft.legalAccepted),
+      legalVersion: LEGAL_VERSION
     };
   }
 
@@ -4917,6 +4922,7 @@ function App() {
     if (!draft.phoneE164) return 'Please enter a mobile number with country code.';
     if (!draft.accountName) return 'Please enter an account or vault name.';
     if (!draft.planCode) return 'Please choose a subscription plan.';
+    if (!draft.legalAccepted) return 'Please accept the Terms, Privacy Policy and Billing & Refund Policy before continuing.';
     return '';
   }
 
@@ -6018,6 +6024,7 @@ function App() {
             })}
             {!publicPlans.length && <div className="landing-plans-unavailable"><AlertTriangle size={20} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
           </div>
+          <p className="landing-pricing-legal">Prices are shown in GBP. Creating a trial does not start a paid subscription. Taxes are handled according to the seller's applicable obligations and the payment information shown at Stripe Checkout. <a href="/billing-terms">Billing, cancellation & refunds</a></p>
         </section>
 
         <section className="landing-section landing-feature-section" aria-label="Features">
@@ -6054,7 +6061,7 @@ function App() {
             <p>My Passwords is designed to protect your vault while keeping everyday access straightforward on the devices you trust.</p>
           </div>
           <div className="landing-security-grid">
-            <article><ShieldCheck size={23} /><strong>Your master password stays yours</strong><p>Your master password is not stored by My Passwords and is required to decrypt your vault.</p></article>
+            <article><ShieldCheck size={23} /><strong>Your master password stays yours</strong><p>Your master password is not stored on My Passwords servers and is used to derive the key that decrypts your vault. Secure device unlock can locally unwrap the password on a device you deliberately set up.</p></article>
             <article><Lock size={23} /><strong>Encrypted before backup</strong><p>Vault records and uploaded documents are encrypted before they are sent to secure storage.</p></article>
             <article><MonitorSmartphone size={23} /><strong>Verified-device protection</strong><p>Secure syncing and cloud backup are linked to verified account sessions on your devices.</p></article>
           </div>
@@ -6067,8 +6074,8 @@ function App() {
           </div>
           <div className="landing-faq-grid">
             <article><h3>When does my free trial start?</h3><p>Your trial starts only after you verify your email and complete account setup.</p></article>
-            <article><h3>Will I be charged when I create an account?</h3><p>No. Account creation starts the free trial. You can choose a paid subscription from inside your vault before the trial ends.</p></article>
-            <article><h3>Can My Passwords recover my master password?</h3><p>No. Your master password unlocks the encrypted vault and cannot be recovered by My Passwords.</p></article>
+            <article><h3>Will I be charged when I create an account?</h3><p>No. Account verification starts the free trial. A paid subscription begins only if you deliberately complete Stripe Checkout from inside your vault.</p></article>
+            <article><h3>Can My Passwords recover my master password?</h3><p>No. My Passwords does not store a server-side copy of your master password and cannot recover or reset it. Secure device unlock, if enabled, keeps a separately protected local wrapped copy on that device.</p></article>
             <article><h3>Can I use the vault on more than one device?</h3><p>Yes. Verify each device and use secure syncing to keep your latest protected vault available.</p></article>
             <article><h3>Can I store documents too?</h3><p>Yes. Supported documents are encrypted before upload and stored with your private vault.</p></article>
             <article><h3>What happens if a backup cannot complete?</h3><p>Your change remains on that device and the app gives you a clear warning and guided steps to finish the backup.</p></article>
@@ -6087,9 +6094,12 @@ function App() {
         <footer className="landing-footer">
           <div className="landing-footer-copy">
             <span>© 2026 My Passwords</span>
-            <small>Encrypted password vault for everyday private details.</small>
+            <small>Encrypted password vault for everyday private details · A ZippyWeb project.</small>
           </div>
           <nav className="landing-footer-links" aria-label="Landing page links">
+            <a href="/terms">Terms</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/billing-terms">Billing & refunds</a>
             <a href="mailto:info@zippyweb.uk">Support</a>
             <button type="button" onClick={openVaultApp}>Open My Vault</button>
           </nav>
@@ -6146,7 +6156,12 @@ function App() {
                       {publicPlans.map((plan) => <button type="button" key={plan.code} className={landingAccountDraft.planCode === plan.code ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: plan.code })}><strong>{plan.displayName}</strong><span>{plan.description}</span><small>{publicPlanPriceLabel(plan)}</small></button>)}
                       {!publicPlans.length && <div className="no-public-plans"><AlertTriangle size={18} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
                     </div>
-                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>Your selected trial starts only after successful contact verification.</span></div>
+                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>Your selected trial starts only after successful contact verification. Creating the trial does not start a paid subscription.</span></div>
+                    <label className="legal-consent-row">
+                      <input type="checkbox" checked={Boolean(landingAccountDraft.legalAccepted)} onChange={(event) => updateLandingDraft({ legalAccepted: event.target.checked })} />
+                      <span>I agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms of Service</a>, acknowledge the <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>, and accept the <a href="/billing-terms" target="_blank" rel="noreferrer">Subscription, Cancellation & Refund Policy</a>.</span>
+                    </label>
+                    <p className="landing-commercial-note">Prices are shown in GBP. Any tax that the seller is required and configured to collect must be shown in the Stripe payment flow before payment.</p>
                   </div>
                 )}
 
@@ -6195,7 +6210,7 @@ function App() {
                       <span><strong>Trial ends</strong>{isFounderPlan(bootstrap) ? 'No expiry' : formatAccountDate(landingSignup.trialEndsAt || bootstrap.trialEndsAt, true)}</span>
                     </div>
                     {!landingSignup.existingAccount && Number(landingSignup.trialDays || 0) > 0 && <div className="trial-ready-card"><CalendarClock size={20} /><span><strong>{landingSignup.trialDays}-day trial active</strong><small>Ends {formatAccountDate(landingSignup.trialEndsAt, true)}.</small></span></div>}
-                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>Next, create your local encrypted vault and choose the master password that only you know.</span></div>
+                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>Next, create your local encrypted vault and choose your private master password.</span></div>
                     {landingSignup.welcomeEmailSent && <p className="welcome-email-note"><Mail size={16} /> A welcome email has been sent.</p>}
                   </div>
                 )}
@@ -6203,7 +6218,7 @@ function App() {
               <footer className="item-popup-footer create-account-popup-footer">
                 {landingOnboardingStep <= 2 && <button type="button" className="secondary-button" onClick={landingOnboardingStep === 1 ? closeCreateAccountPopup : () => setLandingOnboardingStep(1)}>{landingOnboardingStep === 1 ? 'Cancel' : 'Back'}</button>}
                 {landingOnboardingStep === 1 && <button type="button" className="primary-button" onClick={() => { const draft = cleanLandingDraft(); const error = validateLandingDraft(draft); if (error && !error.includes('plan')) return showMessage(error, 'warning'); updateLandingDraft(draft); setLandingOnboardingStep(2); }}>Continue</button>}
-                {landingOnboardingStep === 2 && <button type="button" className="primary-button" onClick={prepareLandingOnboarding} disabled={landingSignup.status === 'preparing' || !publicPlans.length}>{landingSignup.status === 'preparing' ? <RefreshCw size={17} className="spin-icon" /> : <ShieldCheck size={17} />} {landingSignup.status === 'preparing' ? 'Preparing...' : 'Continue to verification'}</button>}
+                {landingOnboardingStep === 2 && <button type="button" className="primary-button" onClick={prepareLandingOnboarding} disabled={landingSignup.status === 'preparing' || !publicPlans.length || !landingAccountDraft.legalAccepted}>{landingSignup.status === 'preparing' ? <RefreshCw size={17} className="spin-icon" /> : <ShieldCheck size={17} />} {landingSignup.status === 'preparing' ? 'Preparing...' : 'Continue to verification'}</button>}
                 {landingOnboardingStep === 3 && <button type="button" className="secondary-button" onClick={closeCreateAccountPopup}>Finish later</button>}
                 {landingOnboardingStep === 4 && <button type="button" className="primary-button" onClick={finishLandingOnboarding}><Unlock size={18} /> Continue to secure vault setup</button>}
               </footer>
@@ -6260,7 +6275,7 @@ function App() {
             <button type="button" className="account-recovery-link" onClick={openAccountRecovery}><UserRoundCheck size={17} /> Recover account access</button>
           </div>
           {message && <p className="message">{message}</p>}
-          <div className="security-note"><ShieldCheck size={18} /> Only your master password opens your vault.</div>
+          <div className="security-note"><ShieldCheck size={18} /> Your master password is the primary secret that decrypts your vault; Secure device unlock can locally unwrap it on a device you set up.</div>
           <p className="version">{VERSION}</p>
         </section>
 
@@ -6279,7 +6294,7 @@ function App() {
               <div className="item-popup-body create-account-popup-body create-vault-popup-body" role="form" autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other">
                 <div className="create-account-step">
                   <h3>Account details</h3>
-                  <p>Your email and mobile number help verify this device. Your master password is still the only key that opens the vault.</p>
+                  <p>Your email and mobile number help verify this device. Your master password is still the primary vault encryption secret. Secure device unlock, if you enable it later, works only from a device you have deliberately set up.</p>
                   <label>Mobile number</label>
                   <div className="phone-combo-field">
                     <CountryPicker countryCode={bootstrap.phoneCountryCode || '+254'} countryIso={bootstrap.phoneCountryIso || 'ke'} onChange={(country) => setBootstrap({ ...bootstrap, phoneCountryCode: country.code, phoneCountryIso: country.iso, phoneE164: buildPhoneE164(country.code, bootstrap.phoneNumber) })} />
@@ -6311,7 +6326,7 @@ function App() {
 
                 <div className="create-account-step">
                   <h3>Master password</h3>
-                  <p>Choose a strong master password you can remember. It is not stored by the app and cannot be recovered if forgotten.</p>
+                  <p>Choose a strong master password you can remember. No server-side copy is stored by My Passwords, so support cannot recover or reset it if forgotten.</p>
                   <label>Master vault password<input id="master-password-input" name="vault-setup-local-decryption-key" type="password" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" /></label>
                   {createMode && (
                     <>
@@ -6917,12 +6932,12 @@ function App() {
                   <p>Deletion is scheduled for <strong>{formatAccountDate(accountSecurity.deletion.scheduled_for, true)}</strong>. Until then, you can cancel this request and keep the account.</p>
                   <button type="button" className="secondary-button" onClick={cancelAccountDeletion}>Cancel account deletion</button>
                 </> : <>
-                  <p>A verified email code is required. Deletion then waits 14 days before the account, encrypted vault backups and stored documents are permanently removed.</p>
+                  <p>A verified email code is required. Deletion then waits 14 days before the active My Passwords cloud account, encrypted vault backups and stored documents are removed. Limited payment, legal or provider records may remain where retention is required for accounting, fraud prevention, disputes or law.</p>
                   <button type="button" className="secondary-button danger-soft" onClick={() => openAccountSecurityAction('delete-account')} disabled={!customerSession.authenticated}><Trash2 size={17} /> Request account deletion</button>
                 </>}
               </section>
 
-              <div className="master-password-boundary-note"><Lock size={20} /><span><strong>The master password remains unrecoverable</strong><small>Account recovery restores the account, subscription and verified-device access only. It cannot decrypt or reset an encrypted vault without the correct master password.</small></span></div>
+              <div className="master-password-boundary-note"><Lock size={20} /><span><strong>Account recovery does not reset the master password</strong><small>It restores the account, subscription and verified-device access only. A previously configured Secure device unlock may still provide local access, but support cannot supply or reset the vault encryption secret.</small></span></div>
 
               {!featureIncluded('secureDeviceUnlock') && <div className="plan-feature-unavailable"><KeyRound size={21} /><span><strong>Secure device unlock is not included</strong><small>Your master password still opens the encrypted vault normally. Upgrade or ask Admin for an entitlement override to enable quick unlock on this device.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('secureDeviceUnlock')}>Review plan</button></div>}
               <section className={`biometric-settings-card settings-inner-card ${biometricUnlock ? 'enabled' : ''} ${!featureIncluded('secureDeviceUnlock') ? 'feature-disabled' : ''}`}>
@@ -6947,7 +6962,7 @@ function App() {
               <div className="settings-section-heading">
                 <p className="eyebrow">My Subscription</p>
                 <h3><CreditCard size={20} /> Plan and billing</h3>
-                <p>See your current status, renewal and payment history here. Stripe Customer Portal continues to securely handle card details and full invoice self-service.</p>
+                <p>See your current status, renewal and payment history here. Stripe Customer Portal continues to securely handle card details and full invoice self-service. Review the Billing & Refund Policy for cancellation, refund and tax wording.</p>
               </div>
 
               {isFounderPlan(bootstrap) ? (
@@ -7030,7 +7045,7 @@ function App() {
                     <summary><span><strong>Manage subscription</strong><small>Payment method, Stripe records and cancellation</small></span><ChevronRight size={19} /></summary>
                     <div className="subscription-management-content">
                       {currentSubscription?.providerCustomerIdPresent && <div className="subscription-manage-card"><div><ExternalLink size={20} /><span><strong>Stripe Customer Portal</strong><small>Update card details, pay an outstanding invoice and open Stripe’s full invoice records.</small></span></div><button type="button" className="secondary-button" onClick={openStripePortal} disabled={billing.status === 'opening-portal'}>{billing.status === 'opening-portal' ? 'Opening...' : 'Open billing portal'}</button></div>}
-                      <div className="subscription-lifecycle-actions"><div><strong>Subscription controls</strong><small>Cancellation only takes effect at the end of the current paid period.</small></div><div className="subscription-action-row">{cancellationScheduled ? <button type="button" className="primary-button" onClick={reviewSubscriptionReactivation} disabled={billing.status === 'updating'}><ShieldCheck size={17} /> Keep subscription active</button> : !ended && <button type="button" className="secondary-button danger-soft" onClick={reviewSubscriptionCancellation} disabled={billing.status === 'updating' || suspended}><X size={17} /> Cancel at period end</button>}</div></div>
+                      <div className="subscription-lifecycle-actions"><div><strong>Subscription controls</strong><small>Cancellation is scheduled for the end of the current paid period, unless applicable law requires otherwise.</small></div><div className="subscription-action-row">{cancellationScheduled ? <button type="button" className="primary-button" onClick={reviewSubscriptionReactivation} disabled={billing.status === 'updating'}><ShieldCheck size={17} /> Keep subscription active</button> : !ended && <button type="button" className="secondary-button danger-soft" onClick={reviewSubscriptionCancellation} disabled={billing.status === 'updating' || suspended}><X size={17} /> Cancel at period end</button>}</div></div>
                     </div>
                   </details>}
 
@@ -7053,6 +7068,11 @@ function App() {
                       {!paymentHistory.length && <div className="subscription-history-empty">No Stripe invoices are available yet.</div>}
                     </div>
                   </details>}
+
+                  <section className="subscription-legal-note settings-inner-card">
+                    <CreditCard size={19} />
+                    <div><strong>Billing terms and payment records</strong><small>Prices are shown in GBP. Stripe hosts the official invoice and receipt records. Cancellation is normally effective at the end of the current paid period. Mandatory consumer rights still apply.</small><span><a href="/billing-terms" target="_blank" rel="noreferrer">Billing & refunds</a><a href="/terms" target="_blank" rel="noreferrer">Terms</a><a href="/privacy" target="_blank" rel="noreferrer">Privacy</a></span></div>
+                  </section>
 
                   {!customerSession.authenticated && <section className="subscription-verify-card settings-inner-card"><ShieldCheck size={20} /><span><strong>Verify this device first</strong><small>Device verification protects access to subscription and billing actions.</small></span><button type="button" className="secondary-button" onClick={openDeviceVerification}>Verify this device</button></section>}
                   {visibleBillingMessage && <div className={`subscription-message ${billing.status}`}>{visibleBillingMessage}</div>}
@@ -7288,8 +7308,9 @@ function App() {
               </div>
 
               <div className="settings-faq-support-card">
-                <div><Mail size={20} /><span><strong>Still need help?</strong><small>Email support from the address linked to your account.</small></span></div>
+                <div><Mail size={20} /><span><strong>Still need help?</strong><small>Email support from the address linked to your account. Never include your master password or decrypted vault contents.</small></span></div>
                 <a href="mailto:info@zippyweb.uk">info@zippyweb.uk</a>
+                <div className="settings-legal-links"><a href="/terms" target="_blank" rel="noreferrer">Terms</a><a href="/privacy" target="_blank" rel="noreferrer">Privacy</a><a href="/billing-terms" target="_blank" rel="noreferrer">Billing & refunds</a></div>
               </div>
             </section>
           )}
@@ -7513,4 +7534,9 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<AppStartupBoundary>{window.location.pathname.startsWith('/admin') ? <AdminApp version={VERSION} /> : <App />}</AppStartupBoundary>);
+const legalPage = legalPageForPath(window.location.pathname);
+createRoot(document.getElementById('root')).render(
+  <AppStartupBoundary>
+    {window.location.pathname.startsWith('/admin') ? <AdminApp version={VERSION} /> : legalPage ? <LegalPage page={legalPage} /> : <App />}
+  </AppStartupBoundary>
+);

@@ -43,7 +43,7 @@ export async function handler(event) {
       encryptedVaultMetadata: { snapshots: snapshots || [], documents: documents || [] },
       accountActivity: audit || [],
       smsVerificationHistory: smsDeliveries || [],
-      securityNotice: 'The master password is not stored by My Passwords and cannot be exported, recovered or reset. Account recovery restores access to account services only; it cannot decrypt a vault without the correct master password.'
+      securityNotice: 'My Passwords does not store a server-side copy of the master password, so it cannot be exported from the account service, recovered or reset by support. Account recovery restores access to account services only; it cannot decrypt a vault without the correct master password.'
     };
     const date = new Date().toISOString().slice(0, 10);
     return {
