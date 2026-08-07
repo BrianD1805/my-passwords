@@ -2,6 +2,7 @@ import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, 
 import { clearCustomerSession } from './_auth.js';
 import { createAccountOtp, maskEmail, maskPhone, verifyAccountOtp } from './_account-otp.js';
 import { revokeAllCustomerSessions, revokeDeviceSessions, validateCustomerSession } from './_account-session.js';
+import { sendCustomerLifecycleEmail } from './_customer-email.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 function cleanDigits(value) { return String(value || '').replace(/\D/g, ''); }
@@ -103,6 +104,17 @@ export async function handler(event) {
       await updateRow('account_contact_changes', `id=${eq(change.id)}`, { status: 'verified', verified_at: now, updated_at: now });
       await updateRow('account_sessions', `user_id=${eq(session.userId)}&status=${eq('active')}&id=neq.${encodeURIComponent(session.sessionId || '')}`, { status: 'revoked', revoked_at: now, revoked_reason: 'email_changed', updated_at: now }).catch(() => null);
       await audit(session, 'account_email_changed', { previous_masked: maskEmail(change.previous_value), new_masked: maskEmail(change.requested_value) });
+      const emailChangedContext = { displayName: user.display_name || '', newEmailMasked: maskEmail(change.requested_value), changedAt: now };
+      await sendCustomerLifecycleEmail({
+        tenantId: session.tenantId, userId: session.userId, to: change.requested_value, type: 'email_changed',
+        idempotencyKey: `email_changed:${change.id}:new`, context: emailChangedContext, metadata: { source: 'account_security' }
+      }).catch(() => null);
+      if (change.previous_value && change.previous_value !== change.requested_value && String(change.previous_value).includes('@')) {
+        await sendCustomerLifecycleEmail({
+          tenantId: session.tenantId, userId: session.userId, to: change.previous_value, type: 'email_changed',
+          idempotencyKey: `email_changed:${change.id}:previous`, context: emailChangedContext, metadata: { source: 'account_security', security_copy: true }
+        }).catch(() => null);
+      }
       return jsonResponse(200, { ok: true, version: APP_VERSION, email: change.requested_value, emailMasked: maskEmail(change.requested_value), message: 'Your email address has been verified and updated. Other account sessions were ended for safety.' });
     }
 
@@ -131,6 +143,14 @@ export async function handler(event) {
       await updateRow('account_contact_changes', `id=${eq(change.id)}`, { status: 'verified', verified_at: now, updated_at: now });
       await updateRow('account_sessions', `user_id=${eq(session.userId)}&status=${eq('active')}&id=neq.${encodeURIComponent(session.sessionId || '')}`, { status: 'revoked', revoked_at: now, revoked_reason: 'phone_changed', updated_at: now }).catch(() => null);
       await audit(session, 'account_phone_changed', { previous_masked: maskPhone(change.previous_value), new_masked: maskPhone(change.requested_value) });
+      if (user.email && user.email_verified) {
+        await sendCustomerLifecycleEmail({
+          tenantId: session.tenantId, userId: session.userId, to: user.email, type: 'mobile_changed',
+          idempotencyKey: `mobile_changed:${change.id}`,
+          context: { displayName: user.display_name || '', newPhoneMasked: maskPhone(change.requested_value), changedAt: now },
+          metadata: { source: 'account_security' }
+        }).catch(() => null);
+      }
       return jsonResponse(200, { ok: true, version: APP_VERSION, phoneE164: change.requested_value, phoneMasked: maskPhone(change.requested_value), phoneCountryCode: change.phone_country_code, phoneNumber: change.phone_number, message: 'Your mobile number has been verified and updated. Other account sessions were ended for safety.' });
     }
 
@@ -167,6 +187,12 @@ export async function handler(event) {
       const deletion = await insertRow('account_deletion_requests', { id: publicId('deletion'), tenant_id: session.tenantId, user_id: session.userId, status: 'pending', requested_at: now.toISOString(), scheduled_for: scheduledFor, reason: safeText(body.reason, 500), contact_email_masked: maskEmail(user.email), metadata: { version: APP_VERSION, waiting_days: 14 } });
       await updateRow('tenants', `id=${eq(session.tenantId)}`, { deletion_status: 'pending', deletion_requested_at: now.toISOString(), deletion_scheduled_for: scheduledFor, updated_at: now.toISOString() });
       await audit(session, 'account_deletion_scheduled', { scheduled_for: scheduledFor });
+      await sendCustomerLifecycleEmail({
+        tenantId: session.tenantId, userId: session.userId, to: user.email, type: 'account_deletion_requested',
+        idempotencyKey: `account_deletion_requested:${deletion.id}`,
+        context: { displayName: user.display_name || '', deletionScheduledFor: scheduledFor },
+        metadata: { source: 'account_security', deletion_request_id: deletion.id }
+      }).catch(() => null);
       return jsonResponse(200, { ok: true, version: APP_VERSION, deletion, message: 'Account deletion is scheduled after the 14-day safety period. You can cancel it before that date.' });
     }
 

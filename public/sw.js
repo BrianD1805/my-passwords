@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-passwords-v0.048';
+const CACHE_NAME = 'my-passwords-v0.049';
 const RUNTIME_CACHE = `${CACHE_NAME}-runtime`;
 const APP_ROUTES = ['/', '/vault', '/admin', '/index.html'];
 const STATIC_SHELL = ['/manifest.webmanifest', '/icons/icon.svg', '/images/password-encrypt-brand.png', '/offline.html'];

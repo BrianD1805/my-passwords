@@ -3,39 +3,10 @@ import { createVerifiedCustomerSession } from './_account-session.js';
 import { evaluateTenantAccess, isFounderTenant, recordLifecycleEvent, upsertTrialSubscription } from './_trial.js';
 import { resolveTenantEntitlements } from './_entitlements.js';
 import { verifyAccountOtp } from './_account-otp.js';
+import { sendCustomerLifecycleEmail } from './_customer-email.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
-}
-
-function formatDate(value) {
-  if (!value) return '';
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(value));
-}
-
-async function sendWelcomeEmail({ to, displayName, accountName, planName, trialDays, trialEndsAt }) {
-  const apiKey = process.env.RESEND_API_KEY || '';
-  const from = process.env.OTP_EMAIL_FROM || '';
-  if (!apiKey || !from || !to) return { sent: false, reason: 'Welcome email delivery is not configured.' };
-
-  const name = String(displayName || '').trim() || 'there';
-  const trialCopy = Number(trialDays || 0) > 0
-    ? `Your ${trialDays}-day ${planName} trial is now active until ${formatDate(trialEndsAt)}.`
-    : `Your ${planName} account is now active.`;
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to,
-      subject: 'Welcome to My Passwords',
-      html: `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;"><div style="max-width:560px;margin:0 auto;padding:28px 18px;"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:28px;"><h1 style="margin:0 0 12px;color:#14263b;font-size:26px;">Welcome to My Passwords</h1><p style="line-height:1.6;color:#536579;">Hello ${name},</p><p style="line-height:1.6;color:#536579;">Your account <strong>${accountName}</strong> has been verified. ${trialCopy}</p><p style="line-height:1.6;color:#536579;">You can now create your private encrypted vault and choose a master password. Your master password is never stored or emailed by My Passwords.</p><p style="line-height:1.6;color:#536579;">Secure backup and syncing become available on verified devices after the vault is created.</p><p style="margin-top:22px;font-size:13px;color:#7b8fa3;">Need help? Contact info@zippyweb.uk.</p></div></div></body></html>`,
-      text: `Hello ${name}. Your My Passwords account ${accountName} has been verified. ${trialCopy} You can now create your encrypted vault. Your master password is never stored or emailed. Support: info@zippyweb.uk.`
-    })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) return { sent: false, reason: data?.message || `Resend returned HTTP ${response.status}.`, details: data };
-  return { sent: true, providerId: data?.id || '' };
 }
 
 export async function handler(event) {
@@ -134,15 +105,21 @@ export async function handler(event) {
     await updateRow('users', `id=${eq(user.id)}&tenant_id=${eq(tenant.id)}`, verifiedUserPatch);
 
     let welcomeEmail = { sent: false, skipped: true };
-    if (firstActivation && isEmail && user.email && !user.welcome_email_sent_at) {
-      welcomeEmail = await sendWelcomeEmail({
+    if (firstActivation && user.email && (isEmail || user.email_verified) && !user.welcome_email_sent_at) {
+      welcomeEmail = await sendCustomerLifecycleEmail({
+        tenantId: tenant.id,
+        userId: user.id,
         to: user.email,
-        displayName: user.display_name,
-        accountName: tenant.account_name || tenant.name || 'My Private Vault',
-        planName,
-        trialDays,
-        trialEndsAt
-      });
+        type: trialDays ? 'welcome_trial_started' : 'welcome_account_activated',
+        idempotencyKey: `welcome:${tenant.id}`,
+        context: {
+          displayName: user.display_name,
+          accountName: tenant.account_name || tenant.name || 'My Private Vault',
+          planName,
+          trialEndsAt
+        },
+        metadata: { source: 'account_activation', trial_days: trialDays }
+      }).catch((error) => ({ sent: false, reason: error.message || 'Welcome email could not be queued.' }));
       if (welcomeEmail.sent) {
         await updateRow('users', `id=${eq(user.id)}&tenant_id=${eq(tenant.id)}`, { welcome_email_sent_at: now, updated_at: now }).catch(() => null);
       }

@@ -7,10 +7,14 @@ export async function handler() {
     ok: true,
     app: 'My Passwords',
     version: APP_VERSION,
-    mode: 'production-sms-integration',
+    mode: 'automated-customer-emails',
     sms: {
       configured: smsMode !== 'unconfigured',
       providerMode: smsMode
+    },
+    email: {
+      configured: Boolean(process.env.RESEND_API_KEY && process.env.OTP_EMAIL_FROM),
+      provider: 'resend'
     }
   });
 }

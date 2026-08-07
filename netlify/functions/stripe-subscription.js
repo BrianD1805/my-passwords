@@ -2,6 +2,7 @@ import { APP_VERSION, jsonResponse, parseBody } from './_db.js';
 import { getBillingContext } from './_billing.js';
 import { stripeConfigured } from './_stripe.js';
 import { resolveTenantEntitlements } from './_entitlements.js';
+import { sendCustomerLifecycleEmailForTenant } from './_customer-email.js';
 import {
   cancelStripeSubscriptionAtPeriodEnd,
   changeStripeSubscription,
@@ -43,16 +44,48 @@ export async function handler(event) {
   try {
     let result;
     let action = 'refresh';
+    let actionBody = {};
     if (event.httpMethod === 'GET') {
       result = await refreshStripeSubscriptionForContext(context, { recordEvent: true });
     } else {
       const body = parseBody(event);
+      actionBody = body;
       action = String(body.action || 'refresh').trim().toLowerCase();
       if (action === 'refresh') result = await refreshStripeSubscriptionForContext(context, { recordEvent: true });
       else if (action === 'change_subscription') result = await changeStripeSubscription(context, { planCode: body.planCode, billingInterval: body.billingInterval, requestId: body.requestId });
       else if (action === 'cancel_at_period_end') result = await cancelStripeSubscriptionAtPeriodEnd(context, { requestId: body.requestId });
       else if (action === 'reactivate') result = await reactivateStripeSubscription(context, { requestId: body.requestId });
       else return jsonResponse(400, { ok: false, version: APP_VERSION, code: 'UNKNOWN_SUBSCRIPTION_ACTION', message: 'Unknown subscription action.' });
+    }
+
+    const resultRow = result.row || null;
+    if (action === 'cancel_at_period_end' && resultRow?.id) {
+      await sendCustomerLifecycleEmailForTenant(context.tenant.id, {
+        userId: context.user?.id || '',
+        type: 'cancellation_scheduled',
+        idempotencyKey: `cancellation_scheduled:${resultRow.id}:${resultRow.current_period_end || 'period_end'}`,
+        context: { cancellationAt: resultRow.current_period_end },
+        metadata: { source: 'customer_subscription_action' }
+      }).catch(() => null);
+    } else if (action === 'reactivate' && resultRow?.id) {
+      await sendCustomerLifecycleEmailForTenant(context.tenant.id, {
+        userId: context.user?.id || '',
+        type: 'subscription_reactivated',
+        idempotencyKey: `subscription_reactivated:${resultRow.id}:${resultRow.current_period_end || 'current_period'}`,
+        metadata: { source: 'customer_subscription_action' }
+      }).catch(() => null);
+    } else if (action === 'change_subscription' && result.changeMode === 'immediate' && resultRow?.id) {
+      const previousPlanCode = context.subscription?.plan_code || context.tenant?.plan_code || '';
+      const nextPlanCode = resultRow.plan_code || String(actionBody.planCode || '');
+      if (nextPlanCode && nextPlanCode !== previousPlanCode) {
+        await sendCustomerLifecycleEmailForTenant(context.tenant.id, {
+          userId: context.user?.id || '',
+          type: 'plan_changed',
+          idempotencyKey: `plan_changed:${resultRow.id}:${resultRow.current_period_start || resultRow.updated_at || nextPlanCode}`,
+          context: { previousPlanCode, planCode: nextPlanCode, billingInterval: resultRow.billing_interval || String(actionBody.billingInterval || '') },
+          metadata: { source: 'customer_subscription_action' }
+        }).catch(() => null);
+      }
     }
 
     const entitlementContext = await resolveTenantEntitlements(context.tenant.id);

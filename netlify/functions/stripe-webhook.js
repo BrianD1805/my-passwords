@@ -1,6 +1,7 @@
 import { APP_VERSION, jsonResponse, selectRows, updateRow, upsertRow } from './_db.js';
 import { stripeObjectId, stripeRequest, stripeTimestampToIso, stripeWebhookConfigured, verifyStripeWebhook } from './_stripe.js';
 import { processStripeInvoiceObject, syncStripeSubscriptionObject } from './_subscription-lifecycle.js';
+import { sendCustomerLifecycleEmailForTenant } from './_customer-email.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -56,6 +57,103 @@ async function processCheckoutExpired(session) {
   });
 }
 
+
+async function sendLifecycleEmail(tenantId, options) {
+  if (!tenantId) return null;
+  return sendCustomerLifecycleEmailForTenant(tenantId, options).catch((error) => ({ sent: false, reason: error.message || 'Customer email could not be queued.' }));
+}
+
+function invoiceRenewalAt(invoice) {
+  return stripeTimestampToIso(invoice?.next_payment_attempt || invoice?.period_end || invoice?.lines?.data?.[0]?.period?.end);
+}
+
+async function sendStripeLifecycleEmails({ stripeEvent, object, before, after }) {
+  const tenantId = after?.tenant_id || before?.tenant_id || metadataValue(object, 'my_passwords_tenant_id') || '';
+  if (!tenantId) return [];
+  const sent = [];
+  const type = stripeEvent.type;
+  const previous = stripeEvent.data?.previous_attributes || {};
+  const currentStatus = String(after?.status || object?.status || '').toLowerCase();
+  const previousStatus = String(previous?.status || before?.status || '').toLowerCase();
+  const subscriptionId = after?.provider_subscription_id || stripeObjectId(object?.subscription || object) || before?.provider_subscription_id || '';
+
+  const send = async (emailType, idempotencyKey, context = {}, metadata = {}) => {
+    const result = await sendLifecycleEmail(tenantId, {
+      type: emailType,
+      idempotencyKey,
+      context,
+      metadata: { source: 'stripe_webhook', stripe_event_id: stripeEvent.id, stripe_event_type: type, ...metadata }
+    });
+    sent.push({ emailType, sent: Boolean(result?.sent), skipped: Boolean(result?.skipped), reason: result?.reason || '' });
+  };
+
+  if (type === 'customer.subscription.trial_will_end') {
+    const trialEndsAt = stripeTimestampToIso(object?.trial_end) || after?.trial_ends_at || before?.trial_ends_at || null;
+    if (trialEndsAt) await send('trial_ending_soon', `trial_ending_soon:${tenantId}:${trialEndsAt}`, { trialEndsAt });
+  }
+
+  if (type === 'invoice.upcoming') {
+    const renewalAt = invoiceRenewalAt(object) || after?.next_invoice_at || after?.current_period_end || before?.current_period_end || null;
+    const amountMinor = Number(object?.amount_due ?? object?.total ?? after?.next_invoice_amount_minor ?? after?.price_minor ?? 0);
+    const currency = String(object?.currency || after?.next_invoice_currency || after?.currency || 'GBP').toUpperCase();
+    if (after?.id && renewalAt) await send('upcoming_renewal', `upcoming_renewal:${after.id}:${after.current_period_end || renewalAt}`, { renewalAt, amountMinor, currency });
+  }
+
+  if (type === 'invoice.payment_failed' && after?.id) {
+    const failureKey = after.last_payment_failed_at || stripeTimestampToIso(stripeEvent.created) || stripeEvent.id;
+    const amountMinor = Number(object?.amount_due ?? object?.amount_remaining ?? 0);
+    const currency = String(object?.currency || after.currency || 'GBP').toUpperCase();
+    await send('payment_failed', `payment_failed:${after.id}:${failureKey}`, { amountMinor, currency });
+    if (after.grace_period_ends_at) await send('grace_period_started', `grace_period_started:${after.id}:${failureKey}`, { gracePeriodEndsAt: after.grace_period_ends_at });
+  }
+
+  if (type === 'invoice.payment_action_required' && after?.id) {
+    await send('payment_action_required', `payment_action_required:${after.id}:${object?.id || stripeEvent.id}`, {
+      amountMinor: Number(object?.amount_due ?? object?.amount_remaining ?? 0),
+      currency: String(object?.currency || after.currency || 'GBP').toUpperCase()
+    });
+  }
+
+  const becameActive = currentStatus === 'active' && previousStatus !== 'active';
+  const checkoutActivated = type === 'checkout.session.completed' && currentStatus === 'active';
+  const subscriptionCreatedActive = type === 'customer.subscription.created' && currentStatus === 'active';
+  if ((becameActive || checkoutActivated || subscriptionCreatedActive) && after?.id) {
+    await send('subscription_activated', `subscription_activated:${subscriptionId || after.id}:${after.current_period_start || 'active'}`, { currentPeriodEnd: after.current_period_end });
+  }
+
+  const cancellationBecameScheduled = type === 'customer.subscription.updated'
+    && (previous?.cancel_at_period_end === false || (before && !before.cancel_at_period_end))
+    && Boolean(object?.cancel_at_period_end || after?.cancel_at_period_end);
+  if (cancellationBecameScheduled && after?.id) {
+    await send('cancellation_scheduled', `cancellation_scheduled:${after.id}:${after.current_period_end || 'period_end'}`, { cancellationAt: after.current_period_end });
+  }
+
+  const cancellationRemoved = (type === 'customer.subscription.resumed') || (type === 'customer.subscription.updated'
+    && (previous?.cancel_at_period_end === true || before?.cancel_at_period_end === true)
+    && !Boolean(object?.cancel_at_period_end || after?.cancel_at_period_end));
+  if (cancellationRemoved && after?.id && ['active', 'trialing'].includes(currentStatus)) {
+    await send('subscription_reactivated', `subscription_reactivated:${after.id}:${after.current_period_end || 'current_period'}`, { currentPeriodEnd: after.current_period_end });
+  }
+
+  const cancelled = type === 'customer.subscription.deleted'
+    || (['cancelled', 'canceled', 'incomplete_expired'].includes(currentStatus) && !['cancelled', 'canceled', 'incomplete_expired'].includes(previousStatus));
+  if (cancelled && after?.id) {
+    await send('subscription_cancelled', `subscription_cancelled:${after.id}:${after.cancelled_at || stripeTimestampToIso(object?.canceled_at) || stripeEvent.id}`);
+  }
+
+  const previousPlanCode = before?.plan_code || previous?.metadata?.my_passwords_plan_code || '';
+  const nextPlanCode = after?.plan_code || metadataValue(object, 'my_passwords_plan_code') || '';
+  if (after?.id && previousPlanCode && nextPlanCode && previousPlanCode !== nextPlanCode) {
+    await send('plan_changed', `plan_changed:${after.id}:${after.current_period_start || after.updated_at || nextPlanCode}`, {
+      previousPlanCode,
+      planCode: nextPlanCode,
+      billingInterval: after.billing_interval || metadataValue(object, 'my_passwords_billing_interval') || ''
+    });
+  }
+
+  return sent;
+}
+
 async function processScheduleEvent(schedule) {
   const subscriptionId = stripeObjectId(schedule.subscription || schedule.released_subscription);
   const customerId = stripeObjectId(schedule.customer);
@@ -97,6 +195,11 @@ export async function handler(event) {
 
   try {
     const object = stripeEvent.data?.object || {};
+    const before = await findSubscriptionRow({
+      tenantId: String(object.client_reference_id || metadataValue(object, 'my_passwords_tenant_id') || ''),
+      subscriptionId: stripeObjectId(object.subscription || (String(object.object || '') === 'subscription' ? object : null)),
+      customerId: stripeObjectId(object.customer)
+    }).catch(() => null);
     let subscriptionRow = null;
     if (stripeEvent.type === 'checkout.session.completed') subscriptionRow = await processCheckoutSession(object);
     else if (stripeEvent.type === 'checkout.session.expired') subscriptionRow = await processCheckoutExpired(object);
@@ -105,6 +208,7 @@ export async function handler(event) {
       subscriptionRow = synced.row;
     } else if (['invoice.paid', 'invoice.payment_succeeded'].includes(stripeEvent.type)) subscriptionRow = await processStripeInvoiceObject(object, true);
     else if (['invoice.payment_failed', 'invoice.payment_action_required'].includes(stripeEvent.type)) subscriptionRow = await processStripeInvoiceObject(object, false);
+    else if (stripeEvent.type === 'invoice.upcoming') subscriptionRow = await findSubscriptionRow({ subscriptionId: stripeObjectId(object.subscription || object.parent?.subscription_details?.subscription), customerId: stripeObjectId(object.customer) });
     else if (stripeEvent.type === 'customer.subscription.trial_will_end') subscriptionRow = await findSubscriptionRow({ subscriptionId: stripeObjectId(object) });
     else if (stripeEvent.type.startsWith('subscription_schedule.')) subscriptionRow = await processScheduleEvent(object);
 
@@ -125,7 +229,8 @@ export async function handler(event) {
       occurred_at: stripeTimestampToIso(stripeEvent.created) || now,
       created_at: now
     }, 'id');
-    return jsonResponse(200, { ok: true, version: APP_VERSION, received: true });
+    const lifecycleEmails = await sendStripeLifecycleEmails({ stripeEvent, object, before, after: subscriptionRow });
+    return jsonResponse(200, { ok: true, version: APP_VERSION, received: true, lifecycleEmails });
   } catch (error) {
     return jsonResponse(500, { ok: false, version: APP_VERSION, message: `Stripe event processing failed: ${error.message}`, details: error.details || null });
   }

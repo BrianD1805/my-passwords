@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { insertRow, publicId, selectRows, updateRow } from './_db.js';
 import { issueCustomerSession, readCustomerSession } from './_auth.js';
+import { sendCustomerLifecycleEmailForTenant } from './_customer-email.js';
 
 const SESSION_DAYS = 30;
 const RENEW_WITHIN_DAYS = 7;
@@ -48,7 +49,12 @@ export async function createVerifiedCustomerSession(event, { tenantId, userId, r
   const details = userAgentDetails(event, { deviceType, platform, browser, userAgent });
   const safeName = cleanText(deviceName, 100) || (details.deviceType === 'mobile' ? 'Verified mobile device' : 'Verified computer');
   const existing = await selectRows('account_devices', `select=*&user_id=${eq(userId)}&client_device_id=${eq(clientId)}&limit=1`).catch(() => []);
-  let device = existing?.[0] || null;
+  const existingDevice = existing?.[0] || null;
+  const previousDevices = !existingDevice
+    ? await selectRows('account_devices', `select=id&user_id=${eq(userId)}&tenant_id=${eq(tenantId)}&limit=1`).catch(() => [])
+    : [];
+  const shouldNotifyNewDevice = !existingDevice && Boolean(previousDevices?.[0]?.id);
+  let device = existingDevice;
 
   if (device?.id) {
     device = await updateRow('account_devices', `id=${eq(device.id)}&user_id=${eq(userId)}&tenant_id=${eq(tenantId)}`, {
@@ -96,8 +102,22 @@ export async function createVerifiedCustomerSession(event, { tenantId, userId, r
     expires_at: expiresAt,
     last_seen_at: now,
     user_agent: details.userAgent,
-    metadata: { ip_hash: requestFingerprint(event) || null, app_version: '0.048' }
+    metadata: { ip_hash: requestFingerprint(event) || null, app_version: '0.049' }
   });
+
+  if (shouldNotifyNewDevice) {
+    await sendCustomerLifecycleEmailForTenant(tenantId, {
+      userId,
+      type: 'new_device_verified',
+      idempotencyKey: `new_device_verified:${device.id}`,
+      context: {
+        deviceName: device.device_name || safeName,
+        platform: device.platform || details.platform || '',
+        verifiedAt: now
+      },
+      metadata: { source: 'device_verification', device_id: device.id }
+    }).catch(() => null);
+  }
 
   return {
     device,

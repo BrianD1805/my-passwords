@@ -6,7 +6,7 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 
-const VERSION = 'My Passwords Ver-0.048';
+const VERSION = 'My Passwords Ver-0.049';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -32,7 +32,7 @@ const LEGACY_VAULT_BACK_MARKER_KEYS = [
 ];
 const LEGACY_VAULT_BACK_HASH = '#my-passwords-back-guard';
 
-// Ver-0.048 keeps the CloseWatcher-based Back handling and removes legacy history markers only.
+// Ver-0.049 keeps the CloseWatcher-based Back handling and removes legacy history markers only.
 // Remove only the current entry's markers left by the previous Back controllers
 // so they cannot interfere with billing URL cleanup or later app navigation.
 function clearLegacyVaultBackMarkers() {

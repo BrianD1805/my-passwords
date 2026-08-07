@@ -32,7 +32,7 @@ function timelineEntry({ id, source, type, status = 'recorded', title, detail = 
   return { id, source, type, status, title, detail, occurredAt, metadata };
 }
 
-function buildTimeline({ tenant, users, subscription, billingEvents, syncEvents, snapshots, sessions, otpChallenges, deletionRequests, auditRows, notes, emailLog }) {
+function buildTimeline({ tenant, users, subscription, billingEvents, syncEvents, snapshots, sessions, otpChallenges, deletionRequests, auditRows, notes, emailLog, customerEmailLog }) {
   const entries = [];
   entries.push(timelineEntry({ id: `tenant-${tenant.id}`, source: 'account', type: 'account_created', status: tenant.account_status || 'active', title: 'Customer account created', detail: tenant.account_name || tenant.name || '', occurredAt: tenant.created_at }));
 
@@ -93,7 +93,12 @@ function buildTimeline({ tenant, users, subscription, billingEvents, syncEvents,
   }
 
   for (const note of notes) entries.push(timelineEntry({ id: `note-${note.id}`, source: 'admin', type: 'admin_note', status: 'recorded', title: 'Admin note added', detail: note.note, occurredAt: note.created_at, metadata: { created_by: note.created_by } }));
-  for (const email of emailLog) entries.push(timelineEntry({ id: `email-${email.id}`, source: 'email', type: email.email_type, status: email.status || 'sent', title: `${titleCase(email.email_type)} email`, detail: email.recipient_masked || '', occurredAt: email.created_at, metadata: parseJson(email.metadata) }));
+  for (const email of emailLog) entries.push(timelineEntry({ id: `email-${email.id}`, source: 'email', type: email.email_type, status: email.status || 'sent', title: `${titleCase(email.email_type)} email`, detail: email.recipient_masked || '', occurredAt: email.created_at, metadata: { ...parseJson(email.metadata), delivery_kind: 'admin_resend' } }));
+  for (const email of customerEmailLog) entries.push(timelineEntry({
+    id: `customer-email-${email.id}`, source: 'email', type: email.email_type, status: email.status || 'recorded',
+    title: `${titleCase(email.email_type)} email`, detail: email.recipient_masked || '', occurredAt: email.sent_at || email.last_attempt_at || email.created_at,
+    metadata: { ...parseJson(email.metadata), delivery_kind: 'automated', attempts: email.attempts, error_message: email.error_message || '', subject: email.subject || '' }
+  }));
 
   return entries.filter((entry) => entry.occurredAt).sort((a, b) => dateValue(b.occurredAt) - dateValue(a.occurredAt));
 }
@@ -103,7 +108,7 @@ async function loadCustomerDetail(tenantId) {
   const tenant = tenantRows?.[0];
   if (!tenant?.id) return null;
 
-  const [users, subscriptions, plans, billingEvents, syncEvents, snapshots, sessions, devices, otpChallenges, deletionRequests, auditRows, notes, emailLog] = await Promise.all([
+  const [users, subscriptions, plans, billingEvents, syncEvents, snapshots, sessions, devices, otpChallenges, deletionRequests, auditRows, notes, emailLog, customerEmailLog] = await Promise.all([
     safeSelect('users', `select=id,tenant_id,email,phone_e164,display_name,role,status,email_verified,phone_verified,otp_test_last_verified_at,otp_test_status,last_login_at,account_recovery_last_verified_at,onboarding_status,onboarding_completed_at,welcome_email_sent_at,created_at,updated_at&tenant_id=${eq(tenantId)}&order=created_at.asc&limit=50`),
     safeSelect('tenant_subscriptions', `select=*&tenant_id=${eq(tenantId)}&order=updated_at.desc&limit=5`),
     safeSelect('subscription_plans', 'select=*&order=display_order.asc&limit=250'),
@@ -116,7 +121,8 @@ async function loadCustomerDetail(tenantId) {
     safeSelect('account_deletion_requests', `select=id,tenant_id,user_id,status,requested_at,scheduled_for,cancelled_at,completed_at,reason,contact_email_masked,metadata,created_at,updated_at&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=30`),
     safeSelect('audit_log', `select=id,tenant_id,user_id,action,metadata,created_at&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=1000`),
     safeSelect('admin_customer_notes', `select=id,tenant_id,note,created_by,created_at,updated_at&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=100`),
-    safeSelect('admin_email_log', `select=id,tenant_id,user_id,email_type,recipient_masked,provider,provider_reference,status,error_message,metadata,created_at&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=100`)
+    safeSelect('admin_email_log', `select=id,tenant_id,user_id,email_type,recipient_masked,provider,provider_reference,status,error_message,metadata,created_at&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=100`),
+    safeSelect('customer_email_log', `select=id,tenant_id,user_id,email_type,idempotency_key,recipient_masked,subject,provider,provider_reference,status,attempts,error_message,last_attempt_at,sent_at,metadata,created_at,updated_at&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=200`)
   ]);
 
   const subscription = subscriptions?.[0] || null;
@@ -134,7 +140,7 @@ async function loadCustomerDetail(tenantId) {
   const lastVerifiedDevice = [...verifiedDevices].sort((a, b) => dateValue(b.last_verified_at) - dateValue(a.last_verified_at))[0] || null;
   const activeSessions = sessions.filter((session) => String(session.status || '').toLowerCase() === 'active' && dateValue(session.expires_at) > Date.now());
   const emailOptions = adminEmailTypesForCustomer({ user: primaryUser, tenant, subscription, deletion });
-  const fullTimeline = buildTimeline({ tenant, users, subscription, billingEvents, syncEvents, snapshots, sessions, otpChallenges, deletionRequests, auditRows, notes, emailLog });
+  const fullTimeline = buildTimeline({ tenant, users, subscription, billingEvents, syncEvents, snapshots, sessions, otpChallenges, deletionRequests, auditRows, notes, emailLog, customerEmailLog });
   const timeline = fullTimeline.slice(0, 400);
   const trialSubscriptionHistory = fullTimeline.filter((entry) => ['trial', 'subscription', 'billing'].includes(entry.source)
     || /trial|subscription|stripe|payment|invoice|checkout|billing/i.test(String(entry.type || ''))).slice(0, 150);
@@ -157,6 +163,7 @@ async function loadCustomerDetail(tenantId) {
     deletionRequests,
     notes,
     emailLog,
+    customerEmailLog,
     auditLog: auditRows,
     timeline,
     emailOptions,

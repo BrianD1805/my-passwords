@@ -4,6 +4,7 @@ import { isFounderTenant, loadTenantSubscription, recordLifecycleEvent, upsertTr
 import { archiveStripePlan, stripeConfigured, stripeRequest, syncStripePlan } from './_stripe.js';
 import { refreshStripeSubscriptionForTenant } from './_subscription-lifecycle.js';
 import { applyEntitlementOverrides, entitlementSnapshotFromPlan, normaliseEntitlementOverrides, normalisePlanFeatureFlags, reservedPlanCannotPublish, serialiseEntitlements } from './_entitlements.js';
+import { sendCustomerLifecycleEmailForTenant } from './_customer-email.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -50,6 +51,15 @@ async function audit(action, metadata = {}) {
     action,
     metadata: { version: APP_VERSION, actor: 'owner_admin', ...metadata }
   }).catch(() => null);
+}
+
+
+async function notifyCustomer(tenantId, options) {
+  if (!tenantId) return null;
+  return sendCustomerLifecycleEmailForTenant(tenantId, options).catch((error) => ({
+    sent: false,
+    reason: error.message || 'Customer email could not be sent.'
+  }));
 }
 
 async function loadTenant(tenantId) {
@@ -217,7 +227,7 @@ export async function handler(event) {
     try {
       return jsonResponse(200, { ok: true, version: APP_VERSION, ...(await loadDashboard()) });
     } catch (error) {
-      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.048.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load admin data. Run all required Supabase migrations through Ver-0.049.', error: error.message, details: error.details || null });
     }
   }
 
@@ -332,9 +342,39 @@ export async function handler(event) {
       const tenant = await loadTenant(tenantId);
       if (!tenant?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Customer account was not found.' });
       if (isFounderTenant(tenant)) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'Founder access does not use Stripe Billing.' });
+      const before = await loadTenantSubscription(tenantId);
       const result = await refreshStripeSubscriptionForTenant(tenantId);
-      await audit('stripe_subscription_refreshed_by_admin', { tenant_id: tenantId, stripe_subscription_id: result.row?.provider_subscription_id || '', status: result.row?.status || '' });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, subscription: result.row || null, message: result.message || 'Stripe subscription refreshed.' });
+      const after = result.row || null;
+      const previousStatus = String(before?.status || '').toLowerCase();
+      const currentStatus = String(after?.status || '').toLowerCase();
+      const transitionKey = after?.current_period_start || after?.updated_at || new Date().toISOString();
+      const customerEmails = [];
+      const send = async (type, idempotencyKey, context = {}) => {
+        const delivery = await notifyCustomer(tenantId, { type, idempotencyKey, context, metadata: { source: 'admin_stripe_refresh' } });
+        customerEmails.push({ type, sent: Boolean(delivery?.sent), skipped: Boolean(delivery?.skipped), reason: delivery?.reason || '' });
+      };
+      if (after?.id && currentStatus === 'active' && previousStatus !== 'active') {
+        await send('subscription_activated', `subscription_activated:${after.provider_subscription_id || after.id}:${after.current_period_start || 'active'}`, { currentPeriodEnd: after.current_period_end });
+      }
+      if (after?.id && !before?.cancel_at_period_end && after.cancel_at_period_end) {
+        await send('cancellation_scheduled', `cancellation_scheduled:${after.id}:${after.current_period_end || 'period_end'}`, { cancellationAt: after.current_period_end });
+      }
+      if (after?.id && before?.cancel_at_period_end && !after.cancel_at_period_end && ['active', 'trialing'].includes(currentStatus)) {
+        await send('subscription_reactivated', `subscription_reactivated:${after.id}:${after.current_period_end || 'current_period'}`, { currentPeriodEnd: after.current_period_end });
+      }
+      if (after?.id && before?.plan_code && after.plan_code && before.plan_code !== after.plan_code) {
+        await send('plan_changed', `plan_changed:${after.id}:${transitionKey}`, { previousPlanCode: before.plan_code, planCode: after.plan_code, billingInterval: after.billing_interval || '' });
+      }
+      if (after?.id && ['past_due', 'unpaid'].includes(currentStatus) && !['past_due', 'unpaid'].includes(previousStatus)) {
+        const failureKey = after.last_payment_failed_at || transitionKey;
+        await send('payment_failed', `payment_failed:${after.id}:${failureKey}`);
+        if (after.grace_period_ends_at) await send('grace_period_started', `grace_period_started:${after.id}:${failureKey}`, { gracePeriodEndsAt: after.grace_period_ends_at });
+      }
+      if (after?.id && ['cancelled', 'canceled', 'incomplete_expired'].includes(currentStatus) && !['cancelled', 'canceled', 'incomplete_expired'].includes(previousStatus)) {
+        await send('subscription_cancelled', `subscription_cancelled:${after.id}:${after.cancelled_at || transitionKey}`);
+      }
+      await audit('stripe_subscription_refreshed_by_admin', { tenant_id: tenantId, stripe_subscription_id: result.row?.provider_subscription_id || '', status: result.row?.status || '', customer_emails: customerEmails });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, subscription: result.row || null, customerEmails, message: result.message || 'Stripe subscription refreshed.' });
     }
 
     if (action === 'set_account_status') {
@@ -343,9 +383,21 @@ export async function handler(event) {
       if (!tenantId || !['active', 'suspended'].includes(accountStatus)) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A valid tenant and account status are required.' });
       const tenantCurrent = await loadTenant(tenantId);
       if (isFounderTenant(tenantCurrent) && accountStatus === 'suspended') return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The Founder account cannot be suspended.' });
-      const tenant = await updateRow('tenants', `id=${eq(tenantId)}`, { account_status: accountStatus, status: accountStatus, updated_at: new Date().toISOString() });
-      await audit('tenant_account_status_changed', { tenant_id: tenantId, previous_account_status: tenantCurrent?.account_status || '', account_status: accountStatus });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, tenant, message: accountStatus === 'suspended' ? 'Account suspended.' : 'Account reactivated.' });
+      const previousStatus = String(tenantCurrent?.account_status || tenantCurrent?.status || '').toLowerCase();
+      const changedAt = new Date().toISOString();
+      const tenant = await updateRow('tenants', `id=${eq(tenantId)}`, { account_status: accountStatus, status: accountStatus, updated_at: changedAt });
+      let customerEmail = null;
+      if (previousStatus !== accountStatus) {
+        const emailType = accountStatus === 'suspended' ? 'account_suspended' : 'account_reactivated';
+        customerEmail = await notifyCustomer(tenantId, {
+          type: emailType,
+          idempotencyKey: `${emailType}:${tenantId}:${changedAt}`,
+          context: { changedAt },
+          metadata: { source: 'admin_account_status_change' }
+        });
+      }
+      await audit('tenant_account_status_changed', { tenant_id: tenantId, previous_account_status: tenantCurrent?.account_status || '', account_status: accountStatus, customer_email_sent: Boolean(customerEmail?.sent) });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, tenant, customerEmail, message: accountStatus === 'suspended' ? 'Account suspended.' : 'Account reactivated.' });
     }
 
     if (['start_trial', 'extend_trial', 'activate_account', 'cancel_trial'].includes(action)) {
@@ -374,8 +426,9 @@ export async function handler(event) {
         await updateRow('tenants', `id=${eq(tenantId)}`, { status: 'active', account_status: 'active', plan_status: 'trial_active', trial_ends_at: trialEndsAt, updated_at: now.toISOString() });
         await updateRow('tenant_subscriptions', `id=${eq(currentSubscription.id)}`, { status: 'trialing', trial_ends_at: trialEndsAt, last_stripe_sync_status: 'admin_trial_extended', last_stripe_sync_message: `Stripe trial extended by ${days} day(s).`, updated_at: now.toISOString() });
         await recordLifecycleEvent({ tenantId, subscriptionId: currentSubscription.id, eventType: 'stripe_trial_extended_by_admin', metadata: { days, trial_ends_at: trialEndsAt } });
-        await audit('stripe_trial_extended_by_admin', { tenant_id: tenantId, days, trial_ends_at: trialEndsAt, stripe_subscription_id: currentSubscription.provider_subscription_id });
-        return jsonResponse(200, { ok: true, version: APP_VERSION, message: `Stripe trial extended by ${days} day${days === 1 ? '' : 's'}.` });
+        const customerEmail = await notifyCustomer(tenantId, { type: 'trial_extended', idempotencyKey: `trial_extended:${tenantId}:${trialEndsAt}`, context: { trialEndsAt }, metadata: { source: 'admin_stripe_trial_extension', days } });
+        await audit('stripe_trial_extended_by_admin', { tenant_id: tenantId, days, trial_ends_at: trialEndsAt, stripe_subscription_id: currentSubscription.provider_subscription_id, customer_email_sent: Boolean(customerEmail?.sent) });
+        return jsonResponse(200, { ok: true, version: APP_VERSION, customerEmail, message: `Stripe trial extended by ${days} day${days === 1 ? '' : 's'}.` });
       }
       const plan = await loadPlan(tenant.plan_code || 'personal');
       if (!plan?.code) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The customer plan could not be found.' });
@@ -389,8 +442,9 @@ export async function handler(event) {
         const updated = await updateRow('tenants', `id=${eq(tenantId)}`, { status: 'active', account_status: 'active', plan_status: days ? 'trial_active' : 'active', trial_started_at: trialStartedAt, trial_ends_at: trialEndsAt, onboarding_completed_at: tenant.onboarding_completed_at || nowIso, updated_at: nowIso });
         const subscription = await upsertTrialSubscription({ tenant, trialStartedAt, trialEndsAt, status: days ? 'trialing' : 'active', metadata: { version: APP_VERSION, admin_started: true } });
         await recordLifecycleEvent({ tenantId, subscriptionId: subscription?.id || null, eventType: 'trial_started_by_admin', metadata: { days, trial_ends_at: trialEndsAt } });
-        await audit('trial_started_by_admin', { tenant_id: tenantId, days, trial_ends_at: trialEndsAt });
-        return jsonResponse(200, { ok: true, version: APP_VERSION, tenant: updated, message: days ? `Trial started for ${days} days.` : 'Account activated without a trial.' });
+        const customerEmail = days ? await notifyCustomer(tenantId, { type: 'trial_started', idempotencyKey: `trial_started:${tenantId}:${trialStartedAt}`, context: { trialEndsAt }, metadata: { source: 'admin_trial_start', days } }) : null;
+        await audit('trial_started_by_admin', { tenant_id: tenantId, days, trial_ends_at: trialEndsAt, customer_email_sent: Boolean(customerEmail?.sent) });
+        return jsonResponse(200, { ok: true, version: APP_VERSION, tenant: updated, customerEmail, message: days ? `Trial started for ${days} days.` : 'Account activated without a trial.' });
       }
 
       if (action === 'extend_trial') {
@@ -405,8 +459,9 @@ export async function handler(event) {
         const updated = await updateRow('tenants', `id=${eq(tenantId)}`, { status: 'active', account_status: 'active', plan_status: 'trial_active', trial_started_at: trialStartedAt, trial_ends_at: trialEndsAt, updated_at: nowIso });
         const subscription = await upsertTrialSubscription({ tenant, trialStartedAt, trialEndsAt, status: 'trialing', metadata: { version: APP_VERSION, last_admin_extension_days: days, last_admin_extension_at: nowIso } });
         await recordLifecycleEvent({ tenantId, subscriptionId: subscription?.id || null, eventType: 'trial_extended_by_admin', metadata: { days, trial_ends_at: trialEndsAt } });
-        await audit('trial_extended_by_admin', { tenant_id: tenantId, days, trial_ends_at: trialEndsAt });
-        return jsonResponse(200, { ok: true, version: APP_VERSION, tenant: updated, message: `Trial extended by ${days} day${days === 1 ? '' : 's'}.` });
+        const customerEmail = await notifyCustomer(tenantId, { type: 'trial_extended', idempotencyKey: `trial_extended:${tenantId}:${trialEndsAt}`, context: { trialEndsAt }, metadata: { source: 'admin_trial_extension', days } });
+        await audit('trial_extended_by_admin', { tenant_id: tenantId, days, trial_ends_at: trialEndsAt, customer_email_sent: Boolean(customerEmail?.sent) });
+        return jsonResponse(200, { ok: true, version: APP_VERSION, tenant: updated, customerEmail, message: `Trial extended by ${days} day${days === 1 ? '' : 's'}.` });
       }
 
       if (action === 'activate_account') {

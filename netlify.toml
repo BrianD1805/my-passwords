@@ -37,3 +37,9 @@
 
 [functions."account-deletion-process"]
   schedule = "0 3 * * *"
+
+[functions."customer-lifecycle-email-process"]
+  schedule = "0 * * * *"
+
+[functions."emergency-access-release-process"]
+  schedule = "*/5 * * * *"
