@@ -10,11 +10,11 @@ export async function sendOperationalAlert({ subject, heading, message, idempote
   const to = String(process.env.OPS_ALERT_EMAIL || '').trim();
   if (!apiKey || !from || !to.includes('@')) return { sent: false, skipped: true, reason: 'not_configured' };
 
-  const safeSubject = sanitiseOperationalText(subject || 'My Passwords operational alert', 140);
+  const safeSubject = sanitiseOperationalText(subject || 'Password-Encrypt operational alert', 140);
   const safeHeading = sanitiseOperationalText(heading || 'Operational alert', 160);
-  const safeMessage = sanitiseOperationalText(message || 'My Passwords requires operational attention.', 500);
-  const text = `${safeHeading}\n\n${safeMessage}\n\nOpen My Passwords Admin > Health for the metadata-only diagnostic view.`;
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">${escapeHtml(safeHeading)}</h1><p style="margin:0 0 18px;line-height:1.6;color:#536579">${escapeHtml(safeMessage)}</p><p style="margin:0;font-size:13px;line-height:1.5;color:#7b8fa3">Open My Passwords Admin &gt; Health for the metadata-only diagnostic view. No vault contents are included in this alert.</p></div></div></body></html>`;
+  const safeMessage = sanitiseOperationalText(message || 'Password-Encrypt requires operational attention.', 500);
+  const text = `${safeHeading}\n\n${safeMessage}\n\nOpen Password-Encrypt Admin > Health for the metadata-only diagnostic view.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">${escapeHtml(safeHeading)}</h1><p style="margin:0 0 18px;line-height:1.6;color:#536579">${escapeHtml(safeMessage)}</p><p style="margin:0;font-size:13px;line-height:1.5;color:#7b8fa3">Open Password-Encrypt Admin &gt; Health for the metadata-only diagnostic view. No vault contents are included in this alert.</p></div></div></body></html>`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {

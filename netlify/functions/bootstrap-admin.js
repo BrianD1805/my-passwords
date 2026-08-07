@@ -3,7 +3,7 @@ import { assertUserCapacity, entitlementSnapshotFromPlan, launchReadyPlan } from
 import { assertBrowserAction, consumeRateLimit, requestIpHash, securityErrorResponseHeaders } from './_security.js';
 
 const defaultCategories = ['Passwords', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Emergency Info'];
-const LEGAL_VERSION = '2026-08-07';
+const LEGAL_VERSION = '2026-08-08';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;

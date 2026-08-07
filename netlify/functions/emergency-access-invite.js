@@ -28,9 +28,9 @@ function buildReleaseReadyEmail({ contactName, ownerName, accessScope, requestUr
   const ownerFirst = firstName(safeOwner);
   const safeScope = accessScope || 'Emergency Info folder only';
   const buttonText = `Open ${ownerFirst}'s Vault`;
-  const text = `Hello ${safeContact}, the waiting period for your My Passwords access request for ${safeOwner} has ended. If ${safeOwner} has not cancelled the request, use this fresh secure browser link to open the prepared emergency package: ${requestUrl}. Button text: ${buttonText}. Access scope: ${safeScope}. If you cannot find this email later, check your Spam or Junk folder first.`;
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;"><div style="max-width:560px;margin:0 auto;padding:28px 18px;"><div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);"><h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">${ownerFirst}'s vault is ready</h1><p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, the waiting period for your My Passwords access request for ${safeOwner} has ended.</p><p style="margin:0 0 18px;line-height:1.55;color:#536579;">If ${safeOwner} has not cancelled the request, you can now use this secure browser link to open the prepared emergency package.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;"><p style="margin:0;"><strong>Access scope:</strong> ${safeScope}</p></div>${requestUrl ? `<a href="${requestUrl}" style="display:inline-block;background:#173a5d;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">${buttonText}</a>` : ''}<p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">You do not need to install My Passwords. This secure link opens in your browser. If you cannot find this email later, check your Spam or Junk folder first.</p></div></div></body></html>`;
-  return { html, text, subject: `${ownerFirst}'s My Passwords vault is ready` };
+  const text = `Hello ${safeContact}, the waiting period for your Password-Encrypt access request for ${safeOwner} has ended. If ${safeOwner} has not cancelled the request, use this fresh secure browser link to open the prepared emergency package: ${requestUrl}. Button text: ${buttonText}. Access scope: ${safeScope}. If you cannot find this email later, check your Spam or Junk folder first.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;"><div style="max-width:560px;margin:0 auto;padding:28px 18px;"><div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);"><h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">${ownerFirst}'s vault is ready</h1><p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, the waiting period for your Password-Encrypt access request for ${safeOwner} has ended.</p><p style="margin:0 0 18px;line-height:1.55;color:#536579;">If ${safeOwner} has not cancelled the request, you can now use this secure browser link to open the prepared emergency package.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;"><p style="margin:0;"><strong>Access scope:</strong> ${safeScope}</p></div>${requestUrl ? `<a href="${requestUrl}" style="display:inline-block;background:#173a5d;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">${buttonText}</a>` : ''}<p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">You do not need to install Password-Encrypt. This secure link opens in your browser. If you cannot find this email later, check your Spam or Junk folder first.</p></div></div></body></html>`;
+  return { html, text, subject: `${ownerFirst}'s Password-Encrypt vault is ready` };
 }
 
 async function notifyEmergencyContactReleaseReady({ invitation, request }) {
@@ -45,7 +45,7 @@ async function notifyEmergencyContactReleaseReady({ invitation, request }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ from, to, subject: content.subject || 'My Passwords access is ready', html: content.html, text: content.text }) });
+    const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ from, to, subject: content.subject || 'Password-Encrypt access is ready', html: content.html, text: content.text }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return { sent: false, provider: 'resend', reason: data?.message || `Resend returned HTTP ${response.status}.`, details: data };
     return { sent: true, provider: 'resend', providerId: data?.id || '' };
@@ -116,29 +116,29 @@ function withEmergencyStep(url, step) {
 }
 
 function buildInviteEmail({ ownerName, contactName, waitingPeriod, accessScope, acceptUrl }) {
-  const safeOwner = ownerName || 'A My Passwords user';
+  const safeOwner = ownerName || 'A Password-Encrypt user';
   const ownerFirst = firstName(safeOwner);
   const safeContact = contactName || 'there';
-  const text = `Hello ${safeContact}, ${safeOwner} has nominated you as their trusted person in My Passwords. Step 1 is to review and accept or decline the nomination. This email does not give access to passwords. If you accept, a separate secure Request Access link will be emailed to you for future use. You do not need the app; the link opens in a browser. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. Review: ${acceptUrl}. If you expected this email but cannot find it later, check Spam or Junk first.`;
+  const text = `Hello ${safeContact}, ${safeOwner} has nominated you as their trusted person in Password-Encrypt. Step 1 is to review and accept or decline the nomination. This email does not give access to passwords. If you accept, a separate secure Request Access link will be emailed to you for future use. You do not need the app; the link opens in a browser. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. Review: ${acceptUrl}. If you expected this email but cannot find it later, check Spam or Junk first.`;
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
     <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
       <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
         <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">${ownerFirst} has nominated you</h1>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, ${safeOwner} has nominated you as their trusted person in My Passwords.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, ${safeOwner} has nominated you as their trusted person in Password-Encrypt.</p>
         <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Step 1 is to review and accept or decline the nomination. This does not give you access to any passwords today.</p>
         <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
           <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
           <p style="margin:0;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
         </div>
         <a href="${acceptUrl}" style="display:inline-block;background:#1d3557;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Review nomination</a>
-        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">Next step: if you accept, My Passwords will send a separate secure Request Access link for future use. If you cannot find the email later, check your Spam or Junk folder first.</p>
+        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">Next step: if you accept, Password-Encrypt will send a separate secure Request Access link for future use. If you cannot find the email later, check your Spam or Junk folder first.</p>
       </div>
     </div>
   </body>
 </html>`;
-  return { html, text, subject: `${ownerFirst} nominated you in My Passwords` };
+  return { html, text, subject: `${ownerFirst} nominated you in Password-Encrypt` };
 }
 
 
@@ -146,14 +146,14 @@ function buildRequestLinkEmail({ ownerName, contactName, waitingPeriod, accessSc
   const safeOwner = ownerName || 'The account owner';
   const ownerFirst = firstName(safeOwner);
   const safeContact = contactName || 'there';
-  const text = `Hello ${safeContact}, this is your secure My Passwords Request Access link for ${safeOwner}. Keep this email somewhere safe. If there is ever an emergency, use the browser link to request access: ${requestUrl}. This link does not release any vault contents by itself. It starts the waiting period and notifies ${safeOwner}. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. After the waiting period ends, you should receive another email with a fresh Open ${ownerFirst}'s Vault link. If no email arrives, check Spam or Junk first.`;
+  const text = `Hello ${safeContact}, this is your secure Password-Encrypt Request Access link for ${safeOwner}. Keep this email somewhere safe. If there is ever an emergency, use the browser link to request access: ${requestUrl}. This link does not release any vault contents by itself. It starts the waiting period and notifies ${safeOwner}. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. After the waiting period ends, you should receive another email with a fresh Open ${ownerFirst}'s Vault link. If no email arrives, check Spam or Junk first.`;
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
     <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
       <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
         <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Your link for ${ownerFirst}</h1>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, this is your secure My Passwords Request Access link for ${safeOwner}.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, this is your secure Password-Encrypt Request Access link for ${safeOwner}.</p>
         <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Keep this email somewhere safe. Use this link only if you need to request emergency access.</p>
         <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
           <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
@@ -165,7 +165,7 @@ function buildRequestLinkEmail({ ownerName, contactName, waitingPeriod, accessSc
     </div>
   </body>
 </html>`;
-  return { html, text, subject: `Your My Passwords link for ${ownerFirst}` };
+  return { html, text, subject: `Your Password-Encrypt link for ${ownerFirst}` };
 }
 
 async function sendRequestLinkWithResend({ to, ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
@@ -185,7 +185,7 @@ async function sendRequestLinkWithResend({ to, ownerName, contactName, waitingPe
       body: JSON.stringify({
         from,
         to,
-        subject: content.subject || 'Your My Passwords link',
+        subject: content.subject || 'Your Password-Encrypt link',
         html: content.html,
         text: content.text
       })
@@ -217,7 +217,7 @@ async function sendWithResend({ to, ownerName, contactName, waitingPeriod, acces
       body: JSON.stringify({
         from,
         to,
-        subject: content.subject || 'My Passwords trusted person nomination',
+        subject: content.subject || 'Password-Encrypt trusted person nomination',
         html: content.html,
         text: content.text
       })
@@ -461,7 +461,7 @@ export async function handler(event) {
       if (!requestUrl) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'This invitation does not have a stored Request Access link. Reset it and send a fresh invitation.' });
       const delivery = await sendRequestLinkWithResend({
         to: invitation.contact_email,
-        ownerName: invitation.metadata?.owner_name || 'My Passwords user',
+        ownerName: invitation.metadata?.owner_name || 'Password-Encrypt user',
         contactName: invitation.contact_name,
         waitingPeriod: invitation.waiting_period,
         accessScope: invitation.access_scope,
@@ -508,7 +508,7 @@ export async function handler(event) {
       if (!inviteUrl) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'This older invitation does not have a stored invite link. Reset it and send a fresh invitation.' });
       const delivery = await sendWithResend({
         to: invitation.contact_email,
-        ownerName: invitation.metadata?.owner_name || 'My Passwords user',
+        ownerName: invitation.metadata?.owner_name || 'Password-Encrypt user',
         contactName: invitation.contact_name,
         waitingPeriod: invitation.waiting_period,
         accessScope: invitation.access_scope,
@@ -529,7 +529,7 @@ export async function handler(event) {
 
     const tenantId = sessionTenantId;
     const userId = sessionUserId;
-    const ownerName = String(body.ownerName || 'My Passwords user').trim();
+    const ownerName = String(body.ownerName || 'Password-Encrypt user').trim();
     const ownerEmail = String(body.ownerEmail || '').trim().toLowerCase();
     const contactName = String(body.contactName || '').trim();
     const relationship = String(body.relationship || '').trim();

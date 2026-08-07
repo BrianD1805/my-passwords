@@ -23,45 +23,45 @@ function formatDate(value) {
 
 function emailDefinition(type, context = {}) {
   const name = escapeHtml(context.displayName || 'there');
-  const account = escapeHtml(context.accountName || 'your My Passwords account');
-  const plan = escapeHtml(context.planName || 'My Passwords');
+  const account = escapeHtml(context.accountName || 'your Password-Encrypt account');
+  const plan = escapeHtml(context.planName || 'Password-Encrypt');
   const trialEnd = formatDate(context.trialEndsAt);
   const deletionDate = formatDate(context.deletionScheduledFor);
   const support = 'info@zippyweb.uk';
 
   const definitions = {
     welcome: {
-      subject: 'Welcome to My Passwords',
-      heading: 'Welcome to My Passwords',
+      subject: 'Welcome to Password-Encrypt',
+      heading: 'Welcome to Password-Encrypt',
       paragraphs: [
         `Hello ${name},`,
         `Your account <strong>${account}</strong> is active on the ${plan} plan.`,
         'You can now use verified devices for account services and encrypted cloud backup where included in your plan.',
-        'My Passwords does not keep a server-side copy of your master password or send it by email, so support cannot recover or reset it. Secure device unlock, if enabled later, keeps a separately protected wrapped copy only on that device.'
+        'Password-Encrypt does not keep a server-side copy of your master password or send it by email, so support cannot recover or reset it. Secure device unlock, if enabled later, keeps a separately protected wrapped copy only on that device.'
       ]
     },
     payment_attention: {
-      subject: 'Your My Passwords payment needs attention',
+      subject: 'Your Password-Encrypt payment needs attention',
       heading: 'Payment needs attention',
       paragraphs: [
         `Hello ${name},`,
         `A payment issue is affecting <strong>${account}</strong>.`,
-        'Please open My Passwords and review Plan & Billing to update your payment method or complete any required billing action.',
+        'Please open Password-Encrypt and review Plan & Billing to update your payment method or complete any required billing action.',
         'Your encrypted local vault remains protected by your master password.'
       ]
     },
     account_suspended: {
-      subject: 'Your My Passwords account has been suspended',
+      subject: 'Your Password-Encrypt account has been suspended',
       heading: 'Account suspended',
       paragraphs: [
         `Hello ${name},`,
-        `<strong>${account}</strong> has been suspended by the My Passwords administrator.`,
+        `<strong>${account}</strong> has been suspended by the Password-Encrypt administrator.`,
         'Account services, encrypted cloud backup and syncing may remain unavailable while the suspension is active.',
         `Contact ${support} if you need help.`
       ]
     },
     account_reactivated: {
-      subject: 'Your My Passwords account has been reactivated',
+      subject: 'Your Password-Encrypt account has been reactivated',
       heading: 'Account reactivated',
       paragraphs: [
         `Hello ${name},`,
@@ -71,7 +71,7 @@ function emailDefinition(type, context = {}) {
       ]
     },
     trial_extended: {
-      subject: 'Your My Passwords trial has been extended',
+      subject: 'Your Password-Encrypt trial has been extended',
       heading: 'Trial extended',
       paragraphs: [
         `Hello ${name},`,
@@ -81,7 +81,7 @@ function emailDefinition(type, context = {}) {
       ]
     },
     deletion_status: {
-      subject: 'My Passwords account deletion status',
+      subject: 'Password-Encrypt account deletion status',
       heading: 'Account deletion status',
       paragraphs: [
         `Hello ${name},`,
@@ -90,12 +90,12 @@ function emailDefinition(type, context = {}) {
           : context.deletionStatus === 'cancelled'
             ? `The deletion request for <strong>${account}</strong> has been cancelled.`
             : `The current deletion status for <strong>${account}</strong> is ${escapeHtml(context.deletionStatus || 'not scheduled')}.`,
-        'Open My Passwords to review the current account deletion status.',
+        'Open Password-Encrypt to review the current account deletion status.',
         `Contact ${support} if this was not expected.`
       ]
     },
     account_status: {
-      subject: 'Your My Passwords account status',
+      subject: 'Your Password-Encrypt account status',
       heading: 'Account status update',
       paragraphs: [
         `Hello ${name},`,
@@ -146,8 +146,8 @@ export async function sendAdminAccountEmail({ to, type, context = {} }) {
       from,
       to,
       subject: definition.subject,
-      html: `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:28px"><h1 style="margin:0 0 16px;color:#14263b;font-size:26px">${definition.heading}</h1>${paragraphs}<p style="margin-top:22px;font-size:13px;line-height:1.5;color:#7b8fa3">My Passwords · A ZippyWeb project · ${APP_VERSION}<br>Support: info@zippyweb.uk<br><a href="${baseUrl()}/terms" style="color:#536579">Terms</a> · <a href="${baseUrl()}/privacy" style="color:#536579">Privacy</a> · <a href="${baseUrl()}/billing-terms" style="color:#536579">Billing &amp; refunds</a></p></div></div></body></html>`,
-      text: `${plainText}\n\nMy Passwords · A ZippyWeb project\nSupport: info@zippyweb.uk\nTerms: ${baseUrl()}/terms\nPrivacy: ${baseUrl()}/privacy\nBilling & refunds: ${baseUrl()}/billing-terms\n${APP_VERSION}`
+      html: `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:28px"><h1 style="margin:0 0 16px;color:#14263b;font-size:26px">${definition.heading}</h1>${paragraphs}<p style="margin-top:22px;font-size:13px;line-height:1.5;color:#7b8fa3">Password-Encrypt · A ZippyWeb project · ${APP_VERSION}<br>Support: info@zippyweb.uk<br><a href="${baseUrl()}/terms" style="color:#536579">Terms</a> · <a href="${baseUrl()}/privacy" style="color:#536579">Privacy</a> · <a href="${baseUrl()}/billing-terms" style="color:#536579">Billing &amp; refunds</a></p></div></div></body></html>`,
+      text: `${plainText}\n\nPassword-Encrypt · A ZippyWeb project\nSupport: info@zippyweb.uk\nTerms: ${baseUrl()}/terms\nPrivacy: ${baseUrl()}/privacy\nBilling & refunds: ${baseUrl()}/billing-terms\n${APP_VERSION}`
     })
   });
   const data = await response.json().catch(() => ({}));

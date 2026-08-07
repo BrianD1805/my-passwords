@@ -58,7 +58,7 @@ async function retryPendingCompletionEmails() {
     if (!recipient) continue;
     const delivery = await sendCompletionEmail(request, recipient, {
       displayName: metadata.completion_email_display_name || 'there',
-      accountName: metadata.completion_email_account_name || 'your My Passwords account'
+      accountName: metadata.completion_email_account_name || 'your Password-Encrypt account'
     });
     if (delivery.sent || delivery.reason === 'already_sent') {
       await updateRow('account_deletion_requests', `id=${eq(request.id)}`, {
@@ -91,7 +91,7 @@ export async function handler() {
       const completionEmailMetadata = completionRecipient ? {
         ...(request.metadata || {}),
         completion_email_recipient_sealed: sealDeletionEmail(completionRecipient),
-        completion_email_account_name: customerContext?.tenant?.account_name || customerContext?.tenant?.name || 'My Passwords',
+        completion_email_account_name: customerContext?.tenant?.account_name || customerContext?.tenant?.name || 'Password-Encrypt',
         completion_email_display_name: customerContext?.user?.display_name || 'there',
         completion_email_sent: false,
         version: APP_VERSION

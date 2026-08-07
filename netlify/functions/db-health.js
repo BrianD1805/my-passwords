@@ -7,7 +7,7 @@ export async function handler() {
     return jsonResponse(200, {
       ok: false,
       connected: false,
-      app: 'My Passwords',
+      app: 'Password-Encrypt',
       version: APP_VERSION,
       checked_at: new Date().toISOString(),
       environment: getEnvironmentFlags(),
@@ -33,7 +33,7 @@ export async function handler() {
       ok: securitySecretsReady,
       connected: true,
       schema_ready: true,
-      app: 'My Passwords',
+      app: 'Password-Encrypt',
       version: APP_VERSION,
       checked_at: new Date().toISOString(),
       environment: getEnvironmentFlags(),
@@ -61,7 +61,7 @@ export async function handler() {
       ok: false,
       connected: !relationMissing,
       schema_ready: false,
-      app: 'My Passwords',
+      app: 'Password-Encrypt',
       version: APP_VERSION,
       checked_at: new Date().toISOString(),
       environment: getEnvironmentFlags(),
@@ -79,7 +79,7 @@ export async function handler() {
         : entitlementMigrationMissing
         ? 'Supabase is reachable, but the Ver-0.044 entitlement columns are missing. Run the Ver-0.044 migration in Supabase SQL Editor.'
         : relationMissing
-          ? 'Supabase is reachable, but the SaaS tables are missing. Run the required My Passwords migrations in Supabase SQL Editor.'
+          ? 'Supabase is reachable, but the SaaS tables are missing. Run the required Password-Encrypt migrations in Supabase SQL Editor.'
           : 'Supabase connection failed. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
     });
   }

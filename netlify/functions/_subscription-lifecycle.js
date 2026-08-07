@@ -211,7 +211,7 @@ export async function syncStripeSubscriptionObject(subscription, hints = {}) {
   }
 
   const resolvedTenantId = providerMatched?.tenant_id || hintedTenantId || metadataTenantId || '';
-  if (!resolvedTenantId) throw new Error('Stripe subscription could not be matched to a My Passwords account.');
+  if (!resolvedTenantId) throw new Error('Stripe subscription could not be matched to a Password-Encrypt account.');
 
   const local = providerMatched || hints.existing || await loadLocalSubscription(resolvedTenantId);
   if (local?.tenant_id && local.tenant_id !== resolvedTenantId) {
@@ -837,7 +837,7 @@ export async function processStripeInvoiceObject(invoice, paid) {
       local = synced.row;
     }
   }
-  if (!local?.id) throw new Error('Stripe invoice could not be matched to a My Passwords subscription.');
+  if (!local?.id) throw new Error('Stripe invoice could not be matched to a Password-Encrypt subscription.');
   const now = new Date().toISOString();
   const failedAt = paid ? null : now;
   const patch = paid

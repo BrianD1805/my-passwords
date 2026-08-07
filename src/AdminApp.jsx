@@ -383,7 +383,7 @@ export default function AdminApp({ version }) {
       <main className="admin-shell admin-centred">
         <section className="admin-login-card admin-offline-card">
           <div className="admin-mark"><img className="admin-brand-image" src="/images/password-encrypt-brand.png" alt="" /></div>
-          <p className="eyebrow">My Passwords Admin</p>
+          <p className="eyebrow">Password-Encrypt Admin</p>
           <h1>No internet connection</h1>
           <p>Admin needs an internet connection to load plans, customers, billing and sync information. Reconnect, then try again.</p>
           <button type="button" className="primary-button" onClick={() => window.location.reload()}><RefreshCw size={18} /> Try again</button>
@@ -402,10 +402,10 @@ export default function AdminApp({ version }) {
     return (
       <main className="admin-shell admin-centred">
         <section className="admin-login-card">
-          <div className="admin-mark"><img className="admin-brand-image" src="/images/password-encrypt-brand.png" alt="My Passwords" /></div>
-          <p className="eyebrow">My Passwords Admin</p>
+          <div className="admin-mark"><img className="admin-brand-image" src="/images/password-encrypt-brand.png" alt="Password-Encrypt" /></div>
+          <p className="eyebrow">Password-Encrypt Admin</p>
           <h1>Owner administration</h1>
-          <p>Manage SaaS plans and customer account status inside the same My Passwords Netlify site.</p>
+          <p>Manage SaaS plans and customer account status inside the same Password-Encrypt Netlify site.</p>
           <form onSubmit={login}>
             <label>Admin access key
               <div className="admin-secret-field"><input type={showKey ? 'text' : 'password'} value={accessKey} onChange={(event) => setAccessKey(event.target.value)} autoComplete="current-password" required /><button type="button" onClick={() => setShowKey((current) => !current)} aria-label={showKey ? 'Hide admin key' : 'Show admin key'}>{showKey ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>
@@ -413,7 +413,7 @@ export default function AdminApp({ version }) {
             <button className="primary-button" type="submit" disabled={busy}><ShieldCheck size={18} /> {busy ? 'Signing in...' : 'Open Admin'}</button>
           </form>
           {notice && <div className="admin-notice error">{notice}</div>}
-          <a className="admin-back-link" href="/">Return to My Passwords</a>
+          <a className="admin-back-link" href="/">Return to Password-Encrypt</a>
           <small>{version}</small>
         </section>
       </main>
@@ -423,7 +423,7 @@ export default function AdminApp({ version }) {
   return (
     <main className="admin-shell">
       <header className="admin-header">
-        <div className="admin-header-brand"><img className="admin-header-brand-image" src="/images/password-encrypt-brand.png" alt="" /><div><p className="eyebrow">My Passwords</p><h1>Admin</h1><span>Single-site SaaS administration</span></div></div>
+        <div className="admin-header-brand"><img className="admin-header-brand-image" src="/images/password-encrypt-brand.png" alt="" /><div><p className="eyebrow">Password-Encrypt</p><h1>Admin</h1><span>Single-site SaaS administration</span></div></div>
         <div className="admin-header-actions"><button type="button" className="secondary-button" onClick={loadData} disabled={busy}><RefreshCw size={17} className={busy ? 'spin-icon' : ''} /> Refresh</button><button type="button" className="secondary-button" onClick={logout}><LogOut size={17} /> Logout</button></div>
       </header>
 
@@ -532,7 +532,7 @@ export default function AdminApp({ version }) {
         <section className="admin-content">
           <section className="admin-panel">
             <div className="admin-panel-heading"><div><p className="eyebrow">Stripe Billing</p><h2>Billing events</h2></div><span>{data.billingEvents?.length || 0} recent events</span></div>
-            <p className="admin-panel-intro">Verified Stripe webhooks update subscriptions, renewals, failed payments and cancellations. No card details are stored in My Passwords.</p>
+            <p className="admin-panel-intro">Verified Stripe webhooks update subscriptions, renewals, failed payments and cancellations. No card details are stored in Password-Encrypt.</p>
             <div className="admin-billing-event-list">
               {(data.billingEvents || []).map((event) => <article className={`admin-billing-event ${event.status || 'recorded'}`} key={event.id}><div className="admin-sync-icon"><CreditCard size={20} /></div><div><strong>{String(event.event_type || 'billing event').replace(/_/g, ' ')}</strong><span>{event.tenant_id || 'Unmatched account'}{event.amount_minor ? ` · ${money(event.amount_minor)}` : ''}</span><small>{dateLabel(event.occurred_at || event.created_at, true)} · {event.provider || 'internal'} · {event.status || 'recorded'}</small></div></article>)}
               {!data.billingEvents?.length && <div className="admin-empty">No billing events have been recorded yet.</div>}
@@ -640,7 +640,7 @@ export default function AdminApp({ version }) {
                 </fieldset>
                 {isReservedFuturePlan(editor.code) && <div className="admin-plan-readiness"><AlertTriangle size={18} /><span><strong>{editor.displayName || planDisplayName(editor.code)} remains hidden</strong><small>Family and Business cannot be published until member accounts and sharing have been built and tested.</small></span></div>}
                 <div className="admin-toggle-grid"><label><input type="checkbox" checked={editor.isActive} onChange={(e) => setEditor({ ...editor, isActive: e.target.checked })} /> Active</label><label><input type="checkbox" checked={isReservedFuturePlan(editor.code) ? false : editor.isPublic} onChange={(e) => setEditor({ ...editor, isPublic: e.target.checked })} disabled={isReservedFuturePlan(editor.code)} /> Publish on website</label><label><input type="checkbox" checked={isReservedFuturePlan(editor.code) ? false : editor.isFeatured} onChange={(e) => setEditor({ ...editor, isFeatured: e.target.checked })} disabled={isReservedFuturePlan(editor.code)} /> Featured plan</label></div>
-                <div className={`admin-stripe-status ${editor.stripeSyncStatus || 'not_synced'}`}><CreditCard size={18} /><span><strong>Stripe Billing: {data.stripeConfigured ? (editor.stripeSyncStatus || 'Not synced').replace(/_/g, ' ') : 'Not configured'}</strong><small>{editor.stripeSyncMessage || (data.stripeConfigured ? 'Save the plan to create or update its Stripe Product and recurring Prices.' : 'Add STRIPE_SECRET_KEY to the existing My Passwords Netlify site.')}</small></span></div>
+                <div className={`admin-stripe-status ${editor.stripeSyncStatus || 'not_synced'}`}><CreditCard size={18} /><span><strong>Stripe Billing: {data.stripeConfigured ? (editor.stripeSyncStatus || 'Not synced').replace(/_/g, ' ') : 'Not configured'}</strong><small>{editor.stripeSyncMessage || (data.stripeConfigured ? 'Save the plan to create or update its Stripe Product and recurring Prices.' : 'Add STRIPE_SECRET_KEY to the existing Password-Encrypt Netlify site.')}</small></span></div>
               </div>
               <footer className="admin-plan-window-footer">
                 <div>{planEditorMode === 'edit' && <button type="button" className="secondary-button danger-soft" onClick={deletePlan} disabled={busy}><Trash2 size={17} /> Delete plan</button>}</div>

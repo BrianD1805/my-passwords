@@ -12,10 +12,10 @@ const customerEmail = read('netlify/functions/_customer-email.js');
 const adminEmail = read('netlify/functions/_admin-email.js');
 const stripe = read('netlify/functions/_stripe.js');
 const checkout = read('netlify/functions/stripe-checkout.js');
-const claims = read('docs/ENCRYPTION_AND_CLAIMS_REGISTER_VER_0.052A.md');
-const processing = read('docs/DATA_PROCESSING_VER_0.052A.md');
-const commercial = read('docs/COMMERCIAL_LAUNCH_CHECKLIST_VER_0.052A.md');
-const support = read('docs/SUPPORT_PROCESS_VER_0.052A.md');
+const claims = read('docs/ENCRYPTION_AND_CLAIMS_REGISTER_VER_0.052B.md');
+const processing = read('docs/DATA_PROCESSING_VER_0.052B.md');
+const commercial = read('docs/COMMERCIAL_LAUNCH_CHECKLIST_VER_0.052B.md');
+const support = read('docs/SUPPORT_PROCESS_VER_0.052B.md');
 const pkg = JSON.parse(read('package.json'));
 const sw = read('public/sw.js');
 const server = read('netlify/functions/_db.js');
@@ -26,7 +26,7 @@ function check(label, ok) {
   else { console.error(`FAIL  ${label}`); failed += 1; }
 }
 
-check('Ver-0.052A app/server/package/service-worker versions align', pkg.version === '0.0.52-a' && /My Passwords Ver-0\.052A/.test(main) && /My Passwords Ver-0\.052A/.test(server) && /my-passwords-v0\.052A/.test(sw));
+check('Ver-0.052B app/server/package/service-worker versions align', pkg.version === '0.0.52-b' && /Password-Encrypt Ver-0\.052B/.test(main) && /Password-Encrypt Ver-0\.052B/.test(server) && /my-passwords-v0\.052B/.test(sw));
 check('Public Terms, Privacy and Billing routes are implemented and included in the PWA shell', /'\/terms': 'terms'/.test(legal) && /'\/privacy': 'privacy'/.test(legal) && /'\/billing-terms': 'billing'/.test(legal) && /'\/terms'/.test(sw) && /'\/privacy'/.test(sw) && /'\/billing-terms'/.test(sw));
 check('Public landing page links all legal policies', /href="\/terms"/.test(main) && /href="\/privacy"/.test(main) && /href="\/billing-terms"/.test(main));
 check('New signup requires explicit current legal acceptance in browser', /legalAccepted/.test(main) && /LEGAL_VERSION/.test(main) && /Please accept the Terms/.test(main));
@@ -56,8 +56,13 @@ check('Stripe Tax is opt-in and disabled unless the server setting is explicitly
 check('Commercial, data-processing, claims and support launch documentation is present', /Stripe statement descriptor/.test(commercial) && /processor\/service-provider register/.test(processing) && /Prohibited \/ unsupported claims/.test(claims) && /Core support rule/.test(support));
 check('Privacy discloses essential browser storage and external font/flag resources', /Essential cookies and browser storage/.test(legal) && /does not intentionally include advertising or behavioural-analytics trackers/.test(legal) && /Google Fonts/.test(processing) && /FlagCDN/.test(processing));
 
+check('Password-Encrypt is the customer-facing product name across live app/legal/PWA shell', !/My Passwords/.test(main + legal + customerEmail + adminEmail) && /Password-Encrypt/.test(main) && /Password-Encrypt/.test(legal) && /Password-Encrypt/.test(read('public/manifest.webmanifest')));
+check('Vault home header uses the customer vault name instead of the product name', /className="vault-home-title">\{bootstrap\.accountName \|\| bootstrap\.tenantName \|\| 'Private Vault'\}/.test(main));
+check('Ubuntu is restored as the global UI font', !/font-family:\s*Inter/.test(read('src/styles.css')) && /font-family:\s*Ubuntu/.test(read('src/styles.css')) && /family=Ubuntu/.test(read('index.html')));
+check('Legal document version is aligned client and server after the product rename', /LEGAL_VERSION = '2026-08-08'/.test(legal) && /LEGAL_VERSION = '2026-08-08'/.test(bootstrap) && /LEGAL_EFFECTIVE_DATE = '8 August 2026'/.test(legal));
+
 if (failed) {
   console.error(`\n${failed} legal/commercial readiness check${failed === 1 ? '' : 's'} failed.`);
   process.exit(1);
 }
-console.log('\nAll 26 legal/commercial readiness checks passed.');
+console.log('\nAll 30 legal/commercial readiness checks passed.');

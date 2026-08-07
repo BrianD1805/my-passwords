@@ -35,14 +35,14 @@ function otpEmailCopy(purpose) {
   const onboarding = String(purpose || '').includes('production_onboarding');
   return onboarding
     ? {
-        subject: 'Verify your new My Passwords account',
-        heading: 'Verify your My Passwords account',
+        subject: 'Verify your new Password-Encrypt account',
+        heading: 'Verify your Password-Encrypt account',
         intro: 'Use this one-time code to confirm your email address and activate your selected free trial. You will create your separate master vault password after verification.',
-        text: 'Use this one-time code to verify your new My Passwords account and start the selected free trial.'
+        text: 'Use this one-time code to verify your new Password-Encrypt account and start the selected free trial.'
       }
     : {
-        subject: 'Your My Passwords verification code',
-        heading: 'My Passwords verification code',
+        subject: 'Your Password-Encrypt verification code',
+        heading: 'Password-Encrypt verification code',
         intro: 'Use this one-time code to verify this device for secure backup and syncing. You will still need your master password to decrypt your vault.',
         text: 'Use this one-time code to verify this device for secure backup and syncing.'
       };

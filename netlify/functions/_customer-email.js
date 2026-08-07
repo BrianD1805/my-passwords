@@ -71,7 +71,7 @@ function baseUrl() {
 
 function emailDefinition(type, context = {}) {
   const displayName = escapeHtml(context.displayName || 'there');
-  const accountName = escapeHtml(context.accountName || 'your My Passwords account');
+  const accountName = escapeHtml(context.accountName || 'your Password-Encrypt account');
   const planName = escapeHtml(context.planName || context.planCode || 'your current plan');
   const previousPlanName = escapeHtml(context.previousPlanName || context.previousPlanCode || 'your previous plan');
   const trialEnd = formatDate(context.trialEndsAt);
@@ -86,29 +86,29 @@ function emailDefinition(type, context = {}) {
   const billingUrl = `${baseUrl()}/vault`;
   const definitions = {
     welcome_trial_started: {
-      subject: 'Welcome to My Passwords — your trial has started',
-      heading: 'Welcome to My Passwords',
+      subject: 'Welcome to Password-Encrypt — your trial has started',
+      heading: 'Welcome to Password-Encrypt',
       paragraphs: [
         `Hello ${displayName},`,
         `Your <strong>${accountName}</strong> account is ready and your ${planName} trial has started${trialEnd ? ` until ${escapeHtml(trialEnd)}` : ''}.`,
         'You can now create or open your private encrypted vault and use the account features included in your plan.',
-        'My Passwords does not store a server-side copy of your master password or send it by email. A paid subscription begins only if you deliberately complete Stripe Checkout.'
+        'Password-Encrypt does not store a server-side copy of your master password or send it by email. A paid subscription begins only if you deliberately complete Stripe Checkout.'
       ],
-      button: { label: 'Open My Passwords', url: billingUrl }
+      button: { label: 'Open Password-Encrypt', url: billingUrl }
     },
     welcome_account_activated: {
-      subject: 'Welcome to My Passwords',
+      subject: 'Welcome to Password-Encrypt',
       heading: 'Your account is ready',
       paragraphs: [
         `Hello ${displayName},`,
         `Your <strong>${accountName}</strong> account is active on the ${planName} plan.`,
         'You can now create or open your private encrypted vault and use the account features included in your plan.',
-        'My Passwords does not store a server-side copy of your master password or send it by email. If you enable Secure device unlock, a separately protected wrapped copy is kept only on that device.'
+        'Password-Encrypt does not store a server-side copy of your master password or send it by email. If you enable Secure device unlock, a separately protected wrapped copy is kept only on that device.'
       ],
-      button: { label: 'Open My Passwords', url: billingUrl }
+      button: { label: 'Open Password-Encrypt', url: billingUrl }
     },
     trial_started: {
-      subject: 'Your My Passwords trial has started',
+      subject: 'Your Password-Encrypt trial has started',
       heading: 'Your trial has started',
       paragraphs: [
         `Hello ${displayName},`,
@@ -116,10 +116,10 @@ function emailDefinition(type, context = {}) {
         'Your included account features remain available throughout the trial.',
         'The trial does not automatically become a paid subscription unless you deliberately complete Stripe Checkout.'
       ],
-      button: { label: 'Open My Passwords', url: billingUrl }
+      button: { label: 'Open Password-Encrypt', url: billingUrl }
     },
     trial_extended: {
-      subject: 'Your My Passwords trial has been extended',
+      subject: 'Your Password-Encrypt trial has been extended',
       heading: 'Your trial has been extended',
       paragraphs: [
         `Hello ${displayName},`,
@@ -127,10 +127,10 @@ function emailDefinition(type, context = {}) {
         'Your current plan features remain available during the extended trial period.',
         'Your vault remains encrypted. The master password is the primary secret used to decrypt it; a device you deliberately set up may also use Secure device unlock.'
       ],
-      button: { label: 'Open My Passwords', url: billingUrl }
+      button: { label: 'Open Password-Encrypt', url: billingUrl }
     },
     trial_ending_soon: {
-      subject: 'Your My Passwords trial is ending soon',
+      subject: 'Your Password-Encrypt trial is ending soon',
       heading: 'Your trial is ending soon',
       paragraphs: [
         `Hello ${displayName},`,
@@ -141,7 +141,7 @@ function emailDefinition(type, context = {}) {
       button: { label: 'Review Plan & Billing', url: billingUrl }
     },
     trial_expired: {
-      subject: 'Your My Passwords trial has ended',
+      subject: 'Your Password-Encrypt trial has ended',
       heading: 'Your trial has ended',
       paragraphs: [
         `Hello ${displayName},`,
@@ -152,40 +152,40 @@ function emailDefinition(type, context = {}) {
       button: { label: 'Choose a Plan', url: billingUrl }
     },
     subscription_activated: {
-      subject: 'Your My Passwords subscription is active',
+      subject: 'Your Password-Encrypt subscription is active',
       heading: 'Subscription activated',
       paragraphs: [
         `Hello ${displayName},`,
         `Your ${planName} subscription for <strong>${accountName}</strong> is now active.`,
         renewalDate ? `Your current billing period runs until ${escapeHtml(renewalDate)}.` : 'Your subscription account services are available now.',
-        'Thank you for choosing My Passwords.'
+        'Thank you for choosing Password-Encrypt.'
       ],
-      button: { label: 'Open My Passwords', url: billingUrl }
+      button: { label: 'Open Password-Encrypt', url: billingUrl }
     },
     upcoming_renewal: {
-      subject: 'Your My Passwords subscription renews soon',
+      subject: 'Your Password-Encrypt subscription renews soon',
       heading: 'Upcoming renewal',
       paragraphs: [
         `Hello ${displayName},`,
         `Your ${planName} subscription for <strong>${accountName}</strong> is due to renew${renewalDate ? ` on ${escapeHtml(renewalDate)}` : ' soon'}.`,
-        amount ? `The expected renewal amount is ${escapeHtml(amount)}.` : 'You can review your upcoming billing information in My Passwords.',
+        amount ? `The expected renewal amount is ${escapeHtml(amount)}.` : 'You can review your upcoming billing information in Password-Encrypt.',
         'If you need to change your plan or payment method, please do so before the renewal date.'
       ],
       button: { label: 'Review Plan & Billing', url: billingUrl }
     },
     payment_failed: {
-      subject: 'Your My Passwords payment was unsuccessful',
+      subject: 'Your Password-Encrypt payment was unsuccessful',
       heading: 'Payment unsuccessful',
       paragraphs: [
         `Hello ${displayName},`,
         `We could not complete the latest payment for <strong>${accountName}</strong>.`,
         amount ? `The payment amount was ${escapeHtml(amount)}.` : 'Please review the payment method for your subscription.',
-        'Update your billing details in My Passwords so your subscription can continue normally.'
+        'Update your billing details in Password-Encrypt so your subscription can continue normally.'
       ],
       button: { label: 'Review Plan & Billing', url: billingUrl }
     },
     payment_action_required: {
-      subject: 'Action is required for your My Passwords payment',
+      subject: 'Action is required for your Password-Encrypt payment',
       heading: 'Payment action required',
       paragraphs: [
         `Hello ${displayName},`,
@@ -196,7 +196,7 @@ function emailDefinition(type, context = {}) {
       button: { label: 'Complete Payment', url: billingUrl }
     },
     grace_period_started: {
-      subject: 'Your My Passwords payment grace period has started',
+      subject: 'Your Password-Encrypt payment grace period has started',
       heading: 'Payment grace period started',
       paragraphs: [
         `Hello ${displayName},`,
@@ -207,7 +207,7 @@ function emailDefinition(type, context = {}) {
       button: { label: 'Review Plan & Billing', url: billingUrl }
     },
     subscription_cancelled: {
-      subject: 'Your My Passwords subscription has ended',
+      subject: 'Your Password-Encrypt subscription has ended',
       heading: 'Subscription cancelled',
       paragraphs: [
         `Hello ${displayName},`,
@@ -218,7 +218,7 @@ function emailDefinition(type, context = {}) {
       button: { label: 'Review Plans', url: billingUrl }
     },
     cancellation_scheduled: {
-      subject: 'Your My Passwords cancellation is scheduled',
+      subject: 'Your Password-Encrypt cancellation is scheduled',
       heading: 'Cancellation scheduled',
       paragraphs: [
         `Hello ${displayName},`,
@@ -229,7 +229,7 @@ function emailDefinition(type, context = {}) {
       button: { label: 'Review Plan & Billing', url: billingUrl }
     },
     subscription_reactivated: {
-      subject: 'Your My Passwords subscription will continue',
+      subject: 'Your Password-Encrypt subscription will continue',
       heading: 'Subscription reactivated',
       paragraphs: [
         `Hello ${displayName},`,
@@ -237,10 +237,10 @@ function emailDefinition(type, context = {}) {
         `Your ${planName} subscription will continue and renew normally.`,
         renewalDate ? `The current billing period ends on ${escapeHtml(renewalDate)}.` : 'Your subscription account services remain active.'
       ],
-      button: { label: 'Open My Passwords', url: billingUrl }
+      button: { label: 'Open Password-Encrypt', url: billingUrl }
     },
     plan_changed: {
-      subject: 'Your My Passwords plan has changed',
+      subject: 'Your Password-Encrypt plan has changed',
       heading: 'Plan changed',
       paragraphs: [
         `Hello ${displayName},`,
@@ -251,7 +251,7 @@ function emailDefinition(type, context = {}) {
       button: { label: 'Review Plan & Billing', url: billingUrl }
     },
     email_changed: {
-      subject: 'Your My Passwords email address was changed',
+      subject: 'Your Password-Encrypt email address was changed',
       heading: 'Email address changed',
       paragraphs: [
         `Hello ${displayName},`,
@@ -261,7 +261,7 @@ function emailDefinition(type, context = {}) {
       ]
     },
     mobile_changed: {
-      subject: 'Your My Passwords mobile number was changed',
+      subject: 'Your Password-Encrypt mobile number was changed',
       heading: 'Mobile number changed',
       paragraphs: [
         `Hello ${displayName},`,
@@ -271,18 +271,18 @@ function emailDefinition(type, context = {}) {
       ]
     },
     new_device_verified: {
-      subject: 'A new device was verified for My Passwords',
+      subject: 'A new device was verified for Password-Encrypt',
       heading: 'New device verified',
       paragraphs: [
         `Hello ${displayName},`,
         `A new device was verified for <strong>${accountName}</strong>${verifiedAt ? ` on ${escapeHtml(verifiedAt)}` : ''}.`,
         context.deviceName ? `Device: ${escapeHtml(context.deviceName)}${context.platform ? ` · ${escapeHtml(context.platform)}` : ''}.` : 'The device can now use the account services available to your plan.',
-        `If this was not you, open My Passwords to remove the device and end account sessions, or contact ${support}.`
+        `If this was not you, open Password-Encrypt to remove the device and end account sessions, or contact ${support}.`
       ],
       button: { label: 'Review Devices', url: billingUrl }
     },
     account_suspended: {
-      subject: 'Your My Passwords account has been suspended',
+      subject: 'Your Password-Encrypt account has been suspended',
       heading: 'Account suspended',
       paragraphs: [
         `Hello ${displayName},`,
@@ -292,7 +292,7 @@ function emailDefinition(type, context = {}) {
       ]
     },
     account_reactivated: {
-      subject: 'Your My Passwords account has been reactivated',
+      subject: 'Your Password-Encrypt account has been reactivated',
       heading: 'Account reactivated',
       paragraphs: [
         `Hello ${displayName},`,
@@ -300,10 +300,10 @@ function emailDefinition(type, context = {}) {
         'Your account services are available again according to your current plan.',
         'Your vault still requires your master password.'
       ],
-      button: { label: 'Open My Passwords', url: billingUrl }
+      button: { label: 'Open Password-Encrypt', url: billingUrl }
     },
     account_deletion_requested: {
-      subject: 'Your My Passwords account deletion has been requested',
+      subject: 'Your Password-Encrypt account deletion has been requested',
       heading: 'Account deletion requested',
       paragraphs: [
         `Hello ${displayName},`,
@@ -314,12 +314,12 @@ function emailDefinition(type, context = {}) {
       button: { label: 'Review Account', url: billingUrl }
     },
     account_deletion_completed: {
-      subject: 'Your My Passwords account has been deleted',
+      subject: 'Your Password-Encrypt account has been deleted',
       heading: 'Account deletion completed',
       paragraphs: [
         `Hello ${displayName},`,
         `The requested deletion of <strong>${accountName}</strong> has been completed.`,
-        'The deleted account can no longer use My Passwords cloud account services. Limited payment, invoice or legal records may remain with payment/service providers where retention is required.',
+        'The deleted account can no longer use Password-Encrypt cloud account services. Limited payment, invoice or legal records may remain with payment/service providers where retention is required.',
         `If you have any questions about this confirmation, contact ${support}.`
       ]
     }
@@ -357,9 +357,9 @@ export async function loadCustomerEmailContext(tenantId, { userId = '' } = {}) {
 function mergedContext(loaded, context = {}) {
   return {
     displayName: loaded?.user?.display_name || '',
-    accountName: loaded?.tenant?.account_name || loaded?.tenant?.name || 'My Passwords',
+    accountName: loaded?.tenant?.account_name || loaded?.tenant?.name || 'Password-Encrypt',
     planCode: loaded?.subscription?.plan_code || loaded?.tenant?.plan_code || '',
-    planName: loaded?.plan?.display_name || loaded?.subscription?.plan_code || loaded?.tenant?.plan_code || 'My Passwords',
+    planName: loaded?.plan?.display_name || loaded?.subscription?.plan_code || loaded?.tenant?.plan_code || 'Password-Encrypt',
     trialEndsAt: loaded?.subscription?.trial_ends_at || loaded?.tenant?.trial_ends_at || null,
     currentPeriodEnd: loaded?.subscription?.current_period_end || null,
     renewalAt: loaded?.subscription?.next_invoice_at || loaded?.subscription?.current_period_end || null,
@@ -475,8 +475,8 @@ export async function sendCustomerLifecycleEmail({
         from,
         to: recipient,
         subject: definition.subject,
-        html: `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:28px"><h1 style="margin:0 0 16px;color:#14263b;font-size:26px">${definition.heading}</h1>${paragraphs}${button}<p style="margin-top:24px;font-size:13px;line-height:1.5;color:#7b8fa3">My Passwords · A ZippyWeb project<br>Support: info@zippyweb.uk<br><a href="${baseUrl()}/terms" style="color:#536579">Terms</a> · <a href="${baseUrl()}/privacy" style="color:#536579">Privacy</a> · <a href="${baseUrl()}/billing-terms" style="color:#536579">Billing &amp; refunds</a></p></div></div></body></html>`,
-        text: `${textParagraphs.join('\n\n')}\n\nMy Passwords · A ZippyWeb project\nSupport: info@zippyweb.uk\nTerms: ${baseUrl()}/terms\nPrivacy: ${baseUrl()}/privacy\nBilling & refunds: ${baseUrl()}/billing-terms`
+        html: `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:28px"><h1 style="margin:0 0 16px;color:#14263b;font-size:26px">${definition.heading}</h1>${paragraphs}${button}<p style="margin-top:24px;font-size:13px;line-height:1.5;color:#7b8fa3">Password-Encrypt · A ZippyWeb project<br>Support: info@zippyweb.uk<br><a href="${baseUrl()}/terms" style="color:#536579">Terms</a> · <a href="${baseUrl()}/privacy" style="color:#536579">Privacy</a> · <a href="${baseUrl()}/billing-terms" style="color:#536579">Billing &amp; refunds</a></p></div></div></body></html>`,
+        text: `${textParagraphs.join('\n\n')}\n\nPassword-Encrypt · A ZippyWeb project\nSupport: info@zippyweb.uk\nTerms: ${baseUrl()}/terms\nPrivacy: ${baseUrl()}/privacy\nBilling & refunds: ${baseUrl()}/billing-terms`
       })
     });
     const data = await response.json().catch(() => ({}));

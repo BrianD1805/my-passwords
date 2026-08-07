@@ -26,7 +26,7 @@ function userForTenant(usersByTenant, tenantId) {
 }
 
 function planName(plansByCode, code) {
-  return plansByCode.get(code)?.display_name || code || 'My Passwords';
+  return plansByCode.get(code)?.display_name || code || 'Password-Encrypt';
 }
 
 async function safeSend(options, results) {

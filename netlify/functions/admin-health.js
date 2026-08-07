@@ -215,7 +215,7 @@ export async function handler(event) {
       if (!tenantId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Choose a Stripe customer first.' });
       const preview = await createStripePreview(tenantId);
       await audit(session, 'admin_stripe_reconciliation_previewed', { tenant_id: tenantId, reconciliation_id: preview.run.id, changes: preview.changes.map((row) => row.field) });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, preview: { runId: preview.run.id, expiresAt: preview.run.expires_at, local: preview.local, provider: preview.provider, changes: preview.changes }, message: preview.changes.length ? 'Preview ready. Review the differences before applying.' : 'Stripe and My Passwords already match. No changes are required.' });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, preview: { runId: preview.run.id, expiresAt: preview.run.expires_at, local: preview.local, provider: preview.provider, changes: preview.changes }, message: preview.changes.length ? 'Preview ready. Review the differences before applying.' : 'Stripe and Password-Encrypt already match. No changes are required.' });
     }
     if (action === 'apply_stripe_reconciliation') {
       const runId = sanitiseOperationalText(body.runId, 220);

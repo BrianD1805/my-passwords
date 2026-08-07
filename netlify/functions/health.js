@@ -5,7 +5,7 @@ export async function handler() {
   const smsMode = smsProviderMode();
   return jsonResponse(200, {
     ok: true,
-    app: 'My Passwords',
+    app: 'Password-Encrypt',
     version: APP_VERSION,
     mode: 'security-hardening',
     sms: {

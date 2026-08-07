@@ -28,7 +28,7 @@ export function smsProviderMode() {
 
 function smsCopy(purpose, code) {
   const label = purpose === 'account_recovery' ? 'recovery code' : 'verification code';
-  return `My Passwords ${label}: ${code}. Expires in 10 minutes. Never share this code.`;
+  return `Password-Encrypt ${label}: ${code}. Expires in 10 minutes. Never share this code.`;
 }
 
 async function twilioRequest(url, params) {

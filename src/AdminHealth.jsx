@@ -165,7 +165,7 @@ export default function AdminHealth({ onSessionExpired, setGlobalNotice }) {
 
       <section className="admin-panel">
         <div className="admin-panel-heading"><div><p className="eyebrow">Safe billing recovery</p><h2>Stripe reconciliation</h2></div><span className="admin-status success">Read Stripe, update local metadata only</span></div>
-        <p className="admin-panel-intro">Preview compares the customer’s already-linked Stripe subscription with My Passwords. Apply can only refresh local billing metadata from that same server-stored Stripe subscription. It cannot create, cancel, upgrade, downgrade or charge a subscription.</p>
+        <p className="admin-panel-intro">Preview compares the customer’s already-linked Stripe subscription with Password-Encrypt. Apply can only refresh local billing metadata from that same server-stored Stripe subscription. It cannot create, cancel, upgrade, downgrade or charge a subscription.</p>
         <div className="admin-health-stripe-controls">
           <CustomSelect value={stripeTenantId} ariaLabel="Choose Stripe customer" options={(data.stripeCustomers || []).map((row) => ({ value: row.value, label: `${row.label} · ${row.plan || 'Stripe'} · ${row.status || 'unknown'}` }))} onChange={(value) => { setStripeTenantId(value); setPreview(null); }} />
           <button type="button" className="secondary-button" onClick={previewStripe} disabled={!stripeTenantId || Boolean(busy)}><RotateCcw size={17} /> {busy === 'stripe-preview' ? 'Comparing...' : 'Preview reconciliation'}</button>
@@ -173,9 +173,9 @@ export default function AdminHealth({ onSessionExpired, setGlobalNotice }) {
         {preview && <div className="admin-health-reconciliation-preview">
           <div className="admin-panel-heading"><div><strong>Preview differences</strong><span>Expires {dateLabel(preview.expiresAt)}</span></div><span className={`admin-status ${preview.changes?.length ? 'warning' : 'success'}`}>{preview.changes?.length || 0} difference(s)</span></div>
           {preview.changes?.length ? <div className="admin-health-diff-table">
-            <div className="head"><strong>Field</strong><strong>My Passwords</strong><strong>Stripe</strong></div>
+            <div className="head"><strong>Field</strong><strong>Password-Encrypt</strong><strong>Stripe</strong></div>
             {preview.changes.map((change) => <div key={change.field}><span>{titleCase(change.field)}</span><span>{formatValue(change.local)}</span><span>{formatValue(change.provider)}</span></div>)}
-          </div> : <div className="admin-empty">Stripe and My Passwords already match.</div>}
+          </div> : <div className="admin-empty">Stripe and Password-Encrypt already match.</div>}
           <div className="admin-health-preview-actions"><button type="button" className="primary-button" onClick={applyStripe} disabled={!preview.changes?.length || Boolean(busy)}>{busy === 'stripe-apply' ? 'Applying...' : 'Apply local metadata reconciliation'}</button><button type="button" className="secondary-button" onClick={() => setPreview(null)} disabled={Boolean(busy)}>Discard preview</button></div>
         </div>}
       </section>

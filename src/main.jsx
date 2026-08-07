@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'My Passwords Ver-0.052A';
+const VERSION = 'Password-Encrypt Ver-0.052B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -232,8 +232,8 @@ function friendlyDeviceType() {
 const SETTINGS_FAQS = [
   {
     category: 'Master password',
-    question: 'Can My Passwords recover my master password?',
-    answer: 'No. Your master password is the primary encryption secret for the vault and no server-side copy is stored by My Passwords, so support cannot recover or reset it. A working Secure device unlock on a device you already configured may still provide local access until its next required password check, and Emergency Access may release information prepared in advance; neither is a master-password reset.'
+    question: 'Can Password-Encrypt recover my master password?',
+    answer: 'No. Your master password is the primary encryption secret for the vault and no server-side copy is stored by Password-Encrypt, so support cannot recover or reset it. A working Secure device unlock on a device you already configured may still provide local access until its next required password check, and Emergency Access may release information prepared in advance; neither is a master-password reset.'
   },
   {
     category: 'Master password',
@@ -242,8 +242,8 @@ const SETTINGS_FAQS = [
   },
   {
     category: 'Security',
-    question: 'Can My Passwords staff read my saved passwords?',
-    answer: 'During normal service operation, readable vault records are encrypted in your browser before storage or backup and the master password is not sent to the server. My Passwords therefore does not hold the information normally needed to decrypt stored vault snapshots, but no online service can promise absolute security against a compromised device, browser or future application code.'
+    question: 'Can Password-Encrypt staff read my saved passwords?',
+    answer: 'During normal service operation, readable vault records are encrypted in your browser before storage or backup and the master password is not sent to the server. Password-Encrypt therefore does not hold the information normally needed to decrypt stored vault snapshots, but no online service can promise absolute security against a compromised device, browser or future application code.'
   },
   {
     category: 'Security',
@@ -253,7 +253,7 @@ const SETTINGS_FAQS = [
   {
     category: 'Devices',
     question: 'How do I open my vault on another device?',
-    answer: 'Verify the new device by email, then enter the same master password. My Passwords will safely check for the latest protected vault copy without replacing different changes automatically.'
+    answer: 'Verify the new device by email, then enter the same master password. Password-Encrypt will safely check for the latest protected vault copy without replacing different changes automatically.'
   },
   {
     category: 'Devices',
@@ -277,7 +277,7 @@ const SETTINGS_FAQS = [
   },
   {
     category: 'Emergency Access',
-    question: 'Does my trusted person need a My Passwords account?',
+    question: 'Does my trusted person need a Password-Encrypt account?',
     answer: 'No. The standard Emergency Access flow works through secure browser links. A trusted person can accept the invitation, request access and open the released package without installing the app or creating their own vault.'
   },
   {
@@ -924,7 +924,7 @@ function buildEmergencyReleasePackage(plan, vaultItems, account) {
   return {
     version: VERSION,
     preparedAt: new Date().toISOString(),
-    ownerName: account?.displayName || account?.accountName || 'My Passwords user',
+    ownerName: account?.displayName || account?.accountName || 'Password-Encrypt user',
     contactName: plan?.contactName || '',
     releaseScope: scope,
     fullVaultAccess: fullAccess,
@@ -1899,7 +1899,7 @@ class AppStartupBoundary extends React.Component {
   }
 
   componentDidCatch(error) {
-    console.error('My Passwords startup error', error);
+    console.error('Password-Encrypt startup error', error);
   }
 
   render() {
@@ -1909,7 +1909,7 @@ class AppStartupBoundary extends React.Component {
       <main className="startup-error-screen">
         <section className="startup-error-card">
           <div className="brand-mark"><img className="brand-mark-image" src="/images/password-encrypt-brand.png" alt="" /></div>
-          <h1>{offline ? 'No internet connection' : 'My Passwords could not start'}</h1>
+          <h1>{offline ? 'No internet connection' : 'Password-Encrypt could not start'}</h1>
           <p>{offline
             ? 'Your encrypted vault data has not been changed. Reconnect and try again.'
             : 'Refresh the app to try again. Your encrypted vault data has not been changed.'}</p>
@@ -1983,9 +1983,9 @@ function ExitAppConfirmationModal({ visible, onStay, onExit }) {
   if (!visible) return null;
   return (
     <div className="item-popup-layer exit-app-confirmation-layer" role="presentation">
-      <button type="button" className="item-popup-backdrop" onClick={onStay} aria-label="Stay in My Passwords" />
+      <button type="button" className="item-popup-backdrop" onClick={onStay} aria-label="Stay in Password-Encrypt" />
       <section className="item-popup-card exit-app-confirmation-card" role="dialog" aria-modal="true" aria-labelledby="exit-app-confirmation-title">
-        <header className="item-popup-header"><h2 id="exit-app-confirmation-title"><ShieldCheck size={21} /> Leave My Passwords?</h2><button type="button" className="icon-button" onClick={onStay} aria-label="Close"><X size={19} /></button></header>
+        <header className="item-popup-header"><h2 id="exit-app-confirmation-title"><ShieldCheck size={21} /> Leave Password-Encrypt?</h2><button type="button" className="icon-button" onClick={onStay} aria-label="Close"><X size={19} /></button></header>
         <div className="item-popup-body exit-app-confirmation-body"><p>You are already on the Passwords home page. Do you want to leave the app?</p><div className="master-password-boundary-note compact"><Lock size={18} /><span><strong>Your vault remains locked when you leave</strong><small>Unsaved popup changes should be completed or cancelled before exiting.</small></span></div></div>
         <footer className="item-popup-footer exit-app-confirmation-footer"><button type="button" className="secondary-button" onClick={onStay}>Stay in app</button><button type="button" className="primary-button" onClick={onExit}>Exit app</button></footer>
       </section>
@@ -3645,11 +3645,11 @@ function App() {
     try {
       setBiometricStatus((current) => ({ ...current, state: 'setting-up' }));
       showVerifyOverlay('working', 'Setting up secure device unlock', 'Your browser will ask for a local device check, such as PIN, fingerprint, face unlock, passkey or device lock. If you do not trust the method shown, cancel and keep using your password.');
-      const userLabel = bootstrap.email || bootstrap.displayName || 'My Passwords user';
+      const userLabel = bootstrap.email || bootstrap.displayName || 'Password-Encrypt user';
       const credential = await navigator.credentials.create({
         publicKey: {
           challenge: crypto.getRandomValues(new Uint8Array(32)),
-          rp: { name: 'My Passwords' },
+          rp: { name: 'Password-Encrypt' },
           user: {
             id: crypto.getRandomValues(new Uint8Array(32)),
             name: userLabel,
@@ -5355,7 +5355,7 @@ function App() {
       const account = { ...bootstrap };
       const result = await postJson('/.netlify/functions/emergency-access-invite', {
         action: 'send',
-        ownerName: account.displayName || account.accountName || 'My Passwords user',
+        ownerName: account.displayName || account.accountName || 'Password-Encrypt user',
         ownerEmail: account.email || '',
         contactName: cleanPlan.contactName,
         relationship: cleanPlan.relationship,
@@ -5856,11 +5856,11 @@ function App() {
       ? 'This secure page is used after the waiting period has ended. If the account owner has not cancelled the request, the prepared emergency package can be opened here.'
       : isRequestStep
         ? 'Use this secure page only if you need to request emergency access. The account owner will be notified and the waiting period will start. No vault contents are released at this step.'
-        : 'You have been nominated as a trusted person. This does not give you access to any passwords today. If you accept, a separate secure Request Access link will be emailed to you for future use. You do not need a My Passwords account or app; this secure link works in your browser.';
+        : 'You have been nominated as a trusted person. This does not give you access to any passwords today. If you accept, a separate secure Request Access link will be emailed to you for future use. You do not need a Password-Encrypt account or app; this secure link works in your browser.';
     return (
       <main className="public-landing-page emergency-invite-page">
         <section className="emergency-invite-shell">
-          <div className="public-brand emergency-invite-brand"><img className="public-brand-image" src="/images/password-encrypt-brand.png" alt="" /><span>My Passwords</span></div>
+          <div className="public-brand emergency-invite-brand"><img className="public-brand-image" src="/images/password-encrypt-brand.png" alt="" /><span>Password-Encrypt</span></div>
           <article className="emergency-invite-card">
             <div className="preview-lock-icon"><UsersRound size={26} /></div>
             <p className="eyebrow">Emergency Access</p>
@@ -5947,12 +5947,12 @@ function App() {
                 <p>You should receive a fresh email with an Open Vault button when the waiting period has ended and the request has not been cancelled. If it does not arrive, check Spam or Junk first. You can also return to this secure page to check the latest status.</p>
               </details>
               <details>
-                <summary>Do I need to install My Passwords?</summary>
+                <summary>Do I need to install Password-Encrypt?</summary>
                 <p>No. This secure page works in your browser.</p>
               </details>
             </div>
           </article>
-          <footer className="landing-footer emergency-invite-footer"><span>© 2026 My Passwords</span><button type="button" onClick={openVaultApp}>Open My Vault</button></footer>
+          <footer className="landing-footer emergency-invite-footer"><span>© 2026 Password-Encrypt</span><button type="button" onClick={openVaultApp}>Open My Vault</button></footer>
         </section>
       </main>
     );
@@ -5962,13 +5962,13 @@ function App() {
     return (
       <main className="public-landing-page">
         <header className="public-landing-topbar">
-          <div className="public-brand"><img className="public-brand-image" src="/images/password-encrypt-brand.png" alt="" /><span>My Passwords</span></div>
+          <div className="public-brand"><img className="public-brand-image" src="/images/password-encrypt-brand.png" alt="" /><span>Password-Encrypt</span></div>
           <button type="button" className="secondary-button public-open-button" onClick={openVaultApp}><Unlock size={17} /> Open My Vault</button>
         </header>
 
         {!isOnline && <NetworkStatusNotice context="public" hasLocalVault={hasLocalVault} />}
 
-        <section className="landing-hero-shell" aria-label="My Passwords introduction">
+        <section className="landing-hero-shell" aria-label="Password-Encrypt introduction">
           <div className="landing-hero-copy">
             <div className="landing-pill"><Sparkles size={16} /> Encrypted password vault for everyday life</div>
             <h1>One secure place for the passwords and private details you rely on.</h1>
@@ -6082,10 +6082,10 @@ function App() {
           <div className="landing-section-heading">
             <p className="eyebrow">Privacy and security</p>
             <h2>Your private details deserve more than a notes app.</h2>
-            <p>My Passwords is designed to protect your vault while keeping everyday access straightforward on the devices you trust.</p>
+            <p>Password-Encrypt is designed to protect your vault while keeping everyday access straightforward on the devices you trust.</p>
           </div>
           <div className="landing-security-grid">
-            <article><ShieldCheck size={23} /><strong>Your master password stays yours</strong><p>Your master password is not stored on My Passwords servers and is used to derive the key that decrypts your vault. Secure device unlock can locally unwrap the password on a device you deliberately set up.</p></article>
+            <article><ShieldCheck size={23} /><strong>Your master password stays yours</strong><p>Your master password is not stored on Password-Encrypt servers and is used to derive the key that decrypts your vault. Secure device unlock can locally unwrap the password on a device you deliberately set up.</p></article>
             <article><Lock size={23} /><strong>Encrypted before backup</strong><p>Vault records and uploaded documents are encrypted before they are sent to secure storage.</p></article>
             <article><MonitorSmartphone size={23} /><strong>Verified-device protection</strong><p>Secure syncing and cloud backup are linked to verified account sessions on your devices.</p></article>
           </div>
@@ -6099,7 +6099,7 @@ function App() {
           <div className="landing-faq-grid">
             <article><h3>When does my free trial start?</h3><p>Your trial starts only after you verify your email and complete account setup.</p></article>
             <article><h3>Will I be charged when I create an account?</h3><p>No. Account verification starts the free trial. A paid subscription begins only if you deliberately complete Stripe Checkout from inside your vault.</p></article>
-            <article><h3>Can My Passwords recover my master password?</h3><p>No. My Passwords does not store a server-side copy of your master password and cannot recover or reset it. Secure device unlock, if enabled, keeps a separately protected local wrapped copy on that device.</p></article>
+            <article><h3>Can Password-Encrypt recover my master password?</h3><p>No. Password-Encrypt does not store a server-side copy of your master password and cannot recover or reset it. Secure device unlock, if enabled, keeps a separately protected local wrapped copy on that device.</p></article>
             <article><h3>Can I use the vault on more than one device?</h3><p>Yes. Verify each device and use secure syncing to keep your latest protected vault available.</p></article>
             <article><h3>Can I store documents too?</h3><p>Yes. Supported documents are encrypted before upload and stored with your private vault.</p></article>
             <article><h3>What happens if a backup cannot complete?</h3><p>Your change remains on that device and the app gives you a clear warning and guided steps to finish the backup.</p></article>
@@ -6117,7 +6117,7 @@ function App() {
 
         <footer className="landing-footer">
           <div className="landing-footer-copy">
-            <span>© 2026 My Passwords</span>
+            <span>© 2026 Password-Encrypt</span>
             <small>Encrypted password vault for everyday private details · A ZippyWeb project.</small>
           </div>
           <nav className="landing-footer-links" aria-label="Landing page links">
@@ -6142,7 +6142,7 @@ function App() {
         )}
 
         {isCreateAccountPopupOpen && (
-          <div className="item-popup-layer create-account-popup-layer" role="dialog" aria-modal="true" aria-label="Create My Passwords account">
+          <div className="item-popup-layer create-account-popup-layer" role="dialog" aria-modal="true" aria-label="Create Password-Encrypt account">
             <div className="item-popup-backdrop" onClick={closeCreateAccountPopup} />
             <section className="item-popup-card create-account-popup-card">
               <header className="item-popup-header">
@@ -6160,7 +6160,7 @@ function App() {
                 {landingOnboardingStep === 1 && (
                   <div className="create-account-step">
                     <h3>Your account details</h3>
-                    <p>Enter the details you want linked to your My Passwords account. You will create your private master password after verification.</p>
+                    <p>Enter the details you want linked to your Password-Encrypt account. You will create your private master password after verification.</p>
                     <label>Display name<input value={landingAccountDraft.displayName} onChange={(e) => updateLandingDraft({ displayName: e.target.value })} placeholder="e.g. Alex" /></label>
                     <label>Email address<input type="email" value={landingAccountDraft.email} onChange={(e) => updateLandingDraft({ email: e.target.value })} placeholder="you@example.com" /></label>
                     <label>Mobile number</label>
@@ -6284,9 +6284,9 @@ function App() {
     return (
       <main className="lock-screen">
         <section className="lock-card" id="vault-access-card">
-          <div className="brand-mark"><img className="brand-mark-image" src="/images/password-encrypt-brand.png" alt="My Passwords secure vault" /></div>
+          <div className="brand-mark"><img className="brand-mark-image" src="/images/password-encrypt-brand.png" alt="Password-Encrypt secure vault" /></div>
           <p className="eyebrow">Secure private vault</p>
-          <h1>My Passwords</h1>
+          <h1>Password-Encrypt</h1>
           {!isOnline && <NetworkStatusNotice context="vault" hasLocalVault={hasLocalVault} />}
           {hasLocalVault ? (
             <>
@@ -6372,7 +6372,7 @@ function App() {
 
                 <div className="create-account-step">
                   <h3>Master password</h3>
-                  <p>Choose a strong master password you can remember. No server-side copy is stored by My Passwords, so support cannot recover or reset it if forgotten.</p>
+                  <p>Choose a strong master password you can remember. No server-side copy is stored by Password-Encrypt, so support cannot recover or reset it if forgotten.</p>
                   <label>Master vault password<input id="master-password-input" name="vault-setup-local-decryption-key" type="password" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" /></label>
                   {createMode && (
                     <>
@@ -6501,7 +6501,7 @@ function App() {
           ? {
               mode: 'status-info',
               title: 'Vault backup is in progress',
-              message: 'My Passwords is securely protecting the latest changes from this device. Keep the app open until the status updates.'
+              message: 'Password-Encrypt is securely protecting the latest changes from this device. Keep the app open until the status updates.'
             }
           : syncSafety.conflict
             ? {
@@ -6548,7 +6548,7 @@ function App() {
       <header className="topbar app-home-topbar">
         <div className="topbar-title-block">
           <p className="eyebrow">Secure private vault</p>
-          <h1>My Passwords</h1>
+          <h1 className="vault-home-title">{bootstrap.accountName || bootstrap.tenantName || 'Private Vault'}</h1>
         </div>
         <button type="button" className="mobile-top-menu-button" onClick={() => setMobileHeaderMenuOpen((open) => !open)} aria-label="Open vault menu" aria-expanded={mobileHeaderMenuOpen ? 'true' : 'false'}><MoreHorizontal size={22} /></button>
         <div className="topbar-actions">
@@ -6978,7 +6978,7 @@ function App() {
                   <p>Deletion is scheduled for <strong>{formatAccountDate(accountSecurity.deletion.scheduled_for, true)}</strong>. Until then, you can cancel this request and keep the account.</p>
                   <button type="button" className="secondary-button" onClick={cancelAccountDeletion}>Cancel account deletion</button>
                 </> : <>
-                  <p>A verified email code is required. Deletion then waits 14 days before the active My Passwords cloud account, encrypted vault backups and stored documents are removed. Limited payment, legal or provider records may remain where retention is required for accounting, fraud prevention, disputes or law.</p>
+                  <p>A verified email code is required. Deletion then waits 14 days before the active Password-Encrypt cloud account, encrypted vault backups and stored documents are removed. Limited payment, legal or provider records may remain where retention is required for accounting, fraud prevention, disputes or law.</p>
                   <button type="button" className="secondary-button danger-soft" onClick={() => openAccountSecurityAction('delete-account')} disabled={!customerSession.authenticated}><Trash2 size={17} /> Request account deletion</button>
                 </>}
               </section>
@@ -6998,7 +6998,7 @@ function App() {
                 <div className="biometric-actions">
                   {biometricUnlock && <button type="button" className="secondary-button danger-lite" onClick={disableBiometricUnlock}>Remove from this device</button>}
                 </div>
-                <p className="biometric-note"><strong>Security note:</strong> this is a trusted-device convenience feature, not a password replacement. Your browser may offer PIN, fingerprint, face unlock, passkey or device lock. My Passwords will pause quick unlock every 14 days or after 10 quick unlocks and ask you to type your master password, so you do not forget it.</p>
+                <p className="biometric-note"><strong>Security note:</strong> this is a trusted-device convenience feature, not a password replacement. Your browser may offer PIN, fingerprint, face unlock, passkey or device lock. Password-Encrypt will pause quick unlock every 14 days or after 10 quick unlocks and ask you to type your master password, so you do not forget it.</p>
               </section>
             </section>
           )}
@@ -7559,7 +7559,7 @@ function App() {
             <div className="item-popup-body subscription-action-body">
               <div className={`subscription-action-symbol ${subscriptionActionModal.mode}`}><CalendarClock size={28} /></div>
               <p>{subscriptionActionModal.message}</p>
-              <div className="subscription-action-safety"><ShieldCheck size={18} /><span>Stripe securely processes payments. My Passwords does not receive or store your full card details.</span></div>
+              <div className="subscription-action-safety"><ShieldCheck size={18} /><span>Stripe securely processes payments. Password-Encrypt does not receive or store your full card details.</span></div>
             </div>
             <footer className="item-popup-footer subscription-action-footer">
               <button type="button" className="secondary-button" onClick={() => setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' })} disabled={billing.status === 'updating'}>Go back</button>

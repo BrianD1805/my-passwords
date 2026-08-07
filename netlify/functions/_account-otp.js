@@ -32,14 +32,14 @@ function parseMetadata(value) {
 
 function emailCopy(purpose) {
   const map = {
-    change_email: ['Confirm your new My Passwords email', 'Confirm your new email address', 'Use this code to verify your new recovery email address.'],
-    change_phone: ['Confirm your My Passwords mobile change', 'Confirm your mobile number change', 'Use this code to confirm the mobile number change on your My Passwords account.'],
-    account_recovery: ['Recover your My Passwords account access', 'Recover account access', 'Use this code to restore access to your account and subscription on this device.'],
-    account_deletion: ['Confirm your My Passwords deletion request', 'Confirm account deletion request', 'Use this code to schedule account deletion after the safety waiting period.'],
-    production_onboarding: ['Verify your new My Passwords account', 'Verify your My Passwords account', 'Use this code to verify your account and activate your selected trial.'],
-    secure_customer_session: ['Verify this My Passwords device', 'Verify this device', 'Use this code to verify this device for secure backup and syncing.']
+    change_email: ['Confirm your new Password-Encrypt email', 'Confirm your new email address', 'Use this code to verify your new recovery email address.'],
+    change_phone: ['Confirm your Password-Encrypt mobile change', 'Confirm your mobile number change', 'Use this code to confirm the mobile number change on your Password-Encrypt account.'],
+    account_recovery: ['Recover your Password-Encrypt account access', 'Recover account access', 'Use this code to restore access to your account and subscription on this device.'],
+    account_deletion: ['Confirm your Password-Encrypt deletion request', 'Confirm account deletion request', 'Use this code to schedule account deletion after the safety waiting period.'],
+    production_onboarding: ['Verify your new Password-Encrypt account', 'Verify your Password-Encrypt account', 'Use this code to verify your account and activate your selected trial.'],
+    secure_customer_session: ['Verify this Password-Encrypt device', 'Verify this device', 'Use this code to verify this device for secure backup and syncing.']
   };
-  return map[purpose] || ['Your My Passwords verification code', 'My Passwords verification', 'Use this code to verify your account action.'];
+  return map[purpose] || ['Your Password-Encrypt verification code', 'Password-Encrypt verification', 'Use this code to verify your account action.'];
 }
 
 async function sendEmail({ to, code, purpose }) {

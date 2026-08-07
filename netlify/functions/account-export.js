@@ -29,7 +29,7 @@ export async function handler(event) {
 
     const exportData = {
       export: {
-        product: 'My Passwords',
+        product: 'Password-Encrypt',
         version: APP_VERSION,
         createdAt: new Date().toISOString(),
         scope: 'Personal account information and encrypted-vault metadata. Decrypted vault contents and master passwords are never included.'
@@ -43,7 +43,7 @@ export async function handler(event) {
       encryptedVaultMetadata: { snapshots: snapshots || [], documents: documents || [] },
       accountActivity: audit || [],
       smsVerificationHistory: smsDeliveries || [],
-      securityNotice: 'My Passwords does not store a server-side copy of the master password, so it cannot be exported from the account service, recovered or reset by support. Account recovery restores access to account services only; it cannot decrypt a vault without the correct master password.'
+      securityNotice: 'Password-Encrypt does not store a server-side copy of the master password, so it cannot be exported from the account service, recovered or reset by support. Account recovery restores access to account services only; it cannot decrypt a vault without the correct master password.'
     };
     const date = new Date().toISOString().slice(0, 10);
     return {

@@ -32,14 +32,14 @@ function buildAcceptedEmail({ ownerName, contactName, waitingPeriod, accessScope
   const safeOwner = ownerName || 'The account owner';
   const ownerFirst = firstName(safeOwner);
   const safeContact = contactName || 'there';
-  const text = `Hello ${safeContact}, you have accepted ${safeOwner}'s My Passwords trusted person nomination. Keep this email somewhere safe. If there is ever an emergency, use this secure browser link to request access: ${requestUrl}. This link does not release any vault contents by itself. It starts the waiting period and notifies ${safeOwner}. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. After the waiting period ends, look for a fresh email with an Open ${ownerFirst}'s Vault link. If no email arrives, check Spam or Junk first.`;
+  const text = `Hello ${safeContact}, you have accepted ${safeOwner}'s Password-Encrypt trusted person nomination. Keep this email somewhere safe. If there is ever an emergency, use this secure browser link to request access: ${requestUrl}. This link does not release any vault contents by itself. It starts the waiting period and notifies ${safeOwner}. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. After the waiting period ends, look for a fresh email with an Open ${ownerFirst}'s Vault link. If no email arrives, check Spam or Junk first.`;
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
     <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
       <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
         <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Your link for ${ownerFirst}</h1>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, you have accepted ${safeOwner}'s My Passwords trusted person nomination.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, you have accepted ${safeOwner}'s Password-Encrypt trusted person nomination.</p>
         <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Keep this email somewhere safe. Use the secure browser link below only if you need to request emergency access.</p>
         <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
           <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
@@ -51,7 +51,7 @@ function buildAcceptedEmail({ ownerName, contactName, waitingPeriod, accessScope
     </div>
   </body>
 </html>`;
-  return { html, text, subject: `Your My Passwords link for ${ownerFirst}` };
+  return { html, text, subject: `Your Password-Encrypt link for ${ownerFirst}` };
 }
 
 async function sendAcceptedConfirmation({ to, ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
@@ -71,7 +71,7 @@ async function sendAcceptedConfirmation({ to, ownerName, contactName, waitingPer
       body: JSON.stringify({
         from,
         to,
-        subject: content.subject || 'Your My Passwords link',
+        subject: content.subject || 'Your Password-Encrypt link',
         html: content.html,
         text: content.text
       })

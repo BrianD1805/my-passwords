@@ -66,7 +66,7 @@ export async function runOperationsHealthCheck({ triggerSource = 'scheduled' } =
           if (!Number.isFinite(lastAttemptMs) || Date.now() - lastAttemptMs >= 6 * 3600000) {
             const attemptedAt = new Date().toISOString();
             const delivery = await sendOperationalAlert({
-              subject: 'My Passwords: Stripe webhook failure alert',
+              subject: 'Password-Encrypt: Stripe webhook failure alert',
               heading: 'Stripe webhook failure detected',
               message: `${failedWebhooks.length} Stripe webhook event(s) are currently marked failed. Review Admin > Health before making any billing changes.`,
               idempotencyKey: `ops-stripe-webhook/${eventRow.id}/${attemptedAt.slice(0, 13)}`
@@ -112,9 +112,9 @@ export async function runOperationsHealthCheck({ triggerSource = 'scheduled' } =
     await recordFunctionFailure('operations-health-check', error, { triggerSource });
     if (process.env.OPS_ALERT_EMAIL) {
       await sendOperationalAlert({
-        subject: 'My Passwords: operational health check failed',
+        subject: 'Password-Encrypt: operational health check failed',
         heading: 'Operational health check failed',
-        message: 'The scheduled My Passwords health check could not complete. Open Admin > Health and check Netlify/Supabase service status.',
+        message: 'The scheduled Password-Encrypt health check could not complete. Open Admin > Health and check Netlify/Supabase service status.',
         idempotencyKey: `ops-health-failed/${new Date().toISOString().slice(0, 13)}`
       }).catch(() => null);
     }

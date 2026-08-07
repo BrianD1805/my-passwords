@@ -69,13 +69,13 @@ export function assertTrustedOrigin(event, { allowMissingOrigin = false } = {}) 
   const origin = clean(header(event, 'origin'), 500);
   if (!origin) {
     if (allowMissingOrigin || process.env.CONTEXT !== 'production') return true;
-    const error = new Error('The request origin could not be verified. Refresh My Passwords and try again.');
+    const error = new Error('The request origin could not be verified. Refresh Password-Encrypt and try again.');
     error.status = 403;
     error.code = 'ORIGIN_REQUIRED';
     throw error;
   }
   if (!configuredOrigins().has(origin)) {
-    const error = new Error('This request did not come from an approved My Passwords origin.');
+    const error = new Error('This request did not come from an approved Password-Encrypt origin.');
     error.status = 403;
     error.code = 'ORIGIN_REJECTED';
     throw error;
@@ -94,7 +94,7 @@ export function assertCsrf(event, session, kind = 'customer') {
   const supplied = clean(header(event, 'x-mp-csrf'), 500);
   const expected = csrfTokenForSession(session, kind);
   if (!supplied || !expected || !safeEqual(supplied, expected)) {
-    const error = new Error('Your secure request token has expired. Refresh My Passwords and try again.');
+    const error = new Error('Your secure request token has expired. Refresh Password-Encrypt and try again.');
     error.status = 403;
     error.code = 'CSRF_REJECTED';
     throw error;
@@ -106,7 +106,7 @@ export function assertBrowserAction(event, { session = null, kind = 'customer', 
   assertTrustedOrigin(event, { allowMissingOrigin });
   const marker = clean(header(event, 'x-mp-request'), 40);
   if (marker !== '1') {
-    const error = new Error('The secure request marker is missing. Refresh My Passwords and try again.');
+    const error = new Error('The secure request marker is missing. Refresh Password-Encrypt and try again.');
     error.status = 403;
     error.code = 'REQUEST_MARKER_REQUIRED';
     throw error;

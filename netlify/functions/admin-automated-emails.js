@@ -112,7 +112,7 @@ async function sendSafeTestEmail(to) {
   const idempotencyKey = `admin_test_email:${Date.now()}:${crypto.randomUUID()}`;
   const log = await insertRow('customer_email_log', {
     id: publicId('customer_email'), tenant_id: null, user_id: null, email_type: 'admin_test_email', idempotency_key: idempotencyKey,
-    recipient_masked: maskEmail(recipient), subject: 'My Passwords automated email test', provider: 'resend', provider_reference: null,
+    recipient_masked: maskEmail(recipient), subject: 'Password-Encrypt automated email test', provider: 'resend', provider_reference: null,
     status: 'sending', attempts: 1, error_message: null, last_attempt_at: now, sent_at: null,
     metadata: { source: 'admin_safe_test', version: APP_VERSION }, created_at: now, updated_at: now
   });
@@ -126,9 +126,9 @@ async function sendSafeTestEmail(to) {
       body: JSON.stringify({
         from,
         to: recipient,
-        subject: 'My Passwords automated email test',
-        html: '<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:28px"><h1 style="margin:0 0 16px;color:#14263b;font-size:26px">Automated email test</h1><p style="margin:0 0 14px;line-height:1.62;color:#536579">This test confirms that My Passwords can send customer emails through the configured email service.</p><p style="margin:0;line-height:1.62;color:#536579">No customer lifecycle status, subscription, trial, account setting or vault data was changed by this test.</p><p style="margin-top:24px;font-size:13px;color:#7b8fa3">My Passwords · Support: info@zippyweb.uk</p></div></div></body></html>',
-        text: 'Automated email test\n\nThis test confirms that My Passwords can send customer emails through the configured email service.\n\nNo customer lifecycle status, subscription, trial, account setting or vault data was changed by this test.\n\nSupport: info@zippyweb.uk'
+        subject: 'Password-Encrypt automated email test',
+        html: '<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:28px"><h1 style="margin:0 0 16px;color:#14263b;font-size:26px">Automated email test</h1><p style="margin:0 0 14px;line-height:1.62;color:#536579">This test confirms that Password-Encrypt can send customer emails through the configured email service.</p><p style="margin:0;line-height:1.62;color:#536579">No customer lifecycle status, subscription, trial, account setting or vault data was changed by this test.</p><p style="margin-top:24px;font-size:13px;color:#7b8fa3">Password-Encrypt · Support: info@zippyweb.uk</p></div></div></body></html>',
+        text: 'Automated email test\n\nThis test confirms that Password-Encrypt can send customer emails through the configured email service.\n\nNo customer lifecycle status, subscription, trial, account setting or vault data was changed by this test.\n\nSupport: info@zippyweb.uk'
       })
     });
     const data = await response.json().catch(() => ({}));

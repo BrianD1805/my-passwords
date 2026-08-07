@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-passwords-v0.052A';
+const CACHE_NAME = 'my-passwords-v0.052B';
 const RUNTIME_CACHE = `${CACHE_NAME}-runtime`;
 const APP_ROUTES = ['/', '/vault', '/admin', '/terms', '/privacy', '/billing-terms', '/index.html'];
 const STATIC_SHELL = ['/manifest.webmanifest', '/icons/icon.svg', '/images/password-encrypt-brand.png', '/offline.html', '/offline.js'];
@@ -63,7 +63,7 @@ async function networkFirstNavigation(request) {
       || (await cache.match('/index.html'))
       || (await cache.match('/offline.html'))
       || new Response(
-        '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>My Passwords offline</title></head><body><h1>No internet connection</h1><p>Reconnect and try again.</p></body></html>',
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Password-Encrypt offline</title></head><body><h1>No internet connection</h1><p>Reconnect and try again.</p></body></html>',
         { headers: { 'content-type': 'text/html; charset=utf-8' }, status: 503 }
       );
   }
