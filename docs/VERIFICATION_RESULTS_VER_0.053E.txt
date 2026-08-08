@@ -1,0 +1,16 @@
+Password-Encrypt Ver-0.053E verification
+
+Target: urgent mobile landing-page vertical scrolling regression caused by the mobile plan carousel/root overflow interaction.
+
+The patch removes page/root overflow manipulation and isolates horizontal swipe behaviour to the plan row only.
+
+Verification results:
+- 13/13 security static checks PASS
+- 20/20 reliability static checks PASS
+- 35/35 legal/commercial readiness checks PASS
+- 12/12 landing/plan UX checks PASS
+- 8/8 mobile regression checks PASS
+- Netlify Function/script JavaScript syntax checks PASS
+- CSS brace validation PASS
+
+No Supabase SQL or environment-variable changes are required.

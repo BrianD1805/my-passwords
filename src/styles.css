@@ -15103,93 +15103,83 @@ option {
   .landing-faq-accordion details > p { margin: -1px 34px 18px 2px; }
 }
 
-/* Password-Encrypt Ver-0.053D — urgent mobile viewport regression guard.
-   Keep horizontal scrolling inside deliberate components (such as the plan carousel)
-   and prevent mobile browser text autosizing from magnifying the complete landing page. */
+/* Password-Encrypt Ver-0.053E — urgent mobile landing scroll fix.
+   The mobile plan chooser remains horizontally swipeable, but it no longer changes
+   the document/root overflow model and it no longer uses mandatory scroll snapping.
+   Vertical landing-page scrolling must remain the browser's normal document scroll. */
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
 
 @media (max-width: 860px) {
-  html,
-  body,
-  #root {
+  /* Never turn html/body/#root into a secondary scroll container for the landing page. */
+  .public-landing-page {
     width: 100%;
-    max-width: 100%;
-    overflow-x: hidden;
+    min-width: 0;
+    height: auto;
+    min-height: 100vh;
+    touch-action: auto;
   }
 
-  .public-landing-page,
-  .public-landing-topbar,
-  .landing-hero-shell,
-  .landing-trusted-person-spotlight,
-  .landing-section,
-  .landing-footer {
-    width: 100%;
-    max-width: 100%;
+  .public-landing-page .landing-hero-shell,
+  .public-landing-page .landing-trusted-person-spotlight,
+  .public-landing-page .landing-section,
+  .public-landing-page .landing-plan-section,
+  .public-landing-page .landing-footer {
     min-width: 0;
     box-sizing: border-box;
   }
 
-  .public-landing-page * {
-    min-width: 0;
-    box-sizing: border-box;
-  }
-
-  .landing-hero-copy,
-  .landing-vault-preview,
-  .trusted-person-copy,
-  .trusted-person-visual,
-  .landing-section-heading,
-  .landing-feature-grid,
-  .landing-step-grid,
-  .landing-faq-accordion,
-  .landing-footer-copy,
-  .landing-footer-links {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-  }
-
-  .landing-hero-copy h1 {
+  .public-landing-page .landing-hero-copy h1 {
     font-size: clamp(2.15rem, 10vw, 3.35rem);
     line-height: 1.02;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
 
-  .landing-section-heading h2,
-  .trusted-person-copy h2 {
+  .public-landing-page .landing-section-heading h2,
+  .public-landing-page .trusted-person-copy h2 {
     font-size: clamp(1.7rem, 7.5vw, 2.35rem);
     line-height: 1.08;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
+}
 
-  .landing-intro,
-  .landing-section-heading p,
-  .trusted-person-copy p,
-  .landing-faq-accordion details > p {
-    overflow-wrap: anywhere;
+@media (max-width: 680px) {
+  /* Isolate horizontal movement to this row only. No negative margins, no mandatory
+     snapping and no overflow rules are applied to the page/root. */
+  .landing-pricing-section {
+    min-width: 0;
+    max-width: 100%;
   }
 
   .landing-pricing-section .landing-plan-tier-grid {
-    width: auto !important;
-    max-width: none !important;
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
     min-width: 0 !important;
-    overscroll-behavior-x: contain;
+    gap: 14px !important;
+    margin: 0 !important;
+    padding: 4px 0 12px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-snap-type: none !important;
+    scroll-padding: 0 !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    touch-action: manipulation;
+  }
+
+  .landing-pricing-section .landing-plan-tier-grid::-webkit-scrollbar {
+    display: none;
   }
 
   .landing-pricing-section .landing-plan-tier {
-    max-width: min(86vw, 360px);
-    min-width: 0;
-  }
-
-  .landing-faq-accordion summary {
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .landing-footer {
-    overflow: hidden;
+    flex: 0 0 calc(88vw - 20px) !important;
+    width: calc(88vw - 20px) !important;
+    max-width: 360px !important;
+    min-width: 0 !important;
+    scroll-snap-align: none !important;
+    scroll-snap-stop: normal !important;
   }
 }

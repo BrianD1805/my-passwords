@@ -20,7 +20,7 @@ check('Emergency Access explicitly describes next of kin and incapacity', main.i
 check('Plan cards suppress duplicated document/storage limit marketing rows', main.includes('document\\s*limit') && main.includes('encrypted\\s+documents'));
 check('Plan item limit is editable and public', admin.includes('itemLimit') && publicPlans.includes('item_limit') && main.includes('vault items'));
 check('Server entitlements enforce item limit metadata', entitlements.includes('ENTITLEMENT_VERSION = 2') && sync.includes('ITEM_LIMIT_REACHED'));
-check('Mobile plans use horizontal swipe scroll snap', css.includes('scroll-snap-type:x mandatory') && css.includes('Swipe left to compare plans'));
+check('Mobile plans use an isolated native horizontal swipe row without mandatory snap', css.includes('Swipe left to compare plans') && css.includes('scroll-snap-type: none !important') && css.includes('overflow-x: auto !important') && css.includes('margin: 0 !important'));
 check('Customer subscription shows plan usage meters with total account storage', main.includes('plan-usage-card') && main.includes('Encrypted documents') && main.includes('Total account storage'));
 check('Total account storage counts encrypted vault backup plus encrypted documents', entitlements.includes('vaultStorageBytes') && entitlements.includes('documentStorageBytes') && entitlements.includes('storageBytes: documentStorageBytes + vaultStorageBytes') && sync.includes('projectedStorageBytes'));
 check('FAQ uses click-to-reveal disclosure rows', main.includes('landing-faq-accordion') && main.includes('<details>') && main.includes('<summary>') && css.includes('.landing-faq-accordion details[open]'));
