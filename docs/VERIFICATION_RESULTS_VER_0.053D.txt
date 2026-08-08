@@ -1,0 +1,4 @@
+Password-Encrypt Ver-0.053D verification
+
+Urgent mobile viewport regression guard added.
+No Supabase SQL or Netlify environment changes required.
