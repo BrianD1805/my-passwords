@@ -1,7 +1,7 @@
 {
   "name": "my-passwords",
   "private": true,
-  "version": "0.0.53",
+  "version": "0.0.53-a",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,8 @@
     "netlify:dev": "netlify dev --no-open",
     "security:check": "node scripts/security-static-check.mjs",
     "reliability:check": "node scripts/reliability-static-check.mjs",
-    "legal:check": "node scripts/legal-readiness-check.mjs"
+    "legal:check": "node scripts/legal-readiness-check.mjs",
+    "ux:check": "node scripts/landing-ux-static-check.mjs"
   },
   "dependencies": {
     "lucide-react": "1.16.0",

@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.053';
+const VERSION = 'Password-Encrypt Ver-0.053A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -6062,6 +6062,25 @@ function App() {
           <div className="landing-trial-no-card"><CreditCard size={18} /><span><strong>NO CREDIT CARD DETAILS are taken during your free trial.</strong><small>You only enter payment details if you later choose to purchase a subscription through Stripe Checkout.</small></span></div>
         </section>
 
+
+        <section className="landing-trusted-person-spotlight" aria-label="Trusted Person Access">
+          <div className="trusted-person-visual" aria-hidden="true">
+            <div className="trusted-person-icon"><UsersRound size={34} /></div>
+            <div className="trusted-person-connection"><span></span><span></span><span></span></div>
+            <div className="trusted-person-shield"><ShieldCheck size={28} /></div>
+          </div>
+          <div className="trusted-person-copy">
+            <p className="eyebrow">Trusted Person Access</p>
+            <h2>Plan for the moment someone you trust may need your private information.</h2>
+            <p>Emergency Access lets you nominate a trusted person and prepare selected information for them. A request starts a waiting period, you are notified, and you can cancel before the release conditions are met.</p>
+            <div className="trusted-person-points">
+              <span><UserRoundCheck size={17} /> You choose the trusted person</span>
+              <span><CalendarClock size={17} /> A waiting period protects you</span>
+              <span><ShieldCheck size={17} /> Only the prepared emergency package is released</span>
+            </div>
+          </div>
+        </section>
+
         <section className="landing-section landing-feature-section" aria-label="Features">
           <div className="landing-section-heading">
             <p className="eyebrow">Everything important, neatly organised</p>
@@ -6129,7 +6148,7 @@ function App() {
         <footer className="landing-footer">
           <div className="landing-footer-copy">
             <span>© 2026 Password-Encrypt</span>
-            <small>Encrypted password vault for everyday private details · A ZippyWeb project.</small>
+            <small>Encrypted password vault. A trusted place for the private details that matter.</small>
           </div>
           <nav className="landing-footer-links" aria-label="Landing page links">
             <a href="/terms">Terms</a>

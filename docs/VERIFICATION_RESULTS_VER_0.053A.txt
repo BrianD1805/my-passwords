@@ -1,0 +1,27 @@
+Password-Encrypt Ver-0.053A — Verification Results
+Date: 8 August 2026
+
+PASS  13/13 security static checks
+PASS  20/20 reliability static checks
+PASS  35/35 legal/commercial readiness checks
+PASS  6/6 landing UX static checks
+PASS  56/56 Netlify Function JavaScript files passed Node syntax checks
+PASS  7/7 JSX files passed TypeScript transpile syntax validation
+PASS  package/app/server/service-worker version alignment to Ver-0.053A
+
+Targeted Ver-0.053A controls verified statically:
+- Main landing hero heading uses a lighter weight.
+- Vault preview shows three red/amber/green traffic-light dots.
+- Trusted Person Access has a dedicated high-prominence landing-page section.
+- Mobile landing sections use mixed visual treatments rather than repeated identical panels.
+- Desktop footer copyright is left-oriented and footer links reserve clear space for Back to top.
+- Footer tagline is now: “Encrypted password vault. A trusted place for the private details that matter.”
+
+Retained Ver-0.053 controls:
+- Ubuntu is forced across the rendered UI and mobile/PWA controls.
+- No-credit-card trial wording remains prominent.
+- Trial acceptance remains Terms + Privacy only.
+- Paid checkout retains the separate Billing/Refund Policy acknowledgement and server enforcement.
+- Signup progress 1–4 remains in the sticky popup header.
+
+npm run build was not executed in the patch environment because dependencies/node_modules are intentionally not installed in the patch workspace. Run the supplied local test command before deployment.
