@@ -15108,3 +15108,204 @@ option {
     background: rgba(255,255,255,.82) !important;
   }
 }
+
+/* Password-Encrypt Ver-0.053G — launch-polish plan motion, premium FAQs and progressive settings drill-downs. */
+
+/* Give vertically stacked/comparison plans more breathing room. */
+.landing-plan-tier-grid {
+  gap: 31px;
+}
+
+/* Subtle alternating reveal: motion stays inside each card and never changes page scrolling. */
+.landing-plan-reveal {
+  will-change: opacity, transform;
+}
+.landing-plan-reveal.plan-reveal-ready {
+  opacity: 0;
+  transform: translate3d(30px, 0, 0) scale(.985);
+  transition: opacity .52s ease, transform .58s cubic-bezier(.2,.72,.2,1);
+}
+.landing-plan-reveal.plan-reveal-ready:nth-child(even) {
+  transform: translate3d(-30px, 0, 0) scale(.985);
+}
+.landing-plan-reveal.plan-reveal-ready:nth-child(2) { transition-delay: .07s; }
+.landing-plan-reveal.plan-reveal-ready:nth-child(3) { transition-delay: .14s; }
+.landing-plan-reveal.plan-reveal-ready.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+@media (min-width: 981px) {
+  .landing-plan-reveal.plan-reveal-ready.featured.is-visible {
+    transform: translate3d(0, -5px, 0) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-plan-reveal,
+  .landing-plan-reveal.plan-reveal-ready,
+  .landing-plan-reveal.plan-reveal-ready:nth-child(even),
+  .landing-plan-reveal.plan-reveal-ready.is-visible {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/* Premium FAQ treatment: numbered editorial disclosures, not shadowed cards. */
+.landing-faq-accordion {
+  counter-reset: landing-faq;
+  gap: 10px;
+  border: 0;
+}
+.landing-faq-accordion details {
+  counter-increment: landing-faq;
+  overflow: hidden;
+  border: 1px solid #d6e2eb;
+  border-radius: 18px;
+  background: rgba(255,255,255,.88);
+  transition: border-color .18s ease, background .18s ease;
+}
+.landing-faq-accordion details:last-child {
+  border-bottom: 1px solid #d6e2eb;
+}
+.landing-faq-accordion summary {
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  min-height: 70px;
+  padding: 14px 18px 14px 14px;
+  gap: 13px;
+  font-weight: 600;
+}
+.landing-faq-accordion summary::before {
+  content: counter(landing-faq, decimal-leading-zero);
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid #c7d8e5;
+  background: #f5f9fc;
+  color: #456b8d;
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.landing-faq-accordion summary:hover {
+  padding-left: 14px;
+  background: #f7fafc;
+}
+.landing-faq-accordion details[open] {
+  border-color: #afc8db;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+}
+.landing-faq-accordion details[open] summary {
+  border-bottom: 1px solid #e1e9ef;
+}
+.landing-faq-accordion details[open] summary::before {
+  border-color: #7fa4c1;
+  background: #eaf2f8;
+  color: #2d5f88;
+}
+.landing-faq-accordion details > p {
+  max-width: none;
+  margin: 0;
+  padding: 17px 62px 20px 65px;
+  color: #5d7083;
+  line-height: 1.68;
+}
+
+/* Settings-style drill-down rows used inside Account, Subscription, Vault Safety and Trusted Person. */
+.settings-drilldown-stack {
+  display: grid;
+  gap: 12px;
+}
+.settings-drilldown {
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid rgba(29,53,87,.11);
+  border-radius: 22px;
+  background: rgba(255,255,255,.94);
+}
+.settings-drilldown > summary {
+  list-style: none;
+  min-height: 78px;
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 16px;
+  cursor: pointer;
+  color: #20364d;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .16s ease;
+}
+.settings-drilldown > summary::-webkit-details-marker { display: none; }
+.settings-drilldown > summary:hover,
+.settings-drilldown > summary:focus-visible {
+  background: #f5f9fc;
+}
+.settings-drilldown > summary .settings-directory-copy strong {
+  font-size: 1rem;
+  font-weight: 650;
+}
+.settings-drilldown > summary .settings-directory-copy small {
+  font-weight: 400;
+}
+.settings-drilldown > summary .settings-directory-chevron {
+  transition: transform .18s ease;
+}
+.settings-drilldown[open] > summary {
+  background: #f7fafc;
+  border-bottom: 1px solid rgba(29,53,87,.09);
+}
+.settings-drilldown[open] > summary .settings-directory-chevron {
+  transform: rotate(90deg);
+}
+.settings-drilldown-content {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+.settings-drilldown-danger > summary .settings-directory-icon {
+  color: #9a443d;
+  background: #fff3f2;
+  border-color: #efd3d0;
+}
+
+@media (max-width: 680px) {
+  .landing-pricing-section .landing-plan-tier-grid {
+    gap: 31px !important;
+  }
+
+  .landing-faq-accordion {
+    gap: 9px;
+  }
+  .landing-faq-accordion summary {
+    grid-template-columns: 34px minmax(0,1fr) auto;
+    min-height: 66px;
+    padding: 13px 13px 13px 11px;
+    gap: 10px;
+  }
+  .landing-faq-accordion summary:hover {
+    padding-left: 11px;
+    background: transparent;
+  }
+  .landing-faq-accordion summary::before {
+    width: 31px;
+    height: 31px;
+    font-size: .7rem;
+  }
+  .landing-faq-accordion details > p {
+    padding: 15px 43px 18px 55px;
+  }
+
+  .settings-drilldown-stack { gap: 10px; }
+  .settings-drilldown { border-radius: 20px; }
+  .settings-drilldown > summary {
+    min-height: 76px;
+    gap: 11px;
+    padding: 13px 14px;
+  }
+  .settings-drilldown-content {
+    padding: 13px;
+    gap: 12px;
+  }
+}

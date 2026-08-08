@@ -26,7 +26,7 @@ function check(label, ok) {
   else { console.error(`FAIL  ${label}`); failed += 1; }
 }
 
-check('Ver-0.053F app/server/package/service-worker versions align', pkg.version === '0.0.53-f' && /Password-Encrypt Ver-0\.053F/.test(main) && /Password-Encrypt Ver-0\.053F/.test(server) && /my-passwords-v0\.053F/.test(sw));
+check('Ver-0.053G app/server/package/service-worker versions align', pkg.version === '0.0.53-g' && /Password-Encrypt Ver-0\.053G/.test(main) && /Password-Encrypt Ver-0\.053G/.test(server) && /my-passwords-v0\.053G/.test(sw));
 check('Public Terms, Privacy and Billing routes are implemented and included in the PWA shell', /'\/terms': 'terms'/.test(legal) && /'\/privacy': 'privacy'/.test(legal) && /'\/billing-terms': 'billing'/.test(legal) && /'\/terms'/.test(sw) && /'\/privacy'/.test(sw) && /'\/billing-terms'/.test(sw));
 check('Public landing page links all legal policies', /href="\/terms"/.test(main) && /href="\/privacy"/.test(main) && /href="\/billing-terms"/.test(main));
 check('New signup requires explicit current Terms and Privacy acceptance in browser', /legalAccepted/.test(main) && /LEGAL_VERSION/.test(main) && /Please read and agree to the Terms of Service and Privacy Policy/.test(main));

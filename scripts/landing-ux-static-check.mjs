@@ -26,6 +26,11 @@ check('Total account storage counts encrypted vault backup plus encrypted docume
 check('FAQ uses click-to-reveal disclosure rows', main.includes('landing-faq-accordion') && main.includes('<details>') && main.includes('<summary>') && css.includes('.landing-faq-accordion details[open]'));
 check('Choose your plan is positioned after Simple setup', main.indexOf('Simple setup') < main.indexOf('Choose your plan'));
 check('Standalone Privacy and security panel is removed and security guidance moved into FAQ', !main.includes('aria-label="Privacy and security"') && main.includes('How is my vault protected before it reaches the cloud?') && main.includes('What does verified-device protection mean?'));
+check('Plan cards have increased 31px spacing without reintroducing a carousel', css.includes('.landing-plan-tier-grid {\n  gap: 31px;') && !/landing-plan-tier-grid\s*\{[\s\S]{0,500}overflow-x:\s*auto/.test(css));
+check('Plans use viewport reveal motion with reduced-motion fallback', main.includes("new IntersectionObserver") && main.includes('landing-plan-reveal') && css.includes('@media (prefers-reduced-motion: reduce)'));
+check('Plan item copy is concise without the parenthetical item-type list', main.includes('`${plan.itemLimit} vault items`') && !main.includes('vault items (passwords, cards, notes & more)'));
+check('Landing FAQs use premium numbered disclosure styling', css.includes('counter-reset: landing-faq') && css.includes('counter(landing-faq, decimal-leading-zero)') && css.includes('.landing-faq-accordion details[open]'));
+check('Account, subscription, Vault Safety and Trusted Person use Settings-style drill-down sections', main.includes('name="account-sections"') && main.includes('name="subscription-sections"') && main.includes('name="safety-sections"') && main.includes('name="trusted-person-sections"') && css.includes('.settings-drilldown-stack'));
 
 if (process.exitCode) process.exit(1);
 console.log(`\nAll ${passed} landing/plan UX static checks passed.`);
