@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&display=swap");
+
 :root {
   color-scheme: light;
   font-family: Ubuntu, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -15308,4 +15310,53 @@ option {
     padding: 13px;
     gap: 12px;
   }
+}
+
+
+/* Password-Encrypt Ver-0.053H — final typography and Settings interaction refinements. */
+/* Request Ubuntu from the application stylesheet as well as the document head so
+   the installed /vault PWA route cannot miss the web-font declaration. */
+.app-shell,
+.app-shell *,
+.lock-screen,
+.lock-screen *,
+.settings-section-panel,
+.settings-section-panel *,
+.item-popup-card,
+.item-popup-card * {
+  font-family: "Ubuntu", Ubuntu, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+
+/* Carry the lighter hero/Next-of-Kin hierarchy through the whole landing page. */
+.public-landing-page h1,
+.public-landing-page h2,
+.public-landing-page h3 {
+  font-weight: 500 !important;
+}
+.public-landing-page strong,
+.public-landing-page .eyebrow,
+.public-landing-page .landing-step-grid strong,
+.public-landing-page .landing-plan-price strong,
+.public-landing-page .landing-faq-accordion summary,
+.public-landing-page .landing-plan-badge {
+  font-weight: 600 !important;
+}
+
+.settings-tool-card.is-working,
+.recovery-check-button.is-working {
+  opacity: .82;
+}
+.recovery-check-status {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #d7e2ec;
+  border-radius: 12px;
+  background: #f7fafc;
+  color: #5f7284;
+  line-height: 1.45;
+}
+.recovery-check-status.success {
+  border-color: #c9dfd1;
+  background: #f4faf6;
+  color: #376348;
 }

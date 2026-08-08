@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.053G';
+const VERSION = 'Password-Encrypt Ver-0.053H';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2036,6 +2036,7 @@ function App() {
   const syncRetryRef = useRef(false);
   const syncOperationRef = useRef(false);
   const [snapshotHistory, setSnapshotHistory] = useState({ loaded: false, loading: false, total: 0, snapshots: [], message: 'Recovery history has not been checked yet.' });
+  const [cloudChangeCheckBusy, setCloudChangeCheckBusy] = useState(false);
   const [deviceStatus, setDeviceStatus] = useState({
     state: 'not-checked',
     label: 'This device has not checked your cloud backup yet.',
@@ -4504,6 +4505,7 @@ function App() {
       return;
     }
     if (!masterPassword) return showMessage('Unlock the vault first, then check for the latest secure copy.', 'warning');
+    if (cloudChangeCheckBusy) return;
     if (syncSafety.pending && !confirmed) {
       setSyncSafetyModal({
         visible: true,
@@ -4514,11 +4516,18 @@ function App() {
       });
       return;
     }
+    setCloudChangeCheckBusy(true);
+    showMessage('Checking secure backup for changes from another device...');
     try {
       const result = await restoreLatestCloudVault(masterPassword, { showSuccess: true, reason: 'manual-check', forceCloud: false });
-      if (!result.restored && !result.upToDate && !result.localNewer && !result.conflict) showMessage(result.latest?.message || 'No secure backup was found. This device was not changed.', 'warning');
+      if (result?.upToDate) showMessage('Check complete. This device already has the latest protected vault copy.', 'success');
+      else if (result?.localNewer) showMessage('Check complete. This device has newer changes waiting to be backed up.', 'warning');
+      else if (result?.sessionRequired) showMessage('Check paused. Verify this device before checking the protected cloud copy.', 'warning');
+      else if (!result?.restored && !result?.conflict && !result?.planFeatureRequired) showMessage(result?.latest?.message || 'Check complete. No secure backup was found and this device was not changed.', 'warning');
     } catch {
       showMessage('The secure backup could not be opened with this master password. This device was not changed.', 'error');
+    } finally {
+      setCloudChangeCheckBusy(false);
     }
   }
 
@@ -6062,6 +6071,20 @@ function App() {
           </div>
         </section>
 
+        <section className="landing-section landing-feature-section" aria-label="Features">
+          <div className="landing-section-heading">
+            <p className="eyebrow">Everything important, neatly organised</p>
+            <h2>A private vault that stays easy to use.</h2>
+            <p>Keep the details you need every day organised, searchable and protected without turning your vault into a complicated filing system.</p>
+          </div>
+          <div className="landing-feature-grid">
+            <article><ShieldCheck size={24} /><h3>Encrypted on your device</h3><p>Your readable vault contents and master password are not sent to the server.</p></article>
+            <article><KeyRound size={24} /><h3>More than passwords</h3><p>Organise logins, cards, secure notes and checklists inside one encrypted vault.</p></article>
+            <article><Search size={24} /><h3>Find things quickly</h3><p>Search folders, favourites and saved records without scrolling through everything.</p></article>
+            <article><Database size={24} /><h3>Local encrypted access</h3><p>Your encrypted local vault remains available on the device where it was created.</p></article>
+          </div>
+        </section>
+
         <section className="landing-trusted-person-spotlight" aria-label="Trusted Person Access">
           <div className="trusted-person-visual" aria-hidden="true">
             <div className="trusted-person-icon"><UsersRound size={34} /></div>
@@ -6077,20 +6100,6 @@ function App() {
               <span><CalendarClock size={17} /> A waiting period protects you</span>
               <span><ShieldCheck size={17} /> Only the prepared emergency package is released</span>
             </div>
-          </div>
-        </section>
-
-        <section className="landing-section landing-feature-section" aria-label="Features">
-          <div className="landing-section-heading">
-            <p className="eyebrow">Everything important, neatly organised</p>
-            <h2>A private vault that stays easy to use.</h2>
-            <p>Keep the details you need every day organised, searchable and protected without turning your vault into a complicated filing system.</p>
-          </div>
-          <div className="landing-feature-grid">
-            <article><ShieldCheck size={24} /><h3>Encrypted on your device</h3><p>Your readable vault contents and master password are not sent to the server.</p></article>
-            <article><KeyRound size={24} /><h3>More than passwords</h3><p>Organise logins, cards, secure notes and checklists inside one encrypted vault.</p></article>
-            <article><Search size={24} /><h3>Find things quickly</h3><p>Search folders, favourites and saved records without scrolling through everything.</p></article>
-            <article><Database size={24} /><h3>Local encrypted access</h3><p>Your encrypted local vault remains available on the device where it was created.</p></article>
           </div>
         </section>
 
@@ -6152,7 +6161,7 @@ function App() {
             })}
             {!publicPlans.length && <div className="landing-plans-unavailable"><AlertTriangle size={20} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
           </div>
-          <div className="landing-trial-no-card"><CreditCard size={18} /><span><strong>NO CREDIT CARD DETAILS are taken during your free trial.</strong><small>You only enter payment details if you later choose to purchase a subscription through Stripe Checkout.</small></span></div>
+          <div className="landing-trial-no-card"><CreditCard size={18} /><span><strong>NO CREDIT CARD DETAILS are taken during your free trial.</strong><small>You only enter payment details if you later choose to purchase a subscription.</small></span></div>
         </section>
 
         <section className="landing-section landing-faq-section" aria-label="Frequently asked questions">
@@ -7012,7 +7021,7 @@ function App() {
               </div>
 
               <div className="settings-drilldown-stack">
-                <details className="settings-drilldown" name="account-sections">
+                <details className="settings-drilldown">
                   <summary><span className="settings-directory-icon"><UsersRound size={21} /></span><span className="settings-directory-copy"><strong>Account overview</strong><small>Plan, account status and verification summary.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <section className="saas-account-card settings-inner-card">
@@ -7043,7 +7052,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown" name="account-sections">
+                <details className="settings-drilldown">
                   <summary><span className="settings-directory-icon"><Mail size={21} /></span><span className="settings-directory-copy"><strong>Contact details & recovery</strong><small>Verified email and mobile details used to recover account access.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <section className="account-contact-card settings-inner-card">
@@ -7058,7 +7067,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown" name="account-sections">
+                <details className="settings-drilldown">
                   <summary><span className="settings-directory-icon"><MonitorSmartphone size={21} /></span><span className="settings-directory-copy"><strong>Devices & sessions</strong><small>Verify this device, review active devices and manage sessions.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <div className={`secure-session-card ${customerSession.authenticated ? 'active' : 'inactive'}`}>
@@ -7084,7 +7093,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown" name="account-sections">
+                <details className="settings-drilldown">
                   <summary><span className="settings-directory-icon"><UserRoundCheck size={21} /></span><span className="settings-directory-copy"><strong>Profile & personal information</strong><small>Update names, download account information and manage account-wide sessions.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <form className="bootstrap-grid settings-inner-card account-name-form" onSubmit={bootstrapAdmin}>
@@ -7103,7 +7112,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown settings-drilldown-danger" name="account-sections">
+                <details className="settings-drilldown settings-drilldown-danger">
                   <summary><span className="settings-directory-icon"><Trash2 size={21} /></span><span className="settings-directory-copy"><strong>Delete account</strong><small>Request or cancel permanent account deletion.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <section className={`account-deletion-card settings-inner-card ${accountSecurity.deletion?.status === 'pending' ? 'pending' : ''}`}>
@@ -7120,7 +7129,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown" name="account-sections">
+                <details className="settings-drilldown">
                   <summary><span className="settings-directory-icon"><KeyRound size={21} /></span><span className="settings-directory-copy"><strong>Secure device unlock</strong><small>Manage quick unlock on this device and understand the master-password boundary.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <div className="master-password-boundary-note"><Lock size={20} /><span><strong>Account recovery does not reset the master password</strong><small>It restores the account, subscription and verified-device access only. A previously configured Secure device unlock may still provide local access, but support cannot supply or reset the vault encryption secret.</small></span></div>
@@ -7151,7 +7160,7 @@ function App() {
               <div className="settings-section-heading">
                 <p className="eyebrow">My Subscription</p>
                 <h3><CreditCard size={20} /> Plan and billing</h3>
-                <p>See your current status, renewal and payment history here. Stripe Customer Portal continues to securely handle card details and full invoice self-service. Review the Billing & Refund Policy for cancellation, refund and tax wording.</p>
+                
               </div>
 
               {isFounderPlan(bootstrap) ? (
@@ -7180,7 +7189,7 @@ function App() {
                 const visibleBillingMessage = billing.message && billing.status !== 'refreshing' && billing.message !== 'Subscription status refreshed directly from Stripe.' ? billing.message : '';
                 const currentActionLabel = changeMode === 'immediate' ? 'Upgrade now' : changeMode === 'scheduled' ? 'Schedule for next renewal' : 'Current plan and billing';
                 return <div className="settings-drilldown-stack">
-                  <details className="settings-drilldown" name="subscription-sections">
+                  <details className="settings-drilldown">
                     <summary><span className="settings-directory-icon"><ShieldCheck size={21} /></span><span className="settings-directory-copy"><strong>Subscription overview</strong><small>Current plan, renewal date and payment status.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                   <section className={`subscription-status-card subscription-lifecycle-card settings-inner-card state-${lifecycleState}`}>
@@ -7214,7 +7223,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className="settings-drilldown" name="subscription-sections">
+                  <details className="settings-drilldown">
                     <summary><span className="settings-directory-icon"><Database size={21} /></span><span className="settings-directory-copy"><strong>Plan usage</strong><small>Vault items, encrypted documents and total account storage.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                   <section className="plan-usage-card settings-inner-card" aria-label="Plan usage">
@@ -7242,7 +7251,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className="settings-drilldown" name="subscription-sections">
+                  <details className="settings-drilldown">
                     <summary><span className="settings-directory-icon"><CreditCard size={21} /></span><span className="settings-directory-copy"><strong>Plan & billing options</strong><small>Choose a plan, billing period or review a subscription change.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                   <section className="subscription-chooser subscription-change-card settings-inner-card">
@@ -7276,7 +7285,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className="settings-drilldown" name="subscription-sections">
+                  <details className="settings-drilldown">
                     <summary><span className="settings-directory-icon"><FileText size={21} /></span><span className="settings-directory-copy"><strong>Payments, invoices & cancellation</strong><small>Stripe portal, invoice history, billing terms and cancellation controls.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                   {stripeSubscriptionExists && <details className="subscription-disclosure subscription-management-disclosure settings-inner-card">
@@ -7341,7 +7350,7 @@ function App() {
 
               <form className={`emergency-access-form ${!featureIncluded('emergencyAccess') ? 'feature-disabled' : ''}`} aria-disabled={!featureIncluded('emergencyAccess')} onSubmit={saveEmergencyAccessPlan}>
                 <div className="settings-drilldown-stack">
-                  <details className="settings-drilldown" name="trusted-person-sections">
+                  <details className="settings-drilldown">
                     <summary><span className="settings-directory-icon"><UsersRound size={21} /></span><span className="settings-directory-copy"><strong>Your trusted person</strong><small>Name, relationship, contact details, waiting period and instructions.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                 <div className="bootstrap-grid emergency-access-grid">
@@ -7364,7 +7373,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className="settings-drilldown" name="trusted-person-sections">
+                  <details className="settings-drilldown">
                     <summary><span className="settings-directory-icon"><Mail size={21} /></span><span className="settings-directory-copy"><strong>Invitation & access status</strong><small>Send the invitation, check acceptance and manage emergency requests.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
               <div className={`emergency-owner-flow-card ${(hasActiveEmergencyRequest || isEmergencyReleaseReady) ? 'request-active' : ''}`}>
@@ -7424,7 +7433,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className="settings-drilldown" name="trusted-person-sections">
+                  <details className="settings-drilldown">
                     <summary><span className="settings-directory-icon"><FileText size={21} /></span><span className="settings-directory-copy"><strong>Emergency package</strong><small>Choose what is prepared and add the information your trusted person may need.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                 <div className="emergency-package-editor-card">
@@ -7440,7 +7449,7 @@ function App() {
                     <span>Prepare an emergency release package after the waiting period if I do not cancel.</span>
                   </label>
                   <div className="bootstrap-grid emergency-package-grid">
-                    <label>Package title<input value={emergencyDraft.emergencyPackageTitle || 'Emergency Info package'} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageTitle: e.target.value })} placeholder="Emergency Info package" /></label>
+                    <label>Package title<input value={emergencyDraft.emergencyPackageTitle ?? ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageTitle: e.target.value })} placeholder="Emergency Info package" /></label>
                     <label>Release scope<CustomSelect value={emergencyDraft.accessScope} ariaLabel="Choose emergency release scope" options={[
                       { value: 'Emergency Info folder only', label: 'Emergency Info folder only' },
                       { value: 'Selected folders later', label: 'Selected folders later' },
@@ -7459,7 +7468,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className="settings-drilldown" name="trusted-person-sections">
+                  <details className="settings-drilldown">
                     <summary><span className="settings-directory-icon"><CircleHelp size={21} /></span><span className="settings-directory-copy"><strong>How Emergency Access works</strong><small>Waiting periods, cancellation, browser access and Full Vault Access.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                 <div className="emergency-access-qa-card">
@@ -7507,7 +7516,7 @@ function App() {
               {!featureIncluded('cloudBackupSync') && <div className="plan-feature-unavailable"><Cloud size={21} /><span><strong>Cloud backup and sync are not included</strong><small>Your encrypted vault remains available on this device. Cross-device refresh, cloud recovery points and automatic backup require an upgrade or Admin override.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('cloudBackupSync')}>Review plan</button></div>}
 
               <div className="settings-drilldown-stack">
-                <details className="settings-drilldown" name="safety-sections">
+                <details className="settings-drilldown">
                   <summary><span className="settings-directory-icon"><ShieldCheck size={21} /></span><span className="settings-directory-copy"><strong>Current protection status</strong><small>See whether the latest vault copy is protected and up to date.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <div className={`vault-safety-status-card ${!featureIncluded('cloudBackupSync') ? 'plan-local-only' : syncSafety.conflict ? 'conflict' : syncSafety.pending ? 'pending' : syncSafety.state === 'unknown' ? 'unknown' : 'safe'}`}>
@@ -7522,33 +7531,29 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown" name="safety-sections">
+                <details className="settings-drilldown">
                   <summary><span className="settings-directory-icon"><Cloud size={21} /></span><span className="settings-directory-copy"><strong>Backup & sync</strong><small>Protect local changes and check for changes from another verified device.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <div className="vault-safety-action-grid">
-                <button type="button" className="settings-tool-card primary-safety-action" disabled={syncing || (featureIncluded('cloudBackupSync') && syncSafety.conflict)} onClick={retryPendingBackup}><Cloud size={20} /><strong>{!featureIncluded('cloudBackupSync') ? 'Cloud backup unavailable' : syncing ? 'Protecting changes...' : syncSafety.pending ? 'Back up changes now' : 'Check and back up now'}</strong><span>{featureIncluded('cloudBackupSync') ? 'Securely protect the latest vault copy from this device.' : 'Review your plan to make this vault available on verified devices.'}</span></button>
-                <button type="button" className="settings-tool-card" onClick={restoreCloudToThisDevice} disabled={syncing}><RefreshCw size={20} /><strong>{featureIncluded('cloudBackupSync') ? 'Check for changes from another device' : 'Cross-device refresh unavailable'}</strong><span>{featureIncluded('cloudBackupSync') ? 'Nothing is replaced if different changes are found.' : 'Cloud backup and sync are required for this action.'}</span></button>
+                <button type="button" className="settings-tool-card primary-safety-action" disabled={syncing || cloudChangeCheckBusy || (featureIncluded('cloudBackupSync') && syncSafety.conflict)} onClick={retryPendingBackup}><Cloud size={20} /><strong>{!featureIncluded('cloudBackupSync') ? 'Cloud backup unavailable' : syncing ? 'Protecting changes...' : syncSafety.pending ? 'Back up changes now' : 'Check and back up now'}</strong><span>{featureIncluded('cloudBackupSync') ? 'Securely protect the latest vault copy from this device.' : 'Review your plan to make this vault available on verified devices.'}</span></button>
+                <button type="button" className={`settings-tool-card ${cloudChangeCheckBusy ? 'is-working' : ''}`} onClick={restoreCloudToThisDevice} disabled={syncing || cloudChangeCheckBusy}><RefreshCw size={20} className={cloudChangeCheckBusy ? 'spin-icon' : ''} /><strong>{!featureIncluded('cloudBackupSync') ? 'Cross-device refresh unavailable' : cloudChangeCheckBusy ? 'Checking for changes...' : 'Check for changes from another device'}</strong><span>{featureIncluded('cloudBackupSync') ? (cloudChangeCheckBusy ? 'Comparing this device with the latest protected cloud copy.' : 'Nothing is replaced if different changes are found.') : 'Cloud backup and sync are required for this action.'}</span></button>
               </div>
 
               {featureIncluded('cloudBackupSync') && !customerSession.authenticated && (
                 <div className="vault-safety-verification-card"><UserRoundCheck size={21} /><span><strong>Device verification required</strong><small>Verify this device before secure backup and syncing can continue.</small></span><button type="button" className="secondary-button" onClick={openDeviceVerification}>Verify device</button></div>
               )}
 
-              <div className="vault-safety-explainer-grid">
-                <article><MonitorSmartphone size={20} /><strong>This device</strong><span>Your encrypted working copy stays on this device for daily access.</span></article>
-                <article><Cloud size={20} /><strong>Secure backup</strong><span>Your encrypted backup makes the latest protected copy available to your other verified devices.</span></article>
-                <article><AlertTriangle size={20} /><strong>Conflict protection</strong><span>If different changes exist in two places, neither copy is replaced automatically.</span></article>
-              </div>
 
                   </div>
                 </details>
 
-                <details className="settings-drilldown" name="safety-sections">
+                <details className="settings-drilldown">
                   <summary><span className="settings-directory-icon"><Database size={21} /></span><span className="settings-directory-copy"><strong>Recovery tools</strong><small>Review recovery points or clear the encrypted local vault on this device.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <div className="advanced-recovery-card settings-inner-card">
                   <p>These controls are only needed when changing devices or recovering an earlier secure copy.</p>
-                  <button type="button" className="secondary-button" disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}><Database size={17} /> {featureIncluded('cloudBackupSync') ? 'Check available recovery points' : 'Recovery points unavailable'}</button>
+                  <button type="button" className={`secondary-button recovery-check-button ${snapshotHistory.loading ? 'is-working' : ''}`} disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}>{snapshotHistory.loading ? <RefreshCw size={17} className="spin-icon" /> : <Database size={17} />} {featureIncluded('cloudBackupSync') ? (snapshotHistory.loading ? 'Checking recovery points...' : 'Checkup recovery points') : 'Recovery points unavailable'}</button>
+                  {snapshotHistory.loaded && <p className={`recovery-check-status ${snapshotHistory.snapshots.length ? 'success' : ''}`}>{snapshotHistory.message}</p>}
                   {!!snapshotHistory.snapshots.length && <p className="recovery-summary">{snapshotHistory.total} encrypted recovery point(s) are available. The latest contains {snapshotHistory.snapshots[0]?.item_count || 0} item(s) from {new Date(snapshotHistory.snapshots[0]?.created_at).toLocaleString()}.</p>}
                   <button type="button" className="clear-local-vault-link" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
                 </div>

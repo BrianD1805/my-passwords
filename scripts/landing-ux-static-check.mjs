@@ -30,7 +30,17 @@ check('Plan cards have increased 31px spacing without reintroducing a carousel',
 check('Plans use viewport reveal motion with reduced-motion fallback', main.includes("new IntersectionObserver") && main.includes('landing-plan-reveal') && css.includes('@media (prefers-reduced-motion: reduce)'));
 check('Plan item copy is concise without the parenthetical item-type list', main.includes('`${plan.itemLimit} vault items`') && !main.includes('vault items (passwords, cards, notes & more)'));
 check('Landing FAQs use premium numbered disclosure styling', css.includes('counter-reset: landing-faq') && css.includes('counter(landing-faq, decimal-leading-zero)') && css.includes('.landing-faq-accordion details[open]'));
-check('Account, subscription, Vault Safety and Trusted Person use Settings-style drill-down sections', main.includes('name="account-sections"') && main.includes('name="subscription-sections"') && main.includes('name="safety-sections"') && main.includes('name="trusted-person-sections"') && css.includes('.settings-drilldown-stack'));
+check('Account, subscription, Vault Safety and Trusted Person use multi-open Settings-style drill-down sections', main.includes('settings-drilldown-stack') && !main.includes('name="account-sections"') && !main.includes('name="subscription-sections"') && !main.includes('name="safety-sections"') && !main.includes('name="trusted-person-sections"') && css.includes('.settings-drilldown-stack'));
+
+check('Vault route explicitly requests and applies Ubuntu', css.startsWith('@import url("https://fonts.googleapis.com/css2?family=Ubuntu') && css.includes('.app-shell *') && css.includes('font-family: "Ubuntu"'));
+check('Landing hierarchy carries lighter weights throughout', css.includes('Carry the lighter hero/Next-of-Kin hierarchy through the whole landing page') && css.includes('.public-landing-page h3') && css.includes('font-weight: 500 !important;'));
+check('Emergency package title can be fully cleared before retyping', main.includes("value={emergencyDraft.emergencyPackageTitle ?? ''}"));
+check('Subscription overview no longer has the long introductory paragraph', !main.includes('See your current status, renewal and payment history here.'));
+check('Cross-device check has visible busy and completion feedback', main.includes('cloudChangeCheckBusy') && main.includes('Checking for changes...') && main.includes('Check complete. This device already has the latest protected vault copy.'));
+check('Vault Safety redundant device/backup/conflict explainer panels are removed', !main.includes('vault-safety-explainer-grid'));
+check('Recovery point check has clearer label and working feedback', main.includes('Checkup recovery points') && main.includes('Checking recovery points...') && main.includes('recovery-check-status'));
+check('Everything important appears before Next of Kin spotlight', main.indexOf('Everything important, neatly organised') < main.indexOf('Next of Kin / Trusted Person Access'));
+check('Trial payment note no longer mentions Stripe Checkout', main.includes('You only enter payment details if you later choose to purchase a subscription.') && !main.includes('You only enter payment details if you later choose to purchase a subscription through Stripe Checkout.'));
 
 if (process.exitCode) process.exit(1);
 console.log(`\nAll ${passed} landing/plan UX static checks passed.`);
