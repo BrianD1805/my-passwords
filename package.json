@@ -1,7 +1,7 @@
 {
   "name": "my-passwords",
   "private": true,
-  "version": "0.0.53-b",
+  "version": "0.0.53-c",
   "type": "module",
   "scripts": {
     "dev": "vite",

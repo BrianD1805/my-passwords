@@ -12,10 +12,10 @@ const customerEmail = read('netlify/functions/_customer-email.js');
 const adminEmail = read('netlify/functions/_admin-email.js');
 const stripe = read('netlify/functions/_stripe.js');
 const checkout = read('netlify/functions/stripe-checkout.js');
-const claims = read('docs/ENCRYPTION_AND_CLAIMS_REGISTER_VER_0.053B.md');
-const processing = read('docs/DATA_PROCESSING_VER_0.053B.md');
-const commercial = read('docs/COMMERCIAL_LAUNCH_CHECKLIST_VER_0.053B.md');
-const support = read('docs/SUPPORT_PROCESS_VER_0.053B.md');
+const claims = read('docs/ENCRYPTION_AND_CLAIMS_REGISTER_VER_0.053C.md');
+const processing = read('docs/DATA_PROCESSING_VER_0.053C.md');
+const commercial = read('docs/COMMERCIAL_LAUNCH_CHECKLIST_VER_0.053C.md');
+const support = read('docs/SUPPORT_PROCESS_VER_0.053C.md');
 const pkg = JSON.parse(read('package.json'));
 const sw = read('public/sw.js');
 const server = read('netlify/functions/_db.js');
@@ -26,7 +26,7 @@ function check(label, ok) {
   else { console.error(`FAIL  ${label}`); failed += 1; }
 }
 
-check('Ver-0.053B app/server/package/service-worker versions align', pkg.version === '0.0.53-b' && /Password-Encrypt Ver-0\.053B/.test(main) && /Password-Encrypt Ver-0\.053B/.test(server) && /my-passwords-v0\.053B/.test(sw));
+check('Ver-0.053C app/server/package/service-worker versions align', pkg.version === '0.0.53-c' && /Password-Encrypt Ver-0\.053C/.test(main) && /Password-Encrypt Ver-0\.053C/.test(server) && /my-passwords-v0\.053C/.test(sw));
 check('Public Terms, Privacy and Billing routes are implemented and included in the PWA shell', /'\/terms': 'terms'/.test(legal) && /'\/privacy': 'privacy'/.test(legal) && /'\/billing-terms': 'billing'/.test(legal) && /'\/terms'/.test(sw) && /'\/privacy'/.test(sw) && /'\/billing-terms'/.test(sw));
 check('Public landing page links all legal policies', /href="\/terms"/.test(main) && /href="\/privacy"/.test(main) && /href="\/billing-terms"/.test(main));
 check('New signup requires explicit current Terms and Privacy acceptance in browser', /legalAccepted/.test(main) && /LEGAL_VERSION/.test(main) && /Please read and agree to the Terms of Service and Privacy Policy/.test(main));

@@ -628,7 +628,7 @@ export default function AdminApp({ version }) {
                   <label>Annual price<input type="number" min="0" step="0.01" value={editor.annualPrice} onChange={(e) => setEditor({ ...editor, annualPrice: e.target.value })} /></label>
                   <label>Maximum users<input type="number" min="1" value={editor.maxUsers} onChange={(e) => setEditor({ ...editor, maxUsers: e.target.value })} /></label>
                   <label>Vault item limit<input type="number" min="0" value={editor.itemLimit} onChange={(e) => setEditor({ ...editor, itemLimit: e.target.value })} /><small>0 = unlimited. Counts passwords, cards, notes, checklists and other normal vault items.</small></label>
-                  <label>Storage limit MB<input type="number" min="0" value={editor.storageLimitMb} onChange={(e) => setEditor({ ...editor, storageLimitMb: e.target.value })} /></label>
+                  <label>Total account storage limit (MB)<input type="number" min="0" value={editor.storageLimitMb} onChange={(e) => setEditor({ ...editor, storageLimitMb: e.target.value })} /></label>
                   <label>Document limit<input type="number" min="0" value={editor.documentLimit} onChange={(e) => setEditor({ ...editor, documentLimit: e.target.value })} /></label>
                   <label>Display order<input type="number" min="0" value={editor.displayOrder} onChange={(e) => setEditor({ ...editor, displayOrder: e.target.value })} /></label>
                   <label className="admin-full">Customer-facing features, one per line<textarea rows="6" value={editor.features} onChange={(e) => setEditor({ ...editor, features: e.target.value })} /></label>

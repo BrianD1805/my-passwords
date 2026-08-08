@@ -58,6 +58,7 @@ export async function handler(event) {
       const updatedUsage = {
         ...currentUsage,
         documents: Math.max(0, Number(currentUsage.documents || 0) - 1),
+        documentStorageBytes: Math.max(0, Number(currentUsage.documentStorageBytes || 0) - removedBytes),
         storageBytes: Math.max(0, Number(currentUsage.storageBytes || 0) - removedBytes)
       };
       return jsonResponse(200, {
@@ -133,11 +134,11 @@ export async function handler(event) {
         ok: false,
         version: APP_VERSION,
         code: 'STORAGE_LIMIT_REACHED',
-        feature: 'documents',
+        feature: 'storage',
         upgradeRequired: true,
         entitlements: serializedEntitlements,
         usage: currentUsage,
-        message: `This plan has reached its ${storageLimitMb} MB encrypted-document storage limit. Upgrade the plan or remove an existing document before uploading another.`
+        message: `This plan has reached its ${storageLimitMb} MB total account storage limit. The allowance includes the encrypted cloud vault and encrypted documents. Upgrade the plan or remove stored data before uploading another document.`
       });
     }
 
@@ -156,7 +157,7 @@ export async function handler(event) {
       metadata: { version: APP_VERSION, storageMode: 'external_encrypted_document_blob', tenant_identity_source: 'secure_session', clientUpdatedAt: body.clientUpdatedAt || new Date().toISOString() },
       updated_at: new Date().toISOString()
     }, 'id');
-    return jsonResponse(200, { ok: true, version: APP_VERSION, documentId, fileName: saved?.file_name || fileName, fileSize: saved?.file_size || fileSize, storageBytes: saved?.storage_bytes || storageBytes, entitlements: serialiseEntitlements(entitlements, { ...currentUsage, documents: currentUsage.documents + (isNewDocument ? 1 : 0), storageBytes: currentUsage.storageBytes - existingSize + storageBytes }), message: 'Encrypted document file stored for the authenticated account.' });
+    return jsonResponse(200, { ok: true, version: APP_VERSION, documentId, fileName: saved?.file_name || fileName, fileSize: saved?.file_size || fileSize, storageBytes: saved?.storage_bytes || storageBytes, entitlements: serialiseEntitlements(entitlements, { ...currentUsage, documents: currentUsage.documents + (isNewDocument ? 1 : 0), documentStorageBytes: Math.max(0, Number(currentUsage.documentStorageBytes || 0) - existingSize + storageBytes), storageBytes: currentUsage.storageBytes - existingSize + storageBytes }), message: 'Encrypted document file stored for the authenticated account.' });
   } catch (error) {
     return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Encrypted document file could not be stored.', error: error.message, details: error.details || null });
   }

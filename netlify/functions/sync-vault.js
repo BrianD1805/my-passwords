@@ -2,7 +2,7 @@ import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, 
 import { getCustomerAccess } from './_session.js';
 import { assertBrowserAction } from './_security.js';
 import { recordFunctionFailure, recordOperationalEvent } from './_operations.js';
-import { serialiseEntitlements } from './_entitlements.js';
+import { base64StorageBytes, serialiseEntitlements } from './_entitlements.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -81,12 +81,28 @@ export async function handler(event) {
   if (!encryptedBlob || !localSalt || !localIv) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Encrypted vault data, salt and IV are required.' });
 
   const itemLimit = Number(access.entitlementContext?.effective?.limits?.itemLimit || 0);
+  const storageLimitMb = Number(access.entitlementContext?.effective?.limits?.storageLimitMb || 0);
+  const currentUsage = access.entitlementContext?.usage || {};
+  const currentVaultStorageBytes = Number(currentUsage.vaultStorageBytes || 0);
+  const newVaultStorageBytes = base64StorageBytes(encryptedBlob);
+  const projectedStorageBytes = Math.max(0, Number(currentUsage.storageBytes || 0) - currentVaultStorageBytes + newVaultStorageBytes);
   if (itemLimit > 0 && itemCount > itemLimit) {
     const entitlementUsage = { ...(access.entitlementContext?.usage || {}), vaultItems: itemCount };
     return jsonResponse(403, {
       ok: false, version: APP_VERSION, code: 'ITEM_LIMIT_REACHED', feature: 'items', upgradeRequired: true,
       entitlements: serialiseEntitlements(access.entitlementContext?.effective || {}, entitlementUsage),
       message: `This plan allows up to ${itemLimit} vault item${itemLimit === 1 ? '' : 's'}. Delete an item or review your plan before backing up another item.`
+    });
+  }
+  if (storageLimitMb > 0 && projectedStorageBytes > storageLimitMb * 1024 * 1024) {
+    return jsonResponse(403, {
+      ok: false,
+      version: APP_VERSION,
+      code: 'STORAGE_LIMIT_REACHED',
+      feature: 'storage',
+      upgradeRequired: true,
+      entitlements: serialiseEntitlements(access.entitlementContext?.effective || {}, currentUsage),
+      message: `This plan allows ${storageLimitMb} MB of total account storage. Your encrypted cloud vault and encrypted documents together would exceed that allowance.`
     });
   }
 
@@ -147,7 +163,7 @@ export async function handler(event) {
     const reusedExistingBackup = Boolean(saved.reusedExistingBackup || saved.reused);
     await insertRow('audit_log', { id: publicId('audit'), tenant_id: tenantId, user_id: userId, action: reusedExistingBackup ? 'encrypted_snapshot_reused' : 'encrypted_snapshot_uploaded', metadata: { version: APP_VERSION, itemCount, provider: 'supabase', tenant_identity_source: 'secure_session', base_snapshot_id: body.baseSnapshotId || '', snapshot_id: effectiveSnapshotId, reused_existing_backup: reusedExistingBackup, forced_conflict_choice: Boolean(body.explicitConflictChoice) } });
     await recordSyncEvent({ tenantId, userId, eventType: reusedExistingBackup ? 'backup_duplicate_reused' : 'backup_success', status: 'success', itemCount, message: reusedExistingBackup ? 'Matching encrypted vault backup already existed and was reused.' : 'Encrypted vault backup saved.', deviceId: body.deviceId, metadata: { deviceType: body.deviceType || '', snapshotId: effectiveSnapshotId, baseSnapshotId: body.baseSnapshotId || '', reusedExistingBackup, forcedConflictChoice: Boolean(body.explicitConflictChoice) } });
-    const updatedEntitlements = serialiseEntitlements(access.entitlementContext?.effective || {}, { ...(access.entitlementContext?.usage || {}), vaultItems: itemCount });
+    const updatedEntitlements = serialiseEntitlements(access.entitlementContext?.effective || {}, { ...currentUsage, vaultItems: itemCount, vaultStorageBytes: newVaultStorageBytes, storageBytes: projectedStorageBytes });
     return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', version: APP_VERSION, snapshotId: effectiveSnapshotId, reusedExistingBackup, itemCount, clientUpdatedAt, entitlements: updatedEntitlements, message: reusedExistingBackup ? 'Matching secure backup already exists and is now linked to this device.' : 'Cloud backup saved for the authenticated account.' });
   } catch (error) {
     await recordSyncEvent({ tenantId, userId, eventType: 'backup_failure', status: 'error', itemCount, message: 'Encrypted cloud backup failed.', deviceId: body.deviceId, metadata: { deviceType: body.deviceType || '', errorCode: error?.code || error?.name || 'BACKUP_FAILED' } });

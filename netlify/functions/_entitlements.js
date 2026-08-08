@@ -28,6 +28,13 @@ function nonNegativeInteger(value, fallback = 0) {
   return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : fallback;
 }
 
+export function base64StorageBytes(value) {
+  const clean = String(value || '').replace(/\s/g, '');
+  if (!clean) return 0;
+  const padding = clean.endsWith('==') ? 2 : clean.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((clean.length * 3) / 4) - padding);
+}
+
 function optionalLimit(value) {
   if (value === null || value === undefined || value === '') return null;
   return nonNegativeInteger(value, 0);
@@ -152,6 +159,8 @@ export function serialiseEntitlements(entitlements = {}, usage = {}) {
     users: nonNegativeInteger(usage.users, 0),
     vaultItems: nonNegativeInteger(usage.vaultItems, 0),
     documents: nonNegativeInteger(usage.documents, 0),
+    documentStorageBytes: nonNegativeInteger(usage.documentStorageBytes, 0),
+    vaultStorageBytes: nonNegativeInteger(usage.vaultStorageBytes, 0),
     storageBytes: nonNegativeInteger(usage.storageBytes, 0),
     storageMb: Number((nonNegativeInteger(usage.storageBytes, 0) / (1024 * 1024)).toFixed(2))
   };
@@ -189,14 +198,18 @@ export async function entitlementUsageForTenant(tenantId) {
   const [users, documents, snapshots] = await Promise.all([
     selectRows('users', `select=id,status&tenant_id=${eq(tenantId)}&limit=5000`).catch(() => []),
     selectRows('document_blobs', `select=id,file_size,storage_bytes&tenant_id=${eq(tenantId)}&limit=5000`).catch(() => []),
-    selectRows('vault_sync_snapshots', `select=item_count&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=1`).catch(() => [])
+    selectRows('vault_sync_snapshots', `select=item_count,encrypted_blob&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=1`).catch(() => [])
   ]);
   const activeUsers = (users || []).filter((user) => !['cancelled', 'deleted'].includes(String(user.status || '').toLowerCase())).length;
+  const documentStorageBytes = (documents || []).reduce((total, document) => total + nonNegativeInteger(document.storage_bytes || document.file_size, 0), 0);
+  const vaultStorageBytes = base64StorageBytes(snapshots?.[0]?.encrypted_blob || '');
   return {
     users: activeUsers,
     vaultItems: nonNegativeInteger(snapshots?.[0]?.item_count, 0),
     documents: (documents || []).length,
-    storageBytes: (documents || []).reduce((total, document) => total + nonNegativeInteger(document.storage_bytes || document.file_size, 0), 0)
+    documentStorageBytes,
+    vaultStorageBytes,
+    storageBytes: documentStorageBytes + vaultStorageBytes
   };
 }
 

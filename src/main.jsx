@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.053B';
+const VERSION = 'Password-Encrypt Ver-0.053C';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -99,7 +99,7 @@ const DEFAULT_ENTITLEMENTS = Object.freeze({
   planName: 'Personal',
   limits: { maxUsers: 1, itemLimit: 0, documentLimit: 0, storageLimitMb: 0 },
   features: { documents: true, emergencyAccess: true, secureDeviceUnlock: true, cloudBackupSync: true, multiUser: false, sharing: false },
-  usage: { users: 1, vaultItems: 0, documents: 0, storageBytes: 0, storageMb: 0 },
+  usage: { users: 1, vaultItems: 0, documents: 0, documentStorageBytes: 0, vaultStorageBytes: 0, storageBytes: 0, storageMb: 0 },
   remaining: { users: 0, vaultItems: null, documents: null, storageBytes: null }
 });
 
@@ -2470,7 +2470,7 @@ function App() {
   }
 
   function showEntitlementUpgrade(feature, message = '') {
-    const labels = { items: 'Vault items', documents: 'Encrypted documents', emergencyAccess: 'Emergency Access', secureDeviceUnlock: 'Secure device unlock', cloudBackupSync: 'Cloud backup and sync', users: 'Additional users' };
+    const labels = { items: 'Vault items', documents: 'Encrypted documents', storage: 'Account storage', emergencyAccess: 'Emergency Access', secureDeviceUnlock: 'Secure device unlock', cloudBackupSync: 'Cloud backup and sync', users: 'Additional users' };
     setEntitlementModal({ visible: true, feature, title: `${labels[feature] || 'This feature'} needs a plan upgrade`, message: message || `${labels[feature] || 'This feature'} is not included in the current plan or its plan limit has been reached.` });
   }
 
@@ -2486,7 +2486,7 @@ function App() {
   function handleEntitlementError(result, fallbackFeature = '') {
     if (!result?.upgradeRequired && !['PLAN_FEATURE_REQUIRED', 'ITEM_LIMIT_REACHED', 'DOCUMENT_LIMIT_REACHED', 'STORAGE_LIMIT_REACHED', 'USER_LIMIT_REACHED'].includes(String(result?.code || ''))) return false;
     if (result.entitlements) updateEntitlements(result.entitlements);
-    const feature = result.feature || (String(result.code || '').includes('ITEM') ? 'items' : (String(result.code || '').includes('DOCUMENT') || String(result.code || '').includes('STORAGE') ? 'documents' : fallbackFeature));
+    const feature = result.feature || (String(result.code || '').includes('ITEM') ? 'items' : (String(result.code || '').includes('STORAGE') ? 'storage' : (String(result.code || '').includes('DOCUMENT') ? 'documents' : fallbackFeature)));
     showEntitlementUpgrade(feature, result.message);
     return true;
   }
@@ -4067,7 +4067,7 @@ function App() {
         const estimatedEncryptedBytes = new TextEncoder().encode(String(form.file.dataUrl || '')).length + 16;
         const projectedStorage = Number(entitlements?.usage?.storageBytes || 0) + estimatedEncryptedBytes;
         if (projectedStorage > Number(entitlements.limits.storageLimitMb) * 1024 * 1024) {
-          showEntitlementUpgrade('documents', `This upload would exceed the ${entitlements.limits.storageLimitMb} MB encrypted document storage allowance.`);
+          showEntitlementUpgrade('storage', `This upload would exceed the ${entitlements.limits.storageLimitMb} MB total account storage allowance.`);
           return;
         }
       }
@@ -6039,55 +6039,6 @@ function App() {
           </div>
         </section>
 
-        <section className="landing-section landing-plan-section landing-pricing-section" aria-label="Subscription plans">
-          <div className="landing-section-heading landing-pricing-heading">
-            <p className="eyebrow">Choose your plan</p>
-            <h2>Start with the vault size that suits you.</h2>
-            <p>Review the included features and limits below. Your free trial starts after email verification.</p>
-          </div>
-          <div className="landing-plan-tier-grid">
-            {publicPlans.map((plan, planIndex) => {
-              const isMostPopular = publicPlans.length >= 3 && planIndex === Math.floor(publicPlans.length / 2);
-              const flags = { ...DEFAULT_ENTITLEMENTS.features, ...(plan.featureFlags || {}), multiUser: false, sharing: false };
-              const enforcedFeatures = [
-                plan.itemLimit > 0 ? `${plan.itemLimit} vault items (passwords, cards, notes & more)` : 'Encrypted password vault',
-                flags.documents !== false ? (plan.documentLimit > 0 ? `${plan.documentLimit} encrypted document${plan.documentLimit === 1 ? '' : 's'}` : 'Encrypted documents included') : '',
-                flags.documents !== false && plan.storageLimitMb > 0 ? `${plan.storageLimitMb} MB encrypted document storage` : '',
-                flags.cloudBackupSync !== false ? 'Secure cloud backup and syncing' : '',
-                flags.emergencyAccess !== false ? 'Next of Kin / Emergency Access' : '',
-                flags.secureDeviceUnlock !== false ? 'Secure device unlock' : ''
-              ].filter(Boolean);
-              const marketingFeatures = (plan.features || []).filter((feature) => {
-                const text = String(feature || '');
-                if (!text) return false;
-                if (flags.documents === false && /document|file|storage/i.test(text)) return false;
-                if (flags.cloudBackupSync === false && /backup|sync|cloud/i.test(text)) return false;
-                if (flags.emergencyAccess === false && /emergency/i.test(text)) return false;
-                if (flags.secureDeviceUnlock === false && /secure device|biometric|passkey/i.test(text)) return false;
-                if (/household|family sharing|team user|multi.?user|sharing controls/i.test(text)) return false;
-                if (/document\s*limit|encrypted\s+documents?|storage\s*limit|encrypted\s+document\s+storage|vault\s*item\s*limit|password\s*limit/i.test(text)) return false;
-                return true;
-              });
-              const featureList = [...new Set([...enforcedFeatures, ...marketingFeatures])].slice(0, 8);
-              return (
-                <article key={plan.code} className={`landing-plan-tier ${isMostPopular ? 'featured' : ''}`}>
-                  {isMostPopular && <span className="landing-plan-badge">Most popular</span>}
-                  <div className="landing-plan-tier-heading">
-                    <h3>{plan.displayName}</h3>
-                    <p>{plan.description}</p>
-                  </div>
-                  <div className="landing-plan-price"><strong>{publicPlanPriceLabel(plan)}</strong><span>{plan.trialDays ? `${plan.trialDays}-day free trial` : 'Start securely today'}</span></div>
-                  <ul>{featureList.map((feature) => <li key={feature}><ShieldCheck size={16} /> {feature}</li>)}</ul>
-                  <button type="button" className="primary-button landing-plan-cta" onClick={() => openCreateAccountPopup(plan.code)}><Sparkles size={17} /> {plan.trialDays ? `Start ${plan.trialDays}-day trial` : 'Choose this plan'}</button>
-                </article>
-              );
-            })}
-            {!publicPlans.length && <div className="landing-plans-unavailable"><AlertTriangle size={20} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
-          </div>
-          <div className="landing-trial-no-card"><CreditCard size={18} /><span><strong>NO CREDIT CARD DETAILS are taken during your free trial.</strong><small>You only enter payment details if you later choose to purchase a subscription through Stripe Checkout.</small></span></div>
-        </section>
-
-
         <section className="landing-trusted-person-spotlight" aria-label="Trusted Person Access">
           <div className="trusted-person-visual" aria-hidden="true">
             <div className="trusted-person-icon"><UsersRound size={34} /></div>
@@ -6133,31 +6084,105 @@ function App() {
           </div>
         </section>
 
-        <section className="landing-section landing-security-section" aria-label="Privacy and security">
-          <div className="landing-section-heading">
-            <p className="eyebrow">Privacy and security</p>
-            <h2>Your private details deserve more than a notes app.</h2>
-            <p>Password-Encrypt is designed to protect your vault while keeping everyday access straightforward on the devices you trust.</p>
+        <section className="landing-section landing-plan-section landing-pricing-section" aria-label="Subscription plans">
+          <div className="landing-section-heading landing-pricing-heading">
+            <p className="eyebrow">Choose your plan</p>
+            <h2>Start with the vault size that suits you.</h2>
+            <p>Review the included features and limits below. Your free trial starts after email verification.</p>
           </div>
-          <div className="landing-security-grid">
-            <article><ShieldCheck size={23} /><strong>Your master password stays yours</strong><p>Your master password is not stored on Password-Encrypt servers and is used to derive the key that decrypts your vault. Secure device unlock can locally unwrap the password on a device you deliberately set up.</p></article>
-            <article><Lock size={23} /><strong>Encrypted before backup</strong><p>Vault records and uploaded documents are encrypted before they are sent to secure storage.</p></article>
-            <article><MonitorSmartphone size={23} /><strong>Verified-device protection</strong><p>Secure syncing and cloud backup are linked to verified account sessions on your devices.</p></article>
+          <div className="landing-plan-tier-grid">
+            {publicPlans.map((plan, planIndex) => {
+              const isMostPopular = publicPlans.length >= 3 && planIndex === Math.floor(publicPlans.length / 2);
+              const flags = { ...DEFAULT_ENTITLEMENTS.features, ...(plan.featureFlags || {}), multiUser: false, sharing: false };
+              const enforcedFeatures = [
+                plan.itemLimit > 0 ? `${plan.itemLimit} vault items (passwords, cards, notes & more)` : 'Encrypted password vault',
+                flags.documents !== false ? (plan.documentLimit > 0 ? `${plan.documentLimit} encrypted document${plan.documentLimit === 1 ? '' : 's'}` : 'Encrypted documents included') : '',
+                plan.storageLimitMb > 0 ? `${plan.storageLimitMb} MB total account storage` : '',
+                flags.cloudBackupSync !== false ? 'Secure cloud backup and syncing' : '',
+                flags.emergencyAccess !== false ? 'Next of Kin / Emergency Access' : '',
+                flags.secureDeviceUnlock !== false ? 'Secure device unlock' : ''
+              ].filter(Boolean);
+              const marketingFeatures = (plan.features || []).filter((feature) => {
+                const text = String(feature || '');
+                if (!text) return false;
+                if (flags.documents === false && /document|file|storage/i.test(text)) return false;
+                if (flags.cloudBackupSync === false && /backup|sync|cloud/i.test(text)) return false;
+                if (flags.emergencyAccess === false && /emergency/i.test(text)) return false;
+                if (flags.secureDeviceUnlock === false && /secure device|biometric|passkey/i.test(text)) return false;
+                if (/household|family sharing|team user|multi.?user|sharing controls/i.test(text)) return false;
+                if (/document\s*limit|encrypted\s+documents?|storage\s*limit|encrypted\s+document\s+storage|total\s+account\s+storage|account\s+storage|vault\s*item\s*limit|password\s*limit/i.test(text)) return false;
+                return true;
+              });
+              const featureList = [...new Set([...enforcedFeatures, ...marketingFeatures])].slice(0, 8);
+              return (
+                <article key={plan.code} className={`landing-plan-tier ${isMostPopular ? 'featured' : ''}`}>
+                  {isMostPopular && <span className="landing-plan-badge">Most popular</span>}
+                  <div className="landing-plan-tier-heading">
+                    <h3>{plan.displayName}</h3>
+                    <p>{plan.description}</p>
+                  </div>
+                  <div className="landing-plan-price"><strong>{publicPlanPriceLabel(plan)}</strong><span>{plan.trialDays ? `${plan.trialDays}-day free trial` : 'Start securely today'}</span></div>
+                  <ul>{featureList.map((feature) => <li key={feature}><ShieldCheck size={16} /> {feature}</li>)}</ul>
+                  <button type="button" className="primary-button landing-plan-cta" onClick={() => openCreateAccountPopup(plan.code)}><Sparkles size={17} /> {plan.trialDays ? `Start ${plan.trialDays}-day trial` : 'Choose this plan'}</button>
+                </article>
+              );
+            })}
+            {!publicPlans.length && <div className="landing-plans-unavailable"><AlertTriangle size={20} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
           </div>
+          <div className="landing-trial-no-card"><CreditCard size={18} /><span><strong>NO CREDIT CARD DETAILS are taken during your free trial.</strong><small>You only enter payment details if you later choose to purchase a subscription through Stripe Checkout.</small></span></div>
         </section>
 
         <section className="landing-section landing-faq-section" aria-label="Frequently asked questions">
           <div className="landing-section-heading compact">
             <p className="eyebrow">Questions answered</p>
             <h2>Frequently asked questions.</h2>
+            <p>Tap a question to reveal the answer. The essentials are here without turning the page into another wall of panels.</p>
           </div>
-          <div className="landing-faq-grid">
-            <article><h3>When does my free trial start?</h3><p>Your trial starts only after you verify your email and complete account setup.</p></article>
-            <article><h3>Will I be charged when I create an account?</h3><p>No. Account verification starts the free trial. A paid subscription begins only if you deliberately complete Stripe Checkout from inside your vault.</p></article>
-            <article><h3>Can Password-Encrypt recover my master password?</h3><p>No. Password-Encrypt does not store a server-side copy of your master password and cannot recover or reset it. Secure device unlock, if enabled, keeps a separately protected local wrapped copy on that device.</p></article>
-            <article><h3>Can I use the vault on more than one device?</h3><p>Yes. Verify each device and use secure syncing to keep your latest protected vault available.</p></article>
-            <article><h3>Can I store documents too?</h3><p>Yes. Supported documents are encrypted before upload and stored with your private vault.</p></article>
-            <article><h3>What happens if a backup cannot complete?</h3><p>Your change remains on that device and the app gives you a clear warning and guided steps to finish the backup.</p></article>
+          <div className="landing-faq-accordion">
+            <details>
+              <summary><span>When does my free trial start?</span><ChevronRight size={19} /></summary>
+              <p>Your trial starts only after you verify your email and complete account setup.</p>
+            </details>
+            <details>
+              <summary><span>Will I be charged when I create an account?</span><ChevronRight size={19} /></summary>
+              <p>No. No card details are taken for the trial. A paid subscription begins only if you deliberately choose a plan and complete Stripe Checkout from inside your vault.</p>
+            </details>
+            <details>
+              <summary><span>Can Password-Encrypt recover my master password?</span><ChevronRight size={19} /></summary>
+              <p>No. Password-Encrypt does not store a server-side copy of your master password and cannot recover or reset it. Secure device unlock, if enabled, keeps a separately protected local wrapped copy on that device.</p>
+            </details>
+            <details>
+              <summary><span>How is my vault protected before it reaches the cloud?</span><ChevronRight size={19} /></summary>
+              <p>Your readable vault records are encrypted on your device before cloud backup or syncing. Password-Encrypt stores the encrypted vault copy, not the readable contents.</p>
+            </details>
+            <details>
+              <summary><span>What does verified-device protection mean?</span><ChevronRight size={19} /></summary>
+              <p>Cloud backup, syncing and protected account actions require a validated customer session on the device. You can review devices and end account sessions from My Account.</p>
+            </details>
+            <details>
+              <summary><span>What is Next of Kin / Emergency Access for?</span><ChevronRight size={19} /></summary>
+              <p>It is designed for incapacity, serious illness or circumstances where you can no longer access the vault yourself. You nominate the trusted person, choose the waiting period and can cancel a request before the prepared emergency package is released.</p>
+            </details>
+            <details>
+              <summary><span>Can I use the vault on more than one device?</span><ChevronRight size={19} /></summary>
+              <p>Yes. Verify each device and use secure syncing to keep your latest protected vault available.</p>
+            </details>
+            <details>
+              <summary><span>Can I use my vault if the cloud service is temporarily unavailable?</span><ChevronRight size={19} /></summary>
+              <p>Your encrypted local vault remains available on a device where it has already been set up. New cloud backups and cross-device syncing wait until the connection is available again.</p>
+            </details>
+            <details>
+              <summary><span>Can Password-Encrypt support staff see my saved passwords or documents?</span><ChevronRight size={19} /></summary>
+              <p>Support diagnostics are metadata-only. Support should never ask you to send your master password, saved passwords, OTP codes, recovery codes or decrypted vault contents.</p>
+            </details>
+            <details>
+              <summary><span>Can I store encrypted documents too?</span><ChevronRight size={19} /></summary>
+              <p>Yes, where included in your plan. Documents count toward the document allowance and their encrypted storage also counts toward the plan's total account storage allowance.</p>
+            </details>
+            <details>
+              <summary><span>What happens if a backup cannot complete?</span><ChevronRight size={19} /></summary>
+              <p>Your change remains on that device and the app gives you a clear warning and guided steps to finish the backup safely.</p>
+            </details>
           </div>
         </section>
 
@@ -7136,7 +7161,7 @@ function App() {
                       const rows = [
                         { key: 'items', label: 'Vault items', used: usedItems, limit: itemLimit, detail: itemLimit > 0 ? `${Math.max(0, itemLimit - usedItems)} item${Math.max(0, itemLimit - usedItems) === 1 ? '' : 's'} left` : 'Unlimited on this plan' },
                         { key: 'documents', label: 'Encrypted documents', used: usedDocuments, limit: documentLimit, detail: documentLimit > 0 ? `${Math.max(0, documentLimit - usedDocuments)} document${Math.max(0, documentLimit - usedDocuments) === 1 ? '' : 's'} left` : 'Unlimited on this plan' },
-                        { key: 'storage', label: 'Encrypted document storage', used: usedStorageMb, limit: storageLimitMb, detail: storageLimitMb > 0 ? `${usedStorageMb.toFixed(2)} MB of ${storageLimitMb} MB used` : `${usedStorageMb.toFixed(2)} MB used · unlimited allocation` }
+                        { key: 'storage', label: 'Total account storage', used: usedStorageMb, limit: storageLimitMb, detail: storageLimitMb > 0 ? `${usedStorageMb.toFixed(2)} MB of ${storageLimitMb} MB used · includes your encrypted cloud vault and encrypted documents` : `${usedStorageMb.toFixed(2)} MB used · unlimited allocation` }
                       ];
                       return <div className="plan-usage-list">{rows.map((row) => {
                         const percent = row.limit > 0 ? Math.min(100, Math.max(0, (Number(row.used || 0) / row.limit) * 100)) : 0;
