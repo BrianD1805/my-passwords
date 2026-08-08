@@ -14998,36 +14998,10 @@ option {
 .plan-usage-track > span { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#336699,#4c82b3); }
 
 @media (max-width: 680px) {
-  .landing-pricing-section .landing-plan-tier-grid {
-    display:flex !important;
-    overflow-x:auto;
-    overflow-y:visible;
-    gap:14px !important;
-    scroll-snap-type:x mandatory;
-    scroll-padding-left:2px;
-    padding:4px 18px 12px 2px;
-    margin-right:-18px;
-    -webkit-overflow-scrolling:touch;
-    scrollbar-width:none;
-  }
-  .landing-pricing-section .landing-plan-tier-grid::-webkit-scrollbar { display:none; }
-  .landing-pricing-section .landing-plan-tier {
-    flex:0 0 min(86vw, 360px);
-    width:min(86vw, 360px);
-    scroll-snap-align:start;
-    scroll-snap-stop:always;
-  }
-  .landing-pricing-heading::after {
-    content:'Swipe left to compare plans →';
-    display:block;
-    margin-top:10px;
-    color:#5f7284;
-    font-size:.84rem;
-    font-weight:500;
-  }
   .plan-usage-heading { flex-direction:column; }
   .plan-usage-row-copy { align-items:flex-start; }
 }
+
 
 
 /* Ver-0.053C — Frequently asked questions use a clean disclosure list rather than another card grid. */
@@ -15103,83 +15077,34 @@ option {
   .landing-faq-accordion details > p { margin: -1px 34px 18px 2px; }
 }
 
-/* Password-Encrypt Ver-0.053E — urgent mobile landing scroll fix.
-   The mobile plan chooser remains horizontally swipeable, but it no longer changes
-   the document/root overflow model and it no longer uses mandatory scroll snapping.
-   Vertical landing-page scrolling must remain the browser's normal document scroll. */
-html {
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
-}
-
-@media (max-width: 860px) {
-  /* Never turn html/body/#root into a secondary scroll container for the landing page. */
-  .public-landing-page {
-    width: 100%;
-    min-width: 0;
-    height: auto;
-    min-height: 100vh;
-    touch-action: auto;
-  }
-
-  .public-landing-page .landing-hero-shell,
-  .public-landing-page .landing-trusted-person-spotlight,
-  .public-landing-page .landing-section,
-  .public-landing-page .landing-plan-section,
-  .public-landing-page .landing-footer {
-    min-width: 0;
-    box-sizing: border-box;
-  }
-
-  .public-landing-page .landing-hero-copy h1 {
-    font-size: clamp(2.15rem, 10vw, 3.35rem);
-    line-height: 1.02;
-    overflow-wrap: break-word;
-  }
-
-  .public-landing-page .landing-section-heading h2,
-  .public-landing-page .trusted-person-copy h2 {
-    font-size: clamp(1.7rem, 7.5vw, 2.35rem);
-    line-height: 1.08;
-    overflow-wrap: break-word;
-  }
-}
-
+/* Password-Encrypt Ver-0.053F — restore the pre-carousel mobile landing layout.
+   Plans stack vertically again. The page uses the original mobile width/padding and
+   normal browser vertical scrolling. No landing plan carousel/swipe CSS remains. */
 @media (max-width: 680px) {
-  /* Isolate horizontal movement to this row only. No negative margins, no mandatory
-     snapping and no overflow rules are applied to the page/root. */
-  .landing-pricing-section {
-    min-width: 0;
-    max-width: 100%;
-  }
-
   .landing-pricing-section .landing-plan-tier-grid {
-    display: flex !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-    gap: 14px !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    width: auto !important;
+    max-width: none !important;
+    gap: 16px !important;
     margin: 0 !important;
-    padding: 4px 0 12px !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    scroll-snap-type: none !important;
-    scroll-padding: 0 !important;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    touch-action: manipulation;
-  }
-
-  .landing-pricing-section .landing-plan-tier-grid::-webkit-scrollbar {
-    display: none;
+    padding: 0 !important;
+    overflow: visible !important;
   }
 
   .landing-pricing-section .landing-plan-tier {
-    flex: 0 0 calc(88vw - 20px) !important;
-    width: calc(88vw - 20px) !important;
-    max-width: 360px !important;
+    width: auto !important;
+    max-width: none !important;
     min-width: 0 !important;
-    scroll-snap-align: none !important;
-    scroll-snap-stop: normal !important;
+    flex: none !important;
+    transform: none !important;
+  }
+
+  /* Keep the FAQ accordion, but restore the standard landing-panel side padding. */
+  .landing-faq-section {
+    padding: 22px !important;
+    border: 1px solid rgba(217,229,238,.9) !important;
+    border-radius: 26px !important;
+    background: rgba(255,255,255,.82) !important;
   }
 }

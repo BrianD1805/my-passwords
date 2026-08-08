@@ -1,0 +1,8 @@
+Password-Encrypt Ver-0.053F verification
+Target: restore mobile landing layout from before the plan carousel while retaining later functional/content changes.
+- Plans stack vertically on mobile
+- Swipe/carousel prompt removed
+- No horizontal plan overflow
+- Original mobile outer page width/margins restored
+- FAQ panel side padding restored
+- Normal document vertical scrolling preserved
