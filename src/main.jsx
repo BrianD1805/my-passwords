@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.052B';
+const VERSION = 'Password-Encrypt Ver-0.053';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2024,6 +2024,8 @@ function App() {
   const [entitlementModal, setEntitlementModal] = useState({ visible: false, feature: '', title: '', message: '' });
   const [publicPlans, setPublicPlans] = useState(FALLBACK_SAAS_PLANS);
   const [billing, setBilling] = useState({ status: 'idle', message: '', planCode: '', interval: 'monthly', subscription: null, stripeConfigured: false, returnState: '', loaded: false, paymentHistory: [], nextInvoice: null, duplicateSubscriptionIds: [] });
+  const [billingTermsAccepted, setBillingTermsAccepted] = useState(false);
+  const [billingLegalModalOpen, setBillingLegalModalOpen] = useState(false);
   const [subscriptionActionModal, setSubscriptionActionModal] = useState({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' });
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'Your vault safety status will update after the first secure backup check.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
@@ -2575,10 +2577,16 @@ function App() {
       setBilling((current) => ({ ...current, status: 'error', message: `${billingIntervalLabel(billing.interval)} billing is not available for this plan.` }));
       return;
     }
+    if (!billingTermsAccepted) {
+      setBilling((current) => ({ ...current, status: 'error', message: 'Please read and agree to the Subscription, Cancellation & Refund Policy before continuing to Stripe Checkout.' }));
+      return;
+    }
     setBilling((current) => ({ ...current, status: 'opening-checkout', message: 'Opening secure Stripe Checkout...' }));
     const result = await postJson('/.netlify/functions/stripe-checkout', {
       planCode: selectedPlan.code,
       billingInterval: billing.interval,
+      billingTermsAccepted: true,
+      billingTermsVersion: LEGAL_VERSION,
       requestId: crypto.randomUUID()
     });
     if (!result.ok || !result.checkoutUrl) {
@@ -4627,6 +4635,7 @@ function App() {
     || isFolderListPopupOpen
     || folderManager.visible
     || signupLegalModal.visible
+    || billingLegalModalOpen
     || isCreateAccountPopupOpen
     || isCreateVaultPopupOpen
   );
@@ -4653,6 +4662,7 @@ function App() {
     isFolderListPopupOpen,
     folderManagerVisible: folderManager.visible,
     signupLegalModalVisible: signupLegalModal.visible,
+    billingLegalModalOpen,
     isCreateAccountPopupOpen,
     isCreateVaultPopupOpen,
     hasBackDismissibleLayer,
@@ -4682,6 +4692,7 @@ function App() {
     if (state.folderManagerVisible) { backNavigationStateRef.current.folderManagerVisible = false; closeFolderManager(); return true; }
     if (state.isFolderListPopupOpen) { backNavigationStateRef.current.isFolderListPopupOpen = false; setIsFolderListPopupOpen(false); return true; }
     if (state.signupLegalModalVisible) { backNavigationStateRef.current.signupLegalModalVisible = false; setSignupLegalModal((current) => ({ ...current, visible: false })); return true; }
+    if (state.billingLegalModalOpen) { backNavigationStateRef.current.billingLegalModalOpen = false; setBillingLegalModalOpen(false); return true; }
     if (state.isCreateAccountPopupOpen) { backNavigationStateRef.current.isCreateAccountPopupOpen = false; setIsCreateAccountPopupOpen(false); return true; }
     if (state.isCreateVaultPopupOpen) { backNavigationStateRef.current.isCreateVaultPopupOpen = false; setIsCreateVaultPopupOpen(false); return true; }
     if (state.mobileHeaderMenuOpen) { backNavigationStateRef.current.mobileHeaderMenuOpen = false; setMobileHeaderMenuOpen(false); return true; }
@@ -4946,7 +4957,7 @@ function App() {
     if (!draft.phoneE164) return 'Please enter a mobile number with country code.';
     if (!draft.accountName) return 'Please enter an account or vault name.';
     if (!draft.planCode) return 'Please choose a subscription plan.';
-    if (!draft.legalAccepted) return 'Please accept the Terms, Privacy Policy and Billing & Refund Policy before continuing.';
+    if (!draft.legalAccepted) return 'Please read and agree to the Terms of Service and Privacy Policy before continuing.';
     return '';
   }
 
@@ -6048,7 +6059,7 @@ function App() {
             })}
             {!publicPlans.length && <div className="landing-plans-unavailable"><AlertTriangle size={20} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
           </div>
-          <p className="landing-pricing-legal">Prices are shown in GBP. Creating a trial does not start a paid subscription. Taxes are handled according to the seller's applicable obligations and the payment information shown at Stripe Checkout. <a href="/billing-terms">Billing, cancellation & refunds</a></p>
+          <div className="landing-trial-no-card"><CreditCard size={18} /><span><strong>NO CREDIT CARD DETAILS are taken during your free trial.</strong><small>You only enter payment details if you later choose to purchase a subscription through Stripe Checkout.</small></span></div>
         </section>
 
         <section className="landing-section landing-feature-section" aria-label="Features">
@@ -6145,17 +6156,19 @@ function App() {
           <div className="item-popup-layer create-account-popup-layer" role="dialog" aria-modal="true" aria-label="Create Password-Encrypt account">
             <div className="item-popup-backdrop" onClick={closeCreateAccountPopup} />
             <section className="item-popup-card create-account-popup-card">
-              <header className="item-popup-header">
-                <div>
-                  <p className="eyebrow">Create Account</p>
-                  <h2><UserRoundCheck size={20} /> Set up your secure vault</h2>
+              <header className="item-popup-header create-account-popup-header">
+                <div className="create-account-header-content">
+                  <div className="create-account-header-title">
+                    <p className="eyebrow">Create Account</p>
+                    <h2><UserRoundCheck size={20} /> Set up your secure vault</h2>
+                  </div>
+                  <div className="onboarding-progress onboarding-progress-four" aria-label="Onboarding progress">
+                    {[1, 2, 3, 4].map((step) => <span key={step} className={landingOnboardingStep === step ? 'active' : landingOnboardingStep > step ? 'complete' : ''}>{step}</span>)}
+                  </div>
                 </div>
                 <button type="button" className="icon-button" onClick={closeCreateAccountPopup} aria-label="Close create account popup"><X size={18} /></button>
               </header>
               <div className="item-popup-body create-account-popup-body">
-                <div className="onboarding-progress onboarding-progress-four" aria-label="Onboarding progress">
-                  {[1, 2, 3, 4].map((step) => <span key={step} className={landingOnboardingStep === step ? 'active' : landingOnboardingStep > step ? 'complete' : ''}>{step}</span>)}
-                </div>
 
                 {landingOnboardingStep === 1 && (
                   <div className="create-account-step">
@@ -6171,7 +6184,7 @@ function App() {
                     <label>Vault name<input value={landingAccountDraft.accountName} onChange={(e) => updateLandingDraft({ accountName: e.target.value })} placeholder="e.g. My Private Vault" /></label>
                     <div className="legal-consent-row">
                       <input id="signup-legal-consent" type="checkbox" checked={Boolean(landingAccountDraft.legalAccepted)} onChange={(event) => updateLandingDraft({ legalAccepted: event.target.checked })} aria-labelledby="signup-legal-consent-text" />
-                      <span id="signup-legal-consent-text">I agree to the <button type="button" className="legal-inline-link" onClick={() => openSignupLegalDocument('terms')}>Terms of Service</button>, acknowledge the <button type="button" className="legal-inline-link" onClick={() => openSignupLegalDocument('privacy')}>Privacy Policy</button>, and accept the <button type="button" className="legal-inline-link" onClick={() => openSignupLegalDocument('billing')}>Subscription, Cancellation &amp; Refund Policy</button>.</span>
+                      <span id="signup-legal-consent-text">I have read and agree to your <button type="button" className="legal-inline-link" onClick={() => openSignupLegalDocument('terms')}>Terms of Service</button> and <button type="button" className="legal-inline-link" onClick={() => openSignupLegalDocument('privacy')}>Privacy Policy</button>.</span>
                     </div>
                   </div>
                 )}
@@ -6185,6 +6198,7 @@ function App() {
                       {!publicPlans.length && <div className="no-public-plans"><AlertTriangle size={18} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
                     </div>
                     <div className="saas-inline-note"><ShieldCheck size={16} /><span>Your selected trial starts only after successful contact verification. Creating the trial does not start a paid subscription.</span></div>
+                    <div className="saas-inline-note trial-no-card-inline"><CreditCard size={16} /><span><strong>NO CREDIT CARD DETAILS are taken during your free trial.</strong> Payment details are requested only if you later choose a paid subscription.</span></div>
                     <p className="landing-commercial-note">Prices are shown in GBP. Any tax that the seller is required and configured to collect must be shown in the Stripe payment flow before payment.</p>
                   </div>
                 )}
@@ -7070,8 +7084,8 @@ function App() {
 
                     {publicPlans.length ? <>
                       <div className="subscription-selection-form">
-                        <label><span>Plan</span><CustomSelect value={selectedPlan?.code || ''} ariaLabel="Choose subscription plan" options={publicPlans.map((plan) => ({ value: plan.code, label: plan.displayName }))} onChange={(planCode) => setBilling((current) => ({ ...current, planCode, message: '' }))} disabled={!chooserEnabled || billing.status === 'updating'} /></label>
-                        <label><span>Billing period</span><CustomSelect value={billing.interval} ariaLabel="Choose billing period" options={['monthly', 'quarterly', 'annual'].map((interval) => ({ value: interval, label: `${billingIntervalLabel(interval)}${selectedPlan && planIntervalReady(selectedPlan, interval) ? ` — ${billingPriceLabel(selectedPlan, interval)}` : ' — Not available'}`, disabled: !selectedPlan || !planIntervalReady(selectedPlan, interval) }))} onChange={(interval) => setBilling((current) => ({ ...current, interval, message: '' }))} disabled={!chooserEnabled || billing.status === 'updating'} /></label>
+                        <label><span>Plan</span><CustomSelect value={selectedPlan?.code || ''} ariaLabel="Choose subscription plan" options={publicPlans.map((plan) => ({ value: plan.code, label: plan.displayName }))} onChange={(planCode) => { setBilling((current) => ({ ...current, planCode, message: '' })); setBillingTermsAccepted(false); }} disabled={!chooserEnabled || billing.status === 'updating'} /></label>
+                        <label><span>Billing period</span><CustomSelect value={billing.interval} ariaLabel="Choose billing period" options={['monthly', 'quarterly', 'annual'].map((interval) => ({ value: interval, label: `${billingIntervalLabel(interval)}${selectedPlan && planIntervalReady(selectedPlan, interval) ? ` — ${billingPriceLabel(selectedPlan, interval)}` : ' — Not available'}`, disabled: !selectedPlan || !planIntervalReady(selectedPlan, interval) }))} onChange={(interval) => { setBilling((current) => ({ ...current, interval, message: '' })); setBillingTermsAccepted(false); }} disabled={!chooserEnabled || billing.status === 'updating'} /></label>
                       </div>
 
                       <div className="subscription-selection-summary">
@@ -7081,9 +7095,15 @@ function App() {
 
                       {selectedPlan && !planIntervalReady(selectedPlan, billing.interval) && <div className="subscription-inline-note"><AlertTriangle size={17} /><span>This billing option is not available yet. Choose another billing period.</span></div>}
 
-                      {!stripeSubscriptionExists || ended
-                        ? <button type="button" className="primary-button subscription-checkout-button" onClick={startStripeCheckout} disabled={billing.status === 'opening-checkout' || !selectedPlan || !planIntervalAmount(selectedPlan, billing.interval) || !planIntervalReady(selectedPlan, billing.interval)}><CreditCard size={18} /> {billing.status === 'opening-checkout' ? 'Opening Stripe Checkout...' : `Continue with ${billingIntervalLabel(billing.interval)} billing`}</button>
-                        : <button type="button" className="primary-button subscription-change-button" onClick={reviewSubscriptionChange} disabled={!canChange || changeMode === 'none' || !selectedPlan || !planIntervalReady(selectedPlan, billing.interval) || billing.status === 'updating'}><CalendarClock size={18} /> {currentActionLabel}</button>}
+                      {!stripeSubscriptionExists || ended ? (
+                        <>
+                          <div className="billing-purchase-consent">
+                            <input id="billing-purchase-consent" type="checkbox" checked={billingTermsAccepted} onChange={(event) => { setBillingTermsAccepted(event.target.checked); setBilling((current) => ({ ...current, message: '' })); }} aria-labelledby="billing-purchase-consent-text" />
+                            <span id="billing-purchase-consent-text">I have read and agree to the <button type="button" className="legal-inline-link" onClick={() => setBillingLegalModalOpen(true)}>Subscription, Cancellation &amp; Refund Policy</button> for this paid subscription.</span>
+                          </div>
+                          <button type="button" className="primary-button subscription-checkout-button" onClick={startStripeCheckout} disabled={billing.status === 'opening-checkout' || !billingTermsAccepted || !selectedPlan || !planIntervalAmount(selectedPlan, billing.interval) || !planIntervalReady(selectedPlan, billing.interval)}><CreditCard size={18} /> {billing.status === 'opening-checkout' ? 'Opening Stripe Checkout...' : `Continue with ${billingIntervalLabel(billing.interval)} billing`}</button>
+                        </>
+                      ) : <button type="button" className="primary-button subscription-change-button" onClick={reviewSubscriptionChange} disabled={!canChange || changeMode === 'none' || !selectedPlan || !planIntervalReady(selectedPlan, billing.interval) || billing.status === 'updating'}><CalendarClock size={18} /> {currentActionLabel}</button>}
                     </> : <div className="subscription-inline-note"><AlertTriangle size={17} /><span>Plan choices could not be loaded. Use the refresh icon above and try again.</span></div>}
                   </section>
 
@@ -7564,6 +7584,27 @@ function App() {
             <footer className="item-popup-footer subscription-action-footer">
               <button type="button" className="secondary-button" onClick={() => setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' })} disabled={billing.status === 'updating'}>Go back</button>
               <button type="button" className="primary-button" onClick={confirmSubscriptionAction} disabled={billing.status === 'updating'}>{billing.status === 'updating' ? 'Updating...' : subscriptionActionModal.action === 'cancel_at_period_end' ? 'Schedule cancellation' : subscriptionActionModal.action === 'reactivate' ? 'Keep active' : subscriptionActionModal.mode === 'immediate' ? 'Confirm upgrade' : 'Schedule change'}</button>
+            </footer>
+          </section>
+        </div>
+      )}
+
+      {billingLegalModalOpen && (
+        <div className="item-popup-layer signup-legal-popup-layer" role="dialog" aria-modal="true" aria-labelledby="billing-legal-popup-title">
+          <button type="button" className="item-popup-backdrop" onClick={() => setBillingLegalModalOpen(false)} aria-label="Close billing policy" />
+          <section className="item-popup-card signup-legal-popup-card">
+            <header className="item-popup-header">
+              <div>
+                <p className="eyebrow">Subscription terms</p>
+                <h2 id="billing-legal-popup-title"><FileText size={20} /> Billing &amp; Refund Terms</h2>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setBillingLegalModalOpen(false)} aria-label="Close billing policy"><X size={18} /></button>
+            </header>
+            <div className="item-popup-body signup-legal-popup-body">
+              <LegalPage page="billing" embedded />
+            </div>
+            <footer className="item-popup-footer signup-legal-popup-footer">
+              <button type="button" className="primary-button" onClick={() => setBillingLegalModalOpen(false)}>Back to Plan &amp; Billing</button>
             </footer>
           </section>
         </div>

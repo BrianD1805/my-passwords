@@ -1,4 +1,6 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow, upsertRow } from './_db.js';
+
+const BILLING_TERMS_VERSION = '2026-08-08';
 import { getBillingContext } from './_billing.js';
 import { billingIntervalDefinition, publicSiteUrl, stripeAutomaticTaxEnabled, stripeConfigured, stripeObjectId, stripeRequest, syncStripePlan } from './_stripe.js';
 import { listCustomerStripeSubscriptions, syncStripeSubscriptionObject } from './_subscription-lifecycle.js';
@@ -69,6 +71,20 @@ export async function handler(event) {
   if (!context.ok) return jsonResponse(context.code === 'SESSION_REQUIRED' ? 401 : 409, { ok: false, version: APP_VERSION, code: context.code, message: context.message });
   try { assertBrowserAction(event, { session: context.session, kind: 'customer', csrf: true }); }
   catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code || 'SECURITY_CHECK_FAILED', message: error.message }, securityErrorResponseHeaders(error)); }
+
+  const body = parseBody(event);
+  const billingTermsAccepted = body.billingTermsAccepted === true;
+  const billingTermsVersion = String(body.billingTermsVersion || '').trim();
+  if (!billingTermsAccepted || billingTermsVersion !== BILLING_TERMS_VERSION) {
+    return jsonResponse(409, {
+      ok: false,
+      version: APP_VERSION,
+      code: 'BILLING_TERMS_ACCEPTANCE_REQUIRED',
+      billingTermsVersion: BILLING_TERMS_VERSION,
+      message: 'Read and agree to the current Subscription, Cancellation & Refund Policy before opening Stripe Checkout.'
+    });
+  }
+
   const existingSubscription = context.subscription || null;
   if (existingSubscription?.status === 'checkout_pending' && existingSubscription?.checkout_session_id) {
     const previousSession = await stripeRequest(`checkout/sessions/${encodeURIComponent(existingSubscription.checkout_session_id)}`, { method: 'GET' }).catch(() => null);
@@ -103,7 +119,6 @@ export async function handler(event) {
     }).catch(() => null);
   }
 
-  const body = parseBody(event);
   const planCode = String(body.planCode || context.tenant.plan_code || 'personal').trim().toLowerCase();
   const interval = billingIntervalDefinition(body.billingInterval || 'monthly');
   const requestId = String(body.requestId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 120);
@@ -224,7 +239,8 @@ export async function handler(event) {
         version: APP_VERSION,
         checkout_request_id: requestId,
         checkout_created_at: now,
-        preserved_trial_end: trialEnd || null
+        preserved_trial_end: trialEnd || null,
+        billing_terms_acceptance: { accepted: true, accepted_at: now, document_version: BILLING_TERMS_VERSION }
       },
       created_at: context.subscription?.created_at || now,
       updated_at: now
@@ -240,8 +256,26 @@ export async function handler(event) {
       status: 'pending',
       amount_minor: Number(plan[interval.amountColumn] || 0),
       currency: 'GBP',
-      metadata: { plan_code: plan.code, billing_interval: interval.key, stripe_customer_id: customer.id, preserved_trial_end: trialEnd || null },
+      metadata: { plan_code: plan.code, billing_interval: interval.key, stripe_customer_id: customer.id, preserved_trial_end: trialEnd || null, billing_terms_version: BILLING_TERMS_VERSION, billing_terms_accepted_at: now },
       occurred_at: now,
+      created_at: now
+    }).catch(() => null);
+
+    await insertRow('audit_log', {
+      id: publicId('audit'),
+      tenant_id: context.tenant.id,
+      user_id: context.user.id,
+      action: 'paid_subscription_terms_accepted',
+      metadata: {
+        version: APP_VERSION,
+        document_version: BILLING_TERMS_VERSION,
+        accepted_at: now,
+        plan_code: plan.code,
+        billing_interval: interval.key,
+        amount_minor: Number(plan[interval.amountColumn] || 0),
+        currency: 'GBP',
+        source: 'plan_and_billing_checkout'
+      },
       created_at: now
     }).catch(() => null);
 

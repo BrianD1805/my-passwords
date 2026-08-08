@@ -118,7 +118,7 @@ export async function handler(event) {
         version: APP_VERSION,
         code: 'LEGAL_ACCEPTANCE_REQUIRED',
         legalVersion: LEGAL_VERSION,
-        message: 'Accept the current Terms, Privacy Policy and Billing & Refund Policy before creating a new account.'
+        message: 'Read and agree to the current Terms of Service and Privacy Policy before creating a new account.'
       });
     }
 
@@ -199,7 +199,7 @@ export async function handler(event) {
           accepted: true,
           accepted_at: now,
           document_version: LEGAL_VERSION,
-          documents: ['terms_of_service', 'privacy_policy', 'subscription_cancellation_refund_policy'],
+          documents: ['terms_of_service', 'privacy_policy'],
           source: 'public_signup'
         }
       }

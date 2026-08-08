@@ -14497,3 +14497,93 @@ select {
     line-height: 1.08;
   }
 }
+
+
+/* Password-Encrypt Ver-0.053 — final pre-launch UX, mobile Ubuntu and consent controls */
+html,
+body,
+#root,
+#root *,
+#root *::before,
+#root *::after,
+button,
+input,
+textarea,
+select,
+option {
+  font-family: "Ubuntu", Ubuntu, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+
+.landing-trial-no-card {
+  max-width: 760px;
+  margin: 18px auto 0;
+  padding: 14px 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 11px;
+  border: 1px solid rgba(51, 102, 153, .22);
+  border-radius: 16px;
+  background: #f5f9fc;
+  color: #31506d;
+  text-align: left;
+}
+.landing-trial-no-card > svg { flex: 0 0 auto; color: #336699; margin-top: 2px; }
+.landing-trial-no-card > span { display: grid; gap: 3px; }
+.landing-trial-no-card strong { color: #173a5d; }
+.landing-trial-no-card small { color: #617487; line-height: 1.45; }
+
+.create-account-popup-header { align-items: center; }
+.create-account-header-content {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.create-account-header-title { min-width: 0; }
+.create-account-header-title .eyebrow { margin-bottom: 7px; }
+.create-account-popup-header .onboarding-progress {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  justify-content: flex-start;
+}
+.create-account-popup-header .onboarding-progress span { width: 36px; height: 36px; }
+
+.billing-purchase-consent {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+  padding: 14px 15px;
+  border: 1px solid #cddae4;
+  border-radius: 16px;
+  background: #f7fafc;
+}
+.billing-purchase-consent input {
+  width: 18px !important;
+  height: 18px !important;
+  margin-top: 2px;
+  accent-color: #336699;
+}
+.billing-purchase-consent span { color: #465d70; line-height: 1.5; }
+
+@media (max-width: 700px) {
+  .create-account-popup-header { align-items: flex-start; }
+  .create-account-header-content {
+    display: grid;
+    gap: 13px;
+    align-items: start;
+  }
+  .create-account-popup-header .onboarding-progress {
+    width: 100%;
+    gap: 8px;
+  }
+  .create-account-popup-header .onboarding-progress span {
+    width: 32px;
+    height: 32px;
+    font-size: .9rem;
+  }
+  .landing-trial-no-card { margin-top: 14px; }
+}

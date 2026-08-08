@@ -1,0 +1,22 @@
+Password-Encrypt Ver-0.053 — Verification Results
+Date: 8 August 2026
+
+PASS  13/13 security static checks
+PASS  20/20 reliability static checks
+PASS  35/35 legal/commercial readiness checks
+PASS  56/56 Netlify Function modules imported successfully
+PASS  56/56 Netlify Function JavaScript files passed Node syntax checks
+PASS  7/7 JSX files passed TypeScript transpile syntax validation
+PASS  package/app/server/service-worker version alignment to Ver-0.053
+
+Targeted Ver-0.053 controls verified statically:
+- Ubuntu forced across the rendered UI and mobile/PWA controls.
+- Landing-page pricing disclaimer removed.
+- No-credit-card trial message present on the public plan area and onboarding plan step.
+- Trial legal acceptance contains Terms of Service + Privacy Policy only.
+- Paid checkout has a separate Subscription, Cancellation & Refund Policy tick.
+- Stripe checkout rejects missing/stale billing-policy acceptance server-side.
+- Paid billing-policy acceptance is captured in subscription/billing/audit metadata.
+- Signup progress 1–4 is located in the sticky popup header with responsive desktop/mobile layout.
+
+npm run build was not executed in the patch environment because dependencies/node_modules are intentionally not installed in the patch workspace. Run the supplied local test command before deployment.
