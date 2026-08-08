@@ -44,7 +44,7 @@
 [functions."emergency-access-release-process"]
   schedule = "*/5 * * * *"
 
-# Ver-0.053A retains the reliability monitoring schedules introduced in Ver-0.051.
+# Ver-0.053B retains the reliability monitoring schedules introduced in Ver-0.051.
 [functions."operations-health-check"]
   schedule = "*/15 * * * *"
 

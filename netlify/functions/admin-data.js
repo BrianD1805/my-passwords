@@ -148,12 +148,12 @@ async function loadDashboard() {
     const snapshot = subscription?.entitlements_snapshot?.version
       ? subscription.entitlements_snapshot
       : entitlementSnapshotFromPlan(founder ? {
-          code: 'founder_private', display_name: 'Founder Plan', max_users: 1, document_limit: 0, storage_limit_mb: 0,
+          code: 'founder_private', display_name: 'Founder Plan', max_users: 1, item_limit: 0, document_limit: 0, storage_limit_mb: 0,
           feature_flags: { documents: true, emergencyAccess: true, secureDeviceUnlock: true, cloudBackupSync: true, multiUser: false, sharing: false }
         } : (plan || { code: effectivePlanCode, display_name: effectivePlanCode.replace(/_/g, ' '), max_users: 1 }));
     const effectiveEntitlements = applyEntitlementOverrides(snapshot, subscription?.entitlement_overrides || {});
     const documentUsage = documentUsageByTenant.get(tenant.id) || { documents: 0, storageBytes: 0 };
-    const usage = { users: customerUsers.filter((user) => !['cancelled', 'deleted'].includes(String(user.status || '').toLowerCase())).length, ...documentUsage };
+    const usage = { users: customerUsers.filter((user) => !['cancelled', 'deleted'].includes(String(user.status || '').toLowerCase())).length, vaultItems: Number(latestSnapshotByTenant.get(tenant.id)?.item_count || 0), ...documentUsage };
     return {
       id: tenant.id,
       accountName: tenant.account_name || tenant.name || '',
@@ -257,6 +257,7 @@ export async function handler(event) {
         annual_price_minor: toNonNegativeInt(plan.annualPriceMinor),
         trial_days: toNonNegativeInt(plan.trialDays),
         max_users: Math.max(1, toNonNegativeInt(plan.maxUsers) || 1),
+        item_limit: toNonNegativeInt(plan.itemLimit),
         storage_limit_mb: toNonNegativeInt(plan.storageLimitMb),
         document_limit: toNonNegativeInt(plan.documentLimit),
         features: reservedPlanCannotPublish(code) ? [] : cleanFeatures(plan.features),
@@ -265,7 +266,7 @@ export async function handler(event) {
           multiUser: false,
           sharing: false
         },
-        entitlement_version: 1,
+        entitlement_version: 2,
         is_featured: reservedPlanCannotPublish(code) ? false : Boolean(plan.isFeatured),
         is_public: reservedPlanCannotPublish(code) ? false : Boolean(plan.isPublic),
         is_active: plan.isActive !== false,

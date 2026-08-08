@@ -1,6 +1,6 @@
 import { selectRows, updateRow } from './_db.js';
 
-export const ENTITLEMENT_VERSION = 1;
+export const ENTITLEMENT_VERSION = 2;
 export const FEATURE_KEYS = Object.freeze({
   documents: 'documents',
   emergencyAccess: 'emergencyAccess',
@@ -66,6 +66,7 @@ export function normaliseEntitlementOverrides(value = {}) {
   return {
     limits: {
       maxUsers: optionalLimit(limits.maxUsers),
+      itemLimit: optionalLimit(limits.itemLimit),
       documentLimit: optionalLimit(limits.documentLimit),
       storageLimitMb: optionalLimit(limits.storageLimitMb)
     },
@@ -82,6 +83,7 @@ export function entitlementSnapshotFromPlan(plan = {}) {
     capturedAt: new Date().toISOString(),
     limits: {
       maxUsers: Math.max(1, nonNegativeInteger(plan.max_users ?? plan.maxUsers, 1) || 1),
+      itemLimit: nonNegativeInteger(plan.item_limit ?? plan.itemLimit, 0),
       documentLimit: nonNegativeInteger(plan.document_limit ?? plan.documentLimit, 0),
       storageLimitMb: nonNegativeInteger(plan.storage_limit_mb ?? plan.storageLimitMb, 0)
     },
@@ -95,7 +97,7 @@ function founderEntitlements() {
     planCode: 'founder_private',
     planName: 'Founder Plan',
     capturedAt: new Date().toISOString(),
-    limits: { maxUsers: 1, documentLimit: 0, storageLimitMb: 0 },
+    limits: { maxUsers: 1, itemLimit: 0, documentLimit: 0, storageLimitMb: 0 },
     features: {
       documents: true,
       emergencyAccess: true,
@@ -124,6 +126,7 @@ export function applyEntitlementOverrides(snapshot = {}, rawOverrides = {}) {
     capturedAt: snapshot.capturedAt || null,
     limits: {
       maxUsers: Math.max(1, nonNegativeInteger(snapshot?.limits?.maxUsers, 1) || 1),
+      itemLimit: nonNegativeInteger(snapshot?.limits?.itemLimit, 0),
       documentLimit: nonNegativeInteger(snapshot?.limits?.documentLimit, 0),
       storageLimitMb: nonNegativeInteger(snapshot?.limits?.storageLimitMb, 0)
     },
@@ -147,6 +150,7 @@ export function serialiseEntitlements(entitlements = {}, usage = {}) {
   const limits = entitlements.limits || {};
   const cleanUsage = {
     users: nonNegativeInteger(usage.users, 0),
+    vaultItems: nonNegativeInteger(usage.vaultItems, 0),
     documents: nonNegativeInteger(usage.documents, 0),
     storageBytes: nonNegativeInteger(usage.storageBytes, 0),
     storageMb: Number((nonNegativeInteger(usage.storageBytes, 0) / (1024 * 1024)).toFixed(2))
@@ -159,6 +163,7 @@ export function serialiseEntitlements(entitlements = {}, usage = {}) {
     overridesApplied: Boolean(entitlements.overridesApplied),
     limits: {
       maxUsers: Math.max(1, nonNegativeInteger(limits.maxUsers, 1) || 1),
+      itemLimit: nonNegativeInteger(limits.itemLimit, 0),
       documentLimit: nonNegativeInteger(limits.documentLimit, 0),
       storageLimitMb: nonNegativeInteger(limits.storageLimitMb, 0)
     },
@@ -166,6 +171,7 @@ export function serialiseEntitlements(entitlements = {}, usage = {}) {
     usage: cleanUsage,
     remaining: {
       users: Number(limits.maxUsers || 0) === 0 ? null : Math.max(0, Number(limits.maxUsers || 1) - cleanUsage.users),
+      vaultItems: Number(limits.itemLimit || 0) === 0 ? null : Math.max(0, Number(limits.itemLimit || 0) - cleanUsage.vaultItems),
       documents: Number(limits.documentLimit || 0) === 0 ? null : Math.max(0, Number(limits.documentLimit || 0) - cleanUsage.documents),
       storageBytes: Number(limits.storageLimitMb || 0) === 0 ? null : Math.max(0, Number(limits.storageLimitMb || 0) * 1024 * 1024 - cleanUsage.storageBytes)
     }
@@ -174,19 +180,21 @@ export function serialiseEntitlements(entitlements = {}, usage = {}) {
 
 export async function loadPlanEntitlementSnapshot(planCode) {
   const code = String(planCode || 'personal').trim().toLowerCase() || 'personal';
-  const rows = await selectRows('subscription_plans', `select=code,display_name,max_users,storage_limit_mb,document_limit,feature_flags&code=${eq(code)}&limit=1`).catch(() => []);
+  const rows = await selectRows('subscription_plans', `select=code,display_name,max_users,item_limit,storage_limit_mb,document_limit,feature_flags&code=${eq(code)}&limit=1`).catch(() => []);
   const plan = rows?.[0];
-  return plan ? entitlementSnapshotFromPlan(plan) : entitlementSnapshotFromPlan({ code, display_name: code, max_users: 1, storage_limit_mb: 0, document_limit: 0, feature_flags: LEGACY_SAFE_FEATURES });
+  return plan ? entitlementSnapshotFromPlan(plan) : entitlementSnapshotFromPlan({ code, display_name: code, max_users: 1, item_limit: 0, storage_limit_mb: 0, document_limit: 0, feature_flags: LEGACY_SAFE_FEATURES });
 }
 
 export async function entitlementUsageForTenant(tenantId) {
-  const [users, documents] = await Promise.all([
+  const [users, documents, snapshots] = await Promise.all([
     selectRows('users', `select=id,status&tenant_id=${eq(tenantId)}&limit=5000`).catch(() => []),
-    selectRows('document_blobs', `select=id,file_size,storage_bytes&tenant_id=${eq(tenantId)}&limit=5000`).catch(() => [])
+    selectRows('document_blobs', `select=id,file_size,storage_bytes&tenant_id=${eq(tenantId)}&limit=5000`).catch(() => []),
+    selectRows('vault_sync_snapshots', `select=item_count&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=1`).catch(() => [])
   ]);
   const activeUsers = (users || []).filter((user) => !['cancelled', 'deleted'].includes(String(user.status || '').toLowerCase())).length;
   return {
     users: activeUsers,
+    vaultItems: nonNegativeInteger(snapshots?.[0]?.item_count, 0),
     documents: (documents || []).length,
     storageBytes: (documents || []).reduce((total, document) => total + nonNegativeInteger(document.storage_bytes || document.file_size, 0), 0)
   };

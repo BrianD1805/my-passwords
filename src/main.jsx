@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.053A';
+const VERSION = 'Password-Encrypt Ver-0.053B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -97,10 +97,10 @@ const DEFAULT_ENTITLEMENTS = Object.freeze({
   version: 1,
   planCode: 'personal',
   planName: 'Personal',
-  limits: { maxUsers: 1, documentLimit: 0, storageLimitMb: 0 },
+  limits: { maxUsers: 1, itemLimit: 0, documentLimit: 0, storageLimitMb: 0 },
   features: { documents: true, emergencyAccess: true, secureDeviceUnlock: true, cloudBackupSync: true, multiUser: false, sharing: false },
-  usage: { users: 1, documents: 0, storageBytes: 0, storageMb: 0 },
-  remaining: { users: 0, documents: null, storageBytes: null }
+  usage: { users: 1, vaultItems: 0, documents: 0, storageBytes: 0, storageMb: 0 },
+  remaining: { users: 0, vaultItems: null, documents: null, storageBytes: null }
 });
 
 function randomIndex(max) {
@@ -277,8 +277,8 @@ const SETTINGS_FAQS = [
   },
   {
     category: 'Emergency Access',
-    question: 'Does my trusted person need a Password-Encrypt account?',
-    answer: 'No. The standard Emergency Access flow works through secure browser links. A trusted person can accept the invitation, request access and open the released package without installing the app or creating their own vault.'
+    question: 'Does my next of kin or trusted person need a Password-Encrypt account?',
+    answer: 'No. Emergency Access is intended for a next of kin or another trusted person you nominate. The standard flow works through secure browser links, so they can accept the invitation, request access and open the released package without installing the app or creating their own vault.'
   },
   {
     category: 'Emergency Access',
@@ -2470,7 +2470,7 @@ function App() {
   }
 
   function showEntitlementUpgrade(feature, message = '') {
-    const labels = { documents: 'Encrypted documents', emergencyAccess: 'Emergency Access', secureDeviceUnlock: 'Secure device unlock', cloudBackupSync: 'Cloud backup and sync', users: 'Additional users' };
+    const labels = { items: 'Vault items', documents: 'Encrypted documents', emergencyAccess: 'Emergency Access', secureDeviceUnlock: 'Secure device unlock', cloudBackupSync: 'Cloud backup and sync', users: 'Additional users' };
     setEntitlementModal({ visible: true, feature, title: `${labels[feature] || 'This feature'} needs a plan upgrade`, message: message || `${labels[feature] || 'This feature'} is not included in the current plan or its plan limit has been reached.` });
   }
 
@@ -2484,9 +2484,9 @@ function App() {
   }
 
   function handleEntitlementError(result, fallbackFeature = '') {
-    if (!result?.upgradeRequired && !['PLAN_FEATURE_REQUIRED', 'DOCUMENT_LIMIT_REACHED', 'STORAGE_LIMIT_REACHED', 'USER_LIMIT_REACHED'].includes(String(result?.code || ''))) return false;
+    if (!result?.upgradeRequired && !['PLAN_FEATURE_REQUIRED', 'ITEM_LIMIT_REACHED', 'DOCUMENT_LIMIT_REACHED', 'STORAGE_LIMIT_REACHED', 'USER_LIMIT_REACHED'].includes(String(result?.code || ''))) return false;
     if (result.entitlements) updateEntitlements(result.entitlements);
-    const feature = result.feature || (String(result.code || '').includes('DOCUMENT') || String(result.code || '').includes('STORAGE') ? 'documents' : fallbackFeature);
+    const feature = result.feature || (String(result.code || '').includes('ITEM') ? 'items' : (String(result.code || '').includes('DOCUMENT') || String(result.code || '').includes('STORAGE') ? 'documents' : fallbackFeature));
     showEntitlementUpgrade(feature, result.message);
     return true;
   }
@@ -2912,6 +2912,7 @@ function App() {
             annualPriceMinor: Number(plan.annual_price_minor || 0),
             trialDays: Number(plan.trial_days || 0),
             maxUsers: Number(plan.max_users || 1),
+            itemLimit: Number(plan.item_limit || 0),
             storageLimitMb: Number(plan.storage_limit_mb || 0),
             documentLimit: Number(plan.document_limit || 0),
             features: Array.isArray(plan.features) ? plan.features.filter(Boolean) : [],
@@ -4048,6 +4049,12 @@ function App() {
     try {
       const isDocument = form.category === DOCUMENTS_CATEGORY;
       const isCard = form.category === CARDS_CATEGORY;
+      const itemLimit = Number(entitlements?.limits?.itemLimit || 0);
+      const currentItemCount = getVisibleVaultItems(items).length;
+      if (!editingItemId && itemLimit > 0 && currentItemCount >= itemLimit) {
+        showEntitlementUpgrade('items', `This plan includes up to ${itemLimit} vault item${itemLimit === 1 ? '' : 's'}. Delete an item or review your plan before adding another.`);
+        return;
+      }
       if (isDocument && !featureIncluded('documents')) {
         showEntitlementUpgrade('documents', 'Encrypted document storage is not included in the current plan. Passwords and other local vault items remain available.');
         return;
@@ -4397,9 +4404,19 @@ function App() {
       });
       if (!result.ok) {
         if (handleEntitlementError(result, 'cloudBackupSync')) {
-          const note = result.message || 'Cloud backup and sync are not included in the current plan.';
-          saveSyncSafety({ state: 'plan-local-only', pending: false, conflict: false, sessionRequired: false, message: note, itemCount, lastFailureAt: '', acknowledgedAt: '' });
-          setCustomerSession((current) => ({ ...current, checked: true, authenticated: true, cloudAccess: false, accessCode: result.code || 'PLAN_FEATURE_REQUIRED', message: note, entitlements: result.entitlements || current.entitlements }));
+          const note = result.message || 'The current plan limit has been reached.';
+          const itemLimitReached = result.code === 'ITEM_LIMIT_REACHED';
+          saveSyncSafety({
+            state: itemLimitReached ? 'backup-pending' : 'plan-local-only',
+            pending: itemLimitReached,
+            conflict: false,
+            sessionRequired: false,
+            message: note,
+            itemCount,
+            lastFailureAt: itemLimitReached ? new Date().toISOString() : '',
+            acknowledgedAt: ''
+          });
+          setCustomerSession((current) => ({ ...current, checked: true, authenticated: true, cloudAccess: itemLimitReached ? current.cloudAccess !== false : false, accessCode: result.code || 'PLAN_FEATURE_REQUIRED', message: note, entitlements: result.entitlements || current.entitlements }));
           return { ...result, planLimited: true };
         }
         const conflictBlocked = result.code === 'VAULT_CONFLICT' || Number(result.httpStatus || 0) === 409;
@@ -4443,6 +4460,7 @@ function App() {
         await recordSyncEvent('backup_failed', sessionRequired ? 'warning' : 'error', { itemCount, message: note });
         return { ...result, sessionRequired, message: note };
       }
+      if (result.entitlements) updateEntitlements(result.entitlements);
       const verified = await fetchLatestCloudSnapshot(activeAccount);
       const verifiedSnapshot = verified?.snapshot || null;
       const verifiedMatchesThisDevice = cloudSnapshotMatchesEnvelope(verifiedSnapshot, envelope);
@@ -5116,6 +5134,12 @@ function App() {
 
 
   function openAddItem() {
+    const itemLimit = Number(entitlements?.limits?.itemLimit || 0);
+    const currentItemCount = getVisibleVaultItems(items).length;
+    if (itemLimit > 0 && currentItemCount >= itemLimit) {
+      showEntitlementUpgrade('items', `This plan includes up to ${itemLimit} vault item${itemLimit === 1 ? '' : 's'}. Delete an item or review your plan before adding another.`);
+      return;
+    }
     const preferredCategory = category && category !== 'All' ? category : 'Passwords';
     setEditingItemId('');
     setForm(emptyForm(preferredCategory));
@@ -6026,11 +6050,11 @@ function App() {
               const isMostPopular = publicPlans.length >= 3 && planIndex === Math.floor(publicPlans.length / 2);
               const flags = { ...DEFAULT_ENTITLEMENTS.features, ...(plan.featureFlags || {}), multiUser: false, sharing: false };
               const enforcedFeatures = [
-                'Encrypted password vault',
+                plan.itemLimit > 0 ? `${plan.itemLimit} vault items (passwords, cards, notes & more)` : 'Encrypted password vault',
                 flags.documents !== false ? (plan.documentLimit > 0 ? `${plan.documentLimit} encrypted document${plan.documentLimit === 1 ? '' : 's'}` : 'Encrypted documents included') : '',
                 flags.documents !== false && plan.storageLimitMb > 0 ? `${plan.storageLimitMb} MB encrypted document storage` : '',
                 flags.cloudBackupSync !== false ? 'Secure cloud backup and syncing' : '',
-                flags.emergencyAccess !== false ? 'Emergency Access' : '',
+                flags.emergencyAccess !== false ? 'Next of Kin / Emergency Access' : '',
                 flags.secureDeviceUnlock !== false ? 'Secure device unlock' : ''
               ].filter(Boolean);
               const marketingFeatures = (plan.features || []).filter((feature) => {
@@ -6041,9 +6065,10 @@ function App() {
                 if (flags.emergencyAccess === false && /emergency/i.test(text)) return false;
                 if (flags.secureDeviceUnlock === false && /secure device|biometric|passkey/i.test(text)) return false;
                 if (/household|family sharing|team user|multi.?user|sharing controls/i.test(text)) return false;
+                if (/document\s*limit|encrypted\s+documents?|storage\s*limit|encrypted\s+document\s+storage|vault\s*item\s*limit|password\s*limit/i.test(text)) return false;
                 return true;
               });
-              const featureList = [...new Set([...marketingFeatures, ...enforcedFeatures])].slice(0, 7);
+              const featureList = [...new Set([...enforcedFeatures, ...marketingFeatures])].slice(0, 8);
               return (
                 <article key={plan.code} className={`landing-plan-tier ${isMostPopular ? 'featured' : ''}`}>
                   {isMostPopular && <span className="landing-plan-badge">Most popular</span>}
@@ -6070,11 +6095,11 @@ function App() {
             <div className="trusted-person-shield"><ShieldCheck size={28} /></div>
           </div>
           <div className="trusted-person-copy">
-            <p className="eyebrow">Trusted Person Access</p>
-            <h2>Plan for the moment someone you trust may need your private information.</h2>
-            <p>Emergency Access lets you nominate a trusted person and prepare selected information for them. A request starts a waiting period, you are notified, and you can cancel before the release conditions are met.</p>
+            <p className="eyebrow">Next of Kin / Trusted Person Access</p>
+            <h2>Make sure someone you trust can help if you are incapacitated or no longer able to access your vault.</h2>
+            <p>Emergency Access is designed for next of kin or another trusted person you nominate. You prepare the information they may need, a request starts your chosen waiting period, you are notified, and you can cancel before any prepared emergency package is released.</p>
             <div className="trusted-person-points">
-              <span><UserRoundCheck size={17} /> You choose the trusted person</span>
+              <span><UserRoundCheck size={17} /> You choose your next of kin or trusted person</span>
               <span><CalendarClock size={17} /> A waiting period protects you</span>
               <span><ShieldCheck size={17} /> Only the prepared emergency package is released</span>
             </div>
@@ -6148,7 +6173,7 @@ function App() {
         <footer className="landing-footer">
           <div className="landing-footer-copy">
             <span>© 2026 Password-Encrypt</span>
-            <small>Encrypted password vault. A trusted place for the private details that matter.</small>
+            <small>A trusted place for your private details that matter.</small>
           </div>
           <nav className="landing-footer-links" aria-label="Landing page links">
             <a href="/terms">Terms</a>
@@ -6907,7 +6932,7 @@ function App() {
                   <p className="settings-directory-label" id="settings-protection-group">Protection and recovery</p>
                   <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('emergency')}>
                     <span className="settings-directory-icon"><UsersRound size={22} /></span>
-                    <span className="settings-directory-copy"><strong>Emergency Access</strong><small>Trusted contact, waiting period and release plan.</small></span>
+                    <span className="settings-directory-copy"><strong>Emergency Access</strong><small>Next of kin or trusted person access for incapacity or other emergencies.</small></span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
                 </section>
@@ -7098,6 +7123,28 @@ function App() {
                     {duplicateCount > 1 && <div className="subscription-payment-warning"><AlertTriangle size={19} /><span><strong>Overlapping Stripe subscriptions detected</strong><small>No automatic plan change will be made until Admin keeps one live subscription and refreshes this account from Stripe.</small></span></div>}
                   </section>
 
+                  <section className="plan-usage-card settings-inner-card" aria-label="Plan usage">
+                    <div className="plan-usage-heading"><div><p className="eyebrow">Plan usage</p><h3>How much of your plan you are using</h3></div><span>{entitlements?.planName || planDisplayName(currentPlanCode)}</span></div>
+                    {(() => {
+                      const localVaultItems = getVisibleVaultItems(items).length;
+                      const usedItems = Math.max(localVaultItems, Number(entitlements?.usage?.vaultItems || 0));
+                      const itemLimit = Number(entitlements?.limits?.itemLimit || 0);
+                      const usedDocuments = Number(entitlements?.usage?.documents || 0);
+                      const documentLimit = Number(entitlements?.limits?.documentLimit || 0);
+                      const usedStorageMb = Number(entitlements?.usage?.storageMb || 0);
+                      const storageLimitMb = Number(entitlements?.limits?.storageLimitMb || 0);
+                      const rows = [
+                        { key: 'items', label: 'Vault items', used: usedItems, limit: itemLimit, detail: itemLimit > 0 ? `${Math.max(0, itemLimit - usedItems)} item${Math.max(0, itemLimit - usedItems) === 1 ? '' : 's'} left` : 'Unlimited on this plan' },
+                        { key: 'documents', label: 'Encrypted documents', used: usedDocuments, limit: documentLimit, detail: documentLimit > 0 ? `${Math.max(0, documentLimit - usedDocuments)} document${Math.max(0, documentLimit - usedDocuments) === 1 ? '' : 's'} left` : 'Unlimited on this plan' },
+                        { key: 'storage', label: 'Encrypted document storage', used: usedStorageMb, limit: storageLimitMb, detail: storageLimitMb > 0 ? `${usedStorageMb.toFixed(2)} MB of ${storageLimitMb} MB used` : `${usedStorageMb.toFixed(2)} MB used · unlimited allocation` }
+                      ];
+                      return <div className="plan-usage-list">{rows.map((row) => {
+                        const percent = row.limit > 0 ? Math.min(100, Math.max(0, (Number(row.used || 0) / row.limit) * 100)) : 0;
+                        return <article key={row.key} className="plan-usage-row"><div className="plan-usage-row-copy"><strong>{row.label}</strong><span>{row.limit > 0 ? `${Number(row.used || 0).toFixed(row.key === 'storage' ? 2 : 0)} / ${row.limit}` : `${Number(row.used || 0).toFixed(row.key === 'storage' ? 2 : 0)} used`}</span></div><div className="plan-usage-track" aria-hidden="true"><span style={{ width: `${percent}%` }} /></div><small>{row.detail}</small></article>;
+                      })}</div>;
+                    })()}
+                  </section>
+
                   <section className="subscription-chooser subscription-change-card settings-inner-card">
                     <div className="subscription-card-heading"><div><p className="eyebrow">{!stripeSubscriptionExists || ended ? 'Subscription options' : 'Change subscription'}</p><h3>{ended ? 'Restart your subscription' : !stripeSubscriptionExists ? 'Choose your plan and billing period' : 'Change plan or billing period'}</h3><p>Choose the plan and payment frequency you prefer. Higher-plan upgrades take effect immediately; downgrades and billing-period changes begin at the next renewal.</p></div><span>GBP (£)</span></div>
 
@@ -7170,8 +7217,8 @@ function App() {
             <section className="settings-section-panel settings-emergency-panel" aria-label="Emergency Access">
               <div className="settings-section-heading">
                 <p className="eyebrow">Emergency Access</p>
-                <h3><UsersRound size={20} /> Trusted person planning</h3>
-                <p>Nominate someone you trust so the right person is recorded if emergency access is enabled later.</p>
+                <h3><UsersRound size={20} /> Next of kin / trusted person planning</h3>
+                <p>Nominate your next of kin or another trusted person who may need your prepared emergency information if you are incapacitated, seriously ill, or otherwise unable to access your vault.</p>
               </div>
 
               {!featureIncluded('emergencyAccess') && <div className="plan-feature-unavailable"><UsersRound size={21} /><span><strong>Emergency Access is not included</strong><small>Your existing encrypted vault items remain available. Upgrade or ask Admin for an entitlement override to configure and manage a trusted person.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('emergencyAccess')}>Review plan</button></div>}
@@ -7179,14 +7226,14 @@ function App() {
               <div className="emergency-access-intro-card">
                 <ShieldCheck size={22} />
                 <div>
-                  <strong>You stay in control</strong>
-                  <p>This saves your nominated contact inside your encrypted vault. If they request emergency access, you are notified and can cancel during the waiting period. If you do not cancel before the waiting period ends, your selected emergency package will become available.</p>
+                  <strong>Designed for serious emergencies</strong>
+                  <p>This is intended for next of kin or another person you trust if you are incapacitated or cannot access your vault yourself. Their request starts your chosen waiting period; you are notified and can cancel during that period. Only if the waiting period ends without cancellation does your selected emergency package become available.</p>
                 </div>
               </div>
 
               <form className={`emergency-access-form ${!featureIncluded('emergencyAccess') ? 'feature-disabled' : ''}`} aria-disabled={!featureIncluded('emergencyAccess')} onSubmit={saveEmergencyAccessPlan}>
                 <div className="bootstrap-grid emergency-access-grid">
-                  <label>Trusted person name<input value={emergencyDraft.contactName} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactName: e.target.value })} placeholder="Full name" /></label>
+                  <label>Next of kin / trusted person name<input value={emergencyDraft.contactName} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactName: e.target.value })} placeholder="Full name" /></label>
                   <label>Relationship<input value={emergencyDraft.relationship} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, relationship: e.target.value })} placeholder="Spouse, child, sibling, solicitor..." /></label>
                   <label>Email<input type="email" value={emergencyDraft.contactEmail} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactEmail: e.target.value })} placeholder="trusted@example.com" /></label>
                   <label>Phone<input inputMode="tel" value={emergencyDraft.contactPhone} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactPhone: e.target.value })} placeholder="Mobile or landline" /></label>

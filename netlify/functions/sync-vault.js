@@ -2,6 +2,7 @@ import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, 
 import { getCustomerAccess } from './_session.js';
 import { assertBrowserAction } from './_security.js';
 import { recordFunctionFailure, recordOperationalEvent } from './_operations.js';
+import { serialiseEntitlements } from './_entitlements.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -75,9 +76,19 @@ export async function handler(event) {
   const encryptedBlob = String(body.encryptedBlob || '').trim();
   const localSalt = String(body.localSalt || '').trim();
   const localIv = String(body.localIv || '').trim();
-  const itemCount = Number(body.itemCount || 0);
+  const itemCount = Math.max(0, Math.round(Number(body.itemCount || 0) || 0));
   const clientUpdatedAt = body.clientUpdatedAt ? new Date(body.clientUpdatedAt).toISOString() : new Date().toISOString();
   if (!encryptedBlob || !localSalt || !localIv) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Encrypted vault data, salt and IV are required.' });
+
+  const itemLimit = Number(access.entitlementContext?.effective?.limits?.itemLimit || 0);
+  if (itemLimit > 0 && itemCount > itemLimit) {
+    const entitlementUsage = { ...(access.entitlementContext?.usage || {}), vaultItems: itemCount };
+    return jsonResponse(403, {
+      ok: false, version: APP_VERSION, code: 'ITEM_LIMIT_REACHED', feature: 'items', upgradeRequired: true,
+      entitlements: serialiseEntitlements(access.entitlementContext?.effective || {}, entitlementUsage),
+      message: `This plan allows up to ${itemLimit} vault item${itemLimit === 1 ? '' : 's'}. Delete an item or review your plan before backing up another item.`
+    });
+  }
 
   try {
     const snapshotId = publicId('snap');
@@ -136,7 +147,8 @@ export async function handler(event) {
     const reusedExistingBackup = Boolean(saved.reusedExistingBackup || saved.reused);
     await insertRow('audit_log', { id: publicId('audit'), tenant_id: tenantId, user_id: userId, action: reusedExistingBackup ? 'encrypted_snapshot_reused' : 'encrypted_snapshot_uploaded', metadata: { version: APP_VERSION, itemCount, provider: 'supabase', tenant_identity_source: 'secure_session', base_snapshot_id: body.baseSnapshotId || '', snapshot_id: effectiveSnapshotId, reused_existing_backup: reusedExistingBackup, forced_conflict_choice: Boolean(body.explicitConflictChoice) } });
     await recordSyncEvent({ tenantId, userId, eventType: reusedExistingBackup ? 'backup_duplicate_reused' : 'backup_success', status: 'success', itemCount, message: reusedExistingBackup ? 'Matching encrypted vault backup already existed and was reused.' : 'Encrypted vault backup saved.', deviceId: body.deviceId, metadata: { deviceType: body.deviceType || '', snapshotId: effectiveSnapshotId, baseSnapshotId: body.baseSnapshotId || '', reusedExistingBackup, forcedConflictChoice: Boolean(body.explicitConflictChoice) } });
-    return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', version: APP_VERSION, snapshotId: effectiveSnapshotId, reusedExistingBackup, itemCount, clientUpdatedAt, message: reusedExistingBackup ? 'Matching secure backup already exists and is now linked to this device.' : 'Cloud backup saved for the authenticated account.' });
+    const updatedEntitlements = serialiseEntitlements(access.entitlementContext?.effective || {}, { ...(access.entitlementContext?.usage || {}), vaultItems: itemCount });
+    return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', version: APP_VERSION, snapshotId: effectiveSnapshotId, reusedExistingBackup, itemCount, clientUpdatedAt, entitlements: updatedEntitlements, message: reusedExistingBackup ? 'Matching secure backup already exists and is now linked to this device.' : 'Cloud backup saved for the authenticated account.' });
   } catch (error) {
     await recordSyncEvent({ tenantId, userId, eventType: 'backup_failure', status: 'error', itemCount, message: 'Encrypted cloud backup failed.', deviceId: body.deviceId, metadata: { deviceType: body.deviceType || '', errorCode: error?.code || error?.name || 'BACKUP_FAILED' } });
     await recordOperationalEvent({ source: 'vault_backup', eventType: 'backup_failure', severity: 'error', errorCode: error?.code || error?.name || 'BACKUP_FAILED', message: 'An encrypted vault cloud backup failed.', tenantId, userId, metadata: { itemCount, deviceType: body.deviceType || '' } });

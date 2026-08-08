@@ -52,7 +52,7 @@ function isReservedFuturePlan(code) {
 function emptyPlan() {
   return {
     code: '', displayName: '', description: '', currency: 'GBP', monthlyPrice: '0.00', quarterlyPrice: '0.00', annualPrice: '0.00',
-    trialDays: 14, maxUsers: 1, storageLimitMb: 0, documentLimit: 0, features: '', featureFlags: { ...DEFAULT_PLAN_FEATURE_FLAGS }, isFeatured: false, isPublic: false, isActive: true, displayOrder: 10, stripeSyncStatus: 'not_synced', stripeSyncMessage: '', stripeSyncedAt: ''
+    trialDays: 14, maxUsers: 1, itemLimit: 0, storageLimitMb: 0, documentLimit: 0, features: '', featureFlags: { ...DEFAULT_PLAN_FEATURE_FLAGS }, isFeatured: false, isPublic: false, isActive: true, displayOrder: 10, stripeSyncStatus: 'not_synced', stripeSyncMessage: '', stripeSyncedAt: ''
   };
 }
 
@@ -67,6 +67,7 @@ function toEditorPlan(plan) {
     annualPrice: (Number(plan.annual_price_minor || 0) / 100).toFixed(2),
     trialDays: Number(plan.trial_days || 0),
     maxUsers: Number(plan.max_users || 1),
+    itemLimit: Number(plan.item_limit || 0),
     storageLimitMb: Number(plan.storage_limit_mb || 0),
     documentLimit: Number(plan.document_limit || 0),
     features: Array.isArray(plan.features) ? plan.features.join('\n') : '',
@@ -325,6 +326,7 @@ export default function AdminApp({ version }) {
           annualPriceMinor: minor(editor.annualPrice),
           trialDays: Number(editor.trialDays || 0),
           maxUsers: Number(editor.maxUsers || 1),
+          itemLimit: Number(editor.itemLimit || 0),
           storageLimitMb: Number(editor.storageLimitMb || 0),
           documentLimit: Number(editor.documentLimit || 0),
           features: editor.features,
@@ -474,7 +476,7 @@ export default function AdminApp({ version }) {
                   <div><strong>{plan.display_name}</strong><code>{plan.code}</code></div>
                   <p>{plan.description}</p>
                   <div className="admin-plan-prices"><span><small>Monthly</small>{money(plan.monthly_price_minor)}</span><span><small>Quarterly</small>{money(plan.quarterly_price_minor)}</span><span><small>Annual</small>{money(plan.annual_price_minor)}</span></div>
-                  <footer><span>{plan.trial_days || 0} trial days</span><span>{plan.is_public ? 'Published' : 'Hidden'}</span><span>{plan.is_active ? 'Active' : 'Inactive'}</span><span className={`stripe-plan-state ${plan.stripe_sync_status || 'not_synced'}`}>Stripe: {(plan.stripe_sync_status || 'not synced').replace(/_/g, ' ')}</span></footer>
+                  <footer><span>{plan.item_limit ? `${plan.item_limit} vault items` : 'Unlimited vault items'}</span><span>{plan.trial_days || 0} trial days</span><span>{plan.is_public ? 'Published' : 'Hidden'}</span><span>{plan.is_active ? 'Active' : 'Inactive'}</span><span className={`stripe-plan-state ${plan.stripe_sync_status || 'not_synced'}`}>Stripe: {(plan.stripe_sync_status || 'not synced').replace(/_/g, ' ')}</span></footer>
                 </button>
               ))}
               {!visiblePlans.length && <div className="admin-empty">{planVisibility === 'active' ? 'No active published plans are available.' : 'No hidden, unpublished or inactive plans are available.'}</div>}
@@ -625,6 +627,7 @@ export default function AdminApp({ version }) {
                   <label>Quarterly price<input type="number" min="0" step="0.01" value={editor.quarterlyPrice} onChange={(e) => setEditor({ ...editor, quarterlyPrice: e.target.value })} /></label>
                   <label>Annual price<input type="number" min="0" step="0.01" value={editor.annualPrice} onChange={(e) => setEditor({ ...editor, annualPrice: e.target.value })} /></label>
                   <label>Maximum users<input type="number" min="1" value={editor.maxUsers} onChange={(e) => setEditor({ ...editor, maxUsers: e.target.value })} /></label>
+                  <label>Vault item limit<input type="number" min="0" value={editor.itemLimit} onChange={(e) => setEditor({ ...editor, itemLimit: e.target.value })} /><small>0 = unlimited. Counts passwords, cards, notes, checklists and other normal vault items.</small></label>
                   <label>Storage limit MB<input type="number" min="0" value={editor.storageLimitMb} onChange={(e) => setEditor({ ...editor, storageLimitMb: e.target.value })} /></label>
                   <label>Document limit<input type="number" min="0" value={editor.documentLimit} onChange={(e) => setEditor({ ...editor, documentLimit: e.target.value })} /></label>
                   <label>Display order<input type="number" min="0" value={editor.displayOrder} onChange={(e) => setEditor({ ...editor, displayOrder: e.target.value })} /></label>

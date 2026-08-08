@@ -14936,3 +14936,95 @@ option {
     justify-content: flex-start !important;
   }
 }
+
+
+/* Password-Encrypt Ver-0.053B — launch polish, lighter Admin typography, plan usage and mobile plan carousel */
+@media (min-width: 861px) {
+  .landing-footer {
+    grid-template-columns: minmax(420px, .82fr) minmax(0, 1.18fr);
+    column-gap: 38px;
+    padding-right: 88px;
+  }
+  .landing-footer-copy {
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    white-space: nowrap;
+  }
+  .landing-footer-copy small {
+    font-weight: 400 !important;
+    white-space: nowrap;
+  }
+  .landing-footer-links {
+    justify-self: start;
+    margin-left: 18px;
+  }
+}
+
+/* Admin keeps hierarchy, but no longer renders nearly every label as heavy bold. */
+.admin-shell,
+.admin-shell input,
+.admin-shell textarea,
+.admin-shell select,
+.admin-shell button { font-weight: 400 !important; }
+.admin-shell h1 { font-weight: 700 !important; }
+.admin-shell h2,
+.admin-shell h3,
+.admin-shell h4 { font-weight: 600 !important; }
+.admin-shell strong { font-weight: 600 !important; }
+.admin-shell .eyebrow,
+.admin-shell .admin-status,
+.admin-shell .primary-button,
+.admin-shell .secondary-button,
+.admin-shell .admin-tabs button,
+.admin-shell .admin-plan-filter button { font-weight: 600 !important; }
+.admin-shell label,
+.admin-shell small,
+.admin-shell p,
+.admin-shell span { font-weight: 400 !important; }
+.admin-shell .admin-plan-prices span { font-weight: 600 !important; }
+.admin-shell .admin-plan-prices small { font-weight: 400 !important; }
+
+.plan-usage-card { display:grid; gap:16px; }
+.plan-usage-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+.plan-usage-heading h3 { margin:3px 0 0; }
+.plan-usage-heading > span { border:1px solid #cbd9e5; background:#f5f8fb; border-radius:999px; padding:7px 11px; color:#45627e; font-size:.84rem; font-weight:600; }
+.plan-usage-list { display:grid; gap:14px; }
+.plan-usage-row { display:grid; gap:7px; }
+.plan-usage-row-copy { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.plan-usage-row-copy strong { color:#26384f; }
+.plan-usage-row-copy span, .plan-usage-row small { color:#66798b; }
+.plan-usage-track { height:9px; border-radius:999px; overflow:hidden; background:#e6edf3; }
+.plan-usage-track > span { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#336699,#4c82b3); }
+
+@media (max-width: 680px) {
+  .landing-pricing-section .landing-plan-tier-grid {
+    display:flex !important;
+    overflow-x:auto;
+    overflow-y:visible;
+    gap:14px !important;
+    scroll-snap-type:x mandatory;
+    scroll-padding-left:2px;
+    padding:4px 18px 12px 2px;
+    margin-right:-18px;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .landing-pricing-section .landing-plan-tier-grid::-webkit-scrollbar { display:none; }
+  .landing-pricing-section .landing-plan-tier {
+    flex:0 0 min(86vw, 360px);
+    width:min(86vw, 360px);
+    scroll-snap-align:start;
+    scroll-snap-stop:always;
+  }
+  .landing-pricing-heading::after {
+    content:'Swipe left to compare plans →';
+    display:block;
+    margin-top:10px;
+    color:#5f7284;
+    font-size:.84rem;
+    font-weight:500;
+  }
+  .plan-usage-heading { flex-direction:column; }
+  .plan-usage-row-copy { align-items:flex-start; }
+}
