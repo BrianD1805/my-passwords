@@ -415,7 +415,6 @@ export default function AdminApp({ version }) {
             <button className="primary-button" type="submit" disabled={busy}><ShieldCheck size={18} /> {busy ? 'Signing in...' : 'Open Admin'}</button>
           </form>
           {notice && <div className="admin-notice error">{notice}</div>}
-          <a className="admin-back-link" href="/">Return to Password-Encrypt</a>
           <small>{version}</small>
         </section>
       </main>

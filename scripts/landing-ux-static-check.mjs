@@ -32,7 +32,7 @@ check('Plan item copy is concise without the parenthetical item-type list', main
 check('Landing FAQs use premium numbered disclosure styling', css.includes('counter-reset: landing-faq') && css.includes('counter(landing-faq, decimal-leading-zero)') && css.includes('.landing-faq-accordion details[open]'));
 check('Account, subscription, Vault Safety and Trusted Person use multi-open Settings-style drill-down sections', main.includes('settings-drilldown-stack') && !main.includes('name="account-sections"') && !main.includes('name="subscription-sections"') && !main.includes('name="safety-sections"') && !main.includes('name="trusted-person-sections"') && css.includes('.settings-drilldown-stack'));
 
-check('Vault route explicitly requests and applies Ubuntu', css.startsWith('@import url("https://fonts.googleapis.com/css2?family=Ubuntu') && css.includes('.app-shell *') && css.includes('font-family: "Ubuntu"'));
+check('Ubuntu is locked across landing, vault and Admin using real Ubuntu weights', css.startsWith('@import url("https://fonts.googleapis.com/css?family=Ubuntu:300,400,500,700') && css.includes('font-synthesis: none') && css.includes('.admin-shell *') && css.includes('.app-shell h2') && main.includes('ensureUbuntuFontStylesheet') && !read('public/sw.js').includes("const isFontAsset = ['fonts.googleapis.com'"));
 check('Landing hierarchy carries lighter weights throughout', css.includes('Carry the lighter hero/Next-of-Kin hierarchy through the whole landing page') && css.includes('.public-landing-page h3') && css.includes('font-weight: 500 !important;'));
 check('Emergency package title can be fully cleared before retyping', main.includes("value={emergencyDraft.emergencyPackageTitle ?? ''}"));
 check('Subscription overview no longer has the long introductory paragraph', !main.includes('See your current status, renewal and payment history here.'));
@@ -41,6 +41,13 @@ check('Vault Safety redundant device/backup/conflict explainer panels are remove
 check('Recovery point check has clearer label and working feedback', main.includes('Checkup recovery points') && main.includes('Checking recovery points...') && main.includes('recovery-check-status'));
 check('Everything important appears before Next of Kin spotlight', main.indexOf('Everything important, neatly organised') < main.indexOf('Next of Kin / Trusted Person Access'));
 check('Trial payment note no longer mentions Stripe Checkout', main.includes('You only enter payment details if you later choose to purchase a subscription.') && !main.includes('You only enter payment details if you later choose to purchase a subscription through Stripe Checkout.'));
+
+
+check('Admin login no longer shows Return to Password-Encrypt', !admin.includes('href="/">Return to Password-Encrypt'));
+check('Mobile landing has 5px more side padding', css.includes('width: min(calc(100% - 32px), 620px) !important;'));
+check('Everything important remains before Next of Kin on mobile flow', main.indexOf('Everything important, neatly organised') < main.indexOf('Next of Kin / Trusted Person Access'));
+check('Mobile hero hides CTA row and security highlight pills only at mobile breakpoint', css.includes('.landing-hero-copy .landing-cta-row,') && css.includes('.landing-hero-copy .landing-trust-strip') && css.includes('display: none !important;'));
+check('FAQ has stronger blue premium treatment without drop shadows', css.includes('border-left: 4px solid #336699') && css.includes('background: #336699;') && !/Ver-0\.053I[\s\S]*?landing-faq-accordion[\s\S]{0,1200}box-shadow/.test(css));
 
 if (process.exitCode) process.exit(1);
 console.log(`\nAll ${passed} landing/plan UX static checks passed.`);

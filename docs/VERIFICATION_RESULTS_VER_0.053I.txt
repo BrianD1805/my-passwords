@@ -1,0 +1,11 @@
+Password-Encrypt Ver-0.053I verification
+
+Run:
+  npm run security:check
+  npm run reliability:check
+  npm run legal:check
+  npm run ux:check
+  npm run mobile:check
+  npm run build
+
+The static suites are intended to remain green before launch.

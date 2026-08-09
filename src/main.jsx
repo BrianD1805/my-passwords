@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.053H';
+const VERSION = 'Password-Encrypt Ver-0.053I';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -68,6 +68,31 @@ function clearLegacyVaultBackMarkers() {
 }
 
 clearLegacyVaultBackMarkers();
+
+// Ver-0.053I: make Ubuntu loading deterministic across the landing page, /vault
+// standalone PWA and Admin. The document head contains the same stylesheet; this
+// recovery path only adds it when an older cached shell is missing the link.
+function ensureUbuntuFontStylesheet() {
+  if (typeof document === 'undefined') return;
+  const href = 'https://fonts.googleapis.com/css?family=Ubuntu:300,400,500,700&display=swap';
+  let link = document.getElementById('ubuntu-font-stylesheet');
+  if (!link) {
+    link = document.createElement('link');
+    link.id = 'ubuntu-font-stylesheet';
+    link.rel = 'stylesheet';
+    link.href = href;
+    document.head.appendChild(link);
+  }
+  if (document.fonts?.load) {
+    Promise.all([
+      document.fonts.load('400 16px Ubuntu'),
+      document.fonts.load('500 16px Ubuntu'),
+      document.fonts.load('700 16px Ubuntu')
+    ]).catch(() => {});
+  }
+}
+
+ensureUbuntuFontStylesheet();
 
 function readAccountDeviceInstallId() {
   let value = localStorage.getItem(ACCOUNT_DEVICE_INSTALL_KEY) || '';

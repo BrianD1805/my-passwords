@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&display=swap");
+@import url("https://fonts.googleapis.com/css?family=Ubuntu:300,400,500,700&display=swap");
 
 :root {
   color-scheme: light;
@@ -15360,3 +15360,145 @@ option {
   background: #f4faf6;
   color: #376348;
 }
+
+/* Password-Encrypt Ver-0.053I — definitive Ubuntu lock and final landing polish.
+   Use only Ubuntu's real published weights (300/400/500/700). Avoid synthetic
+   600/800/850/900 weights, which can look like a different typeface on mobile
+   browsers and installed PWAs. */
+html,
+body,
+#root,
+#root *,
+#root *::before,
+#root *::after,
+.public-landing-page,
+.public-landing-page *,
+.admin-shell,
+.admin-shell *,
+.legal-page-shell,
+.legal-page-shell *,
+button,
+input,
+textarea,
+select,
+option {
+  font-family: "Ubuntu", sans-serif !important;
+  font-synthesis: none;
+}
+
+/* Keep hierarchy, but map emphasis to genuine Ubuntu weights rather than
+   browser-synthesised bold values. */
+.public-landing-page,
+.public-landing-page p,
+.public-landing-page small,
+.public-landing-page span { font-weight: 400; }
+.public-landing-page h1,
+.public-landing-page h2,
+.public-landing-page h3,
+.public-landing-page strong,
+.public-landing-page .eyebrow,
+.public-landing-page button,
+.public-landing-page summary,
+.public-landing-page .landing-pill,
+.public-landing-page .public-brand,
+.public-landing-page .landing-plan-badge { font-weight: 500 !important; }
+.public-landing-page .public-brand > span { font-weight: 700 !important; }
+
+.admin-shell { font-weight: 400 !important; }
+.admin-shell h1 { font-weight: 700 !important; }
+.admin-shell h2,
+.admin-shell h3,
+.admin-shell h4,
+.admin-shell strong,
+.admin-shell label,
+.admin-shell button,
+.admin-shell .eyebrow,
+.admin-shell .admin-status,
+.admin-shell .admin-tabs button,
+.admin-shell .admin-plan-filter button { font-weight: 500 !important; }
+
+.app-shell,
+.lock-screen,
+.settings-section-panel,
+.item-popup-card { font-weight: 400; }
+.app-shell h1,
+.lock-screen h1 { font-weight: 700 !important; }
+.app-shell h2,
+.app-shell h3,
+.app-shell h4,
+.app-shell strong,
+.app-shell label,
+.app-shell button,
+.lock-screen h2,
+.lock-screen h3,
+.lock-screen strong,
+.lock-screen label,
+.lock-screen button,
+.settings-section-panel strong,
+.settings-section-panel summary,
+.settings-section-panel button,
+.item-popup-card strong,
+.item-popup-card label,
+.item-popup-card button { font-weight: 500 !important; }
+
+/* FAQ: more confident colour without shadows. */
+.landing-faq-section {
+  background: linear-gradient(180deg, #f6f9fc 0%, #edf4f9 100%) !important;
+  border-color: #bfd3e2 !important;
+}
+.landing-faq-accordion details {
+  border-color: #bfd3e2;
+  background: #ffffff;
+}
+.landing-faq-accordion summary {
+  color: #234d71;
+}
+.landing-faq-accordion summary::before {
+  border-color: #336699;
+  background: #336699;
+  color: #ffffff;
+}
+.landing-faq-accordion summary svg { color: #336699; }
+.landing-faq-accordion details[open] {
+  border-color: #78a4c4;
+  border-left: 4px solid #336699;
+  background: #f3f8fc;
+}
+.landing-faq-accordion details[open] summary {
+  color: #173f62;
+  background: #eaf3f9;
+}
+.landing-faq-accordion details[open] summary::before {
+  border-color: #24557f;
+  background: #24557f;
+  color: #ffffff;
+}
+.landing-faq-accordion details > p { color: #48657f; }
+
+@media (max-width: 680px) {
+  /* Increase mobile landing side padding by 5px per side: 11px -> 16px. */
+  .public-landing-page {
+    width: min(calc(100% - 32px), 620px) !important;
+  }
+
+  /* Mobile hero is intentionally simpler. Desktop retains both CTA buttons and
+     the three security highlight pills. */
+  .landing-hero-copy .landing-cta-row,
+  .landing-hero-copy .landing-trust-strip {
+    display: none !important;
+  }
+
+  /* Keep the organised-features section immediately before the Next of Kin
+     spotlight in the DOM flow; no mobile reordering or carousel behaviour. */
+  .landing-feature-section,
+  .landing-trusted-person-spotlight {
+    position: relative;
+  }
+
+  .landing-faq-section {
+    padding: 22px !important;
+    background: linear-gradient(180deg, #f6f9fc 0%, #edf4f9 100%) !important;
+    border: 1px solid #bfd3e2 !important;
+  }
+}
+

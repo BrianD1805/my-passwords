@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-passwords-v0.053H';
+const CACHE_NAME = 'my-passwords-v0.053I';
 const RUNTIME_CACHE = `${CACHE_NAME}-runtime`;
 const APP_ROUTES = ['/', '/vault', '/admin', '/terms', '/privacy', '/billing-terms', '/index.html'];
 const STATIC_SHELL = ['/manifest.webmanifest', '/icons/icon.svg', '/images/password-encrypt-brand.png', '/offline.html', '/offline.js'];
@@ -122,9 +122,11 @@ self.addEventListener('fetch', (event) => {
   const isSameOrigin = url.origin === self.location.origin;
   const isStaticAsset = ['script', 'style', 'image', 'font', 'manifest', 'worker'].includes(request.destination)
     || /\.(?:js|mjs|css|svg|png|jpg|jpeg|webp|ico|woff2?|json|webmanifest)$/i.test(url.pathname);
-  const isFontAsset = ['fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname);
-
-  if ((isSameOrigin && isStaticAsset) || isFontAsset) {
+  // Ver-0.053I: do not proxy Google Fonts through the PWA service worker.
+  // Let the browser load/cache cross-origin font CSS and font files directly;
+  // this avoids standalone/mobile WebView font responses being trapped in the
+  // service-worker runtime cache. Same-origin app assets remain cache-first.
+  if (isSameOrigin && isStaticAsset) {
     event.respondWith(cacheFirstAsset(request));
     return;
   }

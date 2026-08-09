@@ -26,7 +26,7 @@ function check(label, ok) {
   else { console.error(`FAIL  ${label}`); failed += 1; }
 }
 
-check('Ver-0.053H app/server/package/service-worker versions align', pkg.version === '0.0.53-h' && /Password-Encrypt Ver-0\.053H/.test(main) && /Password-Encrypt Ver-0\.053H/.test(server) && /my-passwords-v0\.053H/.test(sw));
+check('Ver-0.053I app/server/package/service-worker versions align', pkg.version === '0.0.53-i' && /Password-Encrypt Ver-0\.053I/.test(main) && /Password-Encrypt Ver-0\.053I/.test(server) && /my-passwords-v0\.053I/.test(sw));
 check('Public Terms, Privacy and Billing routes are implemented and included in the PWA shell', /'\/terms': 'terms'/.test(legal) && /'\/privacy': 'privacy'/.test(legal) && /'\/billing-terms': 'billing'/.test(legal) && /'\/terms'/.test(sw) && /'\/privacy'/.test(sw) && /'\/billing-terms'/.test(sw));
 check('Public landing page links all legal policies', /href="\/terms"/.test(main) && /href="\/privacy"/.test(main) && /href="\/billing-terms"/.test(main));
 check('New signup requires explicit current Terms and Privacy acceptance in browser', /legalAccepted/.test(main) && /LEGAL_VERSION/.test(main) && /Please read and agree to the Terms of Service and Privacy Policy/.test(main));
@@ -58,7 +58,7 @@ check('Privacy discloses essential browser storage and external font/flag resour
 
 check('Password-Encrypt is the customer-facing product name across live app/legal/PWA shell', !/My Passwords/.test(main + legal + customerEmail + adminEmail) && /Password-Encrypt/.test(main) && /Password-Encrypt/.test(legal) && /Password-Encrypt/.test(read('public/manifest.webmanifest')));
 check('Vault home header uses the customer vault name instead of the product name', /className="vault-home-title">\{bootstrap\.accountName \|\| bootstrap\.tenantName \|\| 'Private Vault'\}/.test(main));
-check('Ubuntu is forcibly applied throughout desktop and mobile UI', !/font-family:\s*Inter/.test(read('src/styles.css')) && /#root \*/.test(read('src/styles.css')) && /family=Ubuntu:wght@300;400;500;700/.test(read('index.html')));
+check('Ubuntu is forcibly applied throughout desktop and mobile UI', !/font-family:\s*Inter/.test(read('src/styles.css')) && /#root \*/.test(read('src/styles.css')) && /fonts.googleapis.com\/css\?family=Ubuntu:300,400,500,700/.test(read('index.html')) && /font-synthesis: none/.test(read('src/styles.css')));
 check('Legal document version is aligned client and server after the product rename', /LEGAL_VERSION = '2026-08-08'/.test(legal) && /LEGAL_VERSION = '2026-08-08'/.test(bootstrap) && /LEGAL_EFFECTIVE_DATE = '8 August 2026'/.test(legal));
 check('Landing plan area prominently states that trial takes no credit card details', /NO CREDIT CARD DETAILS are taken during your free trial/.test(main) && !/landing-pricing-legal/.test(main));
 check('Paid checkout requires explicit billing-policy acknowledgement in the browser', /billing-purchase-consent/.test(main) && /billingTermsAccepted/.test(main) && /Subscription, Cancellation &amp; Refund Policy/.test(main));
