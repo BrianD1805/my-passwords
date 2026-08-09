@@ -94,6 +94,17 @@ function emailDefinition(type, context = {}) {
         `Contact ${support} if this was not expected.`
       ]
     },
+    account_deleted: {
+      subject: 'Your Password-Encrypt account has been deleted',
+      heading: 'Account deleted',
+      paragraphs: [
+        `Hello ${name},`,
+        `Your Password-Encrypt account <strong>${account}</strong> has been deleted.`,
+        'The account can no longer sign in or use Password-Encrypt cloud account services.',
+        'If you still have an encrypted local vault copy on one of your devices, deleting the online account does not know or recover your master password and does not make that local encrypted copy readable to Password-Encrypt.',
+        `If you believe this was unexpected, contact ${support}.`
+      ]
+    },
     account_status: {
       subject: 'Your Password-Encrypt account status',
       heading: 'Account status update',

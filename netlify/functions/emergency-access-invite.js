@@ -2,6 +2,7 @@ import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost,
 import { getActiveCustomerSession } from './_session.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { assertBrowserAction, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
+import { buildEmergencyFlowEvents, recordEmergencyFlowEvent, resetEmergencyFlowToZero } from './_emergency-flow.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -28,9 +29,9 @@ function buildReleaseReadyEmail({ contactName, ownerName, accessScope, requestUr
   const ownerFirst = firstName(safeOwner);
   const safeScope = accessScope || 'Emergency Info folder only';
   const buttonText = `Open ${ownerFirst}'s Vault`;
-  const text = `Hello ${safeContact}, the waiting period for your Password-Encrypt access request for ${safeOwner} has ended. If ${safeOwner} has not cancelled the request, use this fresh secure browser link to open the prepared emergency package: ${requestUrl}. Button text: ${buttonText}. Access scope: ${safeScope}. If you cannot find this email later, check your Spam or Junk folder first.`;
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;"><div style="max-width:560px;margin:0 auto;padding:28px 18px;"><div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);"><h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">${ownerFirst}'s vault is ready</h1><p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, the waiting period for your Password-Encrypt access request for ${safeOwner} has ended.</p><p style="margin:0 0 18px;line-height:1.55;color:#536579;">If ${safeOwner} has not cancelled the request, you can now use this secure browser link to open the prepared emergency package.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;"><p style="margin:0;"><strong>Access scope:</strong> ${safeScope}</p></div>${requestUrl ? `<a href="${requestUrl}" style="display:inline-block;background:#173a5d;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">${buttonText}</a>` : ''}<p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">You do not need to install Password-Encrypt. This secure link opens in your browser. If you cannot find this email later, check your Spam or Junk folder first.</p></div></div></body></html>`;
-  return { html, text, subject: `${ownerFirst}'s Password-Encrypt vault is ready` };
+  const text = `Final stage: the waiting period for your Password-Encrypt access request for ${safeOwner} has ended without cancellation. The prepared ${safeScope} emergency package is now available through this secure browser link: ${requestUrl}. Nothing beyond the package prepared by ${safeOwner} is released. You do not need to install Password-Encrypt.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;"><div style="max-width:560px;margin:0 auto;padding:28px 18px;"><div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);"><h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Final stage — emergency package ready</h1><p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, the waiting period for your Password-Encrypt access request for ${safeOwner} has ended.</p><p style="margin:0 0 18px;line-height:1.55;color:#536579;">The waiting period has completed without cancellation. You can now use this secure browser link to open only the emergency package ${safeOwner} prepared for you.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;"><p style="margin:0;"><strong>Access scope:</strong> ${safeScope}</p></div>${requestUrl ? `<a href="${requestUrl}" style="display:inline-block;background:#173a5d;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">${buttonText}</a>` : ''}<p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">You do not need to install Password-Encrypt. This secure link opens in your browser. If you cannot find this email later, check your Spam or Junk folder first.</p></div></div></body></html>`;
+  return { html, text, subject: `Final stage: ${ownerFirst}'s emergency package is ready` };
 }
 
 async function notifyEmergencyContactReleaseReady({ invitation, request }) {
@@ -84,6 +85,7 @@ async function markReleaseReadyIfDue(request, invitation = null) {
       metadata: { ...(invitation.metadata || {}), release_ready_email_sent: true, release_ready_email_sent_at: now, release_ready_email_provider_id: releaseEmail.providerId || '', version: APP_VERSION }
     }).catch(() => null);
   }
+  if (invitation?.id) await recordEmergencyFlowEvent(invitation.id, { type: 'release_ready', title: 'Emergency package ready', message: 'The waiting period completed without cancellation. The prepared emergency package is now available.', occurredAt: now, metadata: { requestId: request.id } }).catch(() => null);
   return updated || { ...request, status: 'release_ready', metadata: nextMetadata };
 }
 
@@ -119,53 +121,22 @@ function buildInviteEmail({ ownerName, contactName, waitingPeriod, accessScope, 
   const safeOwner = ownerName || 'A Password-Encrypt user';
   const ownerFirst = firstName(safeOwner);
   const safeContact = contactName || 'there';
-  const text = `Hello ${safeContact}, ${safeOwner} has nominated you as their trusted person in Password-Encrypt. Step 1 is to review and accept or decline the nomination. This email does not give access to passwords. If you accept, a separate secure Request Access link will be emailed to you for future use. You do not need the app; the link opens in a browser. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. Review: ${acceptUrl}. If you expected this email but cannot find it later, check Spam or Junk first.`;
-  const html = `<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
-    <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
-      <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
-        <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">${ownerFirst} has nominated you</h1>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, ${safeOwner} has nominated you as their trusted person in Password-Encrypt.</p>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Step 1 is to review and accept or decline the nomination. This does not give you access to any passwords today.</p>
-        <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
-          <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
-          <p style="margin:0;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
-        </div>
-        <a href="${acceptUrl}" style="display:inline-block;background:#1d3557;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Review nomination</a>
-        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">Next step: if you accept, Password-Encrypt will send a separate secure Request Access link for future use. If you cannot find the email later, check your Spam or Junk folder first.</p>
-      </div>
-    </div>
-  </body>
-</html>`;
-  return { html, text, subject: `${ownerFirst} nominated you in Password-Encrypt` };
+  const safeWaiting = waitingPeriod || '7 days';
+  const safeScope = accessScope || 'Emergency Info folder only';
+  const text = `Hello ${safeContact}. Stage 1: ${safeOwner} has nominated you as their trusted person / next of kin contact in Password-Encrypt. This nomination is intended for a serious emergency, incapacity, or a situation where ${safeOwner} cannot access their own vault. Nothing from the vault is available to you now. Please review and accept or decline here: ${acceptUrl}. If you accept, Password-Encrypt sends you a separate secure Request Access link to keep for the future. If you ever use that link, a ${safeWaiting} waiting period starts and ${safeOwner} is notified and can cancel. Only if that period ends without cancellation will the prepared ${safeScope} emergency package become available. You do not need to install Password-Encrypt.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><p style="margin:0 0 8px;color:#336699;font-weight:700;letter-spacing:.08em;text-transform:uppercase">Stage 1 · Nomination</p><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">${ownerFirst} has nominated you as a trusted person</h1><p style="margin:0 0 16px;line-height:1.6;color:#536579">Hello ${safeContact}, this is intended for a serious emergency, incapacity, or a situation where ${safeOwner} cannot access their own vault.</p><p style="margin:0 0 16px;line-height:1.6;color:#536579"><strong>Nothing from the vault is available to you at this stage.</strong> Please review the nomination and accept or decline it.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><p style="margin:0 0 8px"><strong>Waiting period if access is later requested:</strong> ${safeWaiting}</p><p style="margin:0"><strong>Prepared access scope:</strong> ${safeScope}</p></div><a href="${acceptUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Review nomination</a><p style="margin:20px 0 0;font-size:13px;line-height:1.55;color:#7b8fa3"><strong>What happens next?</strong> If you accept, you receive a separate Request Access link. Using it in a genuine emergency starts the waiting period and notifies ${safeOwner}. ${safeOwner} can cancel before the period ends. Only after the period ends without cancellation can the prepared emergency package be opened.</p></div></div></body></html>`;
+  return { html, text, subject: `Stage 1: ${ownerFirst} nominated you as a Password-Encrypt trusted person` };
 }
 
-
 function buildRequestLinkEmail({ ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
-  const safeOwner = ownerName || 'The account owner';
+  const safeOwner = ownerName || 'the account owner';
   const ownerFirst = firstName(safeOwner);
   const safeContact = contactName || 'there';
-  const text = `Hello ${safeContact}, this is your secure Password-Encrypt Request Access link for ${safeOwner}. Keep this email somewhere safe. If there is ever an emergency, use the browser link to request access: ${requestUrl}. This link does not release any vault contents by itself. It starts the waiting period and notifies ${safeOwner}. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. After the waiting period ends, you should receive another email with a fresh Open ${ownerFirst}'s Vault link. If no email arrives, check Spam or Junk first.`;
-  const html = `<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
-    <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
-      <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
-        <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Your link for ${ownerFirst}</h1>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, this is your secure Password-Encrypt Request Access link for ${safeOwner}.</p>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Keep this email somewhere safe. Use this link only if you need to request emergency access.</p>
-        <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
-          <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
-          <p style="margin:0;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
-        </div>
-        <a href="${requestUrl}" style="display:inline-block;background:#1d3557;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Request access for ${ownerFirst}</a>
-        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">Next step: if you request access, ${safeOwner} is notified and can cancel during the waiting period. If the waiting period ends without cancellation, watch for a fresh email with an Open ${ownerFirst}'s Vault link. Check Spam or Junk if you do not see it.</p>
-      </div>
-    </div>
-  </body>
-</html>`;
-  return { html, text, subject: `Your Password-Encrypt link for ${ownerFirst}` };
+  const safeWaiting = waitingPeriod || '7 days';
+  const safeScope = accessScope || 'Emergency Info folder only';
+  const text = `Hello ${safeContact}. Stage 2: your nomination for ${safeOwner} is accepted. Keep this secure link somewhere safe for a genuine emergency: ${requestUrl}. Nothing from the vault is available yet. Using this link starts the ${safeWaiting} waiting period and immediately notifies ${safeOwner}. ${safeOwner} can cancel during that period. Only if the waiting period ends without cancellation will the prepared ${safeScope} emergency package become available. You do not need to install Password-Encrypt.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><p style="margin:0 0 8px;color:#336699;font-weight:700;letter-spacing:.08em;text-transform:uppercase">Stage 2 · Accepted</p><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">Keep your emergency Request Access link safe</h1><p style="margin:0 0 16px;line-height:1.6;color:#536579">Hello ${safeContact}, your trusted person nomination for ${safeOwner} has been accepted.</p><p style="margin:0 0 16px;line-height:1.6;color:#536579"><strong>Nothing from the vault is available yet.</strong> Use the link below only if a genuine emergency means you need to request access.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><p style="margin:0 0 8px"><strong>Waiting period:</strong> ${safeWaiting}</p><p style="margin:0"><strong>Prepared access scope:</strong> ${safeScope}</p></div><a href="${requestUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Request emergency access for ${ownerFirst}</a><p style="margin:20px 0 0;font-size:13px;line-height:1.55;color:#7b8fa3">Using this link starts the waiting period and notifies ${safeOwner}. ${safeOwner} can cancel before the period ends. If it completes without cancellation, you receive a final email when the prepared package is ready.</p></div></div></body></html>`;
+  return { html, text, subject: `Stage 2: Your Password-Encrypt emergency link for ${ownerFirst}` };
 }
 
 async function sendRequestLinkWithResend({ to, ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
@@ -289,7 +260,8 @@ export async function handler(event) {
         },
         updated_at: now
       });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, packageSavedAt: now, packageSummary: cleanSummary, message: 'Emergency release package encrypted and saved for the secure invite link.' });
+      const events = await recordEmergencyFlowEvent(invitationId, { type: 'package_saved', title: 'Emergency package saved', message: 'The owner updated the encrypted emergency package.', occurredAt: now, metadata: { releaseScope: cleanSummary.releaseScope, itemCount: cleanSummary.itemCount } });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, packageSavedAt: now, packageSummary: cleanSummary, events, message: 'Emergency release package encrypted and saved for the secure invite link.' });
     }
 
     if (action === 'status') {
@@ -364,6 +336,7 @@ export async function handler(event) {
               : 'Emergency access request status checked. No vault contents have been released.')
         : '';
 
+      const flowEvents = buildEmergencyFlowEvents(invitation, allRequests);
       return jsonResponse(200, {
         ok: true,
         version: APP_VERSION,
@@ -371,6 +344,7 @@ export async function handler(event) {
         ...invitation,
         status: invitationStatus,
         inviteUrl: invitation.invite_url || '',
+        requestUrl: invitation.metadata?.request_access_url || withEmergencyStep(invitation.invite_url || '', 'request'),
         request: latestRequest ? {
           id: latestRequest.id,
           invitation_id: latestRequest.invitation_id || invitation.id,
@@ -383,6 +357,7 @@ export async function handler(event) {
         } : null,
         releaseReady: isReleaseReady,
         packageSummary: isReleaseReady ? (invitation.metadata?.emergency_package_summary || null) : null,
+        events: flowEvents,
         message: isReleaseReady
           ? 'Waiting period ended. Emergency package is ready.'
           : hasActiveRequest
@@ -398,53 +373,21 @@ export async function handler(event) {
       const tenantId = sessionTenantId;
       const userId = sessionUserId;
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
-      await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: 'cancelled', message: 'Emergency access invitation cancelled.' });
+      const now = new Date().toISOString();
+      await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: now, updated_at: now });
+      const events = await recordEmergencyFlowEvent(invitationId, { type: 'invitation_cancelled', title: 'Invitation cancelled', message: 'The account owner cancelled the trusted person invitation.', occurredAt: now });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: 'cancelled', events, message: 'Trusted person invitation cancelled. No emergency access was granted.' });
     }
 
-    if (action === 'reset') {
-      const invitationId = String(body.invitationId || '').trim();
+    if (action === 'reset' || action === 'reset_zero') {
       const tenantId = sessionTenantId;
       const userId = sessionUserId;
-      const bodyContactEmail = String(body.contactEmail || '').trim().toLowerCase();
-      if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
-
-      const invitationRows = await selectRows('emergency_access_invitations', `select=*&id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&limit=1`).catch(() => []);
-      const invitation = invitationRows?.[0] || null;
-      const contactEmail = bodyContactEmail || String(invitation?.contact_email || '').trim().toLowerCase();
-      const now = new Date().toISOString();
-      const resetMetadata = { reset_by_owner: true, reset_at: now, version: APP_VERSION };
-
-      await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, {
-        status: 'cancelled',
-        cancelled_at: now,
-        updated_at: now,
-        metadata: { ...(invitation?.metadata || {}), ...resetMetadata, request_link_available: false }
-      }).catch(() => null);
-
-      if (contactEmail) {
-        await updateRow('emergency_access_invitations', `tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(contactEmail)}&status=${inList(['pending','sent','accepted','declined'])}`, {
-          status: 'cancelled',
-          cancelled_at: now,
-          updated_at: now,
-          metadata: resetMetadata
-        }).catch(() => null);
-        await updateRow('emergency_access_requests', `tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&contact_email=${eq(contactEmail)}&status=${inList(['requested','waiting','owner_notified','release_ready'])}`, {
-          status: 'cancelled',
-          cancelled_at: now,
-          updated_at: now,
-          metadata: { cancelled_by_owner_reset: true, reset_at: now, version: APP_VERSION }
-        }).catch(() => null);
-      }
-
-      await updateRow('emergency_access_requests', `invitation_id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&status=${inList(['requested','waiting','owner_notified','release_ready'])}`, {
-        status: 'cancelled',
-        cancelled_at: now,
-        updated_at: now,
-        metadata: { cancelled_by_owner_reset: true, reset_at: now, version: APP_VERSION }
-      }).catch(() => null);
-
-      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: 'reset', message: 'Emergency invitation, acceptance and request details reset. You can send a fresh invite now.' });
+      if (!tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Account details are missing.' });
+      const result = await resetEmergencyFlowToZero({ tenantId, userId });
+      return jsonResponse(200, {
+        ok: true, version: APP_VERSION, status: 'reset_zero', invitationsDeleted: result.invitationsDeleted, events: [],
+        message: 'Trusted Person Access has been reset to zero. Trusted person details, invitations, request links, emergency requests and flow history have been removed.'
+      });
     }
 
     if (action === 'resend_request_link') {
@@ -483,12 +426,14 @@ export async function handler(event) {
           version: APP_VERSION
         }
       });
+      const events = await recordEmergencyFlowEvent(invitationId, { type: 'request_link_resent', title: 'Request Access link resent', message: delivery.sent ? 'The secure Request Access link was emailed again.' : 'A Request Access link resend was attempted but email delivery did not complete.', occurredAt: now });
       return jsonResponse(200, {
         ok: true,
         version: APP_VERSION,
         invitationId,
         status: invitation.status,
         requestUrl,
+        events,
         inviteUrl: requestUrl,
         emailSent: delivery.sent,
         message: delivery.sent ? 'Request Access link resent.' : `Request Access link is ready, but the email was not sent. ${delivery.reason || 'Use Copy request link for testing.'}`
@@ -524,7 +469,8 @@ export async function handler(event) {
         updated_at: now,
         metadata: { ...(invitation.metadata || {}), resent_at: now, resend_email_sent: delivery.sent, resend_reason: delivery.reason || null, version: APP_VERSION }
       });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: nextStatus, emailSent: delivery.sent, sentAt: delivery.sent ? now : invitation.sent_at || '', inviteUrl, message: delivery.sent ? 'Emergency invitation resent.' : `Invite link is ready, but the email was not sent. ${delivery.reason || 'Use Copy invite link for testing.'}` });
+      const events = await recordEmergencyFlowEvent(invitationId, { type: 'invitation_resent', title: 'Invitation resent', message: delivery.sent ? 'The trusted person invitation was emailed again.' : 'The invitation resend was attempted but email delivery did not complete.', occurredAt: now });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, status: nextStatus, emailSent: delivery.sent, sentAt: delivery.sent ? now : invitation.sent_at || '', inviteUrl, events, message: delivery.sent ? 'Trusted person invitation resent.' : `Invite link is ready, but the email was not sent. ${delivery.reason || 'Use Copy invite link for testing.'}` });
     }
 
     const tenantId = sessionTenantId;
@@ -574,7 +520,7 @@ export async function handler(event) {
       email_provider_id: delivery.providerId || '',
       sent_at: delivery.sent ? now : null,
       expires_at: expiresAt,
-      metadata: { version: APP_VERSION, owner_name: ownerName, owner_email: ownerEmail, email_sent: delivery.sent, fallback_reason: delivery.reason || null, details: delivery.details || null, request_access_url: requestAccessUrl, open_access_url: openAccessUrl, link_flow: 'invite_request_open' },
+      metadata: { version: APP_VERSION, owner_name: ownerName, owner_email: ownerEmail, email_sent: delivery.sent, fallback_reason: delivery.reason || null, details: delivery.details || null, request_access_url: requestAccessUrl, open_access_url: openAccessUrl, link_flow: 'invite_request_open', flow_events: [{ id: `invitation_created:${now}:${invitationId}`, type: 'invitation_created', title: 'Trusted person invitation created', message: delivery.sent ? 'The trusted person was nominated and the invitation email was sent.' : 'The trusted person was nominated and the invitation link was prepared, but email delivery did not complete.', occurredAt: now, metadata: { invitationId }, version: APP_VERSION }] },
       created_at: now,
       updated_at: now
     });
@@ -588,7 +534,8 @@ export async function handler(event) {
       sentAt: delivery.sent ? now : '',
       acceptUrl: inviteUrl,
       inviteUrl,
-      message: delivery.sent ? 'Emergency contact invitation sent.' : `Invitation link prepared, but the email was not sent. ${delivery.reason || 'Use Copy invite link for testing.'}`
+      events: [{ id: `invitation_created:${now}:${invitationId}`, type: 'invitation_created', title: 'Trusted person invitation created', message: delivery.sent ? 'The trusted person was nominated and the invitation email was sent.' : 'The trusted person was nominated and the invitation link was prepared, but email delivery did not complete.', occurredAt: now, metadata: { invitationId }, version: APP_VERSION }],
+      message: delivery.sent ? 'Trusted person invitation sent. Your trusted person now needs to accept or decline it.' : `Invitation link prepared, but the email was not sent. ${delivery.reason || 'Use Copy invite link for testing.'}`
     });
   } catch (error) {
     return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Emergency access invitation could not be prepared.', error: error.message, details: error.details || null });

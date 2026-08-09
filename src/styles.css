@@ -15512,3 +15512,46 @@ option {
   border-radius: 50% !important;
   object-fit: cover !important;
 }
+
+/* Password-Encrypt Ver-0.054 — simplified Trusted Person emergency flow testing. */
+.emergency-current-stage-card {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 18px;
+  border: 1px solid #cfdce7;
+  border-radius: 18px;
+  background: #f7fafc;
+}
+.emergency-current-stage-card.active { border-color: #e6c979; background: #fffaf0; }
+.emergency-current-stage-card.ready { border-color: #8bc6a2; background: #f1fbf4; }
+.emergency-current-stage-step {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #336699;
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.emergency-current-stage-card strong { display: block; margin-bottom: 5px; font-size: 18px; color: #182b3d; }
+.emergency-current-stage-card p { margin: 0; line-height: 1.55; color: #607185; }
+.emergency-action-select-row { margin-top: 16px; max-width: 420px; }
+.emergency-section-save-row { display: flex; justify-content: flex-end; margin-top: 16px; }
+.emergency-flow-audit-list { display: grid; gap: 0; }
+.emergency-flow-audit-list article { display: grid; grid-template-columns: 13px minmax(0,1fr); gap: 12px; padding: 14px 0; border-bottom: 1px solid #e0e7ee; }
+.emergency-flow-audit-list article:last-child { border-bottom: 0; }
+.emergency-flow-audit-dot { width: 9px; height: 9px; margin-top: 7px; border-radius: 50%; background: #336699; }
+.emergency-flow-audit-list strong { display: block; color: #1c3043; }
+.emergency-flow-audit-list p { margin: 4px 0 5px; color: #607185; line-height: 1.5; }
+.emergency-flow-audit-list small { color: #7c8c9d; }
+.emergency-flow-audit-empty { margin: 0; color: #6c7d8e; }
+.admin-hard-delete-row { border-color: #ebc9c9 !important; background: #fff8f8; }
+
+@media (max-width: 700px) {
+  .emergency-current-stage-card { flex-direction: column; gap: 10px; padding: 16px; }
+  .emergency-action-select-row { max-width: none; }
+  .emergency-section-save-row { justify-content: stretch; }
+  .emergency-section-save-row .primary-button { width: 100%; justify-content: center; }
+}

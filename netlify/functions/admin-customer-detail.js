@@ -3,6 +3,7 @@ import { validateAdminSession } from './_admin-session.js';
 import { assertBrowserAction } from './_security.js';
 import { createAccountOtp, maskEmail } from './_account-otp.js';
 import { adminEmailTypesForCustomer, sendAdminAccountEmail } from './_admin-email.js';
+import { stripeConfigured, stripeRequest } from './_stripe.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 function safeText(value, max = 2000) { return String(value || '').trim().replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').slice(0, max); }
@@ -307,6 +308,45 @@ export async function handler(event) {
       const report = await buildSupportDiagnostics(detail, tenantId);
       await audit(session, 'admin_customer_diagnostics_generated', { tenant_id: tenantId, message: 'Metadata-only customer support diagnostics generated.' });
       return jsonResponse(200, { ok: true, version: APP_VERSION, report, message: 'Metadata-only support diagnostics generated.' });
+    }
+
+    if (action === 'hard_delete_account') {
+      const tenant = detail.tenant || {};
+      const owner = detail.primaryUser || {};
+      const founder = ['founder_private', 'private_founder'].includes(String(tenant.plan_code || '').toLowerCase()) || String(tenant.plan_status || '').toLowerCase() === 'founder_active' || String(tenant.tenant_role || '').toLowerCase() === 'founder_first_tenant';
+      if (founder) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The Founder account cannot be hard deleted from Admin.' });
+      if (safeText(body.confirmText, 20).toUpperCase() !== 'DELETE') return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Type DELETE to confirm permanent account deletion.' });
+
+      const subscription = detail.subscription || {};
+      const providerStatus = String(subscription.status || '').toLowerCase();
+      const stripeAlreadyEnded = ['canceled', 'cancelled', 'ended', 'inactive', 'expired'].includes(providerStatus);
+      if (subscription.provider === 'stripe' && subscription.provider_subscription_id && !stripeAlreadyEnded) {
+        if (!stripeConfigured()) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'Stripe is not configured, so the active paid subscription cannot be cancelled safely before account deletion.' });
+        await stripeRequest(`subscriptions/${encodeURIComponent(subscription.provider_subscription_id)}`, { method: 'DELETE', idempotencyKey: `admin-hard-delete-${tenantId}` });
+      }
+
+      const recipient = safeText(owner.email, 320);
+      const displayName = safeText(owner.display_name || 'there', 160);
+      const accountName = safeText(tenant.account_name || tenant.name || 'your Password-Encrypt account', 200);
+
+      // Remove rows that otherwise use ON DELETE SET NULL so this testing action leaves no tenant-scoped operational/billing residue.
+      for (const table of ['stripe_reconciliation_runs', 'operational_events', 'customer_email_log', 'admin_email_log', 'account_deletion_requests', 'billing_events']) {
+        await deleteRow(table, `tenant_id=${eq(tenantId)}`).catch(() => null);
+      }
+      await deleteRow('tenants', `id=${eq(tenantId)}`);
+
+      let emailSent = false;
+      let emailWarning = '';
+      if (recipient && recipient.includes('@')) {
+        try {
+          const delivery = await sendAdminAccountEmail({ to: recipient, type: 'account_deleted', context: { displayName, accountName } });
+          emailSent = Boolean(delivery?.sent);
+        } catch (error) {
+          emailWarning = safeText(error.message || 'Deletion email could not be sent.', 600);
+        }
+      }
+      await audit(session, 'admin_customer_hard_deleted', { message: 'A customer account was permanently deleted from Admin for testing.', email_sent: emailSent, email_warning: emailWarning || null });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, deleted: true, emailSent, message: emailSent ? 'Account permanently deleted. The account holder was emailed.' : `Account permanently deleted.${emailWarning ? ` Email warning: ${emailWarning}` : ' No account email address was available.'}` });
     }
 
     if (action === 'add_note') {

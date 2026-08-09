@@ -1,13 +1,13 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Save, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.053J';
+const VERSION = 'Password-Encrypt Ver-0.054';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2089,6 +2089,7 @@ function App() {
   const vaultCloseWatcherEnabledRef = useRef(false);
   const [emergencyDraft, setEmergencyDraft] = useState(() => emptyEmergencyAccessPlan());
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
+  const [emergencyFlowEvents, setEmergencyFlowEvents] = useState([]);
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
   const [inviteAcceptance, setInviteAcceptance] = useState({ status: 'idle', message: '' });
   const [emergencyRequestState, setEmergencyRequestState] = useState({ status: 'idle', message: '' });
@@ -3127,6 +3128,11 @@ function App() {
   useEffect(() => {
     if (!locked) setIsCreateVaultPopupOpen(false);
   }, [locked]);
+
+  useEffect(() => {
+    if (locked || activeSettingsSection !== 'emergency' || !customerSession.authenticated || !emergencyDraft.invitationId) return;
+    checkEmergencyInvitationStatus({ silent: true });
+  }, [locked, activeSettingsSection, customerSession.authenticated, emergencyDraft.invitationId]);
 
   async function fetchLatestCloudSnapshot(account = bootstrap) {
     if (!featureIncluded('cloudBackupSync')) return { ok: false, code: 'PLAN_FEATURE_REQUIRED', feature: 'cloudBackupSync', upgradeRequired: true, entitlements, hasSnapshot: false, message: 'Cloud backup and sync are not included in the current plan.' };
@@ -5354,8 +5360,8 @@ function App() {
     return false;
   }
 
-  async function saveEmergencyAccessPlan(event) {
-    event.preventDefault();
+  async function saveEmergencyAccessPlan(event, successMessage = 'Trusted Person Access details saved securely inside your vault.') {
+    event?.preventDefault?.();
     if (!ensureEmergencyAccessEntitled()) return;
     const cleanPlan = {
       ...emergencyDraft,
@@ -5385,7 +5391,7 @@ function App() {
         try { await saveEmergencyReleasePackageForPlan(saved, next); }
         catch (packageError) { showMessage(packageError.message || 'Plan saved, but the emergency release package could not be refreshed.', 'warning'); return; }
       }
-      showMessage('Emergency access plan saved securely inside your vault.', 'success');
+      showMessage(successMessage, 'success');
     } catch (error) {
       showMessage('Emergency access plan could not be saved. Please try again.', 'error');
     } finally {
@@ -5415,6 +5421,7 @@ function App() {
       }
     });
     if (!result.ok) throw new Error(result.message || 'Emergency release package could not be saved.');
+    if (Array.isArray(result.events)) setEmergencyFlowEvents(result.events);
     return result;
   }
 
@@ -5481,6 +5488,7 @@ function App() {
         return;
       }
       setEmergencyDraft(nextPlan);
+      setEmergencyFlowEvents(Array.isArray(result.events) ? result.events : emergencyFlowEvents);
       setEmergencyInviteState({ status: result.emailSent ? 'sent' : 'ready', message: result.message || nextPlan.invitationMessage });
       showMessage(result.message || 'Emergency access invitation and release package saved.', result.emailSent ? 'success' : 'warning');
     } catch (error) {
@@ -5490,10 +5498,11 @@ function App() {
     }
   }
 
-  async function checkEmergencyInvitationStatus() {
+  async function checkEmergencyInvitationStatus(options = {}) {
+    const silent = Boolean(options?.silent);
     if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
     if (!emergencyDraft.invitationId) return showMessage('Send an invitation first.', 'warning');
-    setEmergencyInviteState({ status: 'checking', message: 'Checking invitation status...' });
+    if (!silent) setEmergencyInviteState({ status: 'checking', message: 'Checking current stage...' });
     try {
       const result = await postJson('/.netlify/functions/emergency-access-invite', { action: 'status', invitationId: emergencyDraft.invitationId, contactEmail: emergencyDraft.contactEmail });
       if (!result.ok) throw new Error(result.message || 'Invitation status could not be checked.');
@@ -5510,7 +5519,7 @@ function App() {
         invitationAcceptedAt: result.accepted_at || emergencyDraft.invitationAcceptedAt,
         invitationCancelledAt: result.cancelled_at || emergencyDraft.invitationCancelledAt,
         invitationMessage: result.message || emergencyDraft.invitationMessage,
-        invitationUrl: result.inviteUrl || emergencyDraft.invitationUrl || '',
+        invitationUrl: (latestInvitationStatus === 'accepted' ? (result.requestUrl || result.inviteUrl) : result.inviteUrl) || emergencyDraft.invitationUrl || '',
         requestStatus: latestRequestStatus,
         requestId: result.request?.id || emergencyDraft.requestId || '',
         requestRequestedAt: result.request?.requested_at || emergencyDraft.requestRequestedAt || '',
@@ -5521,12 +5530,17 @@ function App() {
       const next = upsertEmergencyAccessMetaItem(items, savedPlan);
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       setEmergencyDraft(getEmergencyAccessPlan(next));
-      setEmergencyInviteState({ status: 'checked', message: result.request?.message || result.message || 'Invitation status checked.' });
-      showMessage(result.request?.message || result.message || 'Invitation status checked.', result.request ? 'success' : 'info');
+      setEmergencyFlowEvents(Array.isArray(result.events) ? result.events : []);
+      if (!silent) {
+        setEmergencyInviteState({ status: 'checked', message: result.request?.message || result.message || 'Current stage checked.' });
+        showMessage(result.request?.message || result.message || 'Current stage checked.', result.request ? 'success' : 'info');
+      }
     } catch (error) {
       const note = error.message || 'Invitation status could not be checked.';
-      setEmergencyInviteState({ status: 'error', message: note });
-      showMessage(note, 'error');
+      if (!silent) {
+        setEmergencyInviteState({ status: 'error', message: note });
+        showMessage(note, 'error');
+      }
     }
   }
 
@@ -5577,6 +5591,7 @@ function App() {
       const next = upsertEmergencyAccessMetaItem(items, savedPlan);
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       setEmergencyDraft(getEmergencyAccessPlan(next));
+      if (Array.isArray(result.events)) setEmergencyFlowEvents(result.events);
       setEmergencyInviteState({ status: 'resent', message: savedPlan.invitationMessage });
       showMessage(savedPlan.invitationMessage, result.emailSent ? 'success' : 'warning');
     } catch (error) {
@@ -5588,45 +5603,43 @@ function App() {
 
   async function resetEmergencyAccessInvite() {
     if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
-    if (!emergencyDraft.invitationId) return showMessage('There is no invite to reset.', 'warning');
-    setEmergencyInviteState({ status: 'resetting', message: 'Resetting invitation...' });
+    if (!hasEmergencyAccessPlan(emergencyDraft) && !emergencyDraft.invitationId) return showMessage('Trusted Person Access is already at zero.', 'info');
+    if (!window.confirm('Reset Trusted Person Access to zero? This removes the trusted person, invitation/request links, emergency requests, package details and all flow event history.')) return;
+    setEmergencyInviteState({ status: 'resetting', message: 'Resetting Trusted Person Access to zero...' });
     try {
-      const result = await postJson('/.netlify/functions/emergency-access-invite', {
-        action: 'reset',
-        invitationId: emergencyDraft.invitationId,
-        contactEmail: emergencyDraft.contactEmail
-      });
-      if (!result.ok) throw new Error(result.message || 'Invite could not be reset.');
-      const savedPlan = {
-        ...emergencyDraft,
-        invitationStatus: 'not_invited',
-        invitationId: '',
-        invitationSentAt: '',
-        invitationAcceptedAt: '',
-        invitationCancelledAt: '',
-        invitationMessage: 'Previous invitation, acceptance and emergency request details have been reset. You can send a fresh invite now.',
-        invitationUrl: '',
-        requestStatus: 'not_requested',
-        requestId: '',
-        requestRequestedAt: '',
-        requestWaitingEndsAt: '',
-        requestMessage: '',
-        requestLastCheckedAt: new Date().toISOString(),
-        requestLinkResentAt: '',
-        releaseReadyAt: '',
-        releaseMessage: '',
-        openAccessUrl: ''
-      };
-      const next = upsertEmergencyAccessMetaItem(items, savedPlan);
+      const result = await postJson('/.netlify/functions/emergency-access-invite', { action: 'reset_zero' });
+      if (!result.ok) throw new Error(result.message || 'Trusted Person Access could not be reset.');
+      const next = items.filter((item) => !isEmergencyAccessMetaItem(item));
       await saveItems(next, { autoSync: true, silentAutoSync: true });
-      setEmergencyDraft(getEmergencyAccessPlan(next));
-      setEmergencyInviteState({ status: 'reset', message: savedPlan.invitationMessage });
-      showMessage('Emergency invitation, acceptance and request details reset. You can send a fresh invite now.', 'success');
+      setEmergencyDraft(emptyEmergencyAccessPlan());
+      setEmergencyFlowEvents([]);
+      setEmergencyInviteState({ status: 'reset', message: result.message || 'Trusted Person Access reset to zero.' });
+      showMessage('Trusted Person Access reset to zero. All trusted person flow details and history have been removed.', 'success');
     } catch (error) {
-      const note = error.message || 'Emergency invitation could not be reset.';
+      const note = error.message || 'Trusted Person Access could not be reset.';
       setEmergencyInviteState({ status: 'error', message: note });
       showMessage(note, 'error');
     }
+  }
+
+  async function runEmergencyFlowAction(action) {
+    const chosen = String(action || '');
+    if (!chosen) return;
+    if (chosen === 'send_invitation') return sendEmergencyAccessInvite();
+    if (chosen === 'check_status') return checkEmergencyInvitationStatus();
+    if (chosen === 'resend_invitation') return resendEmergencyAccessInvite();
+    if (chosen === 'copy_invitation') return copyEmergencyInviteLink();
+    if (chosen === 'cancel_invitation') {
+      if (window.confirm('Cancel this trusted person invitation?')) return cancelEmergencyInvitation();
+      return;
+    }
+    if (chosen === 'resend_request_link') return resendEmergencyRequestLink();
+    if (chosen === 'copy_request_link') return copyEmergencyRequestLink();
+    if (chosen === 'cancel_request') {
+      if (window.confirm('Cancel the active emergency access request before release?')) return cancelEmergencyAccessRequest();
+      return;
+    }
+    if (chosen === 'reset_zero') return resetEmergencyAccessInvite();
   }
 
   async function copyEmergencyInviteLink() {
@@ -5654,6 +5667,7 @@ function App() {
         userId: bootstrap.userId
       });
       if (!result.ok) throw new Error(result.message || 'Request Access link could not be resent.');
+      if (Array.isArray(result.events)) setEmergencyFlowEvents(result.events);
       const savedPlan = {
         ...emergencyDraft,
         invitationStatus: result.status || emergencyDraft.invitationStatus || 'accepted',
@@ -6582,6 +6596,33 @@ function App() {
       ? 'The emergency access request has been cancelled. No vault contents were released.'
       : emergencyDraft.requestMessage || '';
 
+  const emergencyHasTrustedPerson = Boolean(String(emergencyDraft.contactName || '').trim() || String(emergencyDraft.contactEmail || '').trim());
+  const emergencyCurrentStage = isEmergencyReleaseReady
+    ? { step: 'Stage 5', title: 'Emergency package ready', copy: 'The waiting period has completed without cancellation. Your trusted person can now open only the emergency package you prepared.' }
+    : hasActiveEmergencyRequest
+      ? { step: 'Stage 4', title: 'Waiting period active', copy: `Your trusted person requested emergency access. No vault contents have been released. You can cancel before ${emergencyDraft.requestWaitingEndsAt ? new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString() : 'the waiting period ends'}.` }
+      : emergencyDraft.invitationStatus === 'accepted'
+        ? { step: 'Stage 3', title: 'Trusted person accepted', copy: 'The nomination is accepted. Your trusted person has a secure Request Access link to keep for a genuine emergency. Nothing from the vault is available yet.' }
+        : ['invitation_sent', 'sent', 'pending'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase())
+          ? { step: 'Stage 2', title: 'Waiting for your trusted person', copy: 'The invitation has been sent. Your trusted person needs to accept or decline it. No vault access has been granted.' }
+          : ['declined', 'cancelled'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase())
+            ? { step: 'Stage 2', title: emergencyDraft.invitationStatus === 'declined' ? 'Invitation declined' : 'Invitation cancelled', copy: 'No access has been granted. Review the trusted person details and send a new invitation when you are ready.' }
+            : emergencyHasTrustedPerson
+              ? { step: 'Stage 1', title: 'Ready to send invitation', copy: 'Your trusted person details are saved. Send the invitation when you are ready to start the flow.' }
+              : { step: 'Stage 1', title: 'Add your trusted person', copy: 'Start by adding the next of kin or trusted person you want to nominate for a serious emergency.' };
+
+  const emergencyActionOptions = [
+    (!emergencyDraft.invitationId || ['declined', 'cancelled', 'not_invited'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase())) && { value: 'send_invitation', label: 'Send invitation' },
+    emergencyDraft.invitationId && { value: 'check_status', label: 'Check current stage' },
+    emergencyDraft.invitationId && ['sent', 'pending', 'invitation_sent'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase()) && { value: 'resend_invitation', label: 'Resend invitation email' },
+    emergencyDraft.invitationUrl && ['sent', 'pending', 'invitation_sent'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase()) && { value: 'copy_invitation', label: 'Copy invitation link' },
+    emergencyDraft.invitationId && ['sent', 'pending', 'invitation_sent'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase()) && { value: 'cancel_invitation', label: 'Cancel invitation' },
+    emergencyDraft.invitationId && emergencyDraft.invitationStatus === 'accepted' && { value: 'resend_request_link', label: 'Resend Request Access link' },
+    emergencyDraft.invitationUrl && emergencyDraft.invitationStatus === 'accepted' && { value: 'copy_request_link', label: 'Copy Request Access link' },
+    ['requested', 'waiting', 'owner_notified'].includes(normalisedRequestStatus) && { value: 'cancel_request', label: 'Cancel emergency request' },
+    (hasEmergencyAccessPlan(emergencyDraft) || emergencyDraft.invitationId) && { value: 'reset_zero', label: 'Reset to zero' }
+  ].filter(Boolean);
+
   const cloudBackupIncluded = featureIncluded('cloudBackupSync');
   const vaultSafetyLabel = !isOnline
     ? 'Offline'
@@ -7393,68 +7434,22 @@ function App() {
                   ]} onChange={(waitingPeriod) => setEmergencyDraft({ ...emergencyDraft, waitingPeriod })} /></label>
                 </div>
                 <label className="emergency-access-notes-label">Notes or instructions<textarea value={emergencyDraft.instructions} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, instructions: e.target.value })} placeholder="Add any wishes, instructions, or details you want kept with this emergency plan." /></label>
-
+                <div className="emergency-section-save-row"><button type="button" className="primary-button" disabled={emergencySaveState === 'saving' || !featureIncluded('emergencyAccess')} onClick={(event) => saveEmergencyAccessPlan(event, 'Trusted person details saved.')}><Save size={17} /> {emergencySaveState === 'saving' ? 'Saving...' : 'Save trusted person'}</button></div>
 
                     </div>
                   </details>
 
-                  <details className="settings-drilldown">
-                    <summary><span className="settings-directory-icon"><Mail size={21} /></span><span className="settings-directory-copy"><strong>Invitation & access status</strong><small>Send the invitation, check acceptance and manage emergency requests.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
+                  <details className="settings-drilldown" open>
+                    <summary><span className="settings-directory-icon"><Mail size={21} /></span><span className="settings-directory-copy"><strong>Current stage & actions</strong><small>See where the flow is now and choose the next action if needed.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
-              <div className={`emergency-owner-flow-card ${(hasActiveEmergencyRequest || isEmergencyReleaseReady) ? 'request-active' : ''}`}>
-                <div className="emergency-status-summary emergency-owner-status-summary">
-                  <span className="emergency-status-pill"><ShieldCheck size={16} /> {invitationStatusTitle}</span>
-                  {requestStatusTitle && <span className="emergency-status-pill request"><AlertTriangle size={16} /> {requestStatusTitle}</span>}
-                </div>
-
-                <div className="emergency-owner-flow-grid">
-                  <section className="emergency-owner-flow-section invite-section" aria-label="Invitation status">
-                    <div className="emergency-owner-section-heading">
-                      <Mail size={18} />
-                      <div>
-                        <strong>Invitation</strong>
-                        <p>{invitationStatusCopy}</p>
+                      <div className={`emergency-current-stage-card ${isEmergencyReleaseReady ? 'ready' : hasActiveEmergencyRequest ? 'active' : ''}`}>
+                        <span className="emergency-current-stage-step">{emergencyCurrentStage.step}</span>
+                        <div><strong>{emergencyCurrentStage.title}</strong><p>{emergencyCurrentStage.copy}</p></div>
                       </div>
-                    </div>
-                    <div className="emergency-status-detail-grid compact">
-                      {emergencyDraft.invitationSentAt && <small><strong>Sent</strong>{new Date(emergencyDraft.invitationSentAt).toLocaleString()}</small>}
-                      {emergencyDraft.invitationAcceptedAt && <small><strong>Accepted</strong>{new Date(emergencyDraft.invitationAcceptedAt).toLocaleString()}</small>}
-                    </div>
-                    {emergencyInviteState.message && <small className="emergency-last-check-note">{emergencyInviteState.message}</small>}
-                    <div className="emergency-invite-action-row primary-actions">
-                      <button type="button" className="secondary-button" onClick={sendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'sending'}><Mail size={16} /> {emergencyInviteState.status === 'sending' ? 'Sending...' : 'Send invitation'}</button>
-                      {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={checkEmergencyInvitationStatus} disabled={emergencyInviteState.status === 'checking'}><RefreshCw size={16} /> {emergencyInviteState.status === 'checking' ? 'Checking...' : 'Check status'}</button>}
-                      {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={resendEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resending'}><Mail size={16} /> {emergencyInviteState.status === 'resending' ? 'Resending...' : 'Resend invite'}</button>}
-                      {emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={copyEmergencyInviteLink}><Copy size={16} /> Copy invite link</button>}
-                      {['invitation_sent', 'sent', 'pending'].includes(emergencyDraft.invitationStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyInvitation}><X size={16} /> Cancel invitation</button>}
-                      {emergencyDraft.invitationId && <button type="button" className="secondary-button danger-soft" onClick={resetEmergencyAccessInvite} disabled={emergencyInviteState.status === 'resetting'}><RefreshCw size={16} /> {emergencyInviteState.status === 'resetting' ? 'Resetting...' : 'Reset invite'}</button>}
-                    </div>
-                  </section>
-
-                  <section className="emergency-owner-flow-section request-section" aria-label="Emergency request status">
-                    <div className="emergency-owner-section-heading">
-                      <AlertTriangle size={18} />
-                      <div>
-                        <strong>Request access</strong>
-                        <p>{requestStatusCopy || 'After the invitation is accepted, your trusted person can use their secure browser link to request emergency access.'}</p>
+                      {emergencyInviteState.message && <small className="emergency-last-check-note">{emergencyInviteState.message}</small>}
+                      <div className="emergency-action-select-row">
+                        <CustomSelect value="" placeholder="Choose an action" ariaLabel="Choose Trusted Person Access action" options={emergencyActionOptions} onChange={runEmergencyFlowAction} disabled={!featureIncluded('emergencyAccess') || emergencyInviteState.status === 'resetting'} />
                       </div>
-                    </div>
-                    <div className="emergency-status-detail-grid compact">
-                      {emergencyDraft.requestRequestedAt && <small><strong>Requested</strong>{new Date(emergencyDraft.requestRequestedAt).toLocaleString()}</small>}
-                      {emergencyDraft.requestWaitingEndsAt && <small><strong>Waiting period ends</strong>{new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString()}</small>}
-                    </div>
-                    {isEmergencyReleaseReady && <p className="emergency-request-owner-message">Waiting period completed. The nominee can open the secure request link to view the prepared emergency package.</p>}
-                    {hasActiveEmergencyRequest && <p className="emergency-request-warning">Cancel before the waiting period ends if this emergency request should not continue.</p>}
-                    <div className="emergency-invite-action-row request-actions">
-                      {emergencyDraft.invitationStatus === 'accepted' && emergencyDraft.invitationId && <button type="button" className="secondary-button" onClick={resendEmergencyRequestLink} disabled={emergencyInviteState.status === 'resending-request-link'}><Mail size={16} /> {emergencyInviteState.status === 'resending-request-link' ? 'Sending link...' : 'Resend request link'}</button>}
-                      {emergencyDraft.invitationStatus === 'accepted' && emergencyDraft.invitationUrl && <button type="button" className="secondary-button" onClick={copyEmergencyRequestLink}><Copy size={16} /> Copy request link</button>}
-                      {['requested', 'waiting', 'owner_notified', 'release_ready'].includes(normalisedRequestStatus) && <button type="button" className="secondary-button danger-soft" onClick={cancelEmergencyAccessRequest} disabled={emergencyInviteState.status === 'cancelling-request'}><X size={16} /> Cancel emergency request</button>}
-                    </div>
-                  </section>
-                </div>
-              </div>
-
-
                     </div>
                   </details>
 
@@ -7488,8 +7483,19 @@ function App() {
                     <label className="emergency-access-notes-label">Documents and locations<textarea value={emergencyDraft.emergencyPackageDocuments || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageDocuments: e.target.value })} placeholder="Where to find will, policy documents, house papers, key files, physical documents..." /></label>
                     <label className="emergency-access-notes-label">Checklist for trusted person<textarea value={emergencyDraft.emergencyPackageChecklist || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageChecklist: e.target.value })} placeholder="Step 1: Contact..., Step 2: Check..., Step 3: Do not..." /></label>
                   </div>
+                  <div className="emergency-section-save-row"><button type="button" className="primary-button" disabled={emergencySaveState === 'saving' || !featureIncluded('emergencyAccess')} onClick={(event) => saveEmergencyAccessPlan(event, 'Emergency package saved and protected.')}><Save size={17} /> {emergencySaveState === 'saving' ? 'Saving...' : 'Save emergency package'}</button></div>
                 </div>
 
+                    </div>
+                  </details>
+
+                  <details className="settings-drilldown" onToggle={(event) => { if (event.currentTarget.open && emergencyDraft.invitationId) checkEmergencyInvitationStatus({ silent: true }); }}>
+                    <summary><span className="settings-directory-icon"><FileText size={21} /></span><span className="settings-directory-copy"><strong>Event history</strong><small>Optional audit of this Trusted Person flow with dates and times.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
+                    <div className="settings-drilldown-content">
+                      <div className="emergency-flow-audit-list">
+                        {emergencyFlowEvents.map((event) => <article key={event.id || `${event.type}-${event.occurredAt}`}><span className="emergency-flow-audit-dot" /><div><strong>{event.title || String(event.type || '').replace(/_/g, ' ')}</strong>{event.message && <p>{event.message}</p>}<small>{event.occurredAt ? new Date(event.occurredAt).toLocaleString() : 'Time unavailable'}</small></div></article>)}
+                        {!emergencyFlowEvents.length && <p className="emergency-flow-audit-empty">No flow events are recorded yet.</p>}
+                      </div>
                     </div>
                   </details>
 
@@ -7522,10 +7528,7 @@ function App() {
                     </div>
                   </details>
                 </div>
-                {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last updated: {new Date(emergencyDraft.updatedAt).toLocaleString()}</p>}
-                <div className="button-stack emergency-access-actions">
-                  <button type="submit" className="primary-button emergency-save-button" disabled={emergencySaveState === 'saving' || !featureIncluded('emergencyAccess')}>{emergencySaveState === 'saving' ? <RefreshCw size={17} className="spin-icon" /> : <UsersRound size={17} />} {emergencySaveState === 'saving' ? 'Saving...' : 'Save plan'}</button>
-                </div>
+                {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last saved: {new Date(emergencyDraft.updatedAt).toLocaleString()}</p>}
               </form>
             </section>
           )}

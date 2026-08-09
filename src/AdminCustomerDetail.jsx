@@ -169,6 +169,25 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
     await runDetailAction('resend_account_email', { emailType }, 'Account email sent.');
   }
 
+  async function hardDeleteAccount() {
+    const confirmText = window.prompt('Permanent testing action. Type DELETE to remove this account, its cloud data, sessions, billing metadata and Trusted Person flow.');
+    if (String(confirmText || '').trim().toUpperCase() !== 'DELETE') return;
+    if (!window.confirm('Permanently delete this customer account now? This cannot be undone.')) return;
+    setBusy(true);
+    const result = await requestJson('/.netlify/functions/admin-customer-detail', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'hard_delete_account', tenantId: customerId, confirmText: 'DELETE' })
+    });
+    setBusy(false);
+    if (result.httpStatus === 401 && onSessionExpired) { onSessionExpired(result.message || 'Admin sign-in is required.'); return; }
+    setNotice(result.message || (result.ok ? 'Account permanently deleted.' : 'Account deletion failed.'));
+    if (setGlobalNotice) setGlobalNotice(result.message || '');
+    if (result.ok) {
+      if (onChanged) await onChanged();
+      onBack?.();
+    }
+  }
+
   const timeline = useMemo(() => detail?.timeline || [], [detail]);
   const tenant = detail?.tenant || {};
   const owner = detail?.primaryUser || {};
@@ -255,6 +274,7 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
             {!founder && <div className="admin-operation-row"><div><strong>{tenant.account_status === 'suspended' ? 'Reactivate account' : 'Suspend account'}</strong><span>Controls access to account services. It does not read or alter the encrypted vault.</span></div>{tenant.account_status === 'suspended' ? <button type="button" className="secondary-button" disabled={busy} onClick={() => runCustomerAction('set_account_status', { accountStatus: 'active' }, 'Account reactivated.')}><UserRoundCheck size={16} /> Reactivate</button> : <button type="button" className="secondary-button danger-soft" disabled={busy} onClick={() => window.confirm('Suspend this customer account?') && runCustomerAction('set_account_status', { accountStatus: 'suspended' }, 'Account suspended.')}><Ban size={16} /> Suspend</button>}</div>}
             {!founder && trialExtendable && <div className="admin-operation-row"><div><strong>Extend trial</strong><span>{stripeManaged ? 'Extends an active Stripe trial and records the change.' : 'Extends the internal trial end date.'}</span></div><div className="admin-inline-action"><input type="number" min="1" max="365" value={trialDays} onChange={(event) => setTrialDays(event.target.value)} aria-label="Trial extension days" /><button type="button" className="secondary-button" disabled={busy} onClick={() => runCustomerAction('extend_trial', { days: Number(trialDays || 7) }, 'Trial extended.')}><CalendarClock size={16} /> Extend</button></div></div>}
             {stripeManaged && <div className="admin-operation-row"><div><strong>Refresh subscription from Stripe</strong><span>Pulls the latest status, renewal, payment and schedule information.</span></div><button type="button" className="secondary-button" disabled={busy} onClick={() => runCustomerAction('refresh_stripe_subscription', {}, 'Stripe subscription refreshed.')}><RefreshCw size={16} /> Refresh Stripe</button></div>}
+            {!founder && <div className="admin-operation-row admin-hard-delete-row"><div><strong>Delete account permanently</strong><span>Testing tool. Removes the customer account and server-side account data, cancels an active Stripe subscription first where applicable, then emails the account holder that the account was deleted.</span></div><button type="button" className="secondary-button danger-soft" disabled={busy} onClick={hardDeleteAccount}><Trash2 size={16} /> Delete account</button></div>}
           </div>
         </section>
       </div>

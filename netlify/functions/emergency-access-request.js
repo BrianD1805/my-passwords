@@ -3,6 +3,7 @@ import { getActiveCustomerSession } from './_session.js';
 import { createHash } from 'node:crypto';
 import { resolveTenantEntitlements } from './_entitlements.js';
 import { assertBrowserAction, assertCsrf, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
+import { recordEmergencyFlowEvent } from './_emergency-flow.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -46,27 +47,28 @@ async function markReleaseReadyIfDue(request) {
     metadata: nextMetadata,
     updated_at: now
   }).catch(() => null);
+  if (request.invitation_id) await recordEmergencyFlowEvent(request.invitation_id, { type: 'release_ready', title: 'Emergency package ready', message: 'The waiting period completed without cancellation. The prepared emergency package can now be opened.', occurredAt: now, metadata: { requestId: request.id } }).catch(() => null);
   return updated || { ...request, status: 'release_ready', metadata: nextMetadata };
 }
 
 function buildOwnerNotification({ ownerName, contactName, waitingPeriod, accessScope, requestedAt, waitingEndsAt }) {
   const safeOwner = ownerName || 'there';
   const safeContact = contactName || 'Your trusted person';
-  const text = `${safeOwner}, ${safeContact} has requested emergency access in Password-Encrypt. No vault contents have been released yet. If you do not cancel before the waiting period ends, the selected emergency package will become available. Waiting period: ${waitingPeriod || '7 days'}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. Requested: ${requestedAt}. Waiting period ends: ${waitingEndsAt}. Open your vault settings to review or cancel this request before the waiting period ends.`;
+  const text = `Important: ${safeContact} has started the emergency access stage for your Password-Encrypt vault. No vault contents have been released. The ${waitingPeriod || '7 days'} waiting period is now running and ends at ${waitingEndsAt}. Planned access scope: ${accessScope || 'Emergency Info folder only'}. If this request is expected, you do not need to do anything. If it should not continue, open Trusted Person Access in your vault and cancel the request before the waiting period ends. If you do not cancel, the prepared emergency package becomes available when the waiting period completes.`;
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
     <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
       <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
-        <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Emergency access request</h1>
+        <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Emergency access waiting period started</h1>
         <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeOwner}, ${safeContact} has requested emergency access in Password-Encrypt.</p>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">No vault contents have been released yet. If you do not cancel before the waiting period ends, your selected emergency package will become available to your trusted person.</p>
+        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">No vault contents have been released. The waiting period is now active. If the request is expected, no action is required. If it should not continue, cancel it before the waiting period ends.</p>
         <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
           <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
           <p style="margin:0 0 8px;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
           <p style="margin:0;"><strong>Waiting period ends:</strong> ${waitingEndsAt}</p>
         </div>
-        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">Open your vault settings to review or cancel this request before the waiting period ends.</p>
+        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">Open Password-Encrypt → Settings → Trusted Person Access to review the current stage or cancel this request. If you do not cancel before the waiting period ends, your prepared emergency package becomes available to your trusted person.</p>
       </div>
     </div>
   </body>
@@ -91,7 +93,7 @@ async function notifyOwner({ ownerEmail, ownerName, contactName, waitingPeriod, 
       body: JSON.stringify({
         from,
         to: ownerEmail,
-        subject: `${contactName || 'Your trusted person'} requested access for ${ownerName || 'Password-Encrypt'}`,
+        subject: `Emergency access waiting period started — ${contactName || 'Trusted person'}`,
         html: content.html,
         text: content.text
       })
@@ -123,7 +125,11 @@ export async function handler(event) {
       const tenantId = session.tenantId;
       const userId = session.userId;
       if (!requestId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Request details are missing.' });
-      await updateRow('emergency_access_requests', `id=${eq(requestId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      const requestRows = await selectRows('emergency_access_requests', `select=id,invitation_id&id=${eq(requestId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&limit=1`).catch(() => []);
+      const request = requestRows?.[0];
+      const now = new Date().toISOString();
+      await updateRow('emergency_access_requests', `id=${eq(requestId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: now, updated_at: now });
+      if (request?.invitation_id) await recordEmergencyFlowEvent(request.invitation_id, { type: 'request_cancelled', title: 'Emergency request cancelled', message: 'The account owner cancelled the emergency request before release.', occurredAt: now, metadata: { requestId } }).catch(() => null);
       return jsonResponse(200, { ok: true, version: APP_VERSION, requestId, status: 'cancelled', message: 'Emergency access request cancelled. No vault access has been released.' });
     }
 
@@ -217,6 +223,8 @@ export async function handler(event) {
       updated_at: requestedAt
     });
 
+    await recordEmergencyFlowEvent(invitation.id, { type: 'access_requested', title: 'Emergency access requested', message: `The trusted person requested access. The ${invitation.waiting_period || '7 days'} waiting period started. No vault contents were released.`, occurredAt: requestedAt, metadata: { requestId, waitingEndsAt } }).catch(() => null);
+
     const notification = await notifyOwner({
       ownerEmail,
       ownerName,
@@ -243,6 +251,8 @@ export async function handler(event) {
         updated_at: new Date().toISOString()
       });
     }
+
+    if (notification.sent) await recordEmergencyFlowEvent(invitation.id, { type: 'owner_notified', title: 'Account owner notified', message: 'The account owner was emailed that the emergency waiting period has started.', occurredAt: new Date().toISOString(), metadata: { requestId } }).catch(() => null);
 
     return jsonResponse(200, {
       ok: true,

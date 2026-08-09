@@ -1,5 +1,6 @@
 import { APP_VERSION, insertRow, publicId, selectRows, updateRow } from './_db.js';
 import { finishScheduledCheck, recordFunctionFailure, recordOperationalEvent, startScheduledCheck } from './_operations.js';
+import { recordEmergencyFlowEvent } from './_emergency-flow.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 function lte(value) { return `lte.${encodeURIComponent(value)}`; }
@@ -35,9 +36,9 @@ function buildReleaseReadyEmail({ contactName, ownerName, accessScope, requestUr
   const ownerFirst = escapeHtml(firstName(ownerName));
   const safeScope = escapeHtml(accessScope || 'Emergency Info folder only');
   const safeUrl = escapeHtml(requestUrl || '');
-  const text = `${contactName || 'Hello'}, the waiting period for your Password-Encrypt emergency access request for ${ownerName || 'the account owner'} has ended. If the request has not been cancelled, use this secure link to open the prepared emergency package: ${requestUrl}. Access scope: ${accessScope || 'Emergency Info folder only'}.`;
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">${ownerFirst}'s vault is ready</h1><p style="margin:0 0 18px;line-height:1.6;color:#536579">Hello ${safeContact}, the waiting period for your Password-Encrypt emergency access request for ${safeOwner} has ended.</p><p style="margin:0 0 18px;line-height:1.6;color:#536579">If the request has not been cancelled, you can now use the secure browser link below to open the emergency package prepared for you.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><strong>Access scope:</strong> ${safeScope}</div>${safeUrl ? `<a href="${safeUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Open ${ownerFirst}'s Vault</a>` : ''}<p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#7b8fa3">You do not need to install Password-Encrypt. The secure link opens in your browser. If you do not see this email in future, check Spam or Junk first.</p></div></div></body></html>`;
-  return { subject: `${firstName(ownerName)}'s Password-Encrypt vault is ready`, html, text };
+  const text = `Final stage: the waiting period for your Password-Encrypt emergency access request for ${ownerName || 'the account owner'} has ended without cancellation. The prepared ${accessScope || 'Emergency Info folder only'} package is now available through this secure browser link: ${requestUrl}. Nothing beyond the package prepared by the account owner is released. You do not need to install Password-Encrypt.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">Final stage — emergency package ready</h1><p style="margin:0 0 18px;line-height:1.6;color:#536579">Hello ${safeContact}, the waiting period for your Password-Encrypt emergency access request for ${safeOwner} has ended.</p><p style="margin:0 0 18px;line-height:1.6;color:#536579">The waiting period has ended without cancellation. You can now use the secure browser link below to open only the emergency package prepared for you by the account owner.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><strong>Access scope:</strong> ${safeScope}</div>${safeUrl ? `<a href="${safeUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Open ${ownerFirst}'s Vault</a>` : ''}<p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#7b8fa3">You do not need to install Password-Encrypt. The secure link opens in your browser. If you do not see this email in future, check Spam or Junk first.</p></div></div></body></html>`;
+  return { subject: `Final stage: ${firstName(ownerName)}'s emergency package is ready`, html, text };
 }
 
 async function sendReleaseReadyEmail(invitation, request) {
@@ -105,7 +106,10 @@ async function processRequest(request) {
   }
 
   const currentMetadata = current.metadata || {};
-  if (currentMetadata.release_ready_email_sent || invitation.metadata?.release_ready_email_sent) return { requestId: current.id, status: 'release_ready', email: 'already_sent' };
+  if (currentMetadata.release_ready_email_sent || invitation.metadata?.release_ready_email_sent) {
+    await recordEmergencyFlowEvent(invitation.id, { type: 'release_ready', title: 'Emergency package ready', message: 'The waiting period completed without cancellation. The prepared emergency package is now available to the trusted person.', occurredAt: currentMetadata.release_ready_at || now, metadata: { requestId: current.id } }).catch(() => null);
+    return { requestId: current.id, status: 'release_ready', email: 'already_sent' };
+  }
   const lastAttempt = currentMetadata.release_ready_email_last_attempt_at ? new Date(currentMetadata.release_ready_email_last_attempt_at).getTime() : 0;
   if (Number.isFinite(lastAttempt) && Date.now() - lastAttempt < 4 * 60 * 1000) return { requestId: current.id, status: 'release_ready', email: 'retry_wait' };
 
@@ -129,11 +133,15 @@ async function processRequest(request) {
   };
   await updateRow('emergency_access_requests', `id=${eq(current.id)}`, { status: 'release_ready', metadata: finalMetadata, updated_at: finishedAt }).catch(() => null);
   if (delivery.sent) {
+    const freshRows = await selectRows('emergency_access_invitations', `select=metadata&id=${eq(invitation.id)}&limit=1`).catch(() => []);
+    const freshMetadata = freshRows?.[0]?.metadata || invitation.metadata || {};
     await updateRow('emergency_access_invitations', `id=${eq(invitation.id)}`, {
-      metadata: { ...(invitation.metadata || {}), release_ready_email_sent: true, release_ready_email_sent_at: finishedAt, release_ready_email_provider_id: delivery.providerId || '', version: APP_VERSION },
+      metadata: { ...freshMetadata, release_ready_email_sent: true, release_ready_email_sent_at: finishedAt, release_ready_email_provider_id: delivery.providerId || '', version: APP_VERSION },
       updated_at: finishedAt
     }).catch(() => null);
   }
+  await recordEmergencyFlowEvent(invitation.id, { type: 'release_ready', title: 'Emergency package ready', message: 'The waiting period completed without cancellation. The prepared emergency package is now available to the trusted person.', occurredAt: currentMetadata.release_ready_at || now, metadata: { requestId: current.id } }).catch(() => null);
+  if (delivery.sent) await recordEmergencyFlowEvent(invitation.id, { type: 'release_ready_email_sent', title: 'Final access email sent', message: 'The trusted person was emailed that the emergency package is ready.', occurredAt: finishedAt, metadata: { requestId: current.id } }).catch(() => null);
   return { requestId: current.id, status: 'release_ready', email: delivery.sent ? 'sent' : 'failed', reason: delivery.reason || '' };
 }
 
