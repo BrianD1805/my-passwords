@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.053I';
+const VERSION = 'Password-Encrypt Ver-0.053J';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1933,7 +1933,7 @@ class AppStartupBoundary extends React.Component {
     return (
       <main className="startup-error-screen">
         <section className="startup-error-card">
-          <div className="brand-mark"><img className="brand-mark-image" src="/images/password-encrypt-brand.png" alt="" /></div>
+          <div className="brand-mark startup-brand-mark"><img className="brand-mark-image startup-brand-mark-image" src="/icons/splash-icon.png" alt="" /></div>
           <h1>{offline ? 'No internet connection' : 'Password-Encrypt could not start'}</h1>
           <p>{offline
             ? 'Your encrypted vault data has not been changed. Reconnect and try again.'

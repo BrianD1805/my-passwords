@@ -1,0 +1,17 @@
+Password-Encrypt Ver-0.053J verification
+
+PASS  13/13 security static checks
+PASS  20/20 reliability static checks
+PASS  35/35 legal/commercial readiness checks
+PASS  36/36 landing/plan UX static checks
+PASS  6/6 mobile restoration checks
+PASS  61 Node-parseable Netlify Function/script JS/MJS files syntax checked
+PASS  package.json, package-lock.json and manifest.webmanifest JSON validation
+PASS  favicon PNG dimensions: 16x16, 32x32
+PASS  Apple touch icon: 180x180
+PASS  PWA icons: 192x192, 512x512 and 512x512 maskable
+PASS  circular splash PNG: 512x512 with transparent corners
+PASS  Open Graph image: 1200x630
+PASS  legacy /icons/icon.svg now embeds the uploaded favicon artwork
+
+npm run build was not run in the patch workspace because node_modules is intentionally not installed there.

@@ -15502,3 +15502,13 @@ option {
   }
 }
 
+
+
+/* Password-Encrypt Ver-0.053J — uploaded favicon/PWA/splash artwork. */
+.startup-brand-mark {
+  border-radius: 50% !important;
+}
+.startup-brand-mark-image {
+  border-radius: 50% !important;
+  object-fit: cover !important;
+}

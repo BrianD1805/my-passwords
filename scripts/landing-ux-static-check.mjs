@@ -49,5 +49,11 @@ check('Everything important remains before Next of Kin on mobile flow', main.ind
 check('Mobile hero hides CTA row and security highlight pills only at mobile breakpoint', css.includes('.landing-hero-copy .landing-cta-row,') && css.includes('.landing-hero-copy .landing-trust-strip') && css.includes('display: none !important;'));
 check('FAQ has stronger blue premium treatment without drop shadows', css.includes('border-left: 4px solid #336699') && css.includes('background: #336699;') && !/Ver-0\.053I[\s\S]*?landing-faq-accordion[\s\S]{0,1200}box-shadow/.test(css));
 
+check('Uploaded favicon artwork is wired into browser and Apple icon links', read('index.html').includes('/favicon.ico') && read('index.html').includes('/favicon-32x32.png') && read('index.html').includes('/apple-touch-icon.png'));
+check('PWA manifest uses new 192, 512 and maskable PNG icons', read('public/manifest.webmanifest').includes('/icons/icon-192.png') && read('public/manifest.webmanifest').includes('/icons/icon-512.png') && read('public/manifest.webmanifest').includes('/icons/icon-maskable-512.png'));
+check('Startup and offline splash keep a circular new icon', read('index.html').includes('/icons/splash-icon.png') && read('index.html').includes('border-radius:50%') && read('public/offline.html').includes('/icons/splash-icon.png'));
+check('Open Graph and sharing metadata use the new favicon artwork', read('index.html').includes('property="og:image" content="https://password-encrypt.com/images/password-encrypt-og.png"') && read('index.html').includes('name="twitter:image" content="https://password-encrypt.com/images/password-encrypt-og.png"'));
+check('Service worker precaches current favicon, PWA, splash and sharing assets', read('public/sw.js').includes('/icons/icon-512.png') && read('public/sw.js').includes('/icons/splash-icon.png') && read('public/sw.js').includes('/images/password-encrypt-og.png'));
+
 if (process.exitCode) process.exit(1);
 console.log(`\nAll ${passed} landing/plan UX static checks passed.`);

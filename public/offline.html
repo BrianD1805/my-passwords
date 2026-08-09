@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#336699" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
     <title>Password-Encrypt — Offline</title>
     <style>
       * { box-sizing: border-box; }
@@ -29,7 +32,8 @@
         width: 92px;
         height: 92px;
         margin: 0 auto 20px;
-        object-fit: contain;
+        object-fit: cover;
+        border-radius: 50%;
       }
       h1 { margin: 0 0 12px; font-size: 26px; }
       p { margin: 0 0 20px; color: #66635F; line-height: 1.55; }
@@ -49,11 +53,11 @@
   </head>
   <body>
     <main>
-      <img class="mark" src="/images/password-encrypt-brand.png" alt="Password-Encrypt" />
+      <img class="mark" src="/icons/splash-icon.png" alt="Password-Encrypt" />
       <h1>No internet connection</h1>
       <p>Password-Encrypt could not finish loading. Reconnect, then try again. A vault already saved on this device will remain encrypted and unchanged.</p>
       <button id="offline-retry" type="button">Try again</button>
-      <small>Password-Encrypt Ver-0.053I</small>
+      <small>Password-Encrypt Ver-0.053J</small>
     </main>
     <script src="/offline.js" defer></script>
   </body>
