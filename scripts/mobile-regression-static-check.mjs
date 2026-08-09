@@ -6,7 +6,7 @@ const checks = [
   ['mobile carousel prompt removed', !css.includes('Swipe left to compare plans')],
   ['mobile plan row has no horizontal carousel overflow', !/landing-pricing-section \.landing-plan-tier-grid\s*\{[\s\S]{0,500}overflow-x:\s*auto/.test(css)],
   ['FAQ standard mobile panel padding restored', /Ver-0\.053F[\s\S]*?landing-faq-section\s*\{[\s\S]*?padding:\s*22px\s*!important/.test(css)],
-  ['no root or landing page overflow lock added by 0.053F', !/Ver-0\.053F[\s\S]*?(html|body|#root)[\s\S]*?overflow/.test(css)],
+  ['no root or landing page overflow lock is applied', !/(?:html|body|#root|\.public-landing-page)\s*\{[^}]*overflow(?:-x|-y)?\s*:\s*(?:hidden|clip)/.test(css)],
 ];
 let failed=0;
 for (const [name, ok] of checks) { console.log(`${ok?'PASS':'FAIL'}  ${name}`); if(!ok) failed++; }

@@ -15513,7 +15513,7 @@ option {
   object-fit: cover !important;
 }
 
-/* Password-Encrypt Ver-0.054 — simplified Trusted Person emergency flow testing. */
+/* Password-Encrypt Ver-0.054A — Trusted Person emergency flow testing foundation retained. */
 .emergency-current-stage-card {
   display: flex;
   gap: 16px;
@@ -15554,4 +15554,51 @@ option {
   .emergency-action-select-row { max-width: none; }
   .emergency-section-save-row { justify-content: stretch; }
   .emergency-section-save-row .primary-button { width: 100%; justify-content: center; }
+}
+
+/* Password-Encrypt Ver-0.054A — approved Trusted Person flow refinements. */
+.emergency-current-stage-glance {
+  margin: 0 0 18px;
+  border-width: 2px;
+}
+.emergency-package-access-window {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid #9dc8aa;
+  border-radius: 16px;
+  background: #f2fbf5;
+  color: #315d40;
+}
+.emergency-package-access-window svg { flex: 0 0 auto; margin-top: 2px; }
+.emergency-package-access-window strong { display: block; margin-bottom: 4px; color: #244a31; }
+.emergency-package-access-window span { display: block; line-height: 1.5; }
+.emergency-final-qa {
+  margin: 0 0 18px;
+  border: 1px solid #c7d8e6;
+  border-radius: 16px;
+  background: #f7fafc;
+  overflow: hidden;
+}
+.emergency-final-qa details { border-bottom: 1px solid #dfe8ef; }
+.emergency-final-qa details:last-child { border-bottom: 0; }
+.emergency-final-qa summary { padding: 13px 15px; color: #264f70; cursor: pointer; }
+.emergency-final-qa details p { margin: 0; padding: 0 15px 14px; color: #5b7083; line-height: 1.55; }
+.emergency-package-download-card {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #d4dfe8;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+.emergency-package-download-card > div:first-child strong { display: block; margin-bottom: 5px; color: #20384e; }
+.emergency-package-download-card > div:first-child span { display: block; color: #66798a; line-height: 1.5; }
+.emergency-package-download-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 13px; }
+
+@media (max-width: 700px) {
+  .emergency-current-stage-glance { margin-bottom: 15px; }
+  .emergency-package-download-actions { display: grid; grid-template-columns: 1fr; }
+  .emergency-package-download-actions .secondary-button { width: 100%; justify-content: center; }
 }

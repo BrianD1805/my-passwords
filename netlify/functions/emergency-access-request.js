@@ -28,6 +28,32 @@ function hasWaitingPeriodEnded(value) {
   return Number.isFinite(time) && time <= Date.now();
 }
 
+const EMERGENCY_PACKAGE_ACCESS_MS = 30 * 24 * 60 * 60 * 1000;
+
+function releaseExpiryFrom(request, fallbackReadyAt = '') {
+  const stored = request?.metadata?.release_expires_at;
+  if (stored) return stored;
+  const readyAt = request?.metadata?.release_ready_at || fallbackReadyAt || request?.updated_at || new Date().toISOString();
+  const readyMs = new Date(readyAt).getTime();
+  return new Date((Number.isFinite(readyMs) ? readyMs : Date.now()) + EMERGENCY_PACKAGE_ACCESS_MS).toISOString();
+}
+
+async function ensureReleaseWindow(request) {
+  if (!request?.id || String(request.status || '').toLowerCase() !== 'release_ready') return request;
+  const releaseExpiresAt = releaseExpiryFrom(request);
+  if (request.metadata?.release_expires_at) return request;
+  const metadata = { ...(request.metadata || {}), release_expires_at: releaseExpiresAt, version: APP_VERSION };
+  const updated = await updateRow('emergency_access_requests', `id=${eq(request.id)}`, { metadata, updated_at: new Date().toISOString() }).catch(() => null);
+  return updated || { ...request, metadata };
+}
+
+function releaseWindowExpired(request) {
+  const expiresAt = request?.metadata?.release_expires_at;
+  if (!expiresAt) return false;
+  const time = new Date(expiresAt).getTime();
+  return Number.isFinite(time) && time <= Date.now();
+}
+
 async function markReleaseReadyIfDue(request) {
   const status = String(request?.status || '').toLowerCase();
   if (!request?.id || !['requested', 'waiting', 'owner_notified'].includes(status) || request.cancelled_at || request.released_at || !hasWaitingPeriodEnded(request.waiting_ends_at)) {
@@ -39,6 +65,7 @@ async function markReleaseReadyIfDue(request) {
     version: APP_VERSION,
     release_foundation_ready: true,
     release_ready_at: now,
+    release_expires_at: new Date(Date.now() + EMERGENCY_PACKAGE_ACCESS_MS).toISOString(),
     release_note: 'Waiting period ended. The owner-prepared emergency package is ready if it has been saved.',
     release_ready_email_pending: !request.metadata?.release_ready_email_sent
   };
@@ -149,14 +176,16 @@ export async function handler(event) {
     const existing = await selectRows('emergency_access_requests', `select=*&invitation_id=${eq(invitation.id)}&status=in.(requested,waiting,owner_notified,release_ready)&order=requested_at.desc&limit=1`);
 
     if (action === 'status') {
-      const currentRequest = existing?.[0]?.id ? await markReleaseReadyIfDue(existing[0]) : null;
+      let currentRequest = existing?.[0]?.id ? await markReleaseReadyIfDue(existing[0]) : null;
+      currentRequest = await ensureReleaseWindow(currentRequest);
+      if (releaseWindowExpired(currentRequest)) return jsonResponse(410, { ok: false, version: APP_VERSION, code: 'EMERGENCY_PACKAGE_EXPIRED', message: 'This Emergency Package link expired 30 days after the package became available.' });
       return jsonResponse(200, {
         ok: true,
         version: APP_VERSION,
         invitationId: invitation.id,
         invitationStatus: invitation.status,
         invitationMessage: invitation.status === 'accepted'
-          ? 'Invitation accepted. You can request emergency access if needed.'
+          ? 'Invitation accepted. Your secure Emergency Access link was sent by email for future use.'
           : invitation.status === 'declined'
             ? 'Invitation declined. No access has been granted.'
             : invitation.status === 'cancelled'
@@ -167,6 +196,7 @@ export async function handler(event) {
         requestedAt: currentRequest?.requested_at || '',
         waitingEndsAt: currentRequest?.waiting_ends_at || '',
         releaseReady: String(currentRequest?.status || '').toLowerCase() === 'release_ready',
+        releaseExpiresAt: currentRequest?.metadata?.release_expires_at || '',
         packageEnvelope: String(currentRequest?.status || '').toLowerCase() === 'release_ready' ? (invitation.metadata?.emergency_package_envelope || null) : null,
         packageSummary: String(currentRequest?.status || '').toLowerCase() === 'release_ready' ? (invitation.metadata?.emergency_package_summary || null) : null,
         message: currentRequest?.id
@@ -180,7 +210,9 @@ export async function handler(event) {
     if (invitation.status !== 'accepted') return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'Accept the emergency contact invitation before requesting emergency access.' });
 
     if (existing?.[0]?.id) {
-      const currentRequest = await markReleaseReadyIfDue(existing[0]);
+      let currentRequest = await markReleaseReadyIfDue(existing[0]);
+      currentRequest = await ensureReleaseWindow(currentRequest);
+      if (releaseWindowExpired(currentRequest)) return jsonResponse(410, { ok: false, version: APP_VERSION, code: 'EMERGENCY_PACKAGE_EXPIRED', message: 'This Emergency Package link expired 30 days after the package became available.' });
       return jsonResponse(200, {
         ok: true,
         version: APP_VERSION,
@@ -189,6 +221,7 @@ export async function handler(event) {
         requestedAt: currentRequest.requested_at,
         waitingEndsAt: currentRequest.waiting_ends_at,
         releaseReady: String(currentRequest.status || '').toLowerCase() === 'release_ready',
+        releaseExpiresAt: currentRequest?.metadata?.release_expires_at || '',
         packageEnvelope: String(currentRequest.status || '').toLowerCase() === 'release_ready' ? (invitation.metadata?.emergency_package_envelope || null) : null,
         packageSummary: String(currentRequest.status || '').toLowerCase() === 'release_ready' ? (invitation.metadata?.emergency_package_summary || null) : null,
         message: String(currentRequest.status || '').toLowerCase() === 'release_ready'

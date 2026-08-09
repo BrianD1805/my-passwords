@@ -23,15 +23,22 @@ function hasWaitingPeriodEnded(value) {
   return Number.isFinite(time) && time <= Date.now();
 }
 
-function buildReleaseReadyEmail({ contactName, ownerName, accessScope, requestUrl }) {
-  const safeContact = contactName || 'there';
-  const safeOwner = ownerName || 'the account owner';
-  const ownerFirst = firstName(safeOwner);
-  const safeScope = accessScope || 'Emergency Info folder only';
-  const buttonText = `Open ${ownerFirst}'s Vault`;
-  const text = `Final stage: the waiting period for your Password-Encrypt access request for ${safeOwner} has ended without cancellation. The prepared ${safeScope} emergency package is now available through this secure browser link: ${requestUrl}. Nothing beyond the package prepared by ${safeOwner} is released. You do not need to install Password-Encrypt.`;
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;"><div style="max-width:560px;margin:0 auto;padding:28px 18px;"><div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);"><h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Final stage — emergency package ready</h1><p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, the waiting period for your Password-Encrypt access request for ${safeOwner} has ended.</p><p style="margin:0 0 18px;line-height:1.55;color:#536579;">The waiting period has completed without cancellation. You can now use this secure browser link to open only the emergency package ${safeOwner} prepared for you.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;"><p style="margin:0;"><strong>Access scope:</strong> ${safeScope}</p></div>${requestUrl ? `<a href="${requestUrl}" style="display:inline-block;background:#173a5d;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">${buttonText}</a>` : ''}<p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">You do not need to install Password-Encrypt. This secure link opens in your browser. If you cannot find this email later, check your Spam or Junk folder first.</p></div></div></body></html>`;
-  return { html, text, subject: `Final stage: ${ownerFirst}'s emergency package is ready` };
+const EMERGENCY_PACKAGE_ACCESS_MS = 30 * 24 * 60 * 60 * 1000;
+
+function formatReleaseExpiry(value) {
+  const date = new Date(value || '');
+  return Number.isFinite(date.getTime()) ? date.toUTCString() : '30 days from release';
+}
+
+function buildReleaseReadyEmail({ contactName, ownerName, accessScope, requestUrl, releaseExpiresAt }) {
+  const safeContact = escapeHtml(contactName || 'there');
+  const safeOwner = escapeHtml(ownerName || 'the account owner');
+  const safeScope = escapeHtml(accessScope || 'Emergency Info folder only');
+  const safeUrl = escapeHtml(requestUrl || '');
+  const safeExpiry = escapeHtml(formatReleaseExpiry(releaseExpiresAt));
+  const text = `Your Password-Encrypt Emergency Access package is ready. Hello ${contactName || 'there'}, the waiting period for your Password-Encrypt Emergency Access request for ${ownerName || 'the account owner'} has ended. The waiting period completed without cancellation, so you can now use this secure link to open only the emergency package prepared for you: ${requestUrl}. This secure link remains available for 30 days, until ${formatReleaseExpiry(releaseExpiresAt)}. Open the package promptly. If you download a copy, store it somewhere safe and private. After the 30-day access period expires, this secure link will no longer open the Emergency Package. Do not forward the link or downloaded copies. Support: info@zippyweb.uk.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">Your emergency package is ready</h1><p style="margin:0 0 18px;line-height:1.6;color:#536579">Hello ${safeContact}, the waiting period for your Password-Encrypt Emergency Access request for <strong>${safeOwner}</strong> has ended.</p><p style="margin:0 0 18px;line-height:1.6;color:#536579">The waiting period completed without cancellation, so you can now use the secure browser link below to open <strong>only the emergency package prepared for you</strong>.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><p style="margin:0 0 8px"><strong>Access scope:</strong> ${safeScope}</p><p style="margin:0"><strong>Secure link available until:</strong> ${safeExpiry}</p></div>${safeUrl ? `<a href="${safeUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Open Emergency Package</a>` : ''}<h2 style="margin:22px 0 8px;color:#14263b;font-size:18px">Important — this link is available for 30 days</h2><p style="margin:0 0 14px;line-height:1.6;color:#536579">Open the package promptly. If you need to retain the information, use the available download option and store the downloaded file somewhere safe and private.</p><p style="margin:0 0 14px;line-height:1.6;color:#536579">After the 30-day access period expires, this secure link will no longer open the Emergency Package.</p><p style="margin:0;font-size:13px;line-height:1.5;color:#7b8fa3">The Emergency Package may contain sensitive private information. Please keep the link and any downloaded copies secure and do not forward them to anyone else. If you need help, contact info@zippyweb.uk.</p></div></div></body></html>`;
+  return { html, text, subject: 'Password-Encrypt Emergency Access — Your emergency package is ready' };
 }
 
 async function notifyEmergencyContactReleaseReady({ invitation, request }) {
@@ -42,7 +49,7 @@ async function notifyEmergencyContactReleaseReady({ invitation, request }) {
   const to = invitation?.contact_email || request?.contact_email || '';
   if (!apiKey || !from || !to || !to.includes('@')) return { sent: false, provider: 'resend', reason: 'Release-ready email is not configured.' };
   const requestUrl = metadata.open_access_url || withEmergencyStep(invitation?.invite_url || metadata.request_access_url || '', 'open');
-  const content = buildReleaseReadyEmail({ contactName: invitation?.contact_name || request?.contact_name, ownerName: metadata.owner_name || 'the account owner', accessScope: invitation?.access_scope || request?.access_scope, requestUrl });
+  const content = buildReleaseReadyEmail({ contactName: invitation?.contact_name || request?.contact_name, ownerName: metadata.owner_name || 'the account owner', accessScope: invitation?.access_scope || request?.access_scope, requestUrl, releaseExpiresAt: request?.metadata?.release_expires_at || '' });
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
@@ -63,12 +70,15 @@ async function markReleaseReadyIfDue(request, invitation = null) {
     return request;
   }
   const now = new Date().toISOString();
-  const releaseEmail = invitation ? await notifyEmergencyContactReleaseReady({ invitation, request }).catch((error) => ({ sent: false, reason: error.message || 'Release-ready email failed.' })) : null;
+  const releaseExpiresAt = request?.metadata?.release_expires_at || new Date(Date.now() + EMERGENCY_PACKAGE_ACCESS_MS).toISOString();
+  const requestWithWindow = { ...request, metadata: { ...(request.metadata || {}), release_ready_at: request?.metadata?.release_ready_at || now, release_expires_at: releaseExpiresAt, version: APP_VERSION } };
+  const releaseEmail = invitation ? await notifyEmergencyContactReleaseReady({ invitation, request: requestWithWindow }).catch((error) => ({ sent: false, reason: error.message || 'Release-ready email failed.' })) : null;
   const nextMetadata = {
-    ...(request.metadata || {}),
+    ...(requestWithWindow.metadata || {}),
     version: APP_VERSION,
     release_foundation_ready: true,
-    release_ready_at: now,
+    release_ready_at: requestWithWindow.metadata.release_ready_at,
+    release_expires_at: releaseExpiresAt,
     release_note: 'Waiting period ended. The selected owner-prepared emergency package can now be released from the secure invite link.',
     release_ready_email_sent: Boolean(releaseEmail?.sent) || Boolean(request.metadata?.release_ready_email_sent),
     release_ready_email_provider_id: releaseEmail?.providerId || request.metadata?.release_ready_email_provider_id || '',
@@ -117,26 +127,54 @@ function withEmergencyStep(url, step) {
   }
 }
 
-function buildInviteEmail({ ownerName, contactName, waitingPeriod, accessScope, acceptUrl }) {
-  const safeOwner = ownerName || 'A Password-Encrypt user';
-  const ownerFirst = firstName(safeOwner);
-  const safeContact = contactName || 'there';
-  const safeWaiting = waitingPeriod || '7 days';
-  const safeScope = accessScope || 'Emergency Info folder only';
-  const text = `Hello ${safeContact}. Stage 1: ${safeOwner} has nominated you as their trusted person / next of kin contact in Password-Encrypt. This nomination is intended for a serious emergency, incapacity, or a situation where ${safeOwner} cannot access their own vault. Nothing from the vault is available to you now. Please review and accept or decline here: ${acceptUrl}. If you accept, Password-Encrypt sends you a separate secure Request Access link to keep for the future. If you ever use that link, a ${safeWaiting} waiting period starts and ${safeOwner} is notified and can cancel. Only if that period ends without cancellation will the prepared ${safeScope} emergency package become available. You do not need to install Password-Encrypt.`;
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><p style="margin:0 0 8px;color:#336699;font-weight:700;letter-spacing:.08em;text-transform:uppercase">Stage 1 · Nomination</p><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">${ownerFirst} has nominated you as a trusted person</h1><p style="margin:0 0 16px;line-height:1.6;color:#536579">Hello ${safeContact}, this is intended for a serious emergency, incapacity, or a situation where ${safeOwner} cannot access their own vault.</p><p style="margin:0 0 16px;line-height:1.6;color:#536579"><strong>Nothing from the vault is available to you at this stage.</strong> Please review the nomination and accept or decline it.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><p style="margin:0 0 8px"><strong>Waiting period if access is later requested:</strong> ${safeWaiting}</p><p style="margin:0"><strong>Prepared access scope:</strong> ${safeScope}</p></div><a href="${acceptUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Review nomination</a><p style="margin:20px 0 0;font-size:13px;line-height:1.55;color:#7b8fa3"><strong>What happens next?</strong> If you accept, you receive a separate Request Access link. Using it in a genuine emergency starts the waiting period and notifies ${safeOwner}. ${safeOwner} can cancel before the period ends. Only after the period ends without cancellation can the prepared emergency package be opened.</p></div></div></body></html>`;
-  return { html, text, subject: `Stage 1: ${ownerFirst} nominated you as a Password-Encrypt trusted person` };
+function publicLandingUrlFromLink(url) {
+  try { return `${new URL(url).origin}/`; }
+  catch { return 'https://password-encrypt.com/'; }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function buildInviteEmail({ ownerName, ownerEmail, ownerPhone, contactName, waitingPeriod, accessScope, acceptUrl }) {
+  const safeOwnerText = ownerName || 'A Password-Encrypt user';
+  const safeContactText = contactName || 'there';
+  const safeWaitingText = waitingPeriod || '7 days';
+  const safeScopeText = accessScope || 'Emergency Info folder only';
+  const landingUrl = publicLandingUrlFromLink(acceptUrl);
+  const safeOwner = escapeHtml(safeOwnerText);
+  const safeOwnerEmail = escapeHtml(ownerEmail || 'Not supplied');
+  const safeOwnerPhone = escapeHtml(ownerPhone || 'Not supplied');
+  const safeContact = escapeHtml(safeContactText);
+  const safeWaiting = escapeHtml(safeWaitingText);
+  const safeScope = escapeHtml(safeScopeText);
+  const safeAcceptUrl = escapeHtml(acceptUrl || '');
+  const safeLandingUrl = escapeHtml(landingUrl);
+  const text = `You've been chosen as a trusted person. ${safeOwnerText} has chosen you as their trusted person for their Password-Encrypt account. Password-Encrypt is a secure encrypted vault used to store important private information such as passwords, account details, secure notes and other information the account holder may want protected. The Trusted Person feature is designed for situations such as serious illness, incapacity, or when the account holder is no longer able to access or manage their vault themselves. The person who selected you: Name: ${safeOwnerText}. Email: ${ownerEmail || 'Not supplied'}. Phone: ${ownerPhone || 'Not supplied'}. Being selected does not give you access to their Password-Encrypt vault now. First, you need to accept their invitation: ${acceptUrl}. If you ever need emergency access in the future, you will make a separate access request. Password-Encrypt then starts the account holder's configured ${safeWaitingText} waiting period and notifies them of the request. During that waiting period, the account holder can cancel the request. Only if the waiting period completes without cancellation can the prepared ${safeScopeText} emergency information become available. Nothing from their vault is available to you simply by accepting this invitation. If you were not expecting this invitation, you do not need to take any action. Learn more about Password-Encrypt: ${landingUrl}. Password-Encrypt support will never ask you for the account holder's master password, passwords, recovery codes or other private vault contents.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">You've been chosen as a trusted person</h1><p style="margin:0 0 16px;line-height:1.6;color:#536579"><strong>${safeOwner}</strong> has chosen you as their trusted person for their Password-Encrypt account.</p><p style="margin:0 0 16px;line-height:1.6;color:#536579"><strong>Password-Encrypt</strong> is a secure encrypted vault used to store important private information such as passwords, account details, secure notes and other information the account holder may want protected.</p><p style="margin:0 0 16px;line-height:1.6;color:#536579">The Trusted Person feature is designed for situations such as serious illness, incapacity, or when the account holder is no longer able to access or manage their vault themselves.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><p style="margin:0 0 10px"><strong>The person who selected you</strong></p><p style="margin:0 0 6px"><strong>Name:</strong> ${safeOwner}</p><p style="margin:0 0 6px"><strong>Email:</strong> ${safeOwnerEmail}</p><p style="margin:0"><strong>Phone:</strong> ${safeOwnerPhone}</p></div><h2 style="margin:0 0 10px;color:#14263b;font-size:18px">What does being a trusted person mean?</h2><p style="margin:0 0 16px;line-height:1.6;color:#536579">Being selected does <strong>not</strong> give you access to their Password-Encrypt vault now. First, you need to accept their invitation. If you ever need emergency access in the future, you will make a separate access request. Password-Encrypt then starts the account holder's configured <strong>${safeWaiting}</strong> waiting period and notifies them of the request.</p><p style="margin:0 0 18px;line-height:1.6;color:#536579">During that waiting period, the account holder can cancel the request. Only if the waiting period completes without cancellation can the prepared <strong>${safeScope}</strong> emergency information become available.</p><p style="margin:0 0 18px;line-height:1.6;color:#14263b"><strong>Nothing from their vault is available to you simply by accepting this invitation.</strong></p>${safeAcceptUrl ? `<a href="${safeAcceptUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Accept trusted person invitation</a>` : ''}<p style="margin:20px 0 0;font-size:13px;line-height:1.55;color:#7b8fa3">If you were not expecting this invitation, you do not need to take any action.</p><div style="border-top:1px solid #e0e8ef;margin-top:22px;padding-top:18px"><p style="margin:0 0 8px;line-height:1.55;color:#536579"><strong>Want to know more about Password-Encrypt?</strong><br>Learn how Password-Encrypt protects passwords and private details, including Trusted Person Access.</p><a href="${safeLandingUrl}" style="color:#336699;font-weight:700;text-decoration:none">Learn more about Password-Encrypt</a></div><p style="margin:18px 0 0;font-size:13px;line-height:1.5;color:#7b8fa3">For your security, Password-Encrypt support will never ask you for the account holder's master password, passwords, recovery codes or other private vault contents.</p></div></div></body></html>`;
+  return { html, text, subject: `You've been chosen as a trusted person for Password-Encrypt` };
 }
 
 function buildRequestLinkEmail({ ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
-  const safeOwner = ownerName || 'the account owner';
-  const ownerFirst = firstName(safeOwner);
-  const safeContact = contactName || 'there';
-  const safeWaiting = waitingPeriod || '7 days';
-  const safeScope = accessScope || 'Emergency Info folder only';
-  const text = `Hello ${safeContact}. Stage 2: your nomination for ${safeOwner} is accepted. Keep this secure link somewhere safe for a genuine emergency: ${requestUrl}. Nothing from the vault is available yet. Using this link starts the ${safeWaiting} waiting period and immediately notifies ${safeOwner}. ${safeOwner} can cancel during that period. Only if the waiting period ends without cancellation will the prepared ${safeScope} emergency package become available. You do not need to install Password-Encrypt.`;
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><p style="margin:0 0 8px;color:#336699;font-weight:700;letter-spacing:.08em;text-transform:uppercase">Stage 2 · Accepted</p><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">Keep your emergency Request Access link safe</h1><p style="margin:0 0 16px;line-height:1.6;color:#536579">Hello ${safeContact}, your trusted person nomination for ${safeOwner} has been accepted.</p><p style="margin:0 0 16px;line-height:1.6;color:#536579"><strong>Nothing from the vault is available yet.</strong> Use the link below only if a genuine emergency means you need to request access.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><p style="margin:0 0 8px"><strong>Waiting period:</strong> ${safeWaiting}</p><p style="margin:0"><strong>Prepared access scope:</strong> ${safeScope}</p></div><a href="${requestUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Request emergency access for ${ownerFirst}</a><p style="margin:20px 0 0;font-size:13px;line-height:1.55;color:#7b8fa3">Using this link starts the waiting period and notifies ${safeOwner}. ${safeOwner} can cancel before the period ends. If it completes without cancellation, you receive a final email when the prepared package is ready.</p></div></div></body></html>`;
-  return { html, text, subject: `Stage 2: Your Password-Encrypt emergency link for ${ownerFirst}` };
+  const safeOwnerText = ownerName || 'the account owner';
+  const ownerFirstText = firstName(safeOwnerText);
+  const safeContactText = contactName || 'there';
+  const safeWaitingText = waitingPeriod || '7 days';
+  const safeScopeText = accessScope || 'Emergency Info folder only';
+  const safeOwner = escapeHtml(safeOwnerText);
+  const ownerFirst = escapeHtml(ownerFirstText);
+  const safeContact = escapeHtml(safeContactText);
+  const safeWaiting = escapeHtml(safeWaitingText);
+  const safeScope = escapeHtml(safeScopeText);
+  const safeRequestUrl = escapeHtml(requestUrl || '');
+  const text = `Hello ${safeContactText}. You have accepted the trusted person invitation for ${safeOwnerText}. Keep this Password-Encrypt Emergency Access email and its secure Request Emergency Access link somewhere safe and private for future use: ${requestUrl}. You may not need it for a long time. Nothing from the vault is available now. If emergency access is ever genuinely required, use this link to begin the request. Using it starts the ${safeWaitingText} waiting period and immediately notifies ${safeOwnerText}. ${safeOwnerText} can cancel during that period. Only if the waiting period ends without cancellation will the prepared ${safeScopeText} emergency package become available. Using the link does not immediately reveal any vault information.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">Keep your Emergency Access link safe</h1><p style="margin:0 0 16px;line-height:1.6;color:#536579">Hello ${safeContact}, you have accepted the trusted person invitation for ${safeOwner}.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><strong>Keep this email somewhere safe</strong><p style="margin:8px 0 0;line-height:1.55;color:#536579">Save this email or store the secure link somewhere safe and private. You may not need it for a long time, but this is the link you will use if Emergency Access is genuinely required in the future.</p></div><p style="margin:0 0 16px;line-height:1.6;color:#536579"><strong>Nothing from the vault is available now.</strong> Using the link below does not immediately reveal any vault information.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><p style="margin:0 0 8px"><strong>Waiting period:</strong> ${safeWaiting}</p><p style="margin:0"><strong>Prepared access scope:</strong> ${safeScope}</p></div>${safeRequestUrl ? `<a href="${safeRequestUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Request Emergency Access for ${ownerFirst}</a>` : ''}<p style="margin:20px 0 0;font-size:13px;line-height:1.55;color:#7b8fa3">Using this link starts the waiting period and notifies ${safeOwner}. ${safeOwner} can cancel before the period ends. Only if it completes without cancellation will the prepared package become available.</p></div></div></body></html>`;
+  return { html, text, subject: 'Password-Encrypt Emergency Access — Keep this link safe' };
 }
 
 async function sendRequestLinkWithResend({ to, ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
@@ -156,7 +194,7 @@ async function sendRequestLinkWithResend({ to, ownerName, contactName, waitingPe
       body: JSON.stringify({
         from,
         to,
-        subject: content.subject || 'Your Password-Encrypt link',
+        subject: content.subject || 'Password-Encrypt Emergency Access — Keep this link safe',
         html: content.html,
         text: content.text
       })
@@ -171,13 +209,13 @@ async function sendRequestLinkWithResend({ to, ownerName, contactName, waitingPe
   }
 }
 
-async function sendWithResend({ to, ownerName, contactName, waitingPeriod, accessScope, acceptUrl }) {
+async function sendWithResend({ to, ownerName, ownerEmail, ownerPhone, contactName, waitingPeriod, accessScope, acceptUrl }) {
   const apiKey = process.env.RESEND_API_KEY || '';
   const from = process.env.OTP_EMAIL_FROM || '';
   if (!apiKey || !from) {
     return { sent: false, provider: 'resend', reason: 'Email sending is not configured yet. The invite link was still created and can be copied manually.' };
   }
-  const content = buildInviteEmail({ ownerName, contactName, waitingPeriod, accessScope, acceptUrl });
+  const content = buildInviteEmail({ ownerName, ownerEmail, ownerPhone, contactName, waitingPeriod, accessScope, acceptUrl });
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
@@ -405,6 +443,8 @@ export async function handler(event) {
       const delivery = await sendRequestLinkWithResend({
         to: invitation.contact_email,
         ownerName: invitation.metadata?.owner_name || 'Password-Encrypt user',
+        ownerEmail: invitation.metadata?.owner_email || '',
+        ownerPhone: invitation.metadata?.owner_phone || '',
         contactName: invitation.contact_name,
         waitingPeriod: invitation.waiting_period,
         accessScope: invitation.access_scope,
@@ -454,6 +494,8 @@ export async function handler(event) {
       const delivery = await sendWithResend({
         to: invitation.contact_email,
         ownerName: invitation.metadata?.owner_name || 'Password-Encrypt user',
+        ownerEmail: invitation.metadata?.owner_email || '',
+        ownerPhone: invitation.metadata?.owner_phone || '',
         contactName: invitation.contact_name,
         waitingPeriod: invitation.waiting_period,
         accessScope: invitation.access_scope,
@@ -475,8 +517,11 @@ export async function handler(event) {
 
     const tenantId = sessionTenantId;
     const userId = sessionUserId;
-    const ownerName = String(body.ownerName || 'Password-Encrypt user').trim();
-    const ownerEmail = String(body.ownerEmail || '').trim().toLowerCase();
+    const ownerRows = await selectRows('users', `select=display_name,email,phone_e164&id=${eq(sessionUserId)}&tenant_id=${eq(sessionTenantId)}&limit=1`).catch(() => []);
+    const ownerProfile = ownerRows?.[0] || {};
+    const ownerName = String(ownerProfile.display_name || body.ownerName || 'Password-Encrypt user').trim();
+    const ownerEmail = String(ownerProfile.email || body.ownerEmail || '').trim().toLowerCase();
+    const ownerPhone = String(ownerProfile.phone_e164 || body.ownerPhone || '').trim();
     const contactName = String(body.contactName || '').trim();
     const relationship = String(body.relationship || '').trim();
     const contactEmail = String(body.contactEmail || '').trim().toLowerCase();
@@ -501,7 +546,7 @@ export async function handler(event) {
     const openAccessUrl = emergencyStepUrl(baseUrl, token, 'open');
     const now = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-    const delivery = await sendWithResend({ to: contactEmail, ownerName, contactName, waitingPeriod, accessScope, acceptUrl: inviteUrl });
+    const delivery = await sendWithResend({ to: contactEmail, ownerName, ownerEmail, ownerPhone, contactName, waitingPeriod, accessScope, acceptUrl: inviteUrl });
 
     await insertRow('emergency_access_invitations', {
       id: invitationId,
@@ -520,7 +565,7 @@ export async function handler(event) {
       email_provider_id: delivery.providerId || '',
       sent_at: delivery.sent ? now : null,
       expires_at: expiresAt,
-      metadata: { version: APP_VERSION, owner_name: ownerName, owner_email: ownerEmail, email_sent: delivery.sent, fallback_reason: delivery.reason || null, details: delivery.details || null, request_access_url: requestAccessUrl, open_access_url: openAccessUrl, link_flow: 'invite_request_open', flow_events: [{ id: `invitation_created:${now}:${invitationId}`, type: 'invitation_created', title: 'Trusted person invitation created', message: delivery.sent ? 'The trusted person was nominated and the invitation email was sent.' : 'The trusted person was nominated and the invitation link was prepared, but email delivery did not complete.', occurredAt: now, metadata: { invitationId }, version: APP_VERSION }] },
+      metadata: { version: APP_VERSION, owner_name: ownerName, owner_email: ownerEmail, owner_phone: ownerPhone, email_sent: delivery.sent, fallback_reason: delivery.reason || null, details: delivery.details || null, request_access_url: requestAccessUrl, open_access_url: openAccessUrl, link_flow: 'invite_request_open', flow_events: [{ id: `invitation_created:${now}:${invitationId}`, type: 'invitation_created', title: 'Trusted person invitation created', message: delivery.sent ? 'The trusted person was nominated and the invitation email was sent.' : 'The trusted person was nominated and the invitation link was prepared, but email delivery did not complete.', occurredAt: now, metadata: { invitationId }, version: APP_VERSION }] },
       created_at: now,
       updated_at: now
     });

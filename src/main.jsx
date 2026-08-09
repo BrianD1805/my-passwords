@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.054';
+const VERSION = 'Password-Encrypt Ver-0.054A';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -972,6 +972,156 @@ function buildEmergencyReleasePackage(plan, vaultItems, account) {
       ? 'The owner selected Full vault access. This package includes saved vault records that were available in the unlocked vault when the package was prepared. Encrypted document file downloads are not separately decrypted in this first full-access foundation.'
       : 'The owner selected Emergency Info only. This package includes Emergency Info records and the owner-written emergency package fields.'
   };
+}
+
+
+function sortEmergencyReleasedItems(items = []) {
+  const rank = (value) => {
+    const first = String(value || '').trim().charAt(0);
+    if (/^[A-Za-z]$/.test(first)) return 0;
+    if (/^[0-9]$/.test(first)) return 1;
+    return 2;
+  };
+  return [...(Array.isArray(items) ? items : [])].sort((a, b) => {
+    const titleA = String(a?.title || 'Untitled').trim();
+    const titleB = String(b?.title || 'Untitled').trim();
+    const rankDiff = rank(titleA) - rank(titleB);
+    if (rankDiff) return rankDiff;
+    return titleA.localeCompare(titleB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
+function emergencyPackagePlainText(packageData, releaseExpiresAt = '') {
+  const lines = [];
+  const pushSection = (title, value) => {
+    const text = String(value || '').trim();
+    if (!text) return;
+    lines.push('', title.toUpperCase(), text);
+  };
+  lines.push('PASSWORD-ENCRYPT EMERGENCY PACKAGE');
+  lines.push(`Package: ${packageData?.title || 'Emergency package'}`);
+  if (packageData?.ownerName) lines.push(`Prepared by: ${packageData.ownerName}`);
+  if (packageData?.preparedAt) lines.push(`Prepared: ${new Date(packageData.preparedAt).toLocaleString()}`);
+  if (packageData?.releaseScope) lines.push(`Access scope: ${packageData.releaseScope}`);
+  if (releaseExpiresAt) lines.push(`Secure link available until: ${new Date(releaseExpiresAt).toLocaleString()}`);
+  pushSection('Emergency message', packageData?.message);
+  pushSection('Important contacts', packageData?.importantContacts);
+  pushSection('Documents and locations', packageData?.documentsAndLocations);
+  pushSection('Checklist', packageData?.checklist);
+  pushSection('Owner instructions', packageData?.ownerInstructions);
+  const releasedItems = sortEmergencyReleasedItems(packageData?.items || []);
+  if (releasedItems.length) {
+    lines.push('', 'RELEASED VAULT RECORDS');
+    for (const item of releasedItems) {
+      lines.push('', `${item.title || 'Untitled'}${item.category ? ` [${item.category}]` : ''}`);
+      for (const [key, value] of Object.entries(item.payload || {})) {
+        if (value === undefined || value === null || value === '' || typeof value === 'object') continue;
+        const label = String(key).replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase());
+        lines.push(`${label}: ${String(value)}`);
+      }
+    }
+  }
+  if (packageData?.notes) pushSection('Package note', packageData.notes);
+  lines.push('', 'SECURITY NOTE', 'This downloaded file contains sensitive information in readable form. Store it somewhere safe and private.');
+  return lines.join('\r\n');
+}
+
+function downloadEmergencyText(packageData, releaseExpiresAt = '') {
+  const text = emergencyPackagePlainText(packageData, releaseExpiresAt);
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'Password-Encrypt-Emergency-Package.txt';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function crc32(bytes) {
+  let crc = 0 ^ -1;
+  for (let i = 0; i < bytes.length; i += 1) {
+    crc ^= bytes[i];
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  return (crc ^ -1) >>> 0;
+}
+
+function concatBytes(parts) {
+  const size = parts.reduce((sum, part) => sum + part.length, 0);
+  const output = new Uint8Array(size);
+  let offset = 0;
+  for (const part of parts) { output.set(part, offset); offset += part.length; }
+  return output;
+}
+
+function uint16(value) {
+  const bytes = new Uint8Array(2);
+  new DataView(bytes.buffer).setUint16(0, value, true);
+  return bytes;
+}
+
+function uint32(value) {
+  const bytes = new Uint8Array(4);
+  new DataView(bytes.buffer).setUint32(0, value >>> 0, true);
+  return bytes;
+}
+
+function makeStoreZip(entries) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = encoder.encode(entry.name);
+    const data = typeof entry.data === 'string' ? encoder.encode(entry.data) : entry.data;
+    const crc = crc32(data);
+    const local = concatBytes([
+      uint32(0x04034b50), uint16(20), uint16(0), uint16(0), uint16(0), uint16(0),
+      uint32(crc), uint32(data.length), uint32(data.length), uint16(name.length), uint16(0), name, data
+    ]);
+    localParts.push(local);
+    const central = concatBytes([
+      uint32(0x02014b50), uint16(20), uint16(20), uint16(0), uint16(0), uint16(0), uint16(0),
+      uint32(crc), uint32(data.length), uint32(data.length), uint16(name.length), uint16(0), uint16(0),
+      uint16(0), uint16(0), uint32(0), uint32(offset), name
+    ]);
+    centralParts.push(central);
+    offset += local.length;
+  }
+  const central = concatBytes(centralParts);
+  const end = concatBytes([
+    uint32(0x06054b50), uint16(0), uint16(0), uint16(entries.length), uint16(entries.length),
+    uint32(central.length), uint32(offset), uint16(0)
+  ]);
+  return concatBytes([...localParts, central, end]);
+}
+
+function xmlEscape(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function downloadEmergencyDocx(packageData, releaseExpiresAt = '') {
+  const lines = emergencyPackagePlainText(packageData, releaseExpiresAt).split(/\r?\n/);
+  const paragraphs = lines.map((line) => `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(line || ' ')}</w:t></w:r></w:p>`).join('');
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+  const zipBytes = makeStoreZip([
+    { name: '[Content_Types].xml', data: contentTypes },
+    { name: '_rels/.rels', data: rels },
+    { name: 'word/document.xml', data: documentXml }
+  ]);
+  const blob = new Blob([zipBytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'Password-Encrypt-Emergency-Package.docx';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function decryptVault(masterPassword) {
@@ -5456,6 +5606,7 @@ function App() {
         action: 'send',
         ownerName: account.displayName || account.accountName || 'Password-Encrypt user',
         ownerEmail: account.email || '',
+        ownerPhone: account.phoneE164 || buildPhoneE164(account.phoneCountryCode, account.phoneNumber) || '',
         contactName: cleanPlan.contactName,
         relationship: cleanPlan.relationship,
         contactEmail: cleanPlan.contactEmail,
@@ -5724,9 +5875,16 @@ function App() {
     if (!token) return;
     try {
       const result = await postJson('/.netlify/functions/emergency-access-request', { action: 'status', token });
-      if (!result.ok) return;
+      if (!result.ok) {
+        if (result.code === 'EMERGENCY_PACKAGE_EXPIRED') {
+          setInviteAcceptance({ status: 'accepted', message: '' });
+          setEmergencyReleasePackage(null);
+          setEmergencyRequestState({ status: 'expired', message: result.message || 'This Emergency Package link has expired.', releaseReady: false, waitingEndsAt: '', releaseExpiresAt: '', packageSummary: null });
+        }
+        return;
+      }
       if (result.invitationStatus === 'accepted') {
-        setInviteAcceptance({ status: 'accepted', message: result.invitationMessage || 'Invitation accepted. You can request emergency access if needed.' });
+        setInviteAcceptance({ status: 'accepted', message: result.invitationMessage || 'Invitation accepted. Your secure Emergency Access link was sent by email for future use.' });
       } else if (result.invitationStatus === 'declined') {
         setInviteAcceptance({ status: 'declined', message: result.invitationMessage || 'Invitation declined.' });
       } else if (result.invitationStatus === 'cancelled') {
@@ -5745,7 +5903,8 @@ function App() {
           message: result.message || (ready ? 'The waiting period has ended. The emergency package release screen is ready.' : 'Emergency access request is active. The owner can cancel before the waiting period ends.'),
           releaseReady: ready,
           waitingEndsAt: result.waitingEndsAt || '',
-          packageSummary: result.packageSummary || null
+          packageSummary: result.packageSummary || null,
+          releaseExpiresAt: result.releaseExpiresAt || ''
         });
       }
     } catch (error) {
@@ -5795,7 +5954,8 @@ function App() {
         message: result.message || 'Emergency access request recorded. No vault contents have been released.',
         releaseReady: ready,
         waitingEndsAt: result.waitingEndsAt || '',
-        packageSummary: result.packageSummary || null
+        packageSummary: result.packageSummary || null,
+        releaseExpiresAt: result.releaseExpiresAt || ''
       });
     } catch (error) {
       const note = error.name === 'AbortError'
@@ -5953,16 +6113,21 @@ function App() {
     const emergencyStep = new URLSearchParams(window.location.search || '').get('step') || 'invite';
     const isRequestStep = emergencyStep === 'request';
     const isOpenStep = emergencyStep === 'open';
-    const pageTitle = isOpenStep
-      ? 'Open emergency access'
-      : isRequestStep
-        ? 'Request emergency access'
-        : 'Trusted person nomination';
-    const pageIntro = isOpenStep
-      ? 'This secure page is used after the waiting period has ended. If the account owner has not cancelled the request, the prepared emergency package can be opened here.'
-      : isRequestStep
-        ? 'Use this secure page only if you need to request emergency access. The account owner will be notified and the waiting period will start. No vault contents are released at this step.'
-        : 'You have been nominated as a trusted person. This does not give you access to any passwords today. If you accept, a separate secure Request Access link will be emailed to you for future use. You do not need a Password-Encrypt account or app; this secure link works in your browser.';
+    const acceptedInvitePage = emergencyStep === 'invite' && inviteAcceptance.status === 'accepted';
+    const pageTitle = acceptedInvitePage
+      ? 'Invitation accepted'
+      : isOpenStep
+        ? 'Open emergency access'
+        : isRequestStep
+          ? 'Request emergency access'
+          : 'Trusted person nomination';
+    const pageIntro = acceptedInvitePage
+      ? 'You have accepted the invitation. No vault information has been released. A separate secure Request Emergency Access link has been emailed to you for future use.'
+      : isOpenStep
+        ? 'This secure page is used after the waiting period has ended. If the account owner has not cancelled the request, the prepared emergency package can be opened here.'
+        : isRequestStep
+          ? 'Use this secure page only if you need to request emergency access. The account owner will be notified and the waiting period will start. No vault contents are released at this step.'
+          : 'You have been nominated as a trusted person. This does not give you access to any passwords today. If you accept, a separate secure Request Emergency Access link will be emailed to you for future use. You do not need a Password-Encrypt account or app; this secure link works in your browser.';
     return (
       <main className="public-landing-page emergency-invite-page">
         <section className="emergency-invite-shell">
@@ -5972,15 +6137,15 @@ function App() {
             <p className="eyebrow">Emergency Access</p>
             <h1>{pageTitle}</h1>
             <p>{pageIntro}</p>
-            {inviteAcceptance.message && <div className={`emergency-invite-status ${inviteAcceptance.status}`}>{inviteAcceptance.message}</div>}
+            {emergencyStep === 'invite' && inviteAcceptance.message && <div className={`emergency-invite-status ${inviteAcceptance.status}`}>{inviteAcceptance.message}</div>}
             {emergencyRequestState.message && <div className={`emergency-invite-status ${emergencyRequestState.status}`}>{emergencyRequestState.message}</div>}
-            {emergencyStep === 'invite' && (
+            {emergencyStep === 'invite' && !['accepted', 'declined'].includes(inviteAcceptance.status) && (
               <div className="emergency-invite-actions">
                 <button type="button" className="primary-button" disabled={inviteAcceptance.status === 'working' || inviteAcceptance.status === 'accepted'} onClick={() => respondToEmergencyInvitation('accepted')}><ShieldCheck size={18} /> Accept nomination</button>
                 <button type="button" className="secondary-button" disabled={inviteAcceptance.status === 'working' || inviteAcceptance.status === 'declined'} onClick={() => respondToEmergencyInvitation('declined')}><X size={18} /> Decline</button>
               </div>
             )}
-            {inviteAcceptance.status === 'accepted' && (
+            {inviteAcceptance.status === 'accepted' && (isRequestStep || isOpenStep) && (
               <div className="emergency-request-card">
                 <strong>{emergencyRequestState.status === 'release-ready' ? 'Emergency package ready' : isOpenStep ? 'Waiting period not finished yet' : 'Request access when needed'}</strong>
                 <p>{emergencyRequestState.status === 'release-ready'
@@ -5988,6 +6153,32 @@ function App() {
                   : isOpenStep
                     ? 'This is the open-access page, but the emergency package is not ready yet. Please check the waiting period, or look for the fresh email when access is ready.'
                     : 'This starts the waiting period and notifies the account owner. If the request is not cancelled before the waiting period ends, the selected emergency package will become available here. It still does not reveal any vault contents today.'}</p>
+                {emergencyRequestState.status === 'release-ready' && (
+                  <>
+                    <div className="emergency-package-access-window">
+                      <ShieldCheck size={18} />
+                      <div><strong>This secure link is available for 30 days</strong><span>{emergencyRequestState.releaseExpiresAt ? `Available until ${new Date(emergencyRequestState.releaseExpiresAt).toLocaleString()}.` : 'The 30-day access period starts when the package becomes available.'} Keep this link private.</span></div>
+                    </div>
+                    <div className="emergency-invite-qa-card emergency-final-qa">
+                      <details>
+                        <summary>How long will this link work?</summary>
+                        <p>This secure Emergency Package link remains available for 30 days from release. After that, it expires and the package can no longer be opened from this link.</p>
+                      </details>
+                      <details>
+                        <summary>Should I save a copy?</summary>
+                        <p>If you need to retain the information, download a copy and store it somewhere safe and private. Downloaded files contain sensitive information in readable form.</p>
+                      </details>
+                      <details>
+                        <summary>Can I share this link or downloaded file?</summary>
+                        <p>No. Treat the link and any downloaded copy as highly sensitive and do not forward them to anyone else.</p>
+                      </details>
+                      <details>
+                        <summary>Who can I contact if I need help?</summary>
+                        <p>Email Password-Encrypt support at info@zippyweb.uk. Support will never ask for the account holder's master password or unrelated vault contents.</p>
+                      </details>
+                    </div>
+                  </>
+                )}
                 {emergencyRequestState.status === 'release-ready' && (
                   <div className="emergency-release-ready-card">
                     <ShieldCheck size={18} />
@@ -6014,7 +6205,7 @@ function App() {
                     {!!emergencyReleasePackage.items?.length && (
                       <div className="emergency-released-items">
                         <strong>Released vault records</strong>
-                        {emergencyReleasePackage.items.map((item) => (
+                        {sortEmergencyReleasedItems(emergencyReleasePackage.items).map((item) => (
                           <article className="emergency-released-item" key={item.id}>
                             <div><strong>{item.title}</strong><span>{item.category}</span></div>
                             {item.payload?.url && <p><b>URL:</b> {item.payload.url}</p>}
@@ -6034,16 +6225,23 @@ function App() {
                         ))}
                       </div>
                     )}
+                    <div className="emergency-package-download-card">
+                      <div><strong>Download a copy</strong><span>Downloaded files contain sensitive information in readable form. Store them somewhere safe and private.</span></div>
+                      <div className="emergency-package-download-actions">
+                        <button type="button" className="secondary-button" onClick={() => downloadEmergencyText(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)}><Download size={16} /> Download TXT</button>
+                        <button type="button" className="secondary-button" onClick={() => downloadEmergencyDocx(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)}><FileText size={16} /> Download DOCX</button>
+                      </div>
+                    </div>
                     <small>{emergencyReleasePackage.notes}</small>
                   </div>
                 )}
-                <button type="button" className={`secondary-button emergency-request-button ${['requested', 'release-ready'].includes(emergencyRequestState.status) ? 'success' : ''}`} disabled={emergencyRequestState.status === 'working' || emergencyRequestState.status === 'requested' || emergencyRequestState.status === 'release-ready'} onClick={requestEmergencyAccessFromInvite}>
+                {isRequestStep && <button type="button" className={`secondary-button emergency-request-button ${['requested', 'release-ready'].includes(emergencyRequestState.status) ? 'success' : ''}`} disabled={emergencyRequestState.status === 'working' || emergencyRequestState.status === 'requested' || emergencyRequestState.status === 'release-ready'} onClick={requestEmergencyAccessFromInvite}>
                   {emergencyRequestState.status === 'working' ? <RefreshCw size={17} className="spin-icon" /> : ['requested', 'release-ready'].includes(emergencyRequestState.status) ? <ShieldCheck size={17} /> : <AlertTriangle size={17} />}
                   {emergencyRequestState.status === 'working' ? 'Requesting...' : emergencyRequestState.status === 'release-ready' ? 'Emergency package ready' : emergencyRequestState.status === 'requested' ? 'Request sent' : emergencyRequestState.status === 'error' ? 'Try request again' : 'Request emergency access'}
-                </button>
+                </button>}
               </div>
             )}
-            <div className="emergency-invite-qa-card">
+            {!(isOpenStep && emergencyRequestState.status === 'release-ready') && <div className="emergency-invite-qa-card">
               <details>
                 <summary>What happens after I request access?</summary>
                 <p>The account owner is notified and the waiting period starts. Nothing is released while the owner can still cancel. If the owner does not cancel before the waiting period ends, the selected emergency package will become available from the secure Open Vault link.</p>
@@ -6056,7 +6254,7 @@ function App() {
                 <summary>Do I need to install Password-Encrypt?</summary>
                 <p>No. This secure page works in your browser.</p>
               </details>
-            </div>
+            </div>}
           </article>
           <footer className="landing-footer emergency-invite-footer"><span>© 2026 Password-Encrypt</span><button type="button" onClick={openVaultApp}>Open My Vault</button></footer>
         </section>
@@ -7406,6 +7604,11 @@ function App() {
 
               {!featureIncluded('emergencyAccess') && <div className="plan-feature-unavailable"><UsersRound size={21} /><span><strong>Emergency Access is not included</strong><small>Your existing encrypted vault items remain available. Upgrade or ask Admin for an entitlement override to configure and manage a trusted person.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('emergencyAccess')}>Review plan</button></div>}
 
+              <div className={`emergency-current-stage-card emergency-current-stage-glance ${isEmergencyReleaseReady ? 'ready' : hasActiveEmergencyRequest ? 'active' : ''}`}>
+                <span className="emergency-current-stage-step">{emergencyCurrentStage.step}</span>
+                <div><strong>{emergencyCurrentStage.title}</strong><p>{emergencyCurrentStage.copy}</p></div>
+              </div>
+
               <div className="emergency-access-intro-card">
                 <ShieldCheck size={22} />
                 <div>
@@ -7440,12 +7643,8 @@ function App() {
                   </details>
 
                   <details className="settings-drilldown" open>
-                    <summary><span className="settings-directory-icon"><Mail size={21} /></span><span className="settings-directory-copy"><strong>Current stage & actions</strong><small>See where the flow is now and choose the next action if needed.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
+                    <summary><span className="settings-directory-icon"><Mail size={21} /></span><span className="settings-directory-copy"><strong>Actions</strong><small>Choose the next action for the current Trusted Person flow.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
-                      <div className={`emergency-current-stage-card ${isEmergencyReleaseReady ? 'ready' : hasActiveEmergencyRequest ? 'active' : ''}`}>
-                        <span className="emergency-current-stage-step">{emergencyCurrentStage.step}</span>
-                        <div><strong>{emergencyCurrentStage.title}</strong><p>{emergencyCurrentStage.copy}</p></div>
-                      </div>
                       {emergencyInviteState.message && <small className="emergency-last-check-note">{emergencyInviteState.message}</small>}
                       <div className="emergency-action-select-row">
                         <CustomSelect value="" placeholder="Choose an action" ariaLabel="Choose Trusted Person Access action" options={emergencyActionOptions} onChange={runEmergencyFlowAction} disabled={!featureIncluded('emergencyAccess') || emergencyInviteState.status === 'resetting'} />

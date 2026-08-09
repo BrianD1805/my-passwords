@@ -5,6 +5,8 @@ import { recordEmergencyFlowEvent } from './_emergency-flow.js';
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 function lte(value) { return `lte.${encodeURIComponent(value)}`; }
 
+const EMERGENCY_PACKAGE_ACCESS_MS = 30 * 24 * 60 * 60 * 1000;
+
 function firstName(value) {
   return String(value || 'the account owner').trim().split(/\s+/)[0] || 'the account owner';
 }
@@ -30,15 +32,22 @@ function withEmergencyStep(url, step) {
   }
 }
 
-function buildReleaseReadyEmail({ contactName, ownerName, accessScope, requestUrl }) {
+function formatExpiry(value) {
+  const date = new Date(value || '');
+  return Number.isFinite(date.getTime()) ? date.toUTCString() : '30 days from release';
+}
+
+function buildReleaseReadyEmail({ contactName, ownerName, accessScope, requestUrl, releaseExpiresAt }) {
   const safeContact = escapeHtml(contactName || 'there');
   const safeOwner = escapeHtml(ownerName || 'the account owner');
   const ownerFirst = escapeHtml(firstName(ownerName));
   const safeScope = escapeHtml(accessScope || 'Emergency Info folder only');
   const safeUrl = escapeHtml(requestUrl || '');
-  const text = `Final stage: the waiting period for your Password-Encrypt emergency access request for ${ownerName || 'the account owner'} has ended without cancellation. The prepared ${accessScope || 'Emergency Info folder only'} package is now available through this secure browser link: ${requestUrl}. Nothing beyond the package prepared by the account owner is released. You do not need to install Password-Encrypt.`;
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">Final stage — emergency package ready</h1><p style="margin:0 0 18px;line-height:1.6;color:#536579">Hello ${safeContact}, the waiting period for your Password-Encrypt emergency access request for ${safeOwner} has ended.</p><p style="margin:0 0 18px;line-height:1.6;color:#536579">The waiting period has ended without cancellation. You can now use the secure browser link below to open only the emergency package prepared for you by the account owner.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><strong>Access scope:</strong> ${safeScope}</div>${safeUrl ? `<a href="${safeUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Open ${ownerFirst}'s Vault</a>` : ''}<p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#7b8fa3">You do not need to install Password-Encrypt. The secure link opens in your browser. If you do not see this email in future, check Spam or Junk first.</p></div></div></body></html>`;
-  return { subject: `Final stage: ${firstName(ownerName)}'s emergency package is ready`, html, text };
+  const expiryText = formatExpiry(releaseExpiresAt);
+  const safeExpiry = escapeHtml(expiryText);
+  const text = `Your Password-Encrypt Emergency Access package is ready. Hello ${contactName || 'there'}, the waiting period for your Password-Encrypt Emergency Access request for ${ownerName || 'the account owner'} has ended. The waiting period completed without cancellation, so you can now use this secure link to open only the emergency package prepared for you: ${requestUrl}. This secure link remains available for 30 days, until ${expiryText}. Open the package promptly. If you download a copy, remember that the downloaded file contains sensitive readable information and should be stored somewhere safe and private. After the 30-day access period expires, this secure link will no longer open the Emergency Package. Do not forward the link or downloaded copies to anyone else. Support: info@zippyweb.uk.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">Your emergency package is ready</h1><p style="margin:0 0 18px;line-height:1.6;color:#536579">Hello ${safeContact}, the waiting period for your Password-Encrypt Emergency Access request for <strong>${safeOwner}</strong> has ended.</p><p style="margin:0 0 18px;line-height:1.6;color:#536579">The waiting period completed without cancellation, so you can now use the secure link below to open <strong>only the emergency package prepared for you</strong>.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><p style="margin:0 0 8px"><strong>Access scope:</strong> ${safeScope}</p><p style="margin:0"><strong>Secure link available until:</strong> ${safeExpiry}</p></div>${safeUrl ? `<a href="${safeUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Open Emergency Package</a>` : ''}<h2 style="margin:22px 0 8px;color:#14263b;font-size:18px">Important — this link is available for 30 days</h2><p style="margin:0 0 14px;line-height:1.6;color:#536579">Open the package promptly. If you need to retain the information, use the available download option and store the downloaded file somewhere safe and private.</p><p style="margin:0 0 14px;line-height:1.6;color:#536579">After the 30-day access period expires, this secure link will no longer open the Emergency Package.</p><p style="margin:0;font-size:13px;line-height:1.5;color:#7b8fa3">The Emergency Package may contain sensitive private information. Please keep the link and any downloaded copies secure and do not forward them to anyone else. If you need help, contact info@zippyweb.uk.</p><p style="margin:18px 0 0;color:#536579"><strong>Password-Encrypt</strong><br><em>A trusted place for your private details that matter.</em></p></div></div></body></html>`;
+  return { subject: 'Password-Encrypt Emergency Access — Your emergency package is ready', html, text };
 }
 
 async function sendReleaseReadyEmail(invitation, request) {
@@ -53,7 +62,8 @@ async function sendReleaseReadyEmail(invitation, request) {
     contactName: invitation?.contact_name || request?.contact_name,
     ownerName: metadata.owner_name || 'the account owner',
     accessScope: invitation?.access_scope || request?.access_scope,
-    requestUrl
+    requestUrl,
+    releaseExpiresAt: request?.metadata?.release_expires_at || ''
   });
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
@@ -92,6 +102,7 @@ async function processRequest(request) {
       version: APP_VERSION,
       release_foundation_ready: true,
       release_ready_at: now,
+      release_expires_at: new Date(Date.now() + EMERGENCY_PACKAGE_ACCESS_MS).toISOString(),
       release_note: 'Waiting period ended. The owner-prepared emergency package is ready if it has been saved.'
     };
     const markedReady = await updateRow('emergency_access_requests', `id=${eq(current.id)}&status=in.(requested,waiting,owner_notified)`, {
@@ -105,7 +116,14 @@ async function processRequest(request) {
     }
   }
 
-  const currentMetadata = current.metadata || {};
+  let currentMetadata = current.metadata || {};
+  if (!currentMetadata.release_expires_at) {
+    const readyAtMs = new Date(currentMetadata.release_ready_at || now).getTime();
+    const releaseExpiresAt = new Date((Number.isFinite(readyAtMs) ? readyAtMs : Date.now()) + EMERGENCY_PACKAGE_ACCESS_MS).toISOString();
+    currentMetadata = { ...currentMetadata, release_expires_at: releaseExpiresAt, version: APP_VERSION };
+    await updateRow('emergency_access_requests', `id=${eq(current.id)}`, { metadata: currentMetadata, updated_at: now }).catch(() => null);
+    current = { ...current, metadata: currentMetadata };
+  }
   if (currentMetadata.release_ready_email_sent || invitation.metadata?.release_ready_email_sent) {
     await recordEmergencyFlowEvent(invitation.id, { type: 'release_ready', title: 'Emergency package ready', message: 'The waiting period completed without cancellation. The prepared emergency package is now available to the trusted person.', occurredAt: currentMetadata.release_ready_at || now, metadata: { requestId: current.id } }).catch(() => null);
     return { requestId: current.id, status: 'release_ready', email: 'already_sent' };

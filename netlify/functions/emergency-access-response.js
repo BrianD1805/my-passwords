@@ -29,30 +29,30 @@ function withEmergencyStep(url, step) {
   }
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function buildAcceptedEmail({ ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
-  const safeOwner = ownerName || 'The account owner';
-  const ownerFirst = firstName(safeOwner);
-  const safeContact = contactName || 'there';
-  const text = `Hello ${safeContact}. Stage 2 is complete: you accepted ${safeOwner}'s Password-Encrypt trusted person nomination. Keep this email safe. Nothing from the vault has been released. If a genuine emergency happens, use this secure Request Access link: ${requestUrl}. Requesting access starts the ${waitingPeriod || '7 days'} waiting period and immediately notifies ${safeOwner}. ${safeOwner} can cancel during that waiting period. Only if the waiting period ends without cancellation will the prepared ${accessScope || 'Emergency Info folder only'} package become available. You will then receive a final email telling you the package is ready.`;
-  const html = `<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937;">
-    <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
-      <div style="background:#ffffff;border:1px solid #d7e2ec;border-radius:22px;padding:26px;box-shadow:0 14px 38px rgba(29,53,87,0.12);">
-        <h1 style="margin:0 0 10px;color:#14263b;font-size:24px;">Stage 2 complete — nomination accepted</h1>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Hello ${safeContact}, you have accepted ${safeOwner}'s Password-Encrypt trusted person nomination.</p>
-        <p style="margin:0 0 18px;line-height:1.55;color:#536579;">Keep this email somewhere safe. Nothing from the vault has been released. Use the secure browser link below only if a genuine emergency means you need to request access.</p>
-        <div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px;">
-          <p style="margin:0 0 8px;"><strong>Waiting period:</strong> ${waitingPeriod || '7 days'}</p>
-          <p style="margin:0;"><strong>Planned access scope:</strong> ${accessScope || 'Emergency Info folder only'}</p>
-        </div>
-        <a href="${requestUrl}" style="display:inline-block;background:#1d3557;color:#ffffff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700;">Request access for ${ownerFirst}</a>
-        <p style="margin:18px 0 0;font-size:13px;line-height:1.45;color:#7b8fa3;">Next stage: requesting access starts the waiting period and immediately notifies ${safeOwner}. ${safeOwner} can cancel before the period ends. Only after the period ends without cancellation will the prepared package become available, and you will receive a final email.</p>
-      </div>
-    </div>
-  </body>
-</html>`;
-  return { html, text, subject: `Stage 2: Trusted person nomination accepted for ${ownerFirst}` };
+  const safeOwnerText = ownerName || 'The account owner';
+  const ownerFirstText = firstName(safeOwnerText);
+  const safeContactText = contactName || 'there';
+  const safeWaitingText = waitingPeriod || '7 days';
+  const safeScopeText = accessScope || 'Emergency Info folder only';
+  const safeOwner = escapeHtml(safeOwnerText);
+  const ownerFirst = escapeHtml(ownerFirstText);
+  const safeContact = escapeHtml(safeContactText);
+  const safeWaiting = escapeHtml(safeWaitingText);
+  const safeScope = escapeHtml(safeScopeText);
+  const safeRequestUrl = escapeHtml(requestUrl || '');
+  const text = `Hello ${safeContactText}. You have accepted the trusted person invitation for ${safeOwnerText}. Keep this Password-Encrypt Emergency Access email and its secure Request Emergency Access link somewhere safe and private for future use: ${requestUrl}. You may not need it for a long time. Nothing from the vault is available now. If emergency access is ever genuinely required, use this link to begin the request. Using it starts the ${safeWaitingText} waiting period and immediately notifies ${safeOwnerText}. ${safeOwnerText} can cancel during that period. Only if the waiting period ends without cancellation will the prepared ${safeScopeText} emergency package become available. Using the link does not immediately reveal any vault information.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#edf3f8;font-family:Arial,sans-serif;color:#1f2937"><div style="max-width:560px;margin:0 auto;padding:28px 18px"><div style="background:#fff;border:1px solid #d7e2ec;border-radius:22px;padding:26px"><h1 style="margin:0 0 12px;color:#14263b;font-size:24px">Keep your Emergency Access link safe</h1><p style="margin:0 0 16px;line-height:1.6;color:#536579">Hello ${safeContact}, you have accepted the trusted person invitation for ${safeOwner}.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><strong>Keep this email somewhere safe</strong><p style="margin:8px 0 0;line-height:1.55;color:#536579">Save this email or store the secure link somewhere safe and private. You may not need it for a long time, but this is the link you will use if Emergency Access is genuinely required in the future.</p></div><p style="margin:0 0 16px;line-height:1.6;color:#536579"><strong>Nothing from the vault is available now.</strong> Using the link below does not immediately reveal any vault information.</p><div style="background:#f4f7fa;border:1px solid #d7e2ec;border-radius:16px;padding:16px;margin:0 0 18px"><p style="margin:0 0 8px"><strong>Waiting period:</strong> ${safeWaiting}</p><p style="margin:0"><strong>Prepared access scope:</strong> ${safeScope}</p></div>${safeRequestUrl ? `<a href="${safeRequestUrl}" style="display:inline-block;background:#173a5d;color:#fff;text-decoration:none;border-radius:999px;padding:13px 18px;font-weight:700">Request Emergency Access for ${ownerFirst}</a>` : ''}<p style="margin:20px 0 0;font-size:13px;line-height:1.55;color:#7b8fa3">Using this link starts the waiting period and notifies ${safeOwner}. ${safeOwner} can cancel before the period ends. Only if it completes without cancellation will the prepared package become available.</p></div></div></body></html>`;
+  return { html, text, subject: 'Password-Encrypt Emergency Access — Keep this link safe' };
 }
 
 async function sendAcceptedConfirmation({ to, ownerName, contactName, waitingPeriod, accessScope, requestUrl }) {
@@ -72,7 +72,7 @@ async function sendAcceptedConfirmation({ to, ownerName, contactName, waitingPer
       body: JSON.stringify({
         from,
         to,
-        subject: content.subject || 'Your Password-Encrypt link',
+        subject: content.subject || 'Password-Encrypt Emergency Access — Keep this link safe',
         html: content.html,
         text: content.text
       })
@@ -155,8 +155,8 @@ export async function handler(event) {
       confirmationEmailSent: !!confirmation.sent,
       message: responseStatus === 'accepted'
         ? (confirmation.sent
-            ? 'Invitation accepted. A secure Request Emergency Access link has been emailed to you. This does not give access to any vault items yet.'
-            : 'Invitation accepted. Your secure Request Emergency Access link is ready on this page. This does not give access to any vault items yet.')
+            ? 'Invitation accepted. A separate secure Request Emergency Access link has been emailed to you. Keep that email somewhere safe for future use. No vault information has been released.'
+            : 'Invitation accepted. The confirmation email could not be sent. Please ask the account owner to resend your secure Request Emergency Access link. No vault information has been released.')
         : 'Invitation declined. No access has been granted.'
     });
   } catch (error) {

@@ -1,6 +1,6 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, updateRow, upsertRow } from './_db.js';
 
-const BILLING_TERMS_VERSION = '2026-08-08';
+const BILLING_TERMS_VERSION = '2026-08-09';
 import { getBillingContext } from './_billing.js';
 import { billingIntervalDefinition, publicSiteUrl, stripeAutomaticTaxEnabled, stripeConfigured, stripeObjectId, stripeRequest, syncStripePlan } from './_stripe.js';
 import { listCustomerStripeSubscriptions, syncStripeSubscriptionObject } from './_subscription-lifecycle.js';
