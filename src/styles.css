@@ -15645,13 +15645,14 @@ option {
   position: absolute;
   z-index: 2;
   pointer-events: none;
-  top: 7px;
-  bottom: 7px;
-  left: -2px;
-  width: 3px;
-  border: 0;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(51,102,153,0) 0%, rgba(51,102,153,.45) 9px, #336699 20px, #336699 calc(100% - 20px), rgba(51,102,153,.45) calc(100% - 9px), rgba(51,102,153,0) 100%);
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 16px;
+  box-sizing: border-box;
+  border: 3px solid #336699;
+  border-right: 0;
+  border-radius: 20px 0 0 20px;
 }
 .emergency-flow-stage.completed { border-color: #acd8ba; background: #f5fbf7; }
 .emergency-flow-stage.attention { border-color: #e8c778; background: #fffaf0; }
@@ -15826,7 +15827,7 @@ details.emergency-flow-stage[open] .emergency-flow-stage-action-label svg { tran
 }
 
 
-/* Password-Encrypt Ver-0.054F — Trusted Person quarterly confirmation and desktop login refinement. */
+/* Password-Encrypt Ver-0.054G — Trusted Person quarterly confirmation and desktop login refinement retained from 0.054F. */
 .trusted-person-reminder-card { text-align: center; }
 .trusted-reminder-safety-note {
   max-width: 560px;
@@ -15847,4 +15848,72 @@ details.emergency-flow-stage[open] .emergency-flow-stage-action-label svg { tran
 
 @media (min-width: 761px) {
   #vault-access-card > h1 { font-size: clamp(2rem, calc(5vw - 5px), 55.8px); }
+}
+
+
+/* Password-Encrypt Ver-0.054G — restore the approved corner wrap and keep editor content separate. */
+details.emergency-flow-stage-editor {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+details.emergency-flow-stage-editor.current,
+details.emergency-flow-stage-editor.completed,
+details.emergency-flow-stage-editor.locked {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+details.emergency-flow-stage-editor.current::before { content: none; }
+details.emergency-flow-stage-editor > .emergency-flow-stage-summary {
+  position: relative;
+  border: 1px solid #d9e3eb;
+  border-radius: 20px;
+  background: #fff;
+  transition: border-color .16s ease, background .16s ease;
+  overflow: visible;
+}
+details.emergency-flow-stage-editor.current > .emergency-flow-stage-summary {
+  border-color: #8bb7d8;
+  background: #f5faff;
+}
+details.emergency-flow-stage-editor.current > .emergency-flow-stage-summary::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 16px;
+  box-sizing: border-box;
+  border: 3px solid #336699;
+  border-right: 0;
+  border-radius: 20px 0 0 20px;
+}
+details.emergency-flow-stage-editor.completed > .emergency-flow-stage-summary {
+  border-color: #acd8ba;
+  background: #f5fbf7;
+}
+details.emergency-flow-stage-editor.locked > .emergency-flow-stage-summary {
+  background: #fafbfc;
+}
+details.emergency-flow-stage-editor > .emergency-flow-stage-content {
+  margin-top: 10px;
+  border: 1px solid #d9e3eb;
+  border-radius: 18px;
+  padding: 18px;
+  background: #fff;
+}
+details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
+  border-color: #d5eadb;
+}
+@media (max-width: 760px) {
+  details.emergency-flow-stage-editor > .emergency-flow-stage-content {
+    margin-top: 9px;
+    padding: 15px 14px;
+    border-radius: 16px;
+  }
 }

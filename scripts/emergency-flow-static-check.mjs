@@ -26,11 +26,12 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-0.054F version is aligned', pkg.version === '0.0.54-f' && /Password-Encrypt Ver-0\.054F/.test(main) && /my-passwords-v0\.054F/.test(read('public/sw.js')));
+check('Ver-0.054G version is aligned', pkg.version === '0.0.54-g' && /Password-Encrypt Ver-0\.054G/.test(main) && /my-passwords-v0\.054G/.test(read('public/sw.js')));
 check('Current Trusted Person stage is visible at a glance', /emergency-current-stage-glance/.test(main) && /emergencyCurrentStage\.step/.test(main) && /emergencyCurrentStage\.title/.test(main));
 check('Current stage card is explicitly marked as progress information', /emergency-current-progress-label/.test(main) && /Current progress/.test(main) && /aria-label="Trusted Person flow progress"/.test(main));
 check('Serious-emergency explanation is kept inside the existing Trusted Person help section', !/emergency-help-disclosure/.test(main) && /<strong>How Emergency Access works<\/strong>/.test(main) && /Designed for serious emergencies/.test(main) && /emergency-help-inline-copy/.test(main));
-check('Current stage blue rail tapers softly at both ends', /emergency-flow-stage\.current::before/.test(styles) && /linear-gradient\(180deg/.test(styles) && /rgba\(51,102,153,0\)/.test(styles) && /width: 3px/.test(styles) && !/border: 3px solid #336699/.test(styles));
+check('Current stage uses the approved three-pixel corner wrap', /emergency-flow-stage\.current::before[\s\S]*?top: -1px;[\s\S]*?bottom: -1px;[\s\S]*?width: 16px;[\s\S]*?border: 3px solid #336699;[\s\S]*?border-right: 0;[\s\S]*?border-radius: 20px 0 0 20px;/.test(styles));
+check('Editable stage details are visually separate from the wrapped stage header', /details\.emergency-flow-stage-editor\.current > \.emergency-flow-stage-summary::before/.test(styles) && /details\.emergency-flow-stage-editor > \.emergency-flow-stage-content/.test(styles) && /margin-top: 10px/.test(styles) && /border-radius: 18px/.test(styles));
 check('Owner Trusted Person stage auto-checks every 30 seconds while the page is open', /setInterval\(checkCurrentEmergencyStage, 30000\)/.test(main) && /visibilitychange/.test(main) && /automatic: true/.test(main));
 check('Automatic status checks only save encrypted plan metadata when the server state changed', /const statusChanged = statusFields\.some/.test(main) && /if \(statusChanged\) \{[\s\S]*?saveItems\(next/.test(main));
 check('Stage 4 tells the owner acceptance is checked automatically', /This page checks automatically while open/.test(main));
