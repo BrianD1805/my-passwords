@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.054A';
+const VERSION = 'Password-Encrypt Ver-0.054B';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1702,6 +1702,7 @@ function emptyEmergencyAccessPlan() {
     waitingPeriod: '7 days',
     accessScope: 'Emergency Info folder only',
     instructions: '',
+    trustedPersonUpdatedAt: '',
     emergencyPackageEnabled: true,
     emergencyPackageTitle: 'Emergency Info package',
     emergencyPackageMessage: '',
@@ -5510,9 +5511,11 @@ function App() {
     return false;
   }
 
-  async function saveEmergencyAccessPlan(event, successMessage = 'Trusted Person Access details saved securely inside your vault.') {
+  async function saveEmergencyAccessPlan(event, successMessage = 'Trusted Person Access details saved securely inside your vault.', section = 'trusted_person') {
     event?.preventDefault?.();
     if (!ensureEmergencyAccessEntitled()) return;
+    const now = new Date().toISOString();
+    const savedBeforeEdit = getEmergencyAccessPlan(items);
     const cleanPlan = {
       ...emergencyDraft,
       contactName: String(emergencyDraft.contactName || '').trim(),
@@ -5520,14 +5523,23 @@ function App() {
       contactEmail: String(emergencyDraft.contactEmail || '').trim().toLowerCase(),
       contactPhone: String(emergencyDraft.contactPhone || '').trim(),
       instructions: String(emergencyDraft.instructions || '').trim(),
+      trustedPersonUpdatedAt: section === 'trusted_person' ? now : String(emergencyDraft.trustedPersonUpdatedAt || savedBeforeEdit.trustedPersonUpdatedAt || ''),
       emergencyPackageEnabled: emergencyDraft.emergencyPackageEnabled !== false,
       emergencyPackageTitle: String(emergencyDraft.emergencyPackageTitle || 'Emergency Info package').trim(),
       emergencyPackageMessage: String(emergencyDraft.emergencyPackageMessage || '').trim(),
       emergencyPackageContacts: String(emergencyDraft.emergencyPackageContacts || '').trim(),
       emergencyPackageDocuments: String(emergencyDraft.emergencyPackageDocuments || '').trim(),
       emergencyPackageChecklist: String(emergencyDraft.emergencyPackageChecklist || '').trim(),
-      emergencyPackageUpdatedAt: new Date().toISOString()
+      emergencyPackageUpdatedAt: section === 'package' ? now : String(emergencyDraft.emergencyPackageUpdatedAt || savedBeforeEdit.emergencyPackageUpdatedAt || '')
     };
+    if (section === 'package') {
+      const trustedPersonWasSaved = Boolean(
+        String(savedBeforeEdit.contactName || '').trim()
+        && String(savedBeforeEdit.contactEmail || '').trim().includes('@')
+        && (savedBeforeEdit.trustedPersonUpdatedAt || savedBeforeEdit.invitationId || savedBeforeEdit.updatedAt)
+      );
+      if (!trustedPersonWasSaved) return showMessage('Complete and save Step 1 — Trusted person details first.', 'warning');
+    }
     if (!cleanPlan.contactName) return showMessage("Add the trusted person's name first.", 'warning');
     if (!cleanPlan.contactEmail && !cleanPlan.contactPhone) return showMessage('Add at least one contact detail for your trusted person.', 'warning');
     if (cleanPlan.contactEmail && !cleanPlan.contactEmail.includes('@')) return showMessage("The trusted person's email address does not look valid.", 'warning');
@@ -5591,8 +5603,22 @@ function App() {
       emergencyPackageContacts: String(emergencyDraft.emergencyPackageContacts || '').trim(),
       emergencyPackageDocuments: String(emergencyDraft.emergencyPackageDocuments || '').trim(),
       emergencyPackageChecklist: String(emergencyDraft.emergencyPackageChecklist || '').trim(),
-      emergencyPackageUpdatedAt: new Date().toISOString()
+      trustedPersonUpdatedAt: String(emergencyDraft.trustedPersonUpdatedAt || ''),
+      emergencyPackageUpdatedAt: String(emergencyDraft.emergencyPackageUpdatedAt || '')
     };
+    const savedPlanForInvite = getEmergencyAccessPlan(items);
+    const trustedPersonStepComplete = Boolean(
+      String(savedPlanForInvite.contactName || '').trim()
+      && String(savedPlanForInvite.contactEmail || '').trim().includes('@')
+      && (savedPlanForInvite.trustedPersonUpdatedAt || savedPlanForInvite.invitationId || savedPlanForInvite.updatedAt)
+    );
+    const packageStepComplete = Boolean(
+      savedPlanForInvite.emergencyPackageEnabled !== false
+      && String(savedPlanForInvite.emergencyPackageTitle || '').trim()
+      && String(savedPlanForInvite.accessScope || '').trim()
+      && (savedPlanForInvite.emergencyPackageUpdatedAt || savedPlanForInvite.invitationId)
+    );
+    if (!trustedPersonStepComplete || !packageStepComplete) return showMessage('Complete and save Steps 1 and 2 before sending the invitation.', 'warning');
     if (!cleanPlan.contactName) return showMessage("Add the trusted person's name first.", 'warning');
     if (!cleanPlan.contactEmail || !cleanPlan.contactEmail.includes('@')) return showMessage("Add a valid email address for the trusted person before sending an invitation.", 'warning');
     if (!bootstrap.tenantId || !bootstrap.userId) {
@@ -6794,30 +6820,55 @@ function App() {
       ? 'The emergency access request has been cancelled. No vault contents were released.'
       : emergencyDraft.requestMessage || '';
 
-  const emergencyHasTrustedPerson = Boolean(String(emergencyDraft.contactName || '').trim() || String(emergencyDraft.contactEmail || '').trim());
+  const emergencySavedPlan = getEmergencyAccessPlan(items);
+  const emergencyTrustedPersonComplete = Boolean(
+    String(emergencySavedPlan.contactName || '').trim()
+    && String(emergencySavedPlan.contactEmail || '').trim().includes('@')
+    && (emergencySavedPlan.trustedPersonUpdatedAt || emergencySavedPlan.invitationId || emergencySavedPlan.updatedAt)
+  );
+  const emergencyPackageComplete = Boolean(
+    emergencySavedPlan.emergencyPackageEnabled !== false
+    && String(emergencySavedPlan.emergencyPackageTitle || '').trim()
+    && String(emergencySavedPlan.accessScope || '').trim()
+    && (emergencySavedPlan.emergencyPackageUpdatedAt || emergencySavedPlan.invitationId)
+  );
+  const emergencyInvitationWasSent = Boolean(emergencyDraft.invitationId || emergencyDraft.invitationSentAt);
+  const emergencyInvitationAccepted = emergencyDraft.invitationStatus === 'accepted' || hasActiveEmergencyRequest || isEmergencyReleaseReady;
+  const emergencyRequestWasMade = hasActiveEmergencyRequest || isEmergencyReleaseReady;
+  const emergencyInvitationNeedsAttention = ['declined', 'cancelled'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase());
   const emergencyCurrentStage = isEmergencyReleaseReady
-    ? { step: 'Stage 5', title: 'Emergency package ready', copy: 'The waiting period has completed without cancellation. Your trusted person can now open only the emergency package you prepared.' }
+    ? { number: 6, step: 'Stage 6', title: 'Emergency package ready', copy: 'The waiting period completed without cancellation. Your trusted person can open only the emergency package you prepared.' }
     : hasActiveEmergencyRequest
-      ? { step: 'Stage 4', title: 'Waiting period active', copy: `Your trusted person requested emergency access. No vault contents have been released. You can cancel before ${emergencyDraft.requestWaitingEndsAt ? new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString() : 'the waiting period ends'}.` }
-      : emergencyDraft.invitationStatus === 'accepted'
-        ? { step: 'Stage 3', title: 'Trusted person accepted', copy: 'The nomination is accepted. Your trusted person has a secure Request Access link to keep for a genuine emergency. Nothing from the vault is available yet.' }
-        : ['invitation_sent', 'sent', 'pending'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase())
-          ? { step: 'Stage 2', title: 'Waiting for your trusted person', copy: 'The invitation has been sent. Your trusted person needs to accept or decline it. No vault access has been granted.' }
-          : ['declined', 'cancelled'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase())
-            ? { step: 'Stage 2', title: emergencyDraft.invitationStatus === 'declined' ? 'Invitation declined' : 'Invitation cancelled', copy: 'No access has been granted. Review the trusted person details and send a new invitation when you are ready.' }
-            : emergencyHasTrustedPerson
-              ? { step: 'Stage 1', title: 'Ready to send invitation', copy: 'Your trusted person details are saved. Send the invitation when you are ready to start the flow.' }
-              : { step: 'Stage 1', title: 'Add your trusted person', copy: 'Start by adding the next of kin or trusted person you want to nominate for a serious emergency.' };
+      ? { number: 6, step: 'Stage 6', title: 'Waiting period active', copy: `An Emergency Access request is active. No vault contents have been released. You can cancel before ${emergencyDraft.requestWaitingEndsAt ? new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString() : 'the waiting period ends'}.` }
+      : emergencyInvitationAccepted
+        ? { number: 5, step: 'Stage 5', title: 'Waiting for an Emergency Access request', copy: 'Your trusted person has accepted and has their secure Emergency Access link. Nothing else happens unless they use that link in a genuine emergency.' }
+        : emergencyInvitationWasSent
+          ? { number: 4, step: 'Stage 4', title: emergencyInvitationNeedsAttention ? 'Invitation needs attention' : 'Waiting for your trusted person', copy: emergencyInvitationNeedsAttention ? 'The invitation was declined or cancelled. Review the details and invitation options before continuing.' : 'The invitation has been sent. Your trusted person now needs to accept it. No vault access has been granted.' }
+          : emergencyPackageComplete
+            ? { number: 3, step: 'Stage 3', title: 'Send the invitation', copy: 'Your trusted person and emergency package are prepared. You can now send the invitation.' }
+            : emergencyTrustedPersonComplete
+              ? { number: 2, step: 'Stage 2', title: 'Prepare the emergency package', copy: 'Trusted person details are saved. Now prepare exactly what should be released if the Emergency Access waiting period completes.' }
+              : { number: 1, step: 'Stage 1', title: 'Add your trusted person', copy: 'Start by adding and saving the next of kin or trusted person you want to nominate for a serious emergency.' };
 
-  const emergencyActionOptions = [
-    (!emergencyDraft.invitationId || ['declined', 'cancelled', 'not_invited'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase())) && { value: 'send_invitation', label: 'Send invitation' },
-    emergencyDraft.invitationId && { value: 'check_status', label: 'Check current stage' },
-    emergencyDraft.invitationId && ['sent', 'pending', 'invitation_sent'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase()) && { value: 'resend_invitation', label: 'Resend invitation email' },
+  const emergencyInvitationStageOptions = [
+    { value: 'check_status', label: 'Check acceptance status' },
+    ['sent', 'pending', 'invitation_sent'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase()) && { value: 'resend_invitation', label: 'Resend invitation email' },
     emergencyDraft.invitationUrl && ['sent', 'pending', 'invitation_sent'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase()) && { value: 'copy_invitation', label: 'Copy invitation link' },
-    emergencyDraft.invitationId && ['sent', 'pending', 'invitation_sent'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase()) && { value: 'cancel_invitation', label: 'Cancel invitation' },
-    emergencyDraft.invitationId && emergencyDraft.invitationStatus === 'accepted' && { value: 'resend_request_link', label: 'Resend Request Access link' },
-    emergencyDraft.invitationUrl && emergencyDraft.invitationStatus === 'accepted' && { value: 'copy_request_link', label: 'Copy Request Access link' },
-    ['requested', 'waiting', 'owner_notified'].includes(normalisedRequestStatus) && { value: 'cancel_request', label: 'Cancel emergency request' },
+    ['sent', 'pending', 'invitation_sent'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase()) && { value: 'cancel_invitation', label: 'Cancel invitation' }
+  ].filter(Boolean);
+
+  const emergencyAcceptedStageOptions = [
+    { value: 'check_status', label: 'Check for Emergency Access request' },
+    { value: 'resend_request_link', label: 'Resend Emergency Access link' },
+    emergencyDraft.invitationUrl && { value: 'copy_request_link', label: 'Copy Emergency Access link' }
+  ].filter(Boolean);
+
+  const emergencyWaitingStageOptions = [
+    { value: 'check_status', label: 'Check waiting-period status' },
+    hasActiveEmergencyRequest && { value: 'cancel_request', label: 'Cancel Emergency Access request' }
+  ].filter(Boolean);
+
+  const emergencyManagementOptions = [
     (hasEmergencyAccessPlan(emergencyDraft) || emergencyDraft.invitationId) && { value: 'reset_zero', label: 'Reset to zero' }
   ].filter(Boolean);
 
@@ -7617,77 +7668,127 @@ function App() {
                 </div>
               </div>
 
-              <form className={`emergency-access-form ${!featureIncluded('emergencyAccess') ? 'feature-disabled' : ''}`} aria-disabled={!featureIncluded('emergencyAccess')} onSubmit={saveEmergencyAccessPlan}>
-                <div className="settings-drilldown-stack">
-                  <details className="settings-drilldown">
-                    <summary><span className="settings-directory-icon"><UsersRound size={21} /></span><span className="settings-directory-copy"><strong>Your trusted person</strong><small>Name, relationship, contact details, waiting period and instructions.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
-                    <div className="settings-drilldown-content">
-                <div className="bootstrap-grid emergency-access-grid">
-                  <label>Next of kin / trusted person name<input value={emergencyDraft.contactName} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactName: e.target.value })} placeholder="Full name" /></label>
-                  <label>Relationship<input value={emergencyDraft.relationship} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, relationship: e.target.value })} placeholder="Spouse, child, sibling, solicitor..." /></label>
-                  <label>Email<input type="email" value={emergencyDraft.contactEmail} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactEmail: e.target.value })} placeholder="trusted@example.com" /></label>
-                  <label>Phone<input inputMode="tel" value={emergencyDraft.contactPhone} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactPhone: e.target.value })} placeholder="Mobile or landline" /></label>
-                  <label>Waiting period<CustomSelect value={emergencyDraft.waitingPeriod} ariaLabel="Choose emergency waiting period" options={[
-                    { value: '10 minutes', label: '10 minutes — testing only' },
-                    { value: '24 hours', label: '24 hours' },
-                    { value: '3 days', label: '3 days' },
-                    { value: '7 days', label: '7 days' },
-                    { value: '14 days', label: '14 days' },
-                    { value: '30 days', label: '30 days' }
-                  ]} onChange={(waitingPeriod) => setEmergencyDraft({ ...emergencyDraft, waitingPeriod })} /></label>
+              <form className={`emergency-access-form ${!featureIncluded('emergencyAccess') ? 'feature-disabled' : ''}`} aria-disabled={!featureIncluded('emergencyAccess')} onSubmit={(event) => event.preventDefault()}>
+                <div className="emergency-flow-roadmap-heading">
+                  <div>
+                    <p className="eyebrow">Your Trusted Person journey</p>
+                    <h4>Complete each step in order</h4>
+                    <p>The next action is always shown with the step it belongs to. Completed steps stay visible with a large tick, so you can see the whole route from setup to emergency release.</p>
+                  </div>
+                  <span className="emergency-flow-progress">{[emergencyTrustedPersonComplete, emergencyPackageComplete, emergencyInvitationWasSent, emergencyInvitationAccepted, emergencyRequestWasMade, isEmergencyReleaseReady].filter(Boolean).length} of 6 complete</span>
                 </div>
-                <label className="emergency-access-notes-label">Notes or instructions<textarea value={emergencyDraft.instructions} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, instructions: e.target.value })} placeholder="Add any wishes, instructions, or details you want kept with this emergency plan." /></label>
-                <div className="emergency-section-save-row"><button type="button" className="primary-button" disabled={emergencySaveState === 'saving' || !featureIncluded('emergencyAccess')} onClick={(event) => saveEmergencyAccessPlan(event, 'Trusted person details saved.')}><Save size={17} /> {emergencySaveState === 'saving' ? 'Saving...' : 'Save trusted person'}</button></div>
 
+                <div className="emergency-flow-roadmap">
+                  <details className={`emergency-flow-stage emergency-flow-stage-editor ${emergencyTrustedPersonComplete ? 'completed' : emergencyCurrentStage.number === 1 ? 'current' : ''}`} defaultOpen={!emergencyTrustedPersonComplete}>
+                    <summary className="emergency-flow-stage-summary">
+                      <span className="emergency-flow-step-number">1</span>
+                      <span className="emergency-flow-stage-copy"><strong>Add your trusted person</strong><small>Name, relationship, email, phone and the waiting period.</small></span>
+                      <span className="emergency-flow-stage-action-label">{emergencyTrustedPersonComplete ? 'Edit details' : 'Add details'} <ChevronRight size={18} /></span>
+                      <span className={`emergency-flow-stage-status ${emergencyTrustedPersonComplete ? 'done' : ''}`} aria-label={emergencyTrustedPersonComplete ? 'Completed' : 'Not completed'}>{emergencyTrustedPersonComplete ? <Check size={29} strokeWidth={3} /> : <span>1</span>}</span>
+                    </summary>
+                    <div className="emergency-flow-stage-content">
+                      <div className="bootstrap-grid emergency-access-grid">
+                        <label>Next of kin / trusted person name<input value={emergencyDraft.contactName} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactName: e.target.value })} placeholder="Full name" /></label>
+                        <label>Relationship<input value={emergencyDraft.relationship} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, relationship: e.target.value })} placeholder="Spouse, child, sibling, solicitor..." /></label>
+                        <label>Email<input type="email" value={emergencyDraft.contactEmail} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactEmail: e.target.value })} placeholder="trusted@example.com" /></label>
+                        <label>Phone<input inputMode="tel" value={emergencyDraft.contactPhone} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, contactPhone: e.target.value })} placeholder="Mobile or landline" /></label>
+                        <label>Waiting period<CustomSelect value={emergencyDraft.waitingPeriod} ariaLabel="Choose emergency waiting period" options={[
+                          { value: '10 minutes', label: '10 minutes — testing only' },
+                          { value: '24 hours', label: '24 hours' },
+                          { value: '3 days', label: '3 days' },
+                          { value: '7 days', label: '7 days' },
+                          { value: '14 days', label: '14 days' },
+                          { value: '30 days', label: '30 days' }
+                        ]} onChange={(waitingPeriod) => setEmergencyDraft({ ...emergencyDraft, waitingPeriod })} /></label>
+                      </div>
+                      <label className="emergency-access-notes-label">Notes or instructions<textarea value={emergencyDraft.instructions} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, instructions: e.target.value })} placeholder="Add any wishes, instructions, or details you want kept with this emergency plan." /></label>
+                      <div className="emergency-section-save-row"><button type="button" className="primary-button" disabled={emergencySaveState === 'saving' || !featureIncluded('emergencyAccess')} onClick={(event) => saveEmergencyAccessPlan(event, 'Trusted person details saved. Step 1 is complete.', 'trusted_person')}><Save size={17} /> {emergencySaveState === 'saving' ? 'Saving...' : 'Save Step 1'}</button></div>
                     </div>
                   </details>
 
-                  <details className="settings-drilldown" open>
-                    <summary><span className="settings-directory-icon"><Mail size={21} /></span><span className="settings-directory-copy"><strong>Actions</strong><small>Choose the next action for the current Trusted Person flow.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
-                    <div className="settings-drilldown-content">
-                      {emergencyInviteState.message && <small className="emergency-last-check-note">{emergencyInviteState.message}</small>}
-                      <div className="emergency-action-select-row">
-                        <CustomSelect value="" placeholder="Choose an action" ariaLabel="Choose Trusted Person Access action" options={emergencyActionOptions} onChange={runEmergencyFlowAction} disabled={!featureIncluded('emergencyAccess') || emergencyInviteState.status === 'resetting'} />
+                  <details className={`emergency-flow-stage emergency-flow-stage-editor ${emergencyPackageComplete ? 'completed' : emergencyCurrentStage.number === 2 ? 'current' : !emergencyTrustedPersonComplete ? 'locked' : ''}`} defaultOpen={emergencyTrustedPersonComplete && !emergencyPackageComplete}>
+                    <summary className="emergency-flow-stage-summary">
+                      <span className="emergency-flow-step-number">2</span>
+                      <span className="emergency-flow-stage-copy"><strong>Prepare the emergency package</strong><small>Choose what your trusted person should receive if the waiting period completes.</small></span>
+                      <span className="emergency-flow-stage-action-label">{!emergencyTrustedPersonComplete ? 'Complete Step 1 first' : emergencyPackageComplete ? 'Edit package' : 'Prepare package'} <ChevronRight size={18} /></span>
+                      <span className={`emergency-flow-stage-status ${emergencyPackageComplete ? 'done' : ''}`} aria-label={emergencyPackageComplete ? 'Completed' : 'Not completed'}>{emergencyPackageComplete ? <Check size={29} strokeWidth={3} /> : <span>2</span>}</span>
+                    </summary>
+                    <div className="emergency-flow-stage-content">
+                      {!emergencyTrustedPersonComplete && <div className="emergency-flow-locked-note"><Lock size={17} /> Save Step 1 before preparing the package.</div>}
+                      <div className="emergency-package-editor-card">
+                        <div className="emergency-package-editor-heading">
+                          <FileText size={20} />
+                          <div><strong>Emergency package</strong><span>This is the information that can become available only after a genuine Emergency Access request and your waiting period.</span></div>
+                        </div>
+                        <label className="emergency-toggle-row"><input type="checkbox" checked={emergencyDraft.emergencyPackageEnabled !== false} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageEnabled: e.target.checked })} /><span>Prepare an emergency release package after the waiting period if I do not cancel.</span></label>
+                        <div className="bootstrap-grid emergency-package-grid">
+                          <label>Package title<input value={emergencyDraft.emergencyPackageTitle ?? ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageTitle: e.target.value })} placeholder="Emergency Info package" /></label>
+                          <label>Release scope<CustomSelect value={emergencyDraft.accessScope} ariaLabel="Choose emergency release scope" options={[
+                            { value: 'Emergency Info folder only', label: 'Emergency Info folder only' },
+                            { value: 'Selected folders later', label: 'Selected folders later' },
+                            { value: 'Selected documents later', label: 'Selected documents later' },
+                            { value: 'Full vault access', label: 'Full vault access' }
+                          ]} onChange={(accessScope) => setEmergencyDraft({ ...emergencyDraft, accessScope })} /></label>
+                        </div>
+                        <div className="emergency-package-notes-grid">
+                          <label className="emergency-access-notes-label">Emergency message<textarea value={emergencyDraft.emergencyPackageMessage || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageMessage: e.target.value })} placeholder="Write the message your trusted person should see first if the waiting period ends." /></label>
+                          <label className="emergency-access-notes-label">Important contacts<textarea value={emergencyDraft.emergencyPackageContacts || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageContacts: e.target.value })} placeholder="Solicitor, doctor, accountant, family contacts, executor, insurance contact..." /></label>
+                          <label className="emergency-access-notes-label">Documents and locations<textarea value={emergencyDraft.emergencyPackageDocuments || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageDocuments: e.target.value })} placeholder="Where to find will, policy documents, house papers, key files, physical documents..." /></label>
+                          <label className="emergency-access-notes-label">Checklist for trusted person<textarea value={emergencyDraft.emergencyPackageChecklist || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageChecklist: e.target.value })} placeholder="Step 1: Contact..., Step 2: Check..., Step 3: Do not..." /></label>
+                        </div>
+                        <div className="emergency-section-save-row"><button type="button" className="primary-button" disabled={emergencySaveState === 'saving' || !featureIncluded('emergencyAccess') || !emergencyTrustedPersonComplete} onClick={(event) => saveEmergencyAccessPlan(event, 'Emergency package saved. Step 2 is complete.', 'package')}><Save size={17} /> {emergencySaveState === 'saving' ? 'Saving...' : 'Save Step 2'}</button></div>
                       </div>
                     </div>
                   </details>
 
-                  <details className="settings-drilldown">
-                    <summary><span className="settings-directory-icon"><FileText size={21} /></span><span className="settings-directory-copy"><strong>Emergency package</strong><small>Choose what is prepared and add the information your trusted person may need.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
-                    <div className="settings-drilldown-content">
-                <div className="emergency-package-editor-card">
-                  <div className="emergency-package-editor-heading">
-                    <FileText size={20} />
-                    <div>
-                      <strong>Emergency package foundation</strong>
-                      <span>This is the package that will become available after the waiting period. Emergency Info is the safer default. Full Vault Access can be selected deliberately for next of kin.</span>
+                  <section className={`emergency-flow-stage ${emergencyInvitationWasSent ? 'completed' : emergencyCurrentStage.number === 3 ? 'current' : 'locked'}`}>
+                    <div className="emergency-flow-stage-summary">
+                      <span className="emergency-flow-step-number">3</span>
+                      <span className="emergency-flow-stage-copy"><strong>Send the invitation</strong><small>Only after Steps 1 and 2 are saved should Password-Encrypt contact your trusted person.</small></span>
+                      <span className="emergency-flow-stage-action">
+                        {!emergencyInvitationWasSent ? <button type="button" className="primary-button compact" onClick={sendEmergencyAccessInvite} disabled={!emergencyTrustedPersonComplete || !emergencyPackageComplete || emergencyInviteState.status === 'sending'}><Mail size={16} /> {emergencyInviteState.status === 'sending' ? 'Sending...' : 'Send invitation'}</button> : <span className="emergency-flow-complete-label">Invitation sent</span>}
+                      </span>
+                      <span className={`emergency-flow-stage-status ${emergencyInvitationWasSent ? 'done' : ''}`}>{emergencyInvitationWasSent ? <Check size={29} strokeWidth={3} /> : <span>3</span>}</span>
                     </div>
-                  </div>
-                  <label className="emergency-toggle-row">
-                    <input type="checkbox" checked={emergencyDraft.emergencyPackageEnabled !== false} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageEnabled: e.target.checked })} />
-                    <span>Prepare an emergency release package after the waiting period if I do not cancel.</span>
-                  </label>
-                  <div className="bootstrap-grid emergency-package-grid">
-                    <label>Package title<input value={emergencyDraft.emergencyPackageTitle ?? ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageTitle: e.target.value })} placeholder="Emergency Info package" /></label>
-                    <label>Release scope<CustomSelect value={emergencyDraft.accessScope} ariaLabel="Choose emergency release scope" options={[
-                      { value: 'Emergency Info folder only', label: 'Emergency Info folder only' },
-                      { value: 'Selected folders later', label: 'Selected folders later' },
-                      { value: 'Selected documents later', label: 'Selected documents later' },
-                      { value: 'Full vault access', label: 'Full vault access' }
-                    ]} onChange={(accessScope) => setEmergencyDraft({ ...emergencyDraft, accessScope })} /></label>
-                  </div>
-                  <div className="emergency-package-notes-grid">
-                    <label className="emergency-access-notes-label">Emergency message<textarea value={emergencyDraft.emergencyPackageMessage || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageMessage: e.target.value })} placeholder="Write the message your trusted person should see first if the waiting period ends." /></label>
-                    <label className="emergency-access-notes-label">Important contacts<textarea value={emergencyDraft.emergencyPackageContacts || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageContacts: e.target.value })} placeholder="Solicitor, doctor, accountant, family contacts, executor, insurance contact..." /></label>
-                    <label className="emergency-access-notes-label">Documents and locations<textarea value={emergencyDraft.emergencyPackageDocuments || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageDocuments: e.target.value })} placeholder="Where to find will, policy documents, house papers, key files, physical documents..." /></label>
-                    <label className="emergency-access-notes-label">Checklist for trusted person<textarea value={emergencyDraft.emergencyPackageChecklist || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageChecklist: e.target.value })} placeholder="Step 1: Contact..., Step 2: Check..., Step 3: Do not..." /></label>
-                  </div>
-                  <div className="emergency-section-save-row"><button type="button" className="primary-button" disabled={emergencySaveState === 'saving' || !featureIncluded('emergencyAccess')} onClick={(event) => saveEmergencyAccessPlan(event, 'Emergency package saved and protected.')}><Save size={17} /> {emergencySaveState === 'saving' ? 'Saving...' : 'Save emergency package'}</button></div>
+                  </section>
+
+                  <section className={`emergency-flow-stage ${emergencyInvitationAccepted ? 'completed' : emergencyCurrentStage.number === 4 ? 'current' : !emergencyInvitationWasSent ? 'locked' : emergencyInvitationNeedsAttention ? 'attention' : ''}`}>
+                    <div className="emergency-flow-stage-summary">
+                      <span className="emergency-flow-step-number">4</span>
+                      <span className="emergency-flow-stage-copy"><strong>Trusted person accepts</strong><small>{emergencyInvitationNeedsAttention ? 'The invitation needs attention before this flow can continue.' : 'They accept from their secure email. Acceptance still gives them no vault access.'}</small></span>
+                      <span className="emergency-flow-stage-action">
+                        {emergencyInvitationWasSent && !emergencyInvitationAccepted ? <CustomSelect value="" placeholder="Invitation actions" ariaLabel="Trusted person invitation actions" options={emergencyInvitationStageOptions} onChange={runEmergencyFlowAction} disabled={emergencyInviteState.status === 'checking'} /> : emergencyInvitationAccepted ? <span className="emergency-flow-complete-label">Accepted</span> : <span className="emergency-flow-waiting-label">Waiting for Step 3</span>}
+                      </span>
+                      <span className={`emergency-flow-stage-status ${emergencyInvitationAccepted ? 'done' : ''}`}>{emergencyInvitationAccepted ? <Check size={29} strokeWidth={3} /> : <span>4</span>}</span>
+                    </div>
+                  </section>
+
+                  <section className={`emergency-flow-stage ${emergencyRequestWasMade ? 'completed' : emergencyCurrentStage.number === 5 ? 'current' : 'locked'}`}>
+                    <div className="emergency-flow-stage-summary">
+                      <span className="emergency-flow-step-number">5</span>
+                      <span className="emergency-flow-stage-copy"><strong>Emergency Access is requested</strong><small>Your trusted person uses the secure link they saved only if emergency access is genuinely needed.</small></span>
+                      <span className="emergency-flow-stage-action">
+                        {emergencyInvitationAccepted && !emergencyRequestWasMade ? <CustomSelect value="" placeholder="Emergency link actions" ariaLabel="Emergency Access link actions" options={emergencyAcceptedStageOptions} onChange={runEmergencyFlowAction} /> : emergencyRequestWasMade ? <span className="emergency-flow-complete-label">Request received</span> : <span className="emergency-flow-waiting-label">Waiting for Step 4</span>}
+                      </span>
+                      <span className={`emergency-flow-stage-status ${emergencyRequestWasMade ? 'done' : ''}`}>{emergencyRequestWasMade ? <Check size={29} strokeWidth={3} /> : <span>5</span>}</span>
+                    </div>
+                  </section>
+
+                  <section className={`emergency-flow-stage ${isEmergencyReleaseReady ? 'completed' : emergencyCurrentStage.number === 6 ? 'current active' : 'locked'}`}>
+                    <div className="emergency-flow-stage-summary">
+                      <span className="emergency-flow-step-number">6</span>
+                      <span className="emergency-flow-stage-copy"><strong>Waiting period completes</strong><small>{isEmergencyReleaseReady ? 'The waiting period completed without cancellation and the prepared package is available to your trusted person.' : hasActiveEmergencyRequest ? `The waiting period is active. You can still cancel before ${emergencyDraft.requestWaitingEndsAt ? new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString() : 'it ends'}.` : 'Nothing is released unless an Emergency Access request reaches this step.'}</small></span>
+                      <span className="emergency-flow-stage-action">
+                        {hasActiveEmergencyRequest ? <CustomSelect value="" placeholder="Waiting-period actions" ariaLabel="Waiting period actions" options={emergencyWaitingStageOptions} onChange={runEmergencyFlowAction} /> : isEmergencyReleaseReady ? <span className="emergency-flow-complete-label">Package released</span> : <span className="emergency-flow-waiting-label">Waiting for Step 5</span>}
+                      </span>
+                      <span className={`emergency-flow-stage-status ${isEmergencyReleaseReady ? 'done' : ''}`}>{isEmergencyReleaseReady ? <Check size={29} strokeWidth={3} /> : <span>6</span>}</span>
+                    </div>
+                  </section>
                 </div>
 
-                    </div>
-                  </details>
+                {emergencyInviteState.message && <div className="emergency-flow-latest-message"><strong>Latest update</strong><span>{emergencyInviteState.message}</span></div>}
 
+                <div className="settings-drilldown-stack emergency-flow-secondary-tools">
                   <details className="settings-drilldown" onToggle={(event) => { if (event.currentTarget.open && emergencyDraft.invitationId) checkEmergencyInvitationStatus({ silent: true }); }}>
                     <summary><span className="settings-directory-icon"><FileText size={21} /></span><span className="settings-directory-copy"><strong>Event history</strong><small>Optional audit of this Trusted Person flow with dates and times.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
@@ -7724,6 +7825,13 @@ function App() {
                     <p>Full vault access is an explicit next-of-kin option. It prepares the selected emergency package without saving or sending your master password.</p>
                   </details>
                 </div>
+                    </div>
+                  </details>
+
+                  <details className="settings-drilldown emergency-flow-manage">
+                    <summary><span className="settings-directory-icon"><Settings size={21} /></span><span className="settings-directory-copy"><strong>Manage or reset this flow</strong><small>Use this only for maintenance actions such as returning the entire Trusted Person flow to zero.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
+                    <div className="settings-drilldown-content">
+                      {emergencyManagementOptions.length ? <div className="emergency-action-select-row"><CustomSelect value="" placeholder="Manage flow" ariaLabel="Manage Trusted Person flow" options={emergencyManagementOptions} onChange={runEmergencyFlowAction} disabled={emergencyInviteState.status === 'resetting'} /></div> : <p className="emergency-flow-audit-empty">There are no flow maintenance actions available yet.</p>}
                     </div>
                   </details>
                 </div>

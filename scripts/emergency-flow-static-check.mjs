@@ -21,11 +21,18 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-0.054A version is aligned', pkg.version === '0.0.54-a' && /Password-Encrypt Ver-0\.054A/.test(main) && /my-passwords-v0\.054A/.test(read('public/sw.js')));
+check('Ver-0.054B version is aligned', pkg.version === '0.0.54-b' && /Password-Encrypt Ver-0\.054B/.test(main) && /my-passwords-v0\.054B/.test(read('public/sw.js')));
 check('Current Trusted Person stage is visible at a glance', /emergency-current-stage-glance/.test(main) && /emergencyCurrentStage\.step/.test(main) && /emergencyCurrentStage\.title/.test(main));
-check('Trusted Person actions remain in one dropdown selector', /<strong>Actions<\/strong>/.test(main) && /placeholder="Choose an action"/.test(main) && /options=\{emergencyActionOptions\}/.test(main));
-check('Trusted person details have their own Save button', /Save trusted person/.test(main) && /Trusted person details saved\./.test(main));
-check('Emergency package has its own Save button', /Save emergency package/.test(main) && /Emergency package saved and protected\./.test(main));
+check('Trusted Person journey is explicitly numbered from 1 to 6', /Complete each step in order/.test(main) && /emergency-flow-step-number\">1</.test(main) && /emergency-flow-step-number\">6</.test(main));
+check('Trusted person details are Step 1 with their own Save button', /Add your trusted person/.test(main) && /Save Step 1/.test(main) && /trusted_person/.test(main));
+check('Emergency package is Step 2 with its own Save button', /Prepare the emergency package/.test(main) && /Save Step 2/.test(main) && /'package'/.test(main));
+check('Invitation cannot be sent until Steps 1 and 2 are saved', /Complete and save Steps 1 and 2 before sending the invitation/.test(main) && /disabled=\{!emergencyTrustedPersonComplete \|\| !emergencyPackageComplete/.test(main));
+check('Primary invitation action sits directly on Step 3', /<strong>Send the invitation<\/strong>/.test(main) && /Send invitation/.test(main));
+check('Invitation follow-up actions sit on Step 4 dropdown', /placeholder="Invitation actions"/.test(main) && /options=\{emergencyInvitationStageOptions\}/.test(main));
+check('Emergency-link actions sit on Step 5 dropdown', /placeholder="Emergency link actions"/.test(main) && /options=\{emergencyAcceptedStageOptions\}/.test(main));
+check('Waiting-period actions sit on Step 6 dropdown', /placeholder="Waiting-period actions"/.test(main) && /options=\{emergencyWaitingStageOptions\}/.test(main));
+check('Completed stages have a large tick status', /emergency-flow-stage-status/.test(main) && /<Check size=\{29\} strokeWidth=\{3\}/.test(main));
+check('Reset to zero remains in a maintenance dropdown, not the main route', /Manage or reset this flow/.test(main) && /placeholder="Manage flow"/.test(main) && /options=\{emergencyManagementOptions\}/.test(main));
 check('Optional event-history accordion shows dated flow events', /<strong>Event history<\/strong>/.test(main) && /new Date\(event\.occurredAt\)\.toLocaleString\(\)/.test(main));
 check('Flow events remain metadata-only invitation history', /flow_events/.test(flow) && /slice\(0, 120\)/.test(flow) && /buildEmergencyFlowEvents/.test(flow));
 check('Reset to zero removes current flow and audit source', /reset_zero/.test(main) && /resetEmergencyFlowToZero/.test(invite) && /deleteRow\('emergency_access_invitations'/.test(flow));

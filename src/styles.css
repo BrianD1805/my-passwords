@@ -15513,7 +15513,7 @@ option {
   object-fit: cover !important;
 }
 
-/* Password-Encrypt Ver-0.054A — Trusted Person emergency flow testing foundation retained. */
+/* Password-Encrypt Ver-0.054B — Trusted Person emergency flow testing foundation retained. */
 .emergency-current-stage-card {
   display: flex;
   gap: 16px;
@@ -15556,7 +15556,7 @@ option {
   .emergency-section-save-row .primary-button { width: 100%; justify-content: center; }
 }
 
-/* Password-Encrypt Ver-0.054A — approved Trusted Person flow refinements. */
+/* Password-Encrypt Ver-0.054B — approved Trusted Person flow refinements retained. */
 .emergency-current-stage-glance {
   margin: 0 0 18px;
   border-width: 2px;
@@ -15601,4 +15601,161 @@ option {
   .emergency-current-stage-glance { margin-bottom: 15px; }
   .emergency-package-download-actions { display: grid; grid-template-columns: 1fr; }
   .emergency-package-download-actions .secondary-button { width: 100%; justify-content: center; }
+}
+
+
+/* Password-Encrypt Ver-0.054B — clear, ordered Trusted Person journey. */
+.emergency-flow-roadmap-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 22px;
+  margin: 24px 0 14px;
+  padding: 0 2px;
+}
+.emergency-flow-roadmap-heading .eyebrow { margin: 0 0 5px; }
+.emergency-flow-roadmap-heading h4 { margin: 0; color: #1b3147; font-size: 22px; font-weight: 700; }
+.emergency-flow-roadmap-heading p:not(.eyebrow) { margin: 7px 0 0; max-width: 760px; color: #66798b; line-height: 1.55; }
+.emergency-flow-progress {
+  flex: 0 0 auto;
+  border: 1px solid #c9dbe9;
+  border-radius: 999px;
+  padding: 8px 13px;
+  background: #f6fafd;
+  color: #2f638d;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.emergency-flow-roadmap { display: grid; gap: 12px; }
+.emergency-flow-stage {
+  border: 1px solid #d9e3eb;
+  border-radius: 20px;
+  background: #fff;
+  overflow: visible;
+  transition: border-color .16s ease, background .16s ease, opacity .16s ease;
+}
+.emergency-flow-stage.current { border-color: #8bb7d8; background: #f5faff; box-shadow: inset 4px 0 0 #336699; }
+.emergency-flow-stage.completed { border-color: #acd8ba; background: #f5fbf7; }
+.emergency-flow-stage.attention { border-color: #e8c778; background: #fffaf0; }
+.emergency-flow-stage.locked { background: #fafbfc; }
+.emergency-flow-stage.locked .emergency-flow-stage-copy,
+.emergency-flow-stage.locked .emergency-flow-stage-action { opacity: .7; }
+.emergency-flow-stage-summary {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(180px, 230px) 48px;
+  align-items: center;
+  gap: 14px;
+  padding: 17px 18px;
+  list-style: none;
+}
+details.emergency-flow-stage > summary { cursor: pointer; }
+details.emergency-flow-stage > summary::-webkit-details-marker { display: none; }
+.emergency-flow-step-number,
+.emergency-flow-stage-status {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid #ccdae5;
+  background: #eef5fa;
+  color: #336699;
+  font-weight: 700;
+}
+.emergency-flow-stage-status { justify-self: end; background: #fff; color: #8a9baa; }
+.emergency-flow-stage-status.done {
+  width: 46px;
+  height: 46px;
+  border-color: #5cad77;
+  background: #5cad77;
+  color: #fff;
+}
+.emergency-flow-stage.completed .emergency-flow-step-number { border-color: #b7dbc2; background: #e8f6ec; color: #2e7d4c; }
+.emergency-flow-stage.current .emergency-flow-step-number { border-color: #336699; background: #336699; color: #fff; }
+.emergency-flow-stage-copy { min-width: 0; }
+.emergency-flow-stage-copy strong { display: block; color: #1f3448; font-size: 17px; font-weight: 700; }
+.emergency-flow-stage-copy small { display: block; margin-top: 4px; color: #687b8d; line-height: 1.45; font-size: 14px; }
+.emergency-flow-stage-action,
+.emergency-flow-stage-action-label { min-width: 0; }
+.emergency-flow-stage-action .custom-select { width: 100%; }
+.emergency-flow-stage-action .custom-select-trigger { min-height: 42px; border-radius: 13px; padding-top: 9px; padding-bottom: 9px; }
+.emergency-flow-stage-action-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  color: #336699;
+  font-weight: 700;
+  text-align: right;
+}
+details.emergency-flow-stage[open] .emergency-flow-stage-action-label svg { transform: rotate(90deg); }
+.emergency-flow-stage-action-label svg { transition: transform .15s ease; }
+.emergency-flow-stage-action .primary-button.compact { min-height: 42px; padding: 9px 15px; border-radius: 13px; white-space: nowrap; }
+.emergency-flow-complete-label,
+.emergency-flow-waiting-label {
+  display: block;
+  color: #418158;
+  font-weight: 700;
+  text-align: right;
+}
+.emergency-flow-waiting-label { color: #7a8998; font-weight: 500; }
+.emergency-flow-stage-content { border-top: 1px solid #e1e8ee; padding: 18px; background: rgba(255,255,255,.78); }
+.emergency-flow-stage.completed .emergency-flow-stage-content { border-top-color: #d5eadb; }
+.emergency-flow-locked-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  border-radius: 13px;
+  background: #f0f4f7;
+  color: #697b8d;
+}
+.emergency-flow-latest-message {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px solid #d8e5ef;
+  border-radius: 14px;
+  background: #f7fbfe;
+  color: #526c82;
+}
+.emergency-flow-latest-message strong { color: #284f70; white-space: nowrap; }
+.emergency-flow-secondary-tools { margin-top: 16px; }
+.emergency-flow-manage > summary .settings-directory-icon { color: #7a5b52; background: #faf3f0; }
+
+@media (max-width: 760px) {
+  .emergency-flow-roadmap-heading { display: block; margin-top: 20px; }
+  .emergency-flow-roadmap-heading h4 { font-size: 20px; }
+  .emergency-flow-progress { display: inline-block; margin-top: 12px; }
+  .emergency-flow-roadmap { gap: 11px; }
+  .emergency-flow-stage-summary {
+    grid-template-columns: 42px minmax(0, 1fr) 44px;
+    gap: 10px;
+    padding: 15px 14px;
+  }
+  .emergency-flow-step-number { width: 38px; height: 38px; }
+  .emergency-flow-stage-status { grid-column: 3; grid-row: 1; width: 40px; height: 40px; }
+  .emergency-flow-stage-status.done { width: 42px; height: 42px; }
+  .emergency-flow-stage-copy { grid-column: 2; grid-row: 1; padding-right: 2px; }
+  .emergency-flow-stage-copy strong { font-size: 16px; }
+  .emergency-flow-stage-copy small { font-size: 13px; }
+  .emergency-flow-stage-action,
+  .emergency-flow-stage-action-label {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+  }
+  .emergency-flow-stage-action .primary-button.compact,
+  .emergency-flow-stage-action .custom-select { width: 100%; }
+  .emergency-flow-complete-label,
+  .emergency-flow-waiting-label { text-align: left; padding-left: 52px; }
+  .emergency-flow-stage-content { padding: 15px 14px; }
+  .emergency-flow-latest-message { display: grid; gap: 4px; }
 }
