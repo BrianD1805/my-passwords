@@ -13,6 +13,7 @@ const flow = read('netlify/functions/_emergency-flow.js');
 const detail = read('netlify/functions/admin-customer-detail.js');
 const adminEmail = read('netlify/functions/_admin-email.js');
 const pkg = JSON.parse(read('package.json'));
+const styles = read('src/styles.css');
 
 let passed = 0;
 let failed = 0;
@@ -21,8 +22,11 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-0.054B version is aligned', pkg.version === '0.0.54-b' && /Password-Encrypt Ver-0\.054B/.test(main) && /my-passwords-v0\.054B/.test(read('public/sw.js')));
+check('Ver-0.054C version is aligned', pkg.version === '0.0.54-c' && /Password-Encrypt Ver-0\.054C/.test(main) && /my-passwords-v0\.054C/.test(read('public/sw.js')));
 check('Current Trusted Person stage is visible at a glance', /emergency-current-stage-glance/.test(main) && /emergencyCurrentStage\.step/.test(main) && /emergencyCurrentStage\.title/.test(main));
+check('Current stage card is explicitly marked as progress information', /emergency-current-progress-label/.test(main) && /Current progress/.test(main) && /aria-label="Trusted Person flow progress"/.test(main));
+check('Serious-emergency explanation is hidden behind a help icon', /emergency-help-disclosure/.test(main) && /Help about Trusted Person Access/.test(main) && /Designed for serious emergencies/.test(main));
+check('Current stage blue accent spans the full stage panel', /emergency-flow-stage\.current::before/.test(styles) && /top: 1px/.test(styles) && /bottom: 1px/.test(styles) && /width: 5px/.test(styles));
 check('Trusted Person journey is explicitly numbered from 1 to 6', /Complete each step in order/.test(main) && /emergency-flow-step-number\">1</.test(main) && /emergency-flow-step-number\">6</.test(main));
 check('Trusted person details are Step 1 with their own Save button', /Add your trusted person/.test(main) && /Save Step 1/.test(main) && /trusted_person/.test(main));
 check('Emergency package is Step 2 with its own Save button', /Prepare the emergency package/.test(main) && /Save Step 2/.test(main) && /'package'/.test(main));

@@ -15513,7 +15513,7 @@ option {
   object-fit: cover !important;
 }
 
-/* Password-Encrypt Ver-0.054B — Trusted Person emergency flow testing foundation retained. */
+/* Password-Encrypt Ver-0.054C — Trusted Person emergency flow testing foundation retained. */
 .emergency-current-stage-card {
   display: flex;
   gap: 16px;
@@ -15556,7 +15556,7 @@ option {
   .emergency-section-save-row .primary-button { width: 100%; justify-content: center; }
 }
 
-/* Password-Encrypt Ver-0.054B — approved Trusted Person flow refinements retained. */
+/* Password-Encrypt Ver-0.054C — approved Trusted Person flow refinements retained. */
 .emergency-current-stage-glance {
   margin: 0 0 18px;
   border-width: 2px;
@@ -15604,7 +15604,7 @@ option {
 }
 
 
-/* Password-Encrypt Ver-0.054B — clear, ordered Trusted Person journey. */
+/* Password-Encrypt Ver-0.054C — clear, ordered Trusted Person journey. */
 .emergency-flow-roadmap-heading {
   display: flex;
   justify-content: space-between;
@@ -15758,4 +15758,93 @@ details.emergency-flow-stage[open] .emergency-flow-stage-action-label svg { tran
   .emergency-flow-waiting-label { text-align: left; padding-left: 52px; }
   .emergency-flow-stage-content { padding: 15px 14px; }
   .emergency-flow-latest-message { display: grid; gap: 4px; }
+}
+
+/* Password-Encrypt Ver-0.054C — Trusted Person flow clarity refinements. */
+.emergency-current-stage-card {
+  align-items: stretch;
+}
+.emergency-current-progress-meta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 116px;
+}
+.emergency-current-progress-label {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #e8f2fa;
+  color: #285f89;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.emergency-current-progress-copy {
+  min-width: 0;
+  padding-top: 2px;
+}
+.emergency-help-disclosure {
+  position: relative;
+  margin: -4px 0 6px;
+}
+.emergency-help-disclosure > summary {
+  width: 42px;
+  height: 42px;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #c9d9e6;
+  border-radius: 50%;
+  background: #fff;
+  color: #336699;
+  cursor: pointer;
+  list-style: none;
+  transition: background .15s ease, border-color .15s ease, transform .15s ease;
+}
+.emergency-help-disclosure > summary::-webkit-details-marker { display: none; }
+.emergency-help-disclosure > summary:hover,
+.emergency-help-disclosure[open] > summary {
+  background: #eef6fb;
+  border-color: #9fc1d9;
+}
+.emergency-help-disclosure > summary:active { transform: scale(.97); }
+.emergency-help-disclosure .emergency-access-intro-card { margin-top: 10px; }
+
+.emergency-flow-stage {
+  position: relative;
+}
+.emergency-flow-stage.current {
+  box-shadow: none;
+}
+.emergency-flow-stage.current::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: 1px;
+  bottom: 1px;
+  left: 0;
+  width: 5px;
+  border-radius: 20px 0 0 20px;
+  background: #336699;
+  pointer-events: none;
+}
+
+@media (max-width: 700px) {
+  .emergency-current-progress-meta {
+    min-width: 0;
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .emergency-current-progress-copy { width: 100%; }
+  .emergency-help-disclosure { margin-top: -2px; }
+  .emergency-help-disclosure > summary { width: 40px; height: 40px; }
 }

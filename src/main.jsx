@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.054B';
+const VERSION = 'Password-Encrypt Ver-0.054C';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -7655,18 +7655,24 @@ function App() {
 
               {!featureIncluded('emergencyAccess') && <div className="plan-feature-unavailable"><UsersRound size={21} /><span><strong>Emergency Access is not included</strong><small>Your existing encrypted vault items remain available. Upgrade or ask Admin for an entitlement override to configure and manage a trusted person.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('emergencyAccess')}>Review plan</button></div>}
 
-              <div className={`emergency-current-stage-card emergency-current-stage-glance ${isEmergencyReleaseReady ? 'ready' : hasActiveEmergencyRequest ? 'active' : ''}`}>
-                <span className="emergency-current-stage-step">{emergencyCurrentStage.step}</span>
-                <div><strong>{emergencyCurrentStage.title}</strong><p>{emergencyCurrentStage.copy}</p></div>
+              <div className={`emergency-current-stage-card emergency-current-stage-glance ${isEmergencyReleaseReady ? 'ready' : hasActiveEmergencyRequest ? 'active' : ''}`} aria-label="Trusted Person flow progress">
+                <div className="emergency-current-progress-meta">
+                  <span className="emergency-current-progress-label">Current progress</span>
+                  <span className="emergency-current-stage-step">{emergencyCurrentStage.step}</span>
+                </div>
+                <div className="emergency-current-progress-copy"><strong>{emergencyCurrentStage.title}</strong><p>{emergencyCurrentStage.copy}</p></div>
               </div>
 
-              <div className="emergency-access-intro-card">
-                <ShieldCheck size={22} />
-                <div>
-                  <strong>Designed for serious emergencies</strong>
-                  <p>This is intended for next of kin or another person you trust if you are incapacitated or cannot access your vault yourself. Their request starts your chosen waiting period; you are notified and can cancel during that period. Only if the waiting period ends without cancellation does your selected emergency package become available.</p>
+              <details className="emergency-help-disclosure">
+                <summary aria-label="Help about Trusted Person Access" title="Help about Trusted Person Access"><CircleHelp size={21} /></summary>
+                <div className="emergency-access-intro-card">
+                  <ShieldCheck size={22} />
+                  <div>
+                    <strong>Designed for serious emergencies</strong>
+                    <p>This is intended for next of kin or another person you trust if you are incapacitated or cannot access your vault yourself. Their request starts your chosen waiting period; you are notified and can cancel during that period. Only if the waiting period ends without cancellation does your selected emergency package become available.</p>
+                  </div>
                 </div>
-              </div>
+              </details>
 
               <form className={`emergency-access-form ${!featureIncluded('emergencyAccess') ? 'feature-disabled' : ''}`} aria-disabled={!featureIncluded('emergencyAccess')} onSubmit={(event) => event.preventDefault()}>
                 <div className="emergency-flow-roadmap-heading">
