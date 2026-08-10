@@ -15513,7 +15513,7 @@ option {
   object-fit: cover !important;
 }
 
-/* Password-Encrypt Ver-0.054D — Trusted Person emergency flow testing foundation retained. */
+/* Password-Encrypt Ver-0.054E — Trusted Person emergency flow testing foundation retained. */
 .emergency-current-stage-card {
   display: flex;
   gap: 16px;
@@ -15556,7 +15556,7 @@ option {
   .emergency-section-save-row .primary-button { width: 100%; justify-content: center; }
 }
 
-/* Password-Encrypt Ver-0.054D — approved Trusted Person flow refinements retained. */
+/* Password-Encrypt Ver-0.054E — approved Trusted Person flow refinements retained. */
 .emergency-current-stage-glance {
   margin: 0 0 18px;
   border-width: 2px;
@@ -15604,7 +15604,7 @@ option {
 }
 
 
-/* Password-Encrypt Ver-0.054D — clear, ordered Trusted Person journey. */
+/* Password-Encrypt Ver-0.054E — clear, ordered Trusted Person journey. */
 .emergency-flow-roadmap-heading {
   display: flex;
   justify-content: space-between;
@@ -15634,7 +15634,26 @@ option {
   overflow: visible;
   transition: border-color .16s ease, background .16s ease, opacity .16s ease;
 }
-.emergency-flow-stage.current { border-color: #8bb7d8; border-left: 3px solid #336699; background: #f5faff; box-shadow: none; }
+.emergency-flow-stage.current {
+  position: relative;
+  border-color: #8bb7d8;
+  background: #f5faff;
+  box-shadow: none;
+}
+.emergency-flow-stage.current::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 16px;
+  box-sizing: border-box;
+  border: 3px solid #336699;
+  border-right: 0;
+  border-radius: 20px 0 0 20px;
+}
 .emergency-flow-stage.completed { border-color: #acd8ba; background: #f5fbf7; }
 .emergency-flow-stage.attention { border-color: #e8c778; background: #fffaf0; }
 .emergency-flow-stage.locked { background: #fafbfc; }
@@ -15760,7 +15779,7 @@ details.emergency-flow-stage[open] .emergency-flow-stage-action-label svg { tran
   .emergency-flow-latest-message { display: grid; gap: 4px; }
 }
 
-/* Password-Encrypt Ver-0.054D — Trusted Person flow clarity refinements. */
+/* Password-Encrypt Ver-0.054E — Trusted Person flow clarity refinements. */
 .emergency-current-stage-card {
   align-items: stretch;
 }

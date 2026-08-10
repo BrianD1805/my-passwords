@@ -14,6 +14,7 @@ const detail = read('netlify/functions/admin-customer-detail.js');
 const adminEmail = read('netlify/functions/_admin-email.js');
 const pkg = JSON.parse(read('package.json'));
 const styles = read('src/styles.css');
+const netlify = read('netlify.toml');
 
 let passed = 0;
 let failed = 0;
@@ -22,11 +23,15 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-0.054D version is aligned', pkg.version === '0.0.54-d' && /Password-Encrypt Ver-0\.054D/.test(main) && /my-passwords-v0\.054D/.test(read('public/sw.js')));
+check('Ver-0.054E version is aligned', pkg.version === '0.0.54-e' && /Password-Encrypt Ver-0\.054E/.test(main) && /my-passwords-v0\.054E/.test(read('public/sw.js')));
 check('Current Trusted Person stage is visible at a glance', /emergency-current-stage-glance/.test(main) && /emergencyCurrentStage\.step/.test(main) && /emergencyCurrentStage\.title/.test(main));
 check('Current stage card is explicitly marked as progress information', /emergency-current-progress-label/.test(main) && /Current progress/.test(main) && /aria-label="Trusted Person flow progress"/.test(main));
 check('Serious-emergency explanation is kept inside the existing Trusted Person help section', !/emergency-help-disclosure/.test(main) && /<strong>How Emergency Access works<\/strong>/.test(main) && /Designed for serious emergencies/.test(main) && /emergency-help-inline-copy/.test(main));
-check('Current stage blue rail is thin, full-height and follows the rounded panel border', /emergency-flow-stage\.current \{[^}]*border-left: 3px solid #336699/.test(styles) && !/emergency-flow-stage\.current::before/.test(styles));
+check('Current stage blue rail wraps the rounded top and bottom corners cleanly', /emergency-flow-stage\.current::before/.test(styles) && /border: 3px solid #336699/.test(styles) && /border-right: 0/.test(styles) && /border-radius: 20px 0 0 20px/.test(styles));
+check('Owner Trusted Person stage auto-checks every 30 seconds while the page is open', /setInterval\(checkCurrentEmergencyStage, 30000\)/.test(main) && /visibilitychange/.test(main) && /automatic: true/.test(main));
+check('Automatic status checks only save encrypted plan metadata when the server state changed', /const statusChanged = statusFields\.some/.test(main) && /if \(statusChanged\) \{[\s\S]*?saveItems\(next/.test(main));
+check('Stage 4 tells the owner acceptance is checked automatically', /This page checks automatically while open/.test(main));
+check('Final package release remains on the scheduled five-minute processor', /runEmergencyAccessReleaseProcessor/.test(release) && /release_ready_email/.test(release) && /\[functions\."emergency-access-release-process"\][\s\S]*?schedule = "\*\/5 \* \* \* \*"/.test(netlify));
 check('Trusted Person journey is explicitly numbered from 1 to 6', /Complete each step in order/.test(main) && /emergency-flow-step-number\">1</.test(main) && /emergency-flow-step-number\">6</.test(main));
 check('Trusted person details are Step 1 with their own Save button', /Add your trusted person/.test(main) && /Save Step 1/.test(main) && /trusted_person/.test(main));
 check('Emergency package is Step 2 with its own Save button', /Prepare the emergency package/.test(main) && /Save Step 2/.test(main) && /'package'/.test(main));

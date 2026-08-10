@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.054D';
+const VERSION = 'Password-Encrypt Ver-0.054E';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -3282,8 +3282,40 @@ function App() {
 
   useEffect(() => {
     if (locked || activeSettingsSection !== 'emergency' || !customerSession.authenticated || !emergencyDraft.invitationId) return;
-    checkEmergencyInvitationStatus({ silent: true });
-  }, [locked, activeSettingsSection, customerSession.authenticated, emergencyDraft.invitationId]);
+
+    let stopped = false;
+    let checking = false;
+    const checkCurrentEmergencyStage = async () => {
+      if (stopped || checking || document.visibilityState === 'hidden') return;
+      checking = true;
+      try {
+        await checkEmergencyInvitationStatus({ silent: true, automatic: true });
+      } finally {
+        checking = false;
+      }
+    };
+
+    // Check immediately when Trusted Person Access opens, then keep the owner-side
+    // progress current while this screen remains open. Acceptance itself is saved
+    // immediately by the public response endpoint; this poll only refreshes the
+    // owner's view and never controls release of the emergency package.
+    checkCurrentEmergencyStage();
+    const timer = window.setInterval(checkCurrentEmergencyStage, 30000);
+    const visibilityHandler = () => {
+      if (document.visibilityState === 'visible') checkCurrentEmergencyStage();
+    };
+    document.addEventListener('visibilitychange', visibilityHandler);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', visibilityHandler);
+    };
+  }, [
+    locked, activeSettingsSection, customerSession.authenticated, emergencyDraft.invitationId,
+    emergencyDraft.invitationStatus, emergencyDraft.invitationAcceptedAt, emergencyDraft.requestStatus,
+    emergencyDraft.requestId, emergencyDraft.requestWaitingEndsAt, items
+  ]);
 
   async function fetchLatestCloudSnapshot(account = bootstrap) {
     if (!featureIncluded('cloudBackupSync')) return { ok: false, code: 'PLAN_FEATURE_REQUIRED', feature: 'cloudBackupSync', upgradeRequired: true, entitlements, hasSnapshot: false, message: 'Cloud backup and sync are not included in the current plan.' };
@@ -5688,6 +5720,7 @@ function App() {
       const latestInvitationStatus = statusHasActiveRequest && !['declined', 'cancelled'].includes(String(result.status || '').toLowerCase())
         ? 'accepted'
         : (result.status || emergencyDraft.invitationStatus);
+      const checkedAt = new Date().toISOString();
       const savedPlan = {
         ...emergencyDraft,
         invitationId: result.invitationId || result.id || result.request?.invitation_id || emergencyDraft.invitationId,
@@ -5702,22 +5735,31 @@ function App() {
         requestRequestedAt: result.request?.requested_at || emergencyDraft.requestRequestedAt || '',
         requestWaitingEndsAt: result.request?.waiting_ends_at || emergencyDraft.requestWaitingEndsAt || '',
         requestMessage: result.request?.message || emergencyDraft.requestMessage || '',
-        requestLastCheckedAt: new Date().toISOString()
+        requestLastCheckedAt: checkedAt
       };
-      const next = upsertEmergencyAccessMetaItem(items, savedPlan);
-      await saveItems(next, { autoSync: true, silentAutoSync: true });
-      setEmergencyDraft(getEmergencyAccessPlan(next));
+      const statusFields = [
+        'invitationId', 'invitationStatus', 'invitationSentAt', 'invitationAcceptedAt', 'invitationCancelledAt',
+        'invitationUrl', 'requestStatus', 'requestId', 'requestRequestedAt', 'requestWaitingEndsAt', 'requestMessage'
+      ];
+      const statusChanged = statusFields.some((key) => String(savedPlan[key] || '') !== String(emergencyDraft[key] || ''));
+      if (statusChanged) {
+        const next = upsertEmergencyAccessMetaItem(items, savedPlan);
+        await saveItems(next, { autoSync: true, silentAutoSync: true });
+        setEmergencyDraft(getEmergencyAccessPlan(next));
+      }
       setEmergencyFlowEvents(Array.isArray(result.events) ? result.events : []);
       if (!silent) {
         setEmergencyInviteState({ status: 'checked', message: result.request?.message || result.message || 'Current stage checked.' });
         showMessage(result.request?.message || result.message || 'Current stage checked.', result.request ? 'success' : 'info');
       }
+      return { ...result, statusChanged, checkedAt };
     } catch (error) {
       const note = error.message || 'Invitation status could not be checked.';
       if (!silent) {
         setEmergencyInviteState({ status: 'error', message: note });
         showMessage(note, 'error');
       }
+      return { ok: false, message: note };
     }
   }
 
@@ -7750,7 +7792,7 @@ function App() {
                   <section className={`emergency-flow-stage ${emergencyInvitationAccepted ? 'completed' : emergencyCurrentStage.number === 4 ? 'current' : !emergencyInvitationWasSent ? 'locked' : emergencyInvitationNeedsAttention ? 'attention' : ''}`}>
                     <div className="emergency-flow-stage-summary">
                       <span className="emergency-flow-step-number">4</span>
-                      <span className="emergency-flow-stage-copy"><strong>Trusted person accepts</strong><small>{emergencyInvitationNeedsAttention ? 'The invitation needs attention before this flow can continue.' : 'They accept from their secure email. Acceptance still gives them no vault access.'}</small></span>
+                      <span className="emergency-flow-stage-copy"><strong>Trusted person accepts</strong><small>{emergencyInvitationNeedsAttention ? 'The invitation needs attention before this flow can continue.' : emergencyInvitationAccepted ? 'Accepted. Their separate Emergency Access link has already been emailed for future use.' : 'They accept from their secure email. This page checks automatically while open; acceptance still gives them no vault access.'}</small></span>
                       <span className="emergency-flow-stage-action">
                         {emergencyInvitationWasSent && !emergencyInvitationAccepted ? <CustomSelect value="" placeholder="Invitation actions" ariaLabel="Trusted person invitation actions" options={emergencyInvitationStageOptions} onChange={runEmergencyFlowAction} disabled={emergencyInviteState.status === 'checking'} /> : emergencyInvitationAccepted ? <span className="emergency-flow-complete-label">Accepted</span> : <span className="emergency-flow-waiting-label">Waiting for Step 3</span>}
                       </span>
@@ -7772,7 +7814,7 @@ function App() {
                   <section className={`emergency-flow-stage ${isEmergencyReleaseReady ? 'completed' : emergencyCurrentStage.number === 6 ? 'current active' : 'locked'}`}>
                     <div className="emergency-flow-stage-summary">
                       <span className="emergency-flow-step-number">6</span>
-                      <span className="emergency-flow-stage-copy"><strong>Waiting period completes</strong><small>{isEmergencyReleaseReady ? 'The waiting period completed without cancellation and the prepared package is available to your trusted person.' : hasActiveEmergencyRequest ? `The waiting period is active. You can still cancel before ${emergencyDraft.requestWaitingEndsAt ? new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString() : 'it ends'}.` : 'Nothing is released unless an Emergency Access request reaches this step.'}</small></span>
+                      <span className="emergency-flow-stage-copy"><strong>Waiting period completes</strong><small>{isEmergencyReleaseReady ? 'The waiting period completed without cancellation and the prepared package is available to your trusted person.' : hasActiveEmergencyRequest ? `The waiting period is active. You can still cancel before ${emergencyDraft.requestWaitingEndsAt ? new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString() : 'it ends'}.` : 'Nothing is released unless an Emergency Access request reaches this step. Once the waiting period ends, Password-Encrypt checks automatically and emails the final package link.'}</small></span>
                       <span className="emergency-flow-stage-action">
                         {hasActiveEmergencyRequest ? <CustomSelect value="" placeholder="Waiting-period actions" ariaLabel="Waiting period actions" options={emergencyWaitingStageOptions} onChange={runEmergencyFlowAction} /> : isEmergencyReleaseReady ? <span className="emergency-flow-complete-label">Package released</span> : <span className="emergency-flow-waiting-label">Waiting for Step 5</span>}
                       </span>
