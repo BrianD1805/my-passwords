@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.054C';
+const VERSION = 'Password-Encrypt Ver-0.054D';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -7663,17 +7663,6 @@ function App() {
                 <div className="emergency-current-progress-copy"><strong>{emergencyCurrentStage.title}</strong><p>{emergencyCurrentStage.copy}</p></div>
               </div>
 
-              <details className="emergency-help-disclosure">
-                <summary aria-label="Help about Trusted Person Access" title="Help about Trusted Person Access"><CircleHelp size={21} /></summary>
-                <div className="emergency-access-intro-card">
-                  <ShieldCheck size={22} />
-                  <div>
-                    <strong>Designed for serious emergencies</strong>
-                    <p>This is intended for next of kin or another person you trust if you are incapacitated or cannot access your vault yourself. Their request starts your chosen waiting period; you are notified and can cancel during that period. Only if the waiting period ends without cancellation does your selected emergency package become available.</p>
-                  </div>
-                </div>
-              </details>
-
               <form className={`emergency-access-form ${!featureIncluded('emergencyAccess') ? 'feature-disabled' : ''}`} aria-disabled={!featureIncluded('emergencyAccess')} onSubmit={(event) => event.preventDefault()}>
                 <div className="emergency-flow-roadmap-heading">
                   <div>
@@ -7808,6 +7797,10 @@ function App() {
                   <details className="settings-drilldown">
                     <summary><span className="settings-directory-icon"><CircleHelp size={21} /></span><span className="settings-directory-copy"><strong>How Emergency Access works</strong><small>Waiting periods, cancellation, browser access and Full Vault Access.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
+                <div className="emergency-help-inline-copy">
+                  <strong>Designed for serious emergencies</strong>
+                  <p>This is intended for next of kin or another person you trust if you are incapacitated or cannot access your vault yourself. Their request starts your chosen waiting period; you are notified and can cancel during that period. Only if the waiting period ends without cancellation does your selected emergency package become available.</p>
+                </div>
                 <div className="emergency-access-qa-card">
                   <strong>Emergency Access questions</strong>
                   <details>

@@ -22,11 +22,11 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-0.054C version is aligned', pkg.version === '0.0.54-c' && /Password-Encrypt Ver-0\.054C/.test(main) && /my-passwords-v0\.054C/.test(read('public/sw.js')));
+check('Ver-0.054D version is aligned', pkg.version === '0.0.54-d' && /Password-Encrypt Ver-0\.054D/.test(main) && /my-passwords-v0\.054D/.test(read('public/sw.js')));
 check('Current Trusted Person stage is visible at a glance', /emergency-current-stage-glance/.test(main) && /emergencyCurrentStage\.step/.test(main) && /emergencyCurrentStage\.title/.test(main));
 check('Current stage card is explicitly marked as progress information', /emergency-current-progress-label/.test(main) && /Current progress/.test(main) && /aria-label="Trusted Person flow progress"/.test(main));
-check('Serious-emergency explanation is hidden behind a help icon', /emergency-help-disclosure/.test(main) && /Help about Trusted Person Access/.test(main) && /Designed for serious emergencies/.test(main));
-check('Current stage blue accent spans the full stage panel', /emergency-flow-stage\.current::before/.test(styles) && /top: 1px/.test(styles) && /bottom: 1px/.test(styles) && /width: 5px/.test(styles));
+check('Serious-emergency explanation is kept inside the existing Trusted Person help section', !/emergency-help-disclosure/.test(main) && /<strong>How Emergency Access works<\/strong>/.test(main) && /Designed for serious emergencies/.test(main) && /emergency-help-inline-copy/.test(main));
+check('Current stage blue rail is thin, full-height and follows the rounded panel border', /emergency-flow-stage\.current \{[^}]*border-left: 3px solid #336699/.test(styles) && !/emergency-flow-stage\.current::before/.test(styles));
 check('Trusted Person journey is explicitly numbered from 1 to 6', /Complete each step in order/.test(main) && /emergency-flow-step-number\">1</.test(main) && /emergency-flow-step-number\">6</.test(main));
 check('Trusted person details are Step 1 with their own Save button', /Add your trusted person/.test(main) && /Save Step 1/.test(main) && /trusted_person/.test(main));
 check('Emergency package is Step 2 with its own Save button', /Prepare the emergency package/.test(main) && /Save Step 2/.test(main) && /'package'/.test(main));

@@ -1,4 +1,4 @@
-Password-Encrypt Ver-0.054C verification
+Password-Encrypt Ver-0.054D verification
 
 Security static checks: 13/13 PASS
 Reliability static checks: 20/20 PASS
@@ -10,7 +10,7 @@ Netlify Function JS syntax: PASS (57 files)
 CSS brace validation: PASS
 ZIP integrity: PASS
 
-Ver-0.054C targeted UX coverage:
+Ver-0.054D targeted UX coverage:
 - Current stage remains visible at the top.
 - Current-stage card explicitly says Current progress.
 - Serious-emergency explanatory copy is hidden behind a help icon.
@@ -18,4 +18,4 @@ Ver-0.054C targeted UX coverage:
 - Six-stage route, actions and completion ticks from Ver-0.054B are retained.
 - Reset to zero, Event history and How Emergency Access works are retained.
 
-No Supabase SQL migration is required for Ver-0.054C.
+No Supabase SQL migration is required for Ver-0.054D.
