@@ -9,6 +9,9 @@ const invite = read('netlify/functions/emergency-access-invite.js');
 const request = read('netlify/functions/emergency-access-request.js');
 const response = read('netlify/functions/emergency-access-response.js');
 const release = read('netlify/functions/emergency-access-release-process.js');
+const reminderProcess = read('netlify/functions/trusted-person-reminder-process.js');
+const reminderConfirm = read('netlify/functions/trusted-person-reminder-confirm.js');
+const reminderToken = read('netlify/functions/_trusted-person-reminder-token.js');
 const flow = read('netlify/functions/_emergency-flow.js');
 const detail = read('netlify/functions/admin-customer-detail.js');
 const adminEmail = read('netlify/functions/_admin-email.js');
@@ -23,15 +26,22 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-0.054E version is aligned', pkg.version === '0.0.54-e' && /Password-Encrypt Ver-0\.054E/.test(main) && /my-passwords-v0\.054E/.test(read('public/sw.js')));
+check('Ver-0.054F version is aligned', pkg.version === '0.0.54-f' && /Password-Encrypt Ver-0\.054F/.test(main) && /my-passwords-v0\.054F/.test(read('public/sw.js')));
 check('Current Trusted Person stage is visible at a glance', /emergency-current-stage-glance/.test(main) && /emergencyCurrentStage\.step/.test(main) && /emergencyCurrentStage\.title/.test(main));
 check('Current stage card is explicitly marked as progress information', /emergency-current-progress-label/.test(main) && /Current progress/.test(main) && /aria-label="Trusted Person flow progress"/.test(main));
 check('Serious-emergency explanation is kept inside the existing Trusted Person help section', !/emergency-help-disclosure/.test(main) && /<strong>How Emergency Access works<\/strong>/.test(main) && /Designed for serious emergencies/.test(main) && /emergency-help-inline-copy/.test(main));
-check('Current stage blue rail wraps the rounded top and bottom corners cleanly', /emergency-flow-stage\.current::before/.test(styles) && /border: 3px solid #336699/.test(styles) && /border-right: 0/.test(styles) && /border-radius: 20px 0 0 20px/.test(styles));
+check('Current stage blue rail tapers softly at both ends', /emergency-flow-stage\.current::before/.test(styles) && /linear-gradient\(180deg/.test(styles) && /rgba\(51,102,153,0\)/.test(styles) && /width: 3px/.test(styles) && !/border: 3px solid #336699/.test(styles));
 check('Owner Trusted Person stage auto-checks every 30 seconds while the page is open', /setInterval\(checkCurrentEmergencyStage, 30000\)/.test(main) && /visibilitychange/.test(main) && /automatic: true/.test(main));
 check('Automatic status checks only save encrypted plan metadata when the server state changed', /const statusChanged = statusFields\.some/.test(main) && /if \(statusChanged\) \{[\s\S]*?saveItems\(next/.test(main));
 check('Stage 4 tells the owner acceptance is checked automatically', /This page checks automatically while open/.test(main));
 check('Final package release remains on the scheduled five-minute processor', /runEmergencyAccessReleaseProcessor/.test(release) && /release_ready_email/.test(release) && /\[functions\."emergency-access-release-process"\][\s\S]*?schedule = "\*\/5 \* \* \* \*"/.test(netlify));
+check('Trusted Person reminder processor runs daily and sends only when three calendar months are due', /trusted-person-reminder-process/.test(netlify) && /schedule = "15 7 \* \* \*"/.test(netlify) && /addCalendarMonths\(anchor, 3\)/.test(reminderProcess) && /status=eq.accepted/.test(reminderProcess));
+check('Quarterly reminder email is searchable and asks for confirmation', /Password-Encrypt Trusted Person reminder — Please confirm/.test(reminderProcess) && /Yes, I’m still the trusted person/.test(reminderProcess) && /three-month reminder/.test(reminderProcess));
+check('Trusted Person help explains the quarterly reminder without implying access', /Will my trusted person be reminded/.test(main) && /reminder every three months/.test(main) && /does not request Emergency Access or reveal any vault information/.test(main));
+check('Reminder confirmation uses a signed expiring token and a second deliberate browser action', /createHmac\('sha256'/.test(reminderToken) && /timingSafeEqual/.test(reminderToken) && /TOKEN_TTL_MS = 30/.test(reminderToken) && /trusted-person-confirm/.test(main) && /confirmTrustedPersonReminder/.test(main));
+check('Reminder confirmation never starts Emergency Access and is recorded in flow history', /No Emergency Access request has been started/.test(reminderConfirm) && /trusted_person_reminder_confirmed/.test(reminderConfirm) && /trusted_person_reminder_sent/.test(reminderProcess));
+check('Quarterly reminders pause while an Emergency Access request is active', /status=in\.\(requested,waiting,owner_notified,release_ready\)/.test(reminderProcess) && /skippedActiveEmergency/.test(reminderProcess));
+check('Desktop vault login product title is reduced by about five pixels only on desktop', /@media \(min-width: 761px\)/.test(styles) && /#vault-access-card > h1/.test(styles) && /calc\(5vw - 5px\)/.test(styles));
 check('Trusted Person journey is explicitly numbered from 1 to 6', /Complete each step in order/.test(main) && /emergency-flow-step-number\">1</.test(main) && /emergency-flow-step-number\">6</.test(main));
 check('Trusted person details are Step 1 with their own Save button', /Add your trusted person/.test(main) && /Save Step 1/.test(main) && /trusted_person/.test(main));
 check('Emergency package is Step 2 with its own Save button', /Prepare the emergency package/.test(main) && /Save Step 2/.test(main) && /'package'/.test(main));

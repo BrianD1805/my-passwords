@@ -15645,14 +15645,13 @@ option {
   position: absolute;
   z-index: 2;
   pointer-events: none;
-  top: -1px;
-  bottom: -1px;
-  left: -1px;
-  width: 16px;
-  box-sizing: border-box;
-  border: 3px solid #336699;
-  border-right: 0;
-  border-radius: 20px 0 0 20px;
+  top: 7px;
+  bottom: 7px;
+  left: -2px;
+  width: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(51,102,153,0) 0%, rgba(51,102,153,.45) 9px, #336699 20px, #336699 calc(100% - 20px), rgba(51,102,153,.45) calc(100% - 9px), rgba(51,102,153,0) 100%);
 }
 .emergency-flow-stage.completed { border-color: #acd8ba; background: #f5fbf7; }
 .emergency-flow-stage.attention { border-color: #e8c778; background: #fffaf0; }
@@ -15824,4 +15823,28 @@ details.emergency-flow-stage[open] .emergency-flow-stage-action-label svg { tran
     justify-content: space-between;
   }
   .emergency-current-progress-copy { width: 100%; }
+}
+
+
+/* Password-Encrypt Ver-0.054F — Trusted Person quarterly confirmation and desktop login refinement. */
+.trusted-person-reminder-card { text-align: center; }
+.trusted-reminder-safety-note {
+  max-width: 560px;
+  margin: 18px auto 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #bcd8c7;
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: #f2faf5;
+  color: #365f49;
+  text-align: left;
+  line-height: 1.5;
+}
+.trusted-reminder-safety-note svg { flex: 0 0 auto; margin-top: 2px; color: #36815a; }
+.trusted-reminder-confirmed-time { font-size: .88rem; color: #718295 !important; }
+
+@media (min-width: 761px) {
+  #vault-access-card > h1 { font-size: clamp(2rem, calc(5vw - 5px), 55.8px); }
 }

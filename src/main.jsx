@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.054E';
+const VERSION = 'Password-Encrypt Ver-0.054F';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2245,6 +2245,7 @@ function App() {
   const [inviteAcceptance, setInviteAcceptance] = useState({ status: 'idle', message: '' });
   const [emergencyRequestState, setEmergencyRequestState] = useState({ status: 'idle', message: '' });
   const [emergencyReleasePackage, setEmergencyReleasePackage] = useState(null);
+  const [trustedPersonReminderConfirmation, setTrustedPersonReminderConfirmation] = useState({ status: 'idle', message: '', ownerName: '', contactName: '', confirmedAt: '' });
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
   const [viewItemId, setViewItemId] = useState('');
   const [pendingDeleteItemId, setPendingDeleteItemId] = useState('');
@@ -4857,7 +4858,8 @@ function App() {
   const normalisedRoutePath = routePath.length > 1 ? routePath.replace(/\/+$/, '') : routePath;
   const isVaultRoute = ['/vault', '/app', '/login'].includes(normalisedRoutePath);
   const isEmergencyInviteRoute = normalisedRoutePath === '/emergency-invite';
-  const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute;
+  const isTrustedPersonReminderRoute = normalisedRoutePath === '/trusted-person-confirm';
+  const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute && !isTrustedPersonReminderRoute;
 
   const hasBackDismissibleLayer = Boolean(
     mobileHeaderMenuOpen
@@ -5980,6 +5982,29 @@ function App() {
     }
   }
 
+  async function confirmTrustedPersonReminder() {
+    const params = new URLSearchParams(window.location.search || '');
+    const token = params.get('token') || '';
+    if (!token) {
+      setTrustedPersonReminderConfirmation({ status: 'error', message: 'This Trusted Person confirmation link is missing its secure token.', ownerName: '', contactName: '', confirmedAt: '' });
+      return;
+    }
+    setTrustedPersonReminderConfirmation((current) => ({ ...current, status: 'working', message: 'Confirming your Trusted Person role...' }));
+    try {
+      const result = await postJson('/.netlify/functions/trusted-person-reminder-confirm', { token });
+      if (!result.ok) throw new Error(result.message || 'Your Trusted Person confirmation could not be completed.');
+      setTrustedPersonReminderConfirmation({
+        status: 'confirmed',
+        message: result.message || 'Thank you. Your confirmation has been recorded.',
+        ownerName: result.ownerName || '',
+        contactName: result.contactName || '',
+        confirmedAt: result.confirmedAt || ''
+      });
+    } catch (error) {
+      setTrustedPersonReminderConfirmation({ status: 'error', message: error.message || 'Your Trusted Person confirmation could not be completed.', ownerName: '', contactName: '', confirmedAt: '' });
+    }
+  }
+
   async function respondToEmergencyInvitation(responseStatus) {
     const params = new URLSearchParams(window.location.search || '');
     const token = params.get('token') || '';
@@ -6175,6 +6200,45 @@ function App() {
     const next = items.map((vaultItem) => vaultItem.id === item.id ? { ...vaultItem, payload: { ...vaultItem.payload, notes: sorted }, updatedAt: new Date().toISOString() } : vaultItem);
     await saveItems(next, { autoSync: true, silentAutoSync: true });
     showMessage('Checklist updated.');
+  }
+
+  if (isTrustedPersonReminderRoute) {
+    const reminderToken = new URLSearchParams(window.location.search || '').get('token') || '';
+    const reminderConfirmed = trustedPersonReminderConfirmation.status === 'confirmed';
+    const reminderBusy = trustedPersonReminderConfirmation.status === 'working';
+    return (
+      <main className="emergency-invite-page trusted-person-reminder-page">
+        <section className="emergency-invite-shell">
+          <div className="public-brand emergency-invite-brand"><img className="public-brand-image" src="/images/password-encrypt-brand.png" alt="" /><span>Password-Encrypt</span></div>
+          <article className="emergency-invite-card trusted-person-reminder-card">
+            <p className="eyebrow">Trusted Person reminder</p>
+            <h1>{reminderConfirmed ? 'Thank you for confirming' : 'Are you still happy to be the trusted person?'}</h1>
+            {reminderConfirmed ? (
+              <>
+                <div className="emergency-invite-status accepted">{trustedPersonReminderConfirmation.message}</div>
+                {trustedPersonReminderConfirmation.ownerName && <p>You remain the nominated trusted person for <strong>{trustedPersonReminderConfirmation.ownerName}</strong>.</p>}
+                <p className="emergency-invite-note">This confirmation did not request Emergency Access and did not reveal any vault information.</p>
+                {trustedPersonReminderConfirmation.confirmedAt && <p className="trusted-reminder-confirmed-time">Confirmed {new Date(trustedPersonReminderConfirmation.confirmedAt).toLocaleString()}.</p>}
+              </>
+            ) : (
+              <>
+                <p>This routine three-month check gives you peace of mind that your Trusted Person role is still current.</p>
+                <div className="trusted-reminder-safety-note"><ShieldCheck size={19} /><span>Confirming here does <strong>not</strong> start Emergency Access and does not give you access to any vault information.</span></div>
+                <div className="emergency-invite-actions">
+                  <button type="button" className="primary-button" onClick={confirmTrustedPersonReminder} disabled={!reminderToken || reminderBusy}>
+                    {reminderBusy ? <RefreshCw size={17} className="spin-icon" /> : <UserRoundCheck size={18} />}
+                    {reminderBusy ? 'Confirming...' : 'Yes, I’m still the trusted person'}
+                  </button>
+                </div>
+                {trustedPersonReminderConfirmation.status === 'error' && <div className="emergency-invite-status error">{trustedPersonReminderConfirmation.message}</div>}
+                <p className="emergency-invite-note">Keep your original <strong>Password-Encrypt Emergency Access — Keep this link safe</strong> email. This quarterly reminder does not replace your Emergency Access link.</p>
+              </>
+            )}
+          </article>
+          <footer className="landing-footer emergency-invite-footer"><span>© 2026 Password-Encrypt</span><button type="button" onClick={openVaultApp}>Open My Vault</button></footer>
+        </section>
+      </main>
+    );
   }
 
   if (isEmergencyInviteRoute) {
@@ -7860,6 +7924,10 @@ function App() {
                   <details>
                     <summary>How will they know when the waiting period has ended?</summary>
                     <p>When the system next checks and marks the request as ready, it emails the trusted person. They can also open the same secure request link; it changes to the emergency package view when ready.</p>
+                  </details>
+                  <details>
+                    <summary>Will my trusted person be reminded that they are still nominated?</summary>
+                    <p>Yes. After they accept, Password-Encrypt sends a routine reminder every three months while the flow is dormant. They can securely confirm that they are still happy to remain your trusted person. The reminder does not request Emergency Access or reveal any vault information.</p>
                   </details>
                   <details>
                     <summary>What is Full vault access?</summary>
