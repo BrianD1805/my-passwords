@@ -7,7 +7,7 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 
-const VERSION = 'Password-Encrypt Ver-0.054G';
+const VERSION = 'Password-Encrypt Ver-0.054H';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2246,6 +2246,7 @@ function App() {
   const [emergencyRequestState, setEmergencyRequestState] = useState({ status: 'idle', message: '' });
   const [emergencyReleasePackage, setEmergencyReleasePackage] = useState(null);
   const [trustedPersonReminderConfirmation, setTrustedPersonReminderConfirmation] = useState({ status: 'idle', message: '', ownerName: '', contactName: '', confirmedAt: '' });
+  const [trustedPersonHelpOpen, setTrustedPersonHelpOpen] = useState(false);
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
   const [viewItemId, setViewItemId] = useState('');
   const [pendingDeleteItemId, setPendingDeleteItemId] = useState('');
@@ -3220,7 +3221,7 @@ function App() {
   }, [locked, items]);
 
   useEffect(() => {
-    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || exitAppConfirmationOpen;
+    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || exitAppConfirmationOpen;
     document.body.classList.toggle('app-popup-open', popupOpen);
     if (popupOpen) {
       window.requestAnimationFrame(() => {
@@ -3230,7 +3231,7 @@ function App() {
       });
     }
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, exitAppConfirmationOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, exitAppConfirmationOpen]);
 
   useEffect(() => {
     if (locked || !featureIncluded('cloudBackupSync') || !syncSafety.pending || syncing || syncPromptShown || syncSafetyModal.visible || deviceVerificationModal.visible) return undefined;
@@ -4879,6 +4880,7 @@ function App() {
     || folderManager.visible
     || signupLegalModal.visible
     || billingLegalModalOpen
+    || trustedPersonHelpOpen
     || isCreateAccountPopupOpen
     || isCreateVaultPopupOpen
   );
@@ -4906,6 +4908,7 @@ function App() {
     folderManagerVisible: folderManager.visible,
     signupLegalModalVisible: signupLegalModal.visible,
     billingLegalModalOpen,
+    trustedPersonHelpOpen,
     isCreateAccountPopupOpen,
     isCreateVaultPopupOpen,
     hasBackDismissibleLayer,
@@ -4936,6 +4939,7 @@ function App() {
     if (state.isFolderListPopupOpen) { backNavigationStateRef.current.isFolderListPopupOpen = false; setIsFolderListPopupOpen(false); return true; }
     if (state.signupLegalModalVisible) { backNavigationStateRef.current.signupLegalModalVisible = false; setSignupLegalModal((current) => ({ ...current, visible: false })); return true; }
     if (state.billingLegalModalOpen) { backNavigationStateRef.current.billingLegalModalOpen = false; setBillingLegalModalOpen(false); return true; }
+    if (state.trustedPersonHelpOpen) { backNavigationStateRef.current.trustedPersonHelpOpen = false; setTrustedPersonHelpOpen(false); return true; }
     if (state.isCreateAccountPopupOpen) { backNavigationStateRef.current.isCreateAccountPopupOpen = false; setIsCreateAccountPopupOpen(false); return true; }
     if (state.isCreateVaultPopupOpen) { backNavigationStateRef.current.isCreateVaultPopupOpen = false; setIsCreateVaultPopupOpen(false); return true; }
     if (state.mobileHeaderMenuOpen) { backNavigationStateRef.current.mobileHeaderMenuOpen = false; setMobileHeaderMenuOpen(false); return true; }
@@ -6956,6 +6960,29 @@ function App() {
               ? { number: 2, step: 'Stage 2', title: 'Prepare the emergency package', copy: 'Trusted person details are saved. Now prepare exactly what should be released if the Emergency Access waiting period completes.' }
               : { number: 1, step: 'Stage 1', title: 'Add your trusted person', copy: 'Start by adding and saving the next of kin or trusted person you want to nominate for a serious emergency.' };
 
+  const emergencySetupCompleteCount = [emergencyTrustedPersonComplete, emergencyPackageComplete, emergencyInvitationWasSent, emergencyInvitationAccepted].filter(Boolean).length;
+  const emergencySetupStageNumber = !emergencyTrustedPersonComplete ? 1 : !emergencyPackageComplete ? 2 : !emergencyInvitationWasSent ? 3 : 4;
+  const emergencySetupProgress = emergencySetupStageNumber === 1
+    ? { title: 'Add your trusted person', copy: 'Add and save the next of kin or trusted person you want to nominate.' }
+    : emergencySetupStageNumber === 2
+      ? { title: 'Prepare the emergency package', copy: 'Trusted person details are saved. Now prepare what should be available if Emergency Access is ever needed.' }
+      : emergencySetupStageNumber === 3
+        ? { title: 'Send the invitation', copy: 'Your trusted person and emergency package are ready. Send the invitation when you are happy with both.' }
+        : emergencyInvitationAccepted
+          ? { title: 'Setup complete', copy: 'Your trusted person has accepted. Stages 1–4 are complete. Emergency stages only begin if they later request access.' }
+          : emergencyInvitationNeedsAttention
+            ? { title: 'Invitation needs attention', copy: 'Review the invitation status and actions in Stage 4 before setup can be completed.' }
+            : { title: 'Waiting for your trusted person', copy: 'The invitation has been sent. Setup completes when your trusted person accepts it.' };
+
+  function goToEmergencySetupStage(stageNumber) {
+    window.requestAnimationFrame(() => {
+      const target = document.getElementById(`emergency-stage-${stageNumber}`);
+      if (!target) return;
+      if (target instanceof HTMLDetailsElement) target.open = true;
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
   const emergencyInvitationStageOptions = [
     { value: 'check_status', label: 'Check acceptance status' },
     ['sent', 'pending', 'invitation_sent'].includes(String(emergencyDraft.invitationStatus || '').toLowerCase()) && { value: 'resend_invitation', label: 'Resend invitation email' },
@@ -7753,34 +7780,36 @@ function App() {
 
           {activeSettingsSection === 'emergency' && (
             <section className="settings-section-panel settings-emergency-panel" aria-label="Emergency Access">
-              <div className="settings-section-heading">
-                <p className="eyebrow">Trusted Person Access</p>
-                <h3><UsersRound size={20} /> Next of kin / trusted person planning</h3>
-                <p>Nominate your next of kin or another trusted person who may need your prepared emergency information if you are incapacitated, seriously ill, or otherwise unable to access your vault.</p>
+              <div className="settings-section-heading trusted-person-heading">
+                <div className="trusted-person-heading-row">
+                  <h3><UsersRound size={20} /> Trusted Person Planning</h3>
+                  <button type="button" className="trusted-person-help-button" onClick={() => setTrustedPersonHelpOpen(true)} aria-label="Open Trusted Person help and FAQs" title="Trusted Person help"><CircleHelp size={20} /></button>
+                </div>
               </div>
 
               {!featureIncluded('emergencyAccess') && <div className="plan-feature-unavailable"><UsersRound size={21} /><span><strong>Emergency Access is not included</strong><small>Your existing encrypted vault items remain available. Upgrade or ask Admin for an entitlement override to configure and manage a trusted person.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('emergencyAccess')}>Review plan</button></div>}
 
-              <div className={`emergency-current-stage-card emergency-current-stage-glance ${isEmergencyReleaseReady ? 'ready' : hasActiveEmergencyRequest ? 'active' : ''}`} aria-label="Trusted Person flow progress">
+              <button type="button" className={`emergency-current-stage-card emergency-current-stage-glance emergency-current-stage-button ${emergencyInvitationAccepted ? 'ready' : ''}`} aria-label={`Current setup progress. Stage ${emergencySetupStageNumber} of 4. ${emergencySetupProgress.title}. Tap to go to this stage.`} onClick={() => goToEmergencySetupStage(emergencySetupStageNumber)}>
                 <div className="emergency-current-progress-meta">
                   <span className="emergency-current-progress-label">Current progress</span>
-                  <span className="emergency-current-stage-step">{emergencyCurrentStage.step}</span>
+                  <span className="emergency-current-stage-step">Stage {emergencySetupStageNumber} of 4 setup</span>
                 </div>
-                <div className="emergency-current-progress-copy"><strong>{emergencyCurrentStage.title}</strong><p>{emergencyCurrentStage.copy}</p></div>
-              </div>
+                <div className="emergency-current-progress-copy"><strong>{emergencySetupProgress.title}</strong><p>{emergencySetupProgress.copy}</p><small>Tap to go to Stage {emergencySetupStageNumber}</small></div>
+                <ChevronRight size={22} className="emergency-current-progress-chevron" />
+              </button>
 
               <form className={`emergency-access-form ${!featureIncluded('emergencyAccess') ? 'feature-disabled' : ''}`} aria-disabled={!featureIncluded('emergencyAccess')} onSubmit={(event) => event.preventDefault()}>
                 <div className="emergency-flow-roadmap-heading">
                   <div>
-                    <p className="eyebrow">Your Trusted Person journey</p>
-                    <h4>Complete each step in order</h4>
-                    <p>The next action is always shown with the step it belongs to. Completed steps stay visible with a large tick, so you can see the whole route from setup to emergency release.</p>
+                    <p className="eyebrow">Trusted Person setup</p>
+                    <h4>Complete Stages 1–4 in order</h4>
+                    <p>Stages 1–4 set up your Trusted Person arrangement. Each action is shown beside the stage it belongs to.</p>
                   </div>
-                  <span className="emergency-flow-progress">{[emergencyTrustedPersonComplete, emergencyPackageComplete, emergencyInvitationWasSent, emergencyInvitationAccepted, emergencyRequestWasMade, isEmergencyReleaseReady].filter(Boolean).length} of 6 complete</span>
+                  <span className="emergency-flow-progress">{emergencySetupCompleteCount} of 4 setup complete</span>
                 </div>
 
                 <div className="emergency-flow-roadmap">
-                  <details className={`emergency-flow-stage emergency-flow-stage-editor ${emergencyTrustedPersonComplete ? 'completed' : emergencyCurrentStage.number === 1 ? 'current' : ''}`} defaultOpen={!emergencyTrustedPersonComplete}>
+                  <details id="emergency-stage-1" className={`emergency-flow-stage emergency-flow-stage-editor ${emergencyTrustedPersonComplete ? 'completed' : emergencyCurrentStage.number === 1 ? 'current' : ''}`} defaultOpen={!emergencyTrustedPersonComplete}>
                     <summary className="emergency-flow-stage-summary">
                       <span className="emergency-flow-step-number">1</span>
                       <span className="emergency-flow-stage-copy"><strong>Add your trusted person</strong><small>Name, relationship, email, phone and the waiting period.</small></span>
@@ -7807,7 +7836,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className={`emergency-flow-stage emergency-flow-stage-editor ${emergencyPackageComplete ? 'completed' : emergencyCurrentStage.number === 2 ? 'current' : !emergencyTrustedPersonComplete ? 'locked' : ''}`} defaultOpen={emergencyTrustedPersonComplete && !emergencyPackageComplete}>
+                  <details id="emergency-stage-2" className={`emergency-flow-stage emergency-flow-stage-editor ${emergencyPackageComplete ? 'completed' : emergencyCurrentStage.number === 2 ? 'current' : !emergencyTrustedPersonComplete ? 'locked' : ''}`} defaultOpen={emergencyTrustedPersonComplete && !emergencyPackageComplete}>
                     <summary className="emergency-flow-stage-summary">
                       <span className="emergency-flow-step-number">2</span>
                       <span className="emergency-flow-stage-copy"><strong>Prepare the emergency package</strong><small>Choose what your trusted person should receive if the waiting period completes.</small></span>
@@ -7842,7 +7871,7 @@ function App() {
                     </div>
                   </details>
 
-                  <section className={`emergency-flow-stage ${emergencyInvitationWasSent ? 'completed' : emergencyCurrentStage.number === 3 ? 'current' : 'locked'}`}>
+                  <section id="emergency-stage-3" className={`emergency-flow-stage ${emergencyInvitationWasSent ? 'completed' : emergencyCurrentStage.number === 3 ? 'current' : 'locked'}`}>
                     <div className="emergency-flow-stage-summary">
                       <span className="emergency-flow-step-number">3</span>
                       <span className="emergency-flow-stage-copy"><strong>Send the invitation</strong><small>Only after Steps 1 and 2 are saved should Password-Encrypt contact your trusted person.</small></span>
@@ -7853,7 +7882,7 @@ function App() {
                     </div>
                   </section>
 
-                  <section className={`emergency-flow-stage ${emergencyInvitationAccepted ? 'completed' : emergencyCurrentStage.number === 4 ? 'current' : !emergencyInvitationWasSent ? 'locked' : emergencyInvitationNeedsAttention ? 'attention' : ''}`}>
+                  <section id="emergency-stage-4" className={`emergency-flow-stage ${emergencyInvitationAccepted ? 'completed' : emergencyCurrentStage.number === 4 ? 'current' : !emergencyInvitationWasSent ? 'locked' : emergencyInvitationNeedsAttention ? 'attention' : ''}`}>
                     <div className="emergency-flow-stage-summary">
                       <span className="emergency-flow-step-number">4</span>
                       <span className="emergency-flow-stage-copy"><strong>Trusted person accepts</strong><small>{emergencyInvitationNeedsAttention ? 'The invitation needs attention before this flow can continue.' : emergencyInvitationAccepted ? 'Accepted. Their separate Emergency Access link has already been emailed for future use.' : 'They accept from their secure email. This page checks automatically while open; acceptance still gives them no vault access.'}</small></span>
@@ -7864,7 +7893,12 @@ function App() {
                     </div>
                   </section>
 
-                  <section className={`emergency-flow-stage ${emergencyRequestWasMade ? 'completed' : emergencyCurrentStage.number === 5 ? 'current' : 'locked'}`}>
+                  <div className="emergency-flow-emergency-heading">
+                    <span><AlertTriangle size={18} /></span>
+                    <div><strong>Emergency-only stages</strong><small>Stages 5 and 6 are not part of setup. They stay dormant unless your trusted person later requests Emergency Access in a genuine emergency.</small></div>
+                  </div>
+
+                  <section id="emergency-stage-5" className={`emergency-flow-stage ${emergencyRequestWasMade ? 'completed' : emergencyCurrentStage.number === 5 ? 'current' : 'locked'}`}>
                     <div className="emergency-flow-stage-summary">
                       <span className="emergency-flow-step-number">5</span>
                       <span className="emergency-flow-stage-copy"><strong>Emergency Access is requested</strong><small>Your trusted person uses the secure link they saved only if emergency access is genuinely needed.</small></span>
@@ -7875,7 +7909,7 @@ function App() {
                     </div>
                   </section>
 
-                  <section className={`emergency-flow-stage ${isEmergencyReleaseReady ? 'completed' : emergencyCurrentStage.number === 6 ? 'current active' : 'locked'}`}>
+                  <section id="emergency-stage-6" className={`emergency-flow-stage ${isEmergencyReleaseReady ? 'completed' : emergencyCurrentStage.number === 6 ? 'current active' : 'locked'}`}>
                     <div className="emergency-flow-stage-summary">
                       <span className="emergency-flow-step-number">6</span>
                       <span className="emergency-flow-stage-copy"><strong>Waiting period completes</strong><small>{isEmergencyReleaseReady ? 'The waiting period completed without cancellation and the prepared package is available to your trusted person.' : hasActiveEmergencyRequest ? `The waiting period is active. You can still cancel before ${emergencyDraft.requestWaitingEndsAt ? new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString() : 'it ends'}.` : 'Nothing is released unless an Emergency Access request reaches this step. Once the waiting period ends, Password-Encrypt checks automatically and emails the final package link.'}</small></span>
@@ -7897,43 +7931,6 @@ function App() {
                         {emergencyFlowEvents.map((event) => <article key={event.id || `${event.type}-${event.occurredAt}`}><span className="emergency-flow-audit-dot" /><div><strong>{event.title || String(event.type || '').replace(/_/g, ' ')}</strong>{event.message && <p>{event.message}</p>}<small>{event.occurredAt ? new Date(event.occurredAt).toLocaleString() : 'Time unavailable'}</small></div></article>)}
                         {!emergencyFlowEvents.length && <p className="emergency-flow-audit-empty">No flow events are recorded yet.</p>}
                       </div>
-                    </div>
-                  </details>
-
-                  <details className="settings-drilldown">
-                    <summary><span className="settings-directory-icon"><CircleHelp size={21} /></span><span className="settings-directory-copy"><strong>How Emergency Access works</strong><small>Waiting periods, cancellation, browser access and Full Vault Access.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
-                    <div className="settings-drilldown-content">
-                <div className="emergency-help-inline-copy">
-                  <strong>Designed for serious emergencies</strong>
-                  <p>This is intended for next of kin or another person you trust if you are incapacitated or cannot access your vault yourself. Their request starts your chosen waiting period; you are notified and can cancel during that period. Only if the waiting period ends without cancellation does your selected emergency package become available.</p>
-                </div>
-                <div className="emergency-access-qa-card">
-                  <strong>Emergency Access questions</strong>
-                  <details>
-                    <summary>What happens when my trusted person requests access?</summary>
-                    <p>A waiting period starts and you are notified. No vault contents are released while the waiting period is active.</p>
-                  </details>
-                  <details>
-                    <summary>Can I cancel an emergency request?</summary>
-                    <p>Yes. Use Cancel emergency request before the waiting period ends if the request should not continue.</p>
-                  </details>
-                  <details>
-                    <summary>Does my trusted person need the app?</summary>
-                    <p>No. Their invite and request access links open in a normal browser. They do not need to install the PWA or create their own vault.</p>
-                  </details>
-                  <details>
-                    <summary>How will they know when the waiting period has ended?</summary>
-                    <p>When the system next checks and marks the request as ready, it emails the trusted person. They can also open the same secure request link; it changes to the emergency package view when ready.</p>
-                  </details>
-                  <details>
-                    <summary>Will my trusted person be reminded that they are still nominated?</summary>
-                    <p>Yes. After they accept, Password-Encrypt sends a routine reminder every three months while the flow is dormant. They can securely confirm that they are still happy to remain your trusted person. The reminder does not request Emergency Access or reveal any vault information.</p>
-                  </details>
-                  <details>
-                    <summary>What is Full vault access?</summary>
-                    <p>Full vault access is an explicit next-of-kin option. It prepares the selected emergency package without saving or sending your master password.</p>
-                  </details>
-                </div>
                     </div>
                   </details>
 
@@ -8249,6 +8246,39 @@ function App() {
               <button type="button" className="secondary-button" onClick={() => setSubscriptionActionModal({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' })} disabled={billing.status === 'updating'}>Go back</button>
               <button type="button" className="primary-button" onClick={confirmSubscriptionAction} disabled={billing.status === 'updating'}>{billing.status === 'updating' ? 'Updating...' : subscriptionActionModal.action === 'cancel_at_period_end' ? 'Schedule cancellation' : subscriptionActionModal.action === 'reactivate' ? 'Keep active' : subscriptionActionModal.mode === 'immediate' ? 'Confirm upgrade' : 'Schedule change'}</button>
             </footer>
+          </section>
+        </div>
+      )}
+
+      {trustedPersonHelpOpen && (
+        <div className="item-popup-layer trusted-person-help-popup-layer" role="dialog" aria-modal="true" aria-labelledby="trusted-person-help-title">
+          <button type="button" className="item-popup-backdrop" onClick={() => setTrustedPersonHelpOpen(false)} aria-label="Close Trusted Person help" />
+          <section className="item-popup-card trusted-person-help-popup-card">
+            <header className="item-popup-header">
+              <div>
+                <p className="eyebrow">Trusted Person Planning</p>
+                <h2 id="trusted-person-help-title"><CircleHelp size={20} /> Help &amp; FAQs</h2>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setTrustedPersonHelpOpen(false)} aria-label="Close Trusted Person help"><X size={18} /></button>
+            </header>
+            <div className="item-popup-body trusted-person-help-popup-body">
+              <div className="trusted-person-help-intro">
+                <ShieldCheck size={21} />
+                <div><strong>Designed for serious emergencies</strong><p>Trusted Person Access is intended for next of kin or another person you trust if you are incapacitated, seriously ill, or cannot access your vault yourself.</p></div>
+              </div>
+              <div className="emergency-access-qa-card trusted-person-help-faq">
+                <strong>Setting up your Trusted Person</strong>
+                <details open><summary>What do Stages 1–4 mean?</summary><p>Stages 1–4 are the setup journey: add your trusted person, prepare the emergency package, send the invitation, and wait for them to accept. Once Stage 4 is complete, your Trusted Person arrangement is set up.</p></details>
+                <details><summary>What happens after my trusted person accepts?</summary><p>Nothing is released. They receive a separate secure Emergency Access link to keep for the future. Password-Encrypt also sends a routine reminder every three months while the flow is dormant so they can confirm they are still happy to remain your trusted person.</p></details>
+                <details><summary>What are Stages 5 and 6?</summary><p>Stages 5 and 6 are emergency-only. They are not part of setup and remain dormant unless your trusted person later uses their saved Emergency Access link in a genuine emergency.</p></details>
+                <details><summary>What happens when Emergency Access is requested?</summary><p>Your chosen waiting period starts and you are notified. No vault contents are released while the waiting period is active, and you can cancel the request before the waiting period ends.</p></details>
+                <details><summary>Does my trusted person need the Password-Encrypt app?</summary><p>No. Invitation, confirmation and Emergency Access links open in a normal browser. They do not need to install the PWA or create their own vault.</p></details>
+                <details><summary>How will they know when the waiting period has ended?</summary><p>Password-Encrypt checks the waiting period automatically. When it completes without cancellation, the trusted person is emailed a secure link to the emergency package you prepared. That released-package link remains available for 30 days.</p></details>
+                <details><summary>What is Full vault access?</summary><p>Full vault access is an explicit next-of-kin option that prepares the selected emergency package without saving or sending your master password.</p></details>
+                <details><summary>What does Reset to zero do?</summary><p>Reset to zero removes the trusted person, invitation and request records, secure links, emergency-package setup and the flow audit history so you can start again from Stage 1.</p></details>
+              </div>
+            </div>
+            <footer className="item-popup-footer trusted-person-help-popup-footer"><button type="button" className="primary-button" onClick={() => setTrustedPersonHelpOpen(false)}>Back to Trusted Person Planning</button></footer>
           </section>
         </div>
       )}

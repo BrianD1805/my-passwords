@@ -15917,3 +15917,170 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     border-radius: 16px;
   }
 }
+
+/* Password-Encrypt Ver-0.054H — Trusted Person Planning top-level flow clarity. */
+.trusted-person-heading {
+  margin-bottom: 14px;
+}
+.trusted-person-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.trusted-person-heading-row h3 {
+  margin: 0;
+}
+.trusted-person-help-button {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #c9d9e5;
+  border-radius: 50%;
+  background: #f5f9fc;
+  color: #336699;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .15s ease, border-color .15s ease, transform .15s ease;
+}
+.trusted-person-help-button:hover,
+.trusted-person-help-button:focus-visible {
+  border-color: #96bad4;
+  background: #eaf3f9;
+  outline: none;
+  transform: translateY(-1px);
+}
+.emergency-current-stage-button {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  transition: border-color .15s ease, background .15s ease, transform .15s ease;
+}
+.emergency-current-stage-button:hover,
+.emergency-current-stage-button:focus-visible {
+  border-color: #8bb7d8;
+  background: #f2f8fc;
+  outline: none;
+  transform: translateY(-1px);
+}
+.emergency-current-progress-copy small {
+  display: block;
+  margin-top: 7px;
+  color: #336699;
+  font-size: 12px;
+  font-weight: 500;
+}
+.emergency-current-progress-chevron {
+  align-self: center;
+  color: #5a7f9d;
+}
+#emergency-stage-1,
+#emergency-stage-2,
+#emergency-stage-3,
+#emergency-stage-4,
+#emergency-stage-5,
+#emergency-stage-6 {
+  scroll-margin-top: 92px;
+}
+.emergency-flow-emergency-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin: 10px 2px 2px;
+  padding: 13px 15px;
+  border: 1px solid #e2d7b1;
+  border-radius: 16px;
+  background: #fffaf0;
+  color: #665b3e;
+}
+.emergency-flow-emergency-heading > span {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #f7ebc7;
+  color: #8a6b19;
+}
+.emergency-flow-emergency-heading strong {
+  display: block;
+  color: #51451f;
+  font-weight: 700;
+}
+.emergency-flow-emergency-heading small {
+  display: block;
+  margin-top: 3px;
+  line-height: 1.45;
+  color: #786b48;
+}
+.trusted-person-help-popup-card {
+  width: min(720px, 100%);
+}
+.trusted-person-help-popup-body {
+  gap: 16px;
+}
+.trusted-person-help-intro {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 15px 16px;
+  border: 1px solid #bfd7c8;
+  border-radius: 17px;
+  background: #f2faf5;
+  color: #365f49;
+}
+.trusted-person-help-intro > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #36815a;
+}
+.trusted-person-help-intro strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #28533d;
+}
+.trusted-person-help-intro p {
+  margin: 0;
+  line-height: 1.5;
+}
+.trusted-person-help-faq {
+  margin: 0;
+}
+.trusted-person-help-faq > strong {
+  margin-bottom: 8px;
+}
+@media (max-width: 700px) {
+  .trusted-person-heading-row {
+    gap: 8px;
+  }
+  .trusted-person-help-button {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+  }
+  .emergency-current-stage-button {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .emergency-current-progress-meta,
+  .emergency-current-progress-copy {
+    grid-column: 1 / -1;
+  }
+  .emergency-current-progress-chevron {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .emergency-flow-emergency-heading {
+    margin-top: 8px;
+    padding: 12px 13px;
+  }
+}
