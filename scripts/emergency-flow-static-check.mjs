@@ -26,7 +26,7 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-0.054I version is aligned', pkg.version === '0.0.54-i' && /Password-Encrypt Ver-0\.054I/.test(main) && /my-passwords-v0\.054I/.test(read('public/sw.js')));
+check('Ver-0.055 version is aligned', pkg.version === '0.0.55' && /Password-Encrypt Ver-0\.055/.test(main) && /my-passwords-v0\.055/.test(read('public/sw.js')));
 check('Trusted Person heading has a same-line Help and FAQ control', /Trusted Person Planning<\/h3>/.test(main) && /trusted-person-help-button/.test(main) && /Open Trusted Person help and FAQs/.test(main));
 check('Current progress is setup-only and explicitly shows Stage X of 4', /emergencySetupStageNumber/.test(main) && /Stage \{emergencySetupStageNumber\} of 4 setup/.test(main) && /emergencySetupCompleteCount/.test(main));
 check('Current progress panel jumps directly to its setup stage', /goToEmergencySetupStage/.test(main) && /onClick=\{\(\) => goToEmergencySetupStage\(emergencySetupStageNumber\)\}/.test(main) && /scrollIntoView/.test(main));
@@ -52,6 +52,9 @@ check('Invitation cannot be sent until Steps 1 and 2 are saved', /Complete and s
 check('Primary invitation action sits directly on Step 3', /<strong>Send the invitation<\/strong>/.test(main) && /Send invitation/.test(main));
 check('Invitation follow-up actions sit on Step 4 dropdown', /placeholder="Invitation actions"/.test(main) && /options=\{emergencyInvitationStageOptions\}/.test(main));
 check('Emergency-link actions sit on Step 5 dropdown', /placeholder="Emergency link actions"/.test(main) && /options=\{emergencyAcceptedStageOptions\}/.test(main));
+check('Step 5 relies on automatic request checking and removes the redundant manual check action', /const emergencyAcceptedStageOptions = \[[\s\S]*?Resend access link[\s\S]*?Copy access link/.test(main) && !/Check for Emergency Access request/.test(main));
+check('Step 5 access-link action labels are short enough for desktop and mobile', /label: 'Resend access link'/.test(main) && /label: 'Copy access link'/.test(main) && !/Resend Emergency Access link/.test(main) && !/Copy Emergency Access link/.test(main));
+check('Trusted Person action dropdown options use lighter readable typography', /menuClassName="emergency-flow-action-menu"/.test(main) && /emergency-flow-action-menu \.custom-select-option[\s\S]*?font-weight: 400 !important/.test(styles));
 check('Waiting-period actions sit on Step 6 dropdown', /placeholder="Waiting-period actions"/.test(main) && /options=\{emergencyWaitingStageOptions\}/.test(main));
 check('Completed stages have a large tick status', /emergency-flow-stage-status/.test(main) && /<Check size=\{29\} strokeWidth=\{3\}/.test(main));
 check('Reset to zero remains in a maintenance dropdown, not the main route', /Manage or reset this flow/.test(main) && /placeholder="Manage flow"/.test(main) && /options=\{emergencyManagementOptions\}/.test(main));

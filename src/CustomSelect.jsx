@@ -31,6 +31,7 @@ export default function CustomSelect({
   placeholder = 'Select an option',
   ariaLabel = 'Choose an option',
   className = '',
+  menuClassName = '',
   name = ''
 }) {
   const triggerRef = useRef(null);
@@ -194,7 +195,7 @@ export default function CustomSelect({
 
       {open && typeof document !== 'undefined' && createPortal(
         <div
-          className={`custom-select-menu ${position.openUpward ? 'opens-upward' : 'opens-downward'}`}
+          className={`custom-select-menu ${position.openUpward ? 'opens-upward' : 'opens-downward'} ${menuClassName}`.trim()}
           role="presentation"
           style={{
             top: `${position.top}px`,

@@ -1,7 +1,7 @@
 {
   "name": "my-passwords",
   "private": true,
-  "version": "0.0.54-i",
+  "version": "0.0.55",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,8 @@
     "legal:check": "node scripts/legal-readiness-check.mjs",
     "ux:check": "node scripts/landing-ux-static-check.mjs",
     "mobile:check": "node scripts/mobile-regression-static-check.mjs",
-    "emergency:check": "node scripts/emergency-flow-static-check.mjs"
+    "emergency:check": "node scripts/emergency-flow-static-check.mjs",
+    "onboarding:check": "node scripts/onboarding-flow-static-check.mjs"
   },
   "dependencies": {
     "lucide-react": "1.16.0",

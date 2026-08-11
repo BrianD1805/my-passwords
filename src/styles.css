@@ -16114,3 +16114,120 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
 @media (max-width: 760px) {
   .emergency-flow-stage-action { justify-content: flex-start; }
 }
+
+
+/* Password-Encrypt Ver-0.054J — Trusted Person action dropdown readability. */
+.emergency-flow-action-select .custom-select-trigger {
+  font-weight: 400 !important;
+}
+.emergency-flow-action-menu .custom-select-option {
+  min-height: 42px;
+  padding: 8px 10px;
+  font-weight: 400 !important;
+  font-size: 15px;
+  line-height: 1.25;
+}
+.emergency-flow-action-menu .custom-select-option > span:first-child {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+@media (max-width: 760px) {
+  .emergency-flow-action-menu .custom-select-option {
+    font-size: 14px;
+  }
+}
+
+/* Password-Encrypt Ver-0.055 — separate existing-customer vault access from new-customer onboarding. */
+.open-vault-choice-popup-card {
+  width: min(650px, calc(100vw - 50px));
+}
+.open-vault-choice-popup-body {
+  gap: 18px;
+}
+.open-vault-choice-intro {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+  color: #1d3557;
+}
+.open-vault-choice-options {
+  display: grid;
+  gap: 12px;
+}
+.open-vault-choice-option {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 16px;
+  border: 1px solid #d6e2ec;
+  border-radius: 18px;
+  background: #fff;
+  color: #1d3557;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.open-vault-choice-option:hover,
+.open-vault-choice-option:focus-visible {
+  border-color: #8fb6d5;
+  background: #f6faff;
+  transform: translateY(-1px);
+  outline: none;
+}
+.open-vault-choice-option > span:nth-child(2) {
+  min-width: 0;
+}
+.open-vault-choice-option strong,
+.open-vault-choice-option small {
+  display: block;
+}
+.open-vault-choice-option strong {
+  font-weight: 500;
+  font-size: 17px;
+  line-height: 1.3;
+}
+.open-vault-choice-option small {
+  margin-top: 4px;
+  color: #647789;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.open-vault-choice-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #edf5fb;
+  color: #336699;
+}
+.open-vault-choice-option.new .open-vault-choice-icon {
+  background: #f0f8f3;
+  color: #32825c;
+}
+.existing-vault-entry-actions {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 681px) {
+  .existing-vault-entry-actions {
+    width: min(360px, 100%);
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+@media (max-width: 680px) {
+  .open-vault-choice-option {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    padding: 13px;
+  }
+  .open-vault-choice-icon {
+    width: 40px;
+    height: 40px;
+  }
+  .open-vault-choice-option strong {
+    font-size: 16px;
+  }
+}

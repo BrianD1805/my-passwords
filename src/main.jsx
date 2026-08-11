@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-0.054I';
+const VERSION = 'Password-Encrypt Ver-0.055';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2265,6 +2265,7 @@ function App() {
   const [isFolderListPopupOpen, setIsFolderListPopupOpen] = useState(false);
   const [showOnboardingDetails, setShowOnboardingDetails] = useState(() => !Boolean(readStoredVault()));
   const [isCreateAccountPopupOpen, setIsCreateAccountPopupOpen] = useState(false);
+  const [isOpenVaultChoicePopupOpen, setIsOpenVaultChoicePopupOpen] = useState(false);
   const [signupLegalModal, setSignupLegalModal] = useState({ visible: false, page: 'terms' });
   const [isCreateVaultPopupOpen, setIsCreateVaultPopupOpen] = useState(false);
   const [landingOnboardingStep, setLandingOnboardingStep] = useState(1);
@@ -3224,7 +3225,7 @@ function App() {
   }, [locked, items]);
 
   useEffect(() => {
-    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || isCreateAccountPopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || exitAppConfirmationOpen;
+    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || isCreateAccountPopupOpen || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || exitAppConfirmationOpen;
     document.body.classList.toggle('app-popup-open', popupOpen);
     if (popupOpen) {
       window.requestAnimationFrame(() => {
@@ -3234,7 +3235,7 @@ function App() {
       });
     }
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateAccountPopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, exitAppConfirmationOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateAccountPopupOpen, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, exitAppConfirmationOpen]);
 
   useEffect(() => {
     if (locked || !featureIncluded('cloudBackupSync') || !syncSafety.pending || syncing || syncPromptShown || syncSafetyModal.visible || deviceVerificationModal.visible) return undefined;
@@ -3808,6 +3809,11 @@ function App() {
       }
 
       if (!createMode) {
+        if (existingCustomerEntry) {
+          showVerifyOverlay('error', 'Existing vault not found', 'We could not restore an existing secure backup for this verified account. No new vault was created.');
+          showMessage('We could not restore an existing vault for this account. No new vault was created. Contact support if you believe a secure backup should be available.', 'warning');
+          return;
+        }
         setCreateMode(true);
         showMessage('We could not restore a vault for this account. Only continue if you want to create a new vault on this device.');
         return;
@@ -4861,6 +4867,8 @@ function App() {
   const routePath = typeof window !== 'undefined' ? window.location.pathname : '/vault';
   const normalisedRoutePath = routePath.length > 1 ? routePath.replace(/\/+$/, '') : routePath;
   const isVaultRoute = ['/vault', '/app', '/login'].includes(normalisedRoutePath);
+  const vaultEntryMode = typeof window !== 'undefined' ? new URLSearchParams(window.location.search || '').get('entry') || '' : '';
+  const existingCustomerEntry = isVaultRoute && vaultEntryMode === 'existing';
   const isEmergencyInviteRoute = normalisedRoutePath === '/emergency-invite';
   const isTrustedPersonReminderRoute = normalisedRoutePath === '/trusted-person-confirm';
   const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute && !isTrustedPersonReminderRoute;
@@ -4885,6 +4893,7 @@ function App() {
     || billingLegalModalOpen
     || trustedPersonHelpOpen
     || isCreateAccountPopupOpen
+    || isOpenVaultChoicePopupOpen
     || isCreateVaultPopupOpen
   );
 
@@ -4913,6 +4922,7 @@ function App() {
     billingLegalModalOpen,
     trustedPersonHelpOpen,
     isCreateAccountPopupOpen,
+    isOpenVaultChoicePopupOpen,
     isCreateVaultPopupOpen,
     hasBackDismissibleLayer,
     isVaultRoute
@@ -4944,6 +4954,7 @@ function App() {
     if (state.billingLegalModalOpen) { backNavigationStateRef.current.billingLegalModalOpen = false; setBillingLegalModalOpen(false); return true; }
     if (state.trustedPersonHelpOpen) { backNavigationStateRef.current.trustedPersonHelpOpen = false; setTrustedPersonHelpOpen(false); return true; }
     if (state.isCreateAccountPopupOpen) { backNavigationStateRef.current.isCreateAccountPopupOpen = false; setIsCreateAccountPopupOpen(false); return true; }
+    if (state.isOpenVaultChoicePopupOpen) { backNavigationStateRef.current.isOpenVaultChoicePopupOpen = false; setIsOpenVaultChoicePopupOpen(false); return true; }
     if (state.isCreateVaultPopupOpen) { backNavigationStateRef.current.isCreateVaultPopupOpen = false; setIsCreateVaultPopupOpen(false); return true; }
     if (state.mobileHeaderMenuOpen) { backNavigationStateRef.current.mobileHeaderMenuOpen = false; setMobileHeaderMenuOpen(false); return true; }
 
@@ -5149,7 +5160,21 @@ function App() {
   }, [isEmergencyInviteRoute]);
 
   function openVaultApp() {
-    window.location.assign('/vault');
+    if (isPublicLandingRoute) {
+      setIsOpenVaultChoicePopupOpen(true);
+      return;
+    }
+    window.location.assign('/vault?entry=existing');
+  }
+
+  function continueExistingCustomerToVault() {
+    setIsOpenVaultChoicePopupOpen(false);
+    window.location.assign('/vault?entry=existing');
+  }
+
+  function startNewCustomerFromVaultChoice() {
+    setIsOpenVaultChoicePopupOpen(false);
+    openCreateAccountPopup();
   }
 
   function openCreateAccountPopup(preselectedPlanCode = '') {
@@ -5377,7 +5402,7 @@ function App() {
 
   function finishLandingOnboarding() {
     setIsCreateAccountPopupOpen(false);
-    window.location.assign('/vault');
+    window.location.assign(landingSignup.existingAccount ? '/vault?entry=existing' : '/vault');
   }
 
 
@@ -6634,6 +6659,39 @@ function App() {
           </button>
         )}
 
+        {isOpenVaultChoicePopupOpen && (
+          <div className="item-popup-layer open-vault-choice-popup-layer" role="presentation">
+            <button type="button" className="item-popup-backdrop" onClick={() => setIsOpenVaultChoicePopupOpen(false)} aria-label="Close Open My Vault choice" />
+            <section className="item-popup-card open-vault-choice-popup-card" role="dialog" aria-modal="true" aria-labelledby="open-vault-choice-title">
+              <header className="item-popup-header">
+                <div>
+                  <p className="eyebrow">Vault access</p>
+                  <h2 id="open-vault-choice-title"><Unlock size={21} /> Open My Vault</h2>
+                </div>
+                <button type="button" className="icon-button" onClick={() => setIsOpenVaultChoicePopupOpen(false)} aria-label="Close"><X size={18} /></button>
+              </header>
+              <div className="item-popup-body open-vault-choice-popup-body">
+                <p className="open-vault-choice-intro">Do you already have a Password-Encrypt account?</p>
+                <div className="open-vault-choice-options">
+                  <button type="button" className="open-vault-choice-option existing" onClick={continueExistingCustomerToVault}>
+                    <span className="open-vault-choice-icon"><Unlock size={22} /></span>
+                    <span><strong>Yes — I’m an existing customer</strong><small>Continue to your existing vault. You may be asked to verify this device.</small></span>
+                    <ChevronRight size={20} />
+                  </button>
+                  <button type="button" className="open-vault-choice-option new" onClick={startNewCustomerFromVaultChoice}>
+                    <span className="open-vault-choice-icon"><UserRoundCheck size={22} /></span>
+                    <span><strong>No — I’m new to Password-Encrypt</strong><small>Start your free trial and create a new Password-Encrypt account.</small></span>
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+              </div>
+              <footer className="item-popup-footer">
+                <button type="button" className="secondary-button" onClick={() => setIsOpenVaultChoicePopupOpen(false)}>Cancel</button>
+              </footer>
+            </section>
+          </div>
+        )}
+
         {isCreateAccountPopupOpen && (
           <div className="item-popup-layer create-account-popup-layer" role="dialog" aria-modal="true" aria-label="Create Password-Encrypt account">
             <div className="item-popup-backdrop" onClick={closeCreateAccountPopup} />
@@ -6730,7 +6788,7 @@ function App() {
                       <span><strong>Trial ends</strong>{isFounderPlan(bootstrap) ? 'No expiry' : formatAccountDate(landingSignup.trialEndsAt || bootstrap.trialEndsAt, true)}</span>
                     </div>
                     {!landingSignup.existingAccount && Number(landingSignup.trialDays || 0) > 0 && <div className="trial-ready-card"><CalendarClock size={20} /><span><strong>{landingSignup.trialDays}-day trial active</strong><small>Ends {formatAccountDate(landingSignup.trialEndsAt, true)}.</small></span></div>}
-                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>Next, create your local encrypted vault and choose your private master password.</span></div>
+                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>{landingSignup.existingAccount ? 'Next, open your existing encrypted vault on this device using its existing master password.' : 'Next, create your local encrypted vault and choose your private master password.'}</span></div>
                     {landingSignup.welcomeEmailSent && <p className="welcome-email-note"><Mail size={16} /> A welcome email has been sent.</p>}
                   </div>
                 )}
@@ -6803,6 +6861,13 @@ function App() {
               </div>
               {passwordCheckNotice && <div className="password-check-login-notice" role="status"><AlertTriangle size={18} /><span><strong>Password check required</strong><small>{passwordCheckNotice}</small></span></div>}
             </>
+          ) : existingCustomerEntry ? (
+            <>
+              <p className="intro">Open your existing Password-Encrypt vault on this device. Verify your account, then enter the master password for your existing vault.</p>
+              <div className="create-vault-entry-actions existing-vault-entry-actions">
+                <button type="button" className="primary-button" onClick={() => { setCreateMode(false); setIsCreateVaultPopupOpen(true); }}><RefreshCw size={17} /> Open Existing Vault</button>
+              </div>
+            </>
           ) : (
             <>
               <p className="intro">Create your encrypted vault on this device, or verify your account to open an existing secure backup.</p>
@@ -6827,8 +6892,8 @@ function App() {
             <section className="item-popup-card create-account-popup-card create-vault-popup-card" role="dialog" aria-modal="true" aria-labelledby="create-vault-title">
               <header className="item-popup-header">
                 <div>
-                  <p className="eyebrow">Secure setup</p>
-                  <h2 id="create-vault-title"><ShieldCheck size={21} /> Create your vault</h2>
+                  <p className="eyebrow">{createMode ? 'Secure setup' : 'Existing customer'}</p>
+                  <h2 id="create-vault-title"><ShieldCheck size={21} /> {createMode ? 'Create your vault' : 'Open your existing vault'}</h2>
                 </div>
                 <button type="button" className="icon-button" onClick={() => setIsCreateVaultPopupOpen(false)} aria-label="Close create vault popup"><X size={18} /></button>
               </header>
@@ -6836,7 +6901,7 @@ function App() {
               <div className="item-popup-body create-account-popup-body create-vault-popup-body" role="form" autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other">
                 <div className="create-account-step">
                   <h3>Account details</h3>
-                  <p>Your email and mobile number help verify this device. Your master password is still the primary vault encryption secret. Secure device unlock, if you enable it later, works only from a device you have deliberately set up.</p>
+                  <p>{createMode ? 'Your email and mobile number help verify this device. Your master password is still the primary vault encryption secret. Secure device unlock, if you enable it later, works only from a device you have deliberately set up.' : 'Verify the contact details already linked to your Password-Encrypt account. This does not create a new vault or a new account.'}</p>
                   <label>Mobile number</label>
                   <div className="phone-combo-field">
                     <CountryPicker countryCode={bootstrap.phoneCountryCode || '+254'} countryIso={bootstrap.phoneCountryIso || 'ke'} onChange={(country) => setBootstrap({ ...bootstrap, phoneCountryCode: country.code, phoneCountryIso: country.iso, phoneE164: buildPhoneE164(country.code, bootstrap.phoneNumber) })} />
@@ -6862,13 +6927,13 @@ function App() {
                       <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
                       <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
                     </div>
-                    {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>Account verified. Now set your master password.</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>Master password</button></div>}
+                    {otpTest.verified && <div className="otp-next-step"><ShieldCheck size={16} /><span>{createMode ? 'Account verified. Now set your master password.' : 'Account verified. Enter the existing master password for this vault.'}</span><button type="button" className="mini-inline-button" onClick={focusMasterPassword}>{createMode ? 'Master password' : 'Existing password'}</button></div>}
                   </div>
                 </div>
 
                 <div className="create-account-step">
-                  <h3>Master password</h3>
-                  <p>Choose a strong master password you can remember. No server-side copy is stored by Password-Encrypt, so support cannot recover or reset it if forgotten.</p>
+                  <h3>{createMode ? 'Master password' : 'Existing master password'}</h3>
+                  <p>{createMode ? 'Choose a strong master password you can remember. No server-side copy is stored by Password-Encrypt, so support cannot recover or reset it if forgotten.' : 'Enter the master password for your existing vault. Password-Encrypt cannot recover or reset it.'}</p>
                   <label>Master vault password<input id="master-password-input" name="vault-setup-local-decryption-key" type="password" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter your master password" /></label>
                   {createMode && (
                     <>
@@ -6999,9 +7064,8 @@ function App() {
   ].filter(Boolean);
 
   const emergencyAcceptedStageOptions = [
-    { value: 'check_status', label: 'Check for Emergency Access request' },
-    { value: 'resend_request_link', label: 'Resend Emergency Access link' },
-    emergencyDraft.invitationUrl && { value: 'copy_request_link', label: 'Copy Emergency Access link' }
+    { value: 'resend_request_link', label: 'Resend access link' },
+    emergencyDraft.invitationUrl && { value: 'copy_request_link', label: 'Copy access link' }
   ].filter(Boolean);
 
   const emergencyWaitingStageOptions = [
@@ -7886,7 +7950,7 @@ function App() {
                       <span className="emergency-flow-step-number">4</span>
                       <span className="emergency-flow-stage-copy"><strong>Trusted person accepts</strong><small>{emergencyInvitationNeedsAttention ? 'The invitation needs attention before this flow can continue.' : emergencyInvitationAccepted ? 'Accepted. Their separate Emergency Access link has already been emailed for future use.' : 'They accept from their secure email. This page checks automatically while open; acceptance still gives them no vault access.'}</small></span>
                       <span className="emergency-flow-stage-action">
-                        {emergencyInvitationWasSent && !emergencyInvitationAccepted ? <CustomSelect value="" placeholder="Invitation actions" ariaLabel="Trusted person invitation actions" options={emergencyInvitationStageOptions} onChange={runEmergencyFlowAction} disabled={emergencyInviteState.status === 'checking'} /> : emergencyInvitationAccepted ? <span className="emergency-flow-complete-label">Accepted</span> : <span className="emergency-flow-waiting-label">Waiting for Step 3</span>}
+                        {emergencyInvitationWasSent && !emergencyInvitationAccepted ? <CustomSelect value="" placeholder="Invitation actions" ariaLabel="Trusted person invitation actions" className="emergency-flow-action-select" menuClassName="emergency-flow-action-menu" options={emergencyInvitationStageOptions} onChange={runEmergencyFlowAction} disabled={emergencyInviteState.status === 'checking'} /> : emergencyInvitationAccepted ? <span className="emergency-flow-complete-label">Accepted</span> : <span className="emergency-flow-waiting-label">Waiting for Step 3</span>}
                       </span>
                       <span className={`emergency-flow-stage-status ${emergencyInvitationAccepted ? 'done' : ''}`}>{emergencyInvitationAccepted ? <Check size={29} strokeWidth={3} /> : <span>4</span>}</span>
                     </div>
@@ -7902,7 +7966,7 @@ function App() {
                       <span className="emergency-flow-step-number">5</span>
                       <span className="emergency-flow-stage-copy"><strong>Emergency Access is requested</strong><small>Your trusted person uses the secure link they saved only if emergency access is genuinely needed.</small></span>
                       <span className="emergency-flow-stage-action">
-                        {emergencyInvitationAccepted && !emergencyRequestWasMade ? <CustomSelect value="" placeholder="Emergency link actions" ariaLabel="Emergency Access link actions" options={emergencyAcceptedStageOptions} onChange={runEmergencyFlowAction} /> : emergencyRequestWasMade ? <span className="emergency-flow-complete-label">Request received</span> : <span className="emergency-flow-waiting-label">Waiting for Step 4</span>}
+                        {emergencyInvitationAccepted && !emergencyRequestWasMade ? <CustomSelect value="" placeholder="Emergency link actions" ariaLabel="Emergency Access link actions" className="emergency-flow-action-select" menuClassName="emergency-flow-action-menu" options={emergencyAcceptedStageOptions} onChange={runEmergencyFlowAction} /> : emergencyRequestWasMade ? <span className="emergency-flow-complete-label">Request received</span> : <span className="emergency-flow-waiting-label">Waiting for Step 4</span>}
                       </span>
                       <span className={`emergency-flow-stage-status ${emergencyRequestWasMade ? 'done' : ''}`}>{emergencyRequestWasMade ? <Check size={29} strokeWidth={3} /> : <span>5</span>}</span>
                     </div>
@@ -7913,7 +7977,7 @@ function App() {
                       <span className="emergency-flow-step-number">6</span>
                       <span className="emergency-flow-stage-copy"><strong>Waiting period completes</strong><small>{isEmergencyReleaseReady ? 'The waiting period completed without cancellation and the prepared package is available to your trusted person.' : hasActiveEmergencyRequest ? `The waiting period is active. You can still cancel before ${emergencyDraft.requestWaitingEndsAt ? formatAppDate(emergencyDraft.requestWaitingEndsAt, true) : 'it ends'}.` : 'Nothing is released unless an Emergency Access request reaches this step. Once the waiting period ends, Password-Encrypt checks automatically and emails the final package link.'}</small></span>
                       <span className="emergency-flow-stage-action">
-                        {hasActiveEmergencyRequest ? <CustomSelect value="" placeholder="Waiting-period actions" ariaLabel="Waiting period actions" options={emergencyWaitingStageOptions} onChange={runEmergencyFlowAction} /> : isEmergencyReleaseReady ? <span className="emergency-flow-complete-label">Package released</span> : <span className="emergency-flow-waiting-label">Waiting for Step 5</span>}
+                        {hasActiveEmergencyRequest ? <CustomSelect value="" placeholder="Waiting-period actions" ariaLabel="Waiting period actions" className="emergency-flow-action-select" menuClassName="emergency-flow-action-menu" options={emergencyWaitingStageOptions} onChange={runEmergencyFlowAction} /> : isEmergencyReleaseReady ? <span className="emergency-flow-complete-label">Package released</span> : <span className="emergency-flow-waiting-label">Waiting for Step 5</span>}
                       </span>
                       <span className={`emergency-flow-stage-status ${isEmergencyReleaseReady ? 'done' : ''}`}>{isEmergencyReleaseReady ? <Check size={29} strokeWidth={3} /> : <span>6</span>}</span>
                     </div>
@@ -7936,7 +8000,7 @@ function App() {
                   <details className="settings-drilldown emergency-flow-manage">
                     <summary><span className="settings-directory-icon"><Settings size={21} /></span><span className="settings-directory-copy"><strong>Manage or reset this flow</strong><small>Use this only for maintenance actions such as returning the entire Trusted Person flow to zero.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
-                      {emergencyManagementOptions.length ? <div className="emergency-action-select-row"><CustomSelect value="" placeholder="Manage flow" ariaLabel="Manage Trusted Person flow" options={emergencyManagementOptions} onChange={runEmergencyFlowAction} disabled={emergencyInviteState.status === 'resetting'} /></div> : <p className="emergency-flow-audit-empty">There are no flow maintenance actions available yet.</p>}
+                      {emergencyManagementOptions.length ? <div className="emergency-action-select-row"><CustomSelect value="" placeholder="Manage flow" ariaLabel="Manage Trusted Person flow" className="emergency-flow-action-select" menuClassName="emergency-flow-action-menu" options={emergencyManagementOptions} onChange={runEmergencyFlowAction} disabled={emergencyInviteState.status === 'resetting'} /></div> : <p className="emergency-flow-audit-empty">There are no flow maintenance actions available yet.</p>}
                     </div>
                   </details>
                 </div>
