@@ -84,6 +84,8 @@ function emailDefinition(type, context = {}) {
   const amount = formatMoney(context.amountMinor, context.currency);
   const support = 'info@zippyweb.uk';
   const billingUrl = `${baseUrl()}/vault`;
+  const accountEmail = escapeHtml(context.accountEmail || '');
+  const accountPhone = escapeHtml(context.accountPhone || '');
   const definitions = {
     welcome_trial_started: {
       subject: 'Welcome to Password-Encrypt — your trial has started',
@@ -91,10 +93,16 @@ function emailDefinition(type, context = {}) {
       paragraphs: [
         `Hello ${displayName},`,
         `Your <strong>${accountName}</strong> account is ready and your ${planName} trial has started${trialEnd ? ` until ${escapeHtml(trialEnd)}` : ''}.`,
-        'You can now create or open your private encrypted vault and use the account features included in your plan.',
-        'Password-Encrypt does not store a server-side copy of your master password or send it by email. A paid subscription begins only if you deliberately complete Stripe Checkout.'
-      ],
-      button: { label: 'Open Password-Encrypt', url: billingUrl }
+        '<strong>Your Password-Encrypt account details</strong>',
+        accountEmail ? `Login email: <strong>${accountEmail}</strong>` : '',
+        accountPhone ? `Mobile number: <strong>${accountPhone}</strong>` : '',
+        `Vault name: <strong>${accountName}</strong>`,
+        `Plan: <strong>${planName}</strong>`,
+        'Next, create your encrypted vault and choose the master password only you know. Your master password is never included in email and Password-Encrypt cannot recover it for you.',
+        'Account verification currently uses your email address. Keep this welcome email as a record of the contact details linked to your account.',
+        'No credit card details were taken for your free trial. A paid subscription begins only if you deliberately purchase a subscription later.'
+      ].filter(Boolean),
+      button: { label: 'Password-Encrypt website', url: baseUrl() }
     },
     welcome_account_activated: {
       subject: 'Welcome to Password-Encrypt',
@@ -102,10 +110,15 @@ function emailDefinition(type, context = {}) {
       paragraphs: [
         `Hello ${displayName},`,
         `Your <strong>${accountName}</strong> account is active on the ${planName} plan.`,
-        'You can now create or open your private encrypted vault and use the account features included in your plan.',
-        'Password-Encrypt does not store a server-side copy of your master password or send it by email. If you enable Secure device unlock, a separately protected wrapped copy is kept only on that device.'
-      ],
-      button: { label: 'Open Password-Encrypt', url: billingUrl }
+        '<strong>Your Password-Encrypt account details</strong>',
+        accountEmail ? `Login email: <strong>${accountEmail}</strong>` : '',
+        accountPhone ? `Mobile number: <strong>${accountPhone}</strong>` : '',
+        `Vault name: <strong>${accountName}</strong>`,
+        `Plan: <strong>${planName}</strong>`,
+        'Next, create your encrypted vault and choose the master password only you know. Your master password is never included in email and Password-Encrypt cannot recover it for you.',
+        'Account verification currently uses your email address. Keep this welcome email as a record of the contact details linked to your account.'
+      ].filter(Boolean),
+      button: { label: 'Password-Encrypt website', url: baseUrl() }
     },
     trial_started: {
       subject: 'Your Password-Encrypt trial has started',
@@ -345,8 +358,8 @@ export async function loadCustomerEmailContext(tenantId, { userId = '' } = {}) {
   const tenant = tenantRows?.[0] || null;
   const subscription = subscriptionRows?.[0] || null;
   const userQuery = userId
-    ? `select=id,tenant_id,email,display_name,email_verified,first_tenant_owner,welcome_email_sent_at,onboarding_completed_at,created_at&id=${eq(userId)}&tenant_id=${eq(tenantId)}&limit=1`
-    : `select=id,tenant_id,email,display_name,email_verified,first_tenant_owner,welcome_email_sent_at,onboarding_completed_at,created_at&tenant_id=${eq(tenantId)}&order=first_tenant_owner.desc,created_at.asc&limit=5`;
+    ? `select=id,tenant_id,email,phone_e164,display_name,email_verified,first_tenant_owner,welcome_email_sent_at,onboarding_completed_at,created_at&id=${eq(userId)}&tenant_id=${eq(tenantId)}&limit=1`
+    : `select=id,tenant_id,email,phone_e164,display_name,email_verified,first_tenant_owner,welcome_email_sent_at,onboarding_completed_at,created_at&tenant_id=${eq(tenantId)}&order=first_tenant_owner.desc,created_at.asc&limit=5`;
   const userRows = await selectRows('users', userQuery).catch(() => []);
   const user = userRows?.find((row) => row.email && row.email_verified) || userRows?.find((row) => row.email) || userRows?.[0] || null;
   const planCode = subscription?.plan_code || tenant?.plan_code || '';
@@ -357,6 +370,8 @@ export async function loadCustomerEmailContext(tenantId, { userId = '' } = {}) {
 function mergedContext(loaded, context = {}) {
   return {
     displayName: loaded?.user?.display_name || '',
+    accountEmail: loaded?.user?.email || '',
+    accountPhone: loaded?.user?.phone_e164 || '',
     accountName: loaded?.tenant?.account_name || loaded?.tenant?.name || 'Password-Encrypt',
     planCode: loaded?.subscription?.plan_code || loaded?.tenant?.plan_code || '',
     planName: loaded?.plan?.display_name || loaded?.subscription?.plan_code || loaded?.tenant?.plan_code || 'Password-Encrypt',

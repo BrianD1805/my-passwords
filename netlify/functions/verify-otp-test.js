@@ -27,7 +27,7 @@ export async function handler(event) {
     const now = challenge.verified_at || new Date().toISOString();
     const isEmail = String(challenge.delivery_channel || '').includes('email');
 
-    const users = await selectRows('users', `select=id,tenant_id,role,status,email,display_name,email_verified,phone_verified,welcome_email_sent_at&id=${eq(challenge.user_id)}&tenant_id=${eq(challenge.tenant_id)}&limit=1`);
+    const users = await selectRows('users', `select=id,tenant_id,role,status,email,phone_e164,display_name,email_verified,phone_verified,welcome_email_sent_at&id=${eq(challenge.user_id)}&tenant_id=${eq(challenge.tenant_id)}&limit=1`);
     const tenants = await selectRows('tenants', `select=id,account_name,name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at,onboarding_completed_at&id=${eq(challenge.tenant_id)}&limit=1`);
     const user = users?.[0];
     const tenant = tenants?.[0];
@@ -118,6 +118,8 @@ export async function handler(event) {
         idempotencyKey: `welcome:${tenant.id}`,
         context: {
           displayName: user.display_name,
+          accountEmail: user.email || '',
+          accountPhone: user.phone_e164 || '',
           accountName: tenant.account_name || tenant.name || 'My Private Vault',
           planName,
           trialEndsAt

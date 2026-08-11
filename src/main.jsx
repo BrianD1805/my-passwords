@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-0.055a';
+const VERSION = 'Password-Encrypt Ver-0.055b';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -5457,7 +5457,7 @@ function App() {
   }
 
   function finishLandingOnboarding() {
-    setIsCreateAccountPopupOpen(false);
+    const target = landingSignup.existingAccount ? '/vault?entry=existing' : '/vault?entry=onboarding';
     if (!landingSignup.existingAccount) {
       setOnboardingVaultDraft({
         email: bootstrap.email || landingAccountDraft.email || '',
@@ -5466,7 +5466,10 @@ function App() {
         phoneNumber: bootstrap.phoneNumber || landingAccountDraft.phoneNumber || ''
       });
     }
-    window.location.assign(landingSignup.existingAccount ? '/vault?entry=existing' : '/vault?entry=onboarding');
+    // Change the SPA route before closing the account-setup popup so React's next
+    // render goes directly to vault setup instead of briefly revealing the landing page.
+    window.history.replaceState({ onboarding: true }, '', target);
+    setIsCreateAccountPopupOpen(false);
   }
 
 
@@ -6823,9 +6826,6 @@ function App() {
                       <span><strong>Plan</strong>{landingSignup.planName || planDisplayName(landingAccountDraft.planCode)}</span>
                     </div>
                     {landingSignup.message && <div className={`onboarding-status-message ${landingSignup.status}`}>{landingSignup.message}</div>}
-                    <div className="recovery-channel-switch onboarding-verification-channel email-only-verification" aria-label="Email account verification">
-                      <button type="button" className="active" onClick={() => chooseLandingOtpChannel('email')} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><Mail size={17} /> Email</button>
-                    </div>
                     <div className={`landing-otp-card ${landingOtp.status}`}>
                       <div className="landing-otp-heading"><Mail size={19} /><span><strong>Email verification code</strong><small>The code expires after 10 minutes.</small></span></div>
                       {landingOtp.status === 'idle' || landingOtp.status === 'error' ? (
@@ -6855,7 +6855,7 @@ function App() {
                       <span><strong>Trial ends</strong>{isFounderPlan(bootstrap) ? 'No expiry' : formatAccountDate(landingSignup.trialEndsAt || bootstrap.trialEndsAt, true)}</span>
                     </div>
                     {!landingSignup.existingAccount && Number(landingSignup.trialDays || 0) > 0 && <div className="trial-ready-card"><CalendarClock size={20} /><span><strong>{landingSignup.trialDays}-day trial active</strong><small>Ends {formatAccountDate(landingSignup.trialEndsAt, true)}.</small></span></div>}
-                    <div className="saas-inline-note onboarding-next-step-note"><ShieldCheck size={16} /><span>{landingSignup.existingAccount ? 'This is an existing account. Next, open its existing encrypted vault using the master password you already use.' : 'Step 2 of 2 is next: create your encrypted vault on a separate vault-setup screen and choose the master password only you know.'}</span></div>
+                    <div className="saas-inline-note onboarding-next-step-note"><ShieldCheck size={16} /><span>{landingSignup.existingAccount ? 'This is an existing account. Next, open its existing encrypted vault using the master password you already use.' : 'Step 2 of 2 is next: create your encrypted vault and choose the master password only you know.'}</span></div>
                   </div>
                 )}
               </div>

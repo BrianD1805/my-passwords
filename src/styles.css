@@ -16232,7 +16232,7 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   }
 }
 
-/* Password-Encrypt Ver-0.055a — clearer two-part onboarding and email-only verification UI. */
+/* Password-Encrypt Ver-0.055b — clearer two-part onboarding and email-only verification UI. */
 .email-only-verification {
   grid-template-columns: minmax(0, 1fr) !important;
 }
