@@ -16610,7 +16610,7 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
 }
 
 
-/* Password-Encrypt Ver-0.055D — explicit account/vault mismatch warning. */
+/* Password-Encrypt Ver-1.000 — explicit account/vault mismatch warning. */
 .onboarding-account-mismatch-warning > span {
   min-width: 0;
   display: grid;
@@ -16629,7 +16629,7 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   color: inherit;
 }
 
-/* Password-Encrypt Ver-0.055D — explicit account/vault mismatch warning. */
+/* Password-Encrypt Ver-1.000 — explicit account/vault mismatch warning. */
 .onboarding-account-mismatch-warning > span {
   min-width: 0;
   display: grid;
@@ -16646,4 +16646,10 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   font-size: 14px;
   line-height: 1.45;
   color: inherit;
+}
+
+/* Password-Encrypt Ver-1.000 — onboarding master-password fields are app secrets, not browser login credentials. */
+.onboarding-secret-mask {
+  -webkit-text-security: disc;
+  text-security: disc;
 }

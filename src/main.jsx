@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-0.055D';
+const VERSION = 'Password-Encrypt Ver-1.000';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -2295,6 +2295,7 @@ function App() {
   const [masterPasswordFieldArmed, setMasterPasswordFieldArmed] = useState(false);
   const [passwordCheckNotice, setPasswordCheckNotice] = useState('');
   const masterPasswordInputRef = useRef(null);
+  const onboardingSecretInputType = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('-webkit-text-security', 'disc') ? 'text' : 'password';
   const [hasLocalVault, setHasLocalVault] = useState(() => Boolean(readStoredVault()));
   const [createMode, setCreateMode] = useState(() => !Boolean(readStoredVault()));
   const [items, setItems] = useState([]);
@@ -4245,25 +4246,20 @@ function App() {
     await setupBiometricUnlockForPassword(masterPassword);
   }
 
-  async function handleBiometricIconAction() {
+  async function handleBiometricIconAction(event) {
+    event?.stopPropagation?.();
+    masterPasswordInputRef.current?.blur?.();
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    setSuppressUnlockAutofocus(true);
     if (!featureIncluded('secureDeviceUnlock')) {
       showEntitlementUpgrade('secureDeviceUnlock', 'Secure device unlock is not included in the current plan. Your master password will continue to open the local encrypted vault.');
       return;
     }
-    if (biometricUnlock) {
-      await unlockWithBiometric();
+    if (!biometricUnlock) {
+      showVerifyOverlay('error', 'Secure device unlock is not set up', 'Unlock with your master password, then open Settings → Secure device unlock to set this device up. The key icon is only used to open your device security prompt.');
       return;
     }
-    if (!isBiometricUnlockSupported()) {
-      showMessage('Secure device unlock is not supported on this browser or device.');
-      return;
-    }
-    if (!masterPassword || masterPassword.length < 8) {
-      showMessage('Enter password first, then tap the secure key icon to set up quick unlock on this device.');
-      focusMasterPassword();
-      return;
-    }
-    await openVaultWithPassword(masterPassword, { setupBiometricAfterPassword: true });
+    await unlockWithBiometric();
   }
 
   async function disableBiometricUnlock() {
@@ -4314,7 +4310,7 @@ function App() {
       const usedRecord = markSecureDeviceQuickUnlockUsed(record);
       if (usedRecord) setBiometricUnlock(usedRecord);
     } catch (error) {
-      showVerifyOverlay('error', 'Secure device unlock failed', 'Use your master password or try secure device unlock again.', { focusMasterPassword: true });
+      showVerifyOverlay('error', 'Secure device unlock failed', 'Use your master password or try secure device unlock again.', { focusMasterPassword: false });
       showMessage('Secure device unlock failed. Use your master password or try again.', 'warning');
     }
   }
@@ -5776,6 +5772,8 @@ function App() {
       });
     }
     setOnboardingSecretFieldsArmed({ master: false, confirm: false });
+    setMessage('');
+    setToasts([]);
     // Change the SPA route before closing the account-setup popup so React's next
     // render goes directly to vault setup instead of briefly revealing the landing page.
     window.history.replaceState({ onboarding: true }, '', target);
@@ -7172,14 +7170,14 @@ function App() {
                   <div className="create-account-step">
                     <h3>Your account details</h3>
                     <p>Enter the details you want linked to your Password-Encrypt account. You will create your private master password after verification.</p>
-                    <label>Display name<input value={landingAccountDraft.displayName} onChange={(e) => updateLandingDraft({ displayName: e.target.value })} placeholder="e.g. Alex" /></label>
-                    <label>Email address<input type="email" value={landingAccountDraft.email} onChange={(e) => updateLandingDraft({ email: e.target.value })} placeholder="you@example.com" /></label>
+                    <label>Display name<input autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" value={landingAccountDraft.displayName} onChange={(e) => updateLandingDraft({ displayName: e.target.value })} placeholder="e.g. Alex" /></label>
+                    <label>Email address<input type="email" autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" value={landingAccountDraft.email} onChange={(e) => updateLandingDraft({ email: e.target.value })} placeholder="you@example.com" /></label>
                     <label>Mobile number</label>
                     <div className="phone-combo-field">
                       <CountryPicker countryCode={landingAccountDraft.phoneCountryCode || '+254'} countryIso={landingAccountDraft.phoneCountryIso || 'ke'} onChange={(country) => updateLandingDraft({ phoneCountryCode: country.code, phoneCountryIso: country.iso })} />
-                      <input inputMode="tel" value={landingAccountDraft.phoneNumber || ''} onChange={(e) => updateLandingDraft({ phoneNumber: e.target.value })} placeholder="712345678" />
+                      <input inputMode="tel" autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" value={landingAccountDraft.phoneNumber || ''} onChange={(e) => updateLandingDraft({ phoneNumber: e.target.value })} placeholder="712345678" />
                     </div>
-                    <label>Vault name<input value={landingAccountDraft.accountName} onChange={(e) => updateLandingDraft({ accountName: e.target.value })} placeholder="e.g. My Private Vault" /></label>
+                    <label>Vault name<input autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" value={landingAccountDraft.accountName} onChange={(e) => updateLandingDraft({ accountName: e.target.value })} placeholder="e.g. My Private Vault" /></label>
                     <div className="legal-consent-row">
                       <input id="signup-legal-consent" type="checkbox" checked={Boolean(landingAccountDraft.legalAccepted)} onChange={(event) => updateLandingDraft({ legalAccepted: event.target.checked })} aria-labelledby="signup-legal-consent-text" />
                       <span id="signup-legal-consent-text">I have read and agree to your <button type="button" className="legal-inline-link" onClick={() => openSignupLegalDocument('terms')}>Terms of Service</button> and <button type="button" className="legal-inline-link" onClick={() => openSignupLegalDocument('privacy')}>Privacy Policy</button>.</span>
@@ -7308,19 +7306,19 @@ function App() {
           <form className="vault-onboarding-form" onSubmit={createVaultFromOnboarding} autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other">
             <div className="vault-onboarding-section">
               <div className="vault-onboarding-section-heading"><UserRoundCheck size={21} /><div><strong>Confirm your account details</strong><small>Use the same email and mobile number you entered during account setup.</small></div></div>
-              <label>Email address<input type="email" value={onboardingVaultDraft.email || ''} onChange={(event) => setOnboardingVaultDraft((current) => ({ ...current, email: event.target.value }))} placeholder="you@example.com" /></label>
+              <label>Email address<input type="email" autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" value={onboardingVaultDraft.email || ''} onChange={(event) => setOnboardingVaultDraft((current) => ({ ...current, email: event.target.value }))} placeholder="you@example.com" /></label>
               <label>Mobile number</label>
               <div className="phone-combo-field">
                 <CountryPicker countryCode={onboardingVaultDraft.phoneCountryCode || '+254'} countryIso={onboardingVaultDraft.phoneCountryIso || 'ke'} onChange={(country) => setOnboardingVaultDraft((current) => ({ ...current, phoneCountryCode: country.code, phoneCountryIso: country.iso }))} />
-                <input inputMode="tel" value={onboardingVaultDraft.phoneNumber || ''} onChange={(event) => setOnboardingVaultDraft((current) => ({ ...current, phoneNumber: event.target.value }))} placeholder="712345678" />
+                <input inputMode="tel" autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" value={onboardingVaultDraft.phoneNumber || ''} onChange={(event) => setOnboardingVaultDraft((current) => ({ ...current, phoneNumber: event.target.value }))} placeholder="712345678" />
               </div>
               {onboardingPhone && <small className="vault-onboarding-contact-preview">Account mobile: {maskPhone(onboardingPhone)}</small>}
             </div>
 
             <div className="vault-onboarding-section">
               <div className="vault-onboarding-section-heading"><KeyRound size={21} /><div><strong>Create your master password</strong><small>This password encrypts your vault. Password-Encrypt cannot recover or reset it.</small></div></div>
-              <label>Master password<input id="onboarding-master-password" name="vault-onboarding-secret-entry" type="password" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!onboardingSecretFieldsArmed.master} onPointerDown={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, master: true }))} onFocus={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, master: true }))} value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} placeholder="Create your master password" /></label>
-              <label>Confirm master password<input name="vault-onboarding-secret-confirmation-entry" type="password" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!onboardingSecretFieldsArmed.confirm} onPointerDown={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, confirm: true }))} onFocus={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, confirm: true }))} value={confirmMasterPassword} onChange={(event) => setConfirmMasterPassword(event.target.value)} placeholder="Type the same password again" /></label>
+              <label>Master password<input id="onboarding-master-password" className="onboarding-secret-mask" type={onboardingSecretInputType} inputMode="text" autoComplete="off" aria-autocomplete="none" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!onboardingSecretFieldsArmed.master} onPointerDown={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, master: true }))} onFocus={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, master: true }))} value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} placeholder="Create your master password" /></label>
+              <label>Confirm master password<input className="onboarding-secret-mask" type={onboardingSecretInputType} inputMode="text" autoComplete="off" aria-autocomplete="none" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!onboardingSecretFieldsArmed.confirm} onPointerDown={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, confirm: true }))} onFocus={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, confirm: true }))} value={confirmMasterPassword} onChange={(event) => setConfirmMasterPassword(event.target.value)} placeholder="Type the same password again" /></label>
               <div className="master-password-boundary-note compact"><Lock size={18} /><span><strong>Keep this password somewhere safe</strong><small>It is the primary secret that decrypts your vault and cannot be recovered by support.</small></span></div>
             </div>
 
@@ -7402,11 +7400,11 @@ function App() {
               <p className="intro">Unlock your private vault with your master password.</p>
               <div className="unlock-form" role="form" onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); unlockVault(event); } }} autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other">
                 <div className="unlock-password-and-biometric-row">
-                  <div className={`unlock-password-field ${hasLocalVault && !createMode && biometricStatus.supported && featureIncluded('secureDeviceUnlock') ? 'has-secure-device-key' : ''}`}>
+                  <div className={`unlock-password-field ${hasLocalVault && !createMode && biometricUnlock && biometricStatus.supported && featureIncluded('secureDeviceUnlock') ? 'has-secure-device-key' : ''}`}>
                     <input ref={masterPasswordInputRef} id="master-password-input" name="vault-local-decryption-key" type={showUnlockPassword ? 'text' : 'password'} aria-label="Master vault password" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!masterPasswordFieldArmed} onPointerDown={armMasterPasswordField} onFocus={armMasterPasswordField} value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} placeholder="Enter Password" />
                     <button type="button" className="unlock-password-toggle" onClick={() => setShowUnlockPassword((current) => !current)} aria-label={showUnlockPassword ? 'Hide master password' : 'Show master password'} title={showUnlockPassword ? 'Hide password' : 'Show password'}>{showUnlockPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-                    {hasLocalVault && !createMode && biometricStatus.supported && featureIncluded('secureDeviceUnlock') && (
-                      <button type="button" className={`unlock-biometric-icon-button ${biometricUnlock ? 'enabled' : 'setup'}`} onClick={handleBiometricIconAction} disabled={biometricStatus.state === 'setting-up'} aria-label={biometricUnlock ? 'Open with secure device unlock' : 'Set up secure device unlock'} title={biometricUnlock ? 'Open with secure device unlock' : 'Enter password, then tap the key to set up secure device unlock'}>
+                    {hasLocalVault && !createMode && biometricUnlock && biometricStatus.supported && featureIncluded('secureDeviceUnlock') && (
+                      <button type="button" className="unlock-biometric-icon-button enabled" onPointerDown={(event) => { event.stopPropagation(); masterPasswordInputRef.current?.blur?.(); }} onClick={handleBiometricIconAction} aria-label="Open device unlock" title="Open device unlock">
                         <KeyRound size={23} strokeWidth={1.25} />
                       </button>
                     )}
@@ -8208,14 +8206,15 @@ function App() {
               {!featureIncluded('secureDeviceUnlock') && <div className="plan-feature-unavailable"><KeyRound size={21} /><span><strong>Secure device unlock is not included</strong><small>Your master password still opens the encrypted vault normally. Upgrade or ask Admin for an entitlement override to enable quick unlock on this device.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('secureDeviceUnlock')}>Review plan</button></div>}
               <section className={`biometric-settings-card settings-inner-card ${biometricUnlock ? 'enabled' : ''} ${!featureIncluded('secureDeviceUnlock') ? 'feature-disabled' : ''}`}>
                 <div className="vault-security-info-heading"><KeyRound size={19} /><strong>Secure device unlock on this device</strong></div>
-                <p>{!featureIncluded('secureDeviceUnlock') ? 'Quick unlock is unavailable on the current plan. The master password remains the secure way to open this device’s local encrypted vault.' : biometricStatus.supported ? 'Use the secure key icon beside the password field on the login screen. Your phone or browser may offer a PIN, fingerprint, face unlock, passkey or device lock. Enter your password once and tap the key icon to set this device up; after that, the icon can open your local vault quickly on this device.' : 'This browser or device does not support secure device unlock for this PWA.'}</p>
+                <p>{!featureIncluded('secureDeviceUnlock') ? 'Quick unlock is unavailable on the current plan. The master password remains the secure way to open this device’s local encrypted vault.' : biometricStatus.supported ? (biometricUnlock ? 'Secure device unlock is enabled. On the vault login screen, the key icon opens your device security prompt only; your phone or computer handles any PIN, fingerprint, face unlock or passkey input.' : 'Set up Secure device unlock here after opening the vault with your master password. After setup, the key icon on the login screen opens your device security prompt only.') : 'This browser or device does not support secure device unlock for this PWA.'}</p>
                 <div className="biometric-status-grid">
-                  <span><strong>Status</strong>{!featureIncluded('secureDeviceUnlock') ? 'Not included in current plan' : biometricUnlock ? 'Enabled on this device' : (biometricStatus.supported ? 'Set up from login icon' : 'Not available')}</span>
+                  <span><strong>Status</strong>{!featureIncluded('secureDeviceUnlock') ? 'Not included in current plan' : biometricUnlock ? 'Enabled on this device' : (biometricStatus.supported ? 'Ready to set up' : 'Not available')}</span>
                   <span><strong>Device method</strong>{biometricStatus.label}</span>
                   <span><strong>Scope</strong>This device only</span>
                   <span><strong>Password check</strong>Required every 14 days or 10 quick unlocks</span>
                 </div>
                 <div className="biometric-actions">
+                  {!biometricUnlock && biometricStatus.supported && featureIncluded('secureDeviceUnlock') && <button type="button" className="secondary-button" onClick={enableBiometricUnlock}>Set up secure device unlock</button>}
                   {biometricUnlock && <button type="button" className="secondary-button danger-lite" onClick={disableBiometricUnlock}>Remove from this device</button>}
                 </div>
                 <p className="biometric-note"><strong>Security note:</strong> this is a trusted-device convenience feature, not a password replacement. Your browser may offer PIN, fingerprint, face unlock, passkey or device lock. Password-Encrypt will pause quick unlock every 14 days or after 10 quick unlocks and ask you to type your master password, so you do not forget it.</p>
