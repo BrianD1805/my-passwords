@@ -6,8 +6,9 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
+import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-0.054H';
+const VERSION = 'Password-Encrypt Ver-0.054I';
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -513,11 +514,7 @@ function planStatusDisplayName(planStatus, accountStatus = '') {
 
 
 function formatAccountDate(value, includeTime = false) {
-  if (!value) return '—';
-  const options = includeTime
-    ? { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-    : { day: 'numeric', month: 'short', year: 'numeric' };
-  return new Intl.DateTimeFormat('en-GB', options).format(new Date(value));
+  return formatAppDate(value, includeTime, '—');
 }
 
 function accountTrialDaysRemaining(value) {
@@ -1001,9 +998,9 @@ function emergencyPackagePlainText(packageData, releaseExpiresAt = '') {
   lines.push('PASSWORD-ENCRYPT EMERGENCY PACKAGE');
   lines.push(`Package: ${packageData?.title || 'Emergency package'}`);
   if (packageData?.ownerName) lines.push(`Prepared by: ${packageData.ownerName}`);
-  if (packageData?.preparedAt) lines.push(`Prepared: ${new Date(packageData.preparedAt).toLocaleString()}`);
+  if (packageData?.preparedAt) lines.push(`Prepared: ${formatAppDate(packageData.preparedAt, true)}`);
   if (packageData?.releaseScope) lines.push(`Access scope: ${packageData.releaseScope}`);
-  if (releaseExpiresAt) lines.push(`Secure link available until: ${new Date(releaseExpiresAt).toLocaleString()}`);
+  if (releaseExpiresAt) lines.push(`Secure link available until: ${formatAppDate(releaseExpiresAt, true)}`);
   pushSection('Emergency message', packageData?.message);
   pushSection('Important contacts', packageData?.importantContacts);
   pushSection('Documents and locations', packageData?.documentsAndLocations);
@@ -1700,7 +1697,7 @@ function emptyEmergencyAccessPlan() {
     contactEmail: '',
     contactPhone: '',
     waitingPeriod: '7 days',
-    accessScope: 'Emergency Info folder only',
+    accessScope: 'Full vault access',
     instructions: '',
     trustedPersonUpdatedAt: '',
     emergencyPackageEnabled: true,
@@ -1729,7 +1726,13 @@ function emptyEmergencyAccessPlan() {
 
 function getEmergencyAccessPlan(vaultItems) {
   const meta = Array.isArray(vaultItems) ? vaultItems.find(isEmergencyAccessMetaItem) : null;
-  return { ...emptyEmergencyAccessPlan(), ...(meta?.payload || {}) };
+  if (!meta) return emptyEmergencyAccessPlan();
+  const payload = meta?.payload || {};
+  return {
+    ...emptyEmergencyAccessPlan(),
+    ...payload,
+    accessScope: String(payload.accessScope || 'Emergency Info folder only')
+  };
 }
 
 function hasEmergencyAccessPlan(plan) {
@@ -2014,8 +2017,8 @@ function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKe
           {(isConflict || isConflictReminder) && (
             <div className="sync-conflict-summary">
               {isConflict && <>
-                <span><strong>This device</strong>{details.localItemCount ?? 0} item(s)<small>{details.localEnvelope?.updatedAt ? `Changed ${new Date(details.localEnvelope.updatedAt).toLocaleString()}` : 'Change time unavailable'}</small></span>
-                <span><strong>Secure backup</strong>{details.cloudItemCount ?? 0} item(s)<small>{details.latest?.snapshot?.created_at || details.latest?.snapshot?.client_updated_at ? `Backed up ${new Date(details.latest.snapshot.created_at || details.latest.snapshot.client_updated_at).toLocaleString()}` : 'Backup time unavailable'}</small></span>
+                <span><strong>This device</strong>{details.localItemCount ?? 0} item(s)<small>{details.localEnvelope?.updatedAt ? `Changed ${formatAppDate(details.localEnvelope.updatedAt, true)}` : 'Change time unavailable'}</small></span>
+                <span><strong>Secure backup</strong>{details.cloudItemCount ?? 0} item(s)<small>{details.latest?.snapshot?.created_at || details.latest?.snapshot?.client_updated_at ? `Backed up ${formatAppDate(details.latest.snapshot.created_at || details.latest.snapshot.client_updated_at, true)}` : 'Backup time unavailable'}</small></span>
               </>}
               <p><AlertTriangle size={17} /> Nothing has been replaced automatically.</p>
             </div>
@@ -5592,6 +5595,11 @@ function App() {
         catch (packageError) { showMessage(packageError.message || 'Plan saved, but the emergency release package could not be refreshed.', 'warning'); return; }
       }
       showMessage(successMessage, 'success');
+      const stageId = section === 'trusted_person' ? 'emergency-stage-1' : section === 'package' ? 'emergency-stage-2' : '';
+      if (stageId) {
+        const stagePanel = document.getElementById(stageId);
+        if (stagePanel?.open) stagePanel.open = false;
+      }
     } catch (error) {
       showMessage('Emergency access plan could not be saved. Please try again.', 'error');
     } finally {
@@ -6222,7 +6230,7 @@ function App() {
                 <div className="emergency-invite-status accepted">{trustedPersonReminderConfirmation.message}</div>
                 {trustedPersonReminderConfirmation.ownerName && <p>You remain the nominated trusted person for <strong>{trustedPersonReminderConfirmation.ownerName}</strong>.</p>}
                 <p className="emergency-invite-note">This confirmation did not request Emergency Access and did not reveal any vault information.</p>
-                {trustedPersonReminderConfirmation.confirmedAt && <p className="trusted-reminder-confirmed-time">Confirmed {new Date(trustedPersonReminderConfirmation.confirmedAt).toLocaleString()}.</p>}
+                {trustedPersonReminderConfirmation.confirmedAt && <p className="trusted-reminder-confirmed-time">Confirmed {formatAppDate(trustedPersonReminderConfirmation.confirmedAt, true)}.</p>}
               </>
             ) : (
               <>
@@ -6293,7 +6301,7 @@ function App() {
                   <>
                     <div className="emergency-package-access-window">
                       <ShieldCheck size={18} />
-                      <div><strong>This secure link is available for 30 days</strong><span>{emergencyRequestState.releaseExpiresAt ? `Available until ${new Date(emergencyRequestState.releaseExpiresAt).toLocaleString()}.` : 'The 30-day access period starts when the package becomes available.'} Keep this link private.</span></div>
+                      <div><strong>This secure link is available for 30 days</strong><span>{emergencyRequestState.releaseExpiresAt ? `Available until ${formatAppDate(emergencyRequestState.releaseExpiresAt, true)}.` : 'The 30-day access period starts when the package becomes available.'} Keep this link private.</span></div>
                     </div>
                     <div className="emergency-invite-qa-card emergency-final-qa">
                       <details>
@@ -6949,7 +6957,7 @@ function App() {
   const emergencyCurrentStage = isEmergencyReleaseReady
     ? { number: 6, step: 'Stage 6', title: 'Emergency package ready', copy: 'The waiting period completed without cancellation. Your trusted person can open only the emergency package you prepared.' }
     : hasActiveEmergencyRequest
-      ? { number: 6, step: 'Stage 6', title: 'Waiting period active', copy: `An Emergency Access request is active. No vault contents have been released. You can cancel before ${emergencyDraft.requestWaitingEndsAt ? new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString() : 'the waiting period ends'}.` }
+      ? { number: 6, step: 'Stage 6', title: 'Waiting period active', copy: `An Emergency Access request is active. No vault contents have been released. You can cancel before ${emergencyDraft.requestWaitingEndsAt ? formatAppDate(emergencyDraft.requestWaitingEndsAt, true) : 'the waiting period ends'}.` }
       : emergencyInvitationAccepted
         ? { number: 5, step: 'Stage 5', title: 'Waiting for an Emergency Access request', copy: 'Your trusted person has accepted and has their secure Emergency Access link. Nothing else happens unless they use that link in a genuine emergency.' }
         : emergencyInvitationWasSent
@@ -7799,15 +7807,6 @@ function App() {
               </button>
 
               <form className={`emergency-access-form ${!featureIncluded('emergencyAccess') ? 'feature-disabled' : ''}`} aria-disabled={!featureIncluded('emergencyAccess')} onSubmit={(event) => event.preventDefault()}>
-                <div className="emergency-flow-roadmap-heading">
-                  <div>
-                    <p className="eyebrow">Trusted Person setup</p>
-                    <h4>Complete Stages 1–4 in order</h4>
-                    <p>Stages 1–4 set up your Trusted Person arrangement. Each action is shown beside the stage it belongs to.</p>
-                  </div>
-                  <span className="emergency-flow-progress">{emergencySetupCompleteCount} of 4 setup complete</span>
-                </div>
-
                 <div className="emergency-flow-roadmap">
                   <details id="emergency-stage-1" className={`emergency-flow-stage emergency-flow-stage-editor ${emergencyTrustedPersonComplete ? 'completed' : emergencyCurrentStage.number === 1 ? 'current' : ''}`} defaultOpen={!emergencyTrustedPersonComplete}>
                     <summary className="emergency-flow-stage-summary">
@@ -7912,7 +7911,7 @@ function App() {
                   <section id="emergency-stage-6" className={`emergency-flow-stage ${isEmergencyReleaseReady ? 'completed' : emergencyCurrentStage.number === 6 ? 'current active' : 'locked'}`}>
                     <div className="emergency-flow-stage-summary">
                       <span className="emergency-flow-step-number">6</span>
-                      <span className="emergency-flow-stage-copy"><strong>Waiting period completes</strong><small>{isEmergencyReleaseReady ? 'The waiting period completed without cancellation and the prepared package is available to your trusted person.' : hasActiveEmergencyRequest ? `The waiting period is active. You can still cancel before ${emergencyDraft.requestWaitingEndsAt ? new Date(emergencyDraft.requestWaitingEndsAt).toLocaleString() : 'it ends'}.` : 'Nothing is released unless an Emergency Access request reaches this step. Once the waiting period ends, Password-Encrypt checks automatically and emails the final package link.'}</small></span>
+                      <span className="emergency-flow-stage-copy"><strong>Waiting period completes</strong><small>{isEmergencyReleaseReady ? 'The waiting period completed without cancellation and the prepared package is available to your trusted person.' : hasActiveEmergencyRequest ? `The waiting period is active. You can still cancel before ${emergencyDraft.requestWaitingEndsAt ? formatAppDate(emergencyDraft.requestWaitingEndsAt, true) : 'it ends'}.` : 'Nothing is released unless an Emergency Access request reaches this step. Once the waiting period ends, Password-Encrypt checks automatically and emails the final package link.'}</small></span>
                       <span className="emergency-flow-stage-action">
                         {hasActiveEmergencyRequest ? <CustomSelect value="" placeholder="Waiting-period actions" ariaLabel="Waiting period actions" options={emergencyWaitingStageOptions} onChange={runEmergencyFlowAction} /> : isEmergencyReleaseReady ? <span className="emergency-flow-complete-label">Package released</span> : <span className="emergency-flow-waiting-label">Waiting for Step 5</span>}
                       </span>
@@ -7928,7 +7927,7 @@ function App() {
                     <summary><span className="settings-directory-icon"><FileText size={21} /></span><span className="settings-directory-copy"><strong>Event history</strong><small>Optional audit of this Trusted Person flow with dates and times.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                       <div className="emergency-flow-audit-list">
-                        {emergencyFlowEvents.map((event) => <article key={event.id || `${event.type}-${event.occurredAt}`}><span className="emergency-flow-audit-dot" /><div><strong>{event.title || String(event.type || '').replace(/_/g, ' ')}</strong>{event.message && <p>{event.message}</p>}<small>{event.occurredAt ? new Date(event.occurredAt).toLocaleString() : 'Time unavailable'}</small></div></article>)}
+                        {emergencyFlowEvents.map((event) => <article key={event.id || `${event.type}-${event.occurredAt}`}><span className="emergency-flow-audit-dot" /><div><strong>{event.title || String(event.type || '').replace(/_/g, ' ')}</strong>{event.message && <p>{event.message}</p>}<small>{event.occurredAt ? formatAppDate(event.occurredAt, true) : 'Time unavailable'}</small></div></article>)}
                         {!emergencyFlowEvents.length && <p className="emergency-flow-audit-empty">No flow events are recorded yet.</p>}
                       </div>
                     </div>
@@ -7941,7 +7940,7 @@ function App() {
                     </div>
                   </details>
                 </div>
-                {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last saved: {new Date(emergencyDraft.updatedAt).toLocaleString()}</p>}
+                {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last saved: {formatAppDate(emergencyDraft.updatedAt, true)}</p>}
               </form>
             </section>
           )}
@@ -7965,7 +7964,7 @@ function App() {
                 <div>
                   <strong>{!featureIncluded('cloudBackupSync') ? 'Your vault is stored locally on this device' : syncSafety.conflict ? 'Different vault changes need review' : syncSafety.pending ? 'Changes are waiting to be backed up' : syncSafety.state === 'unknown' ? 'Vault safety has not been checked yet' : 'Your vault is up to date'}</strong>
                   <span>{!featureIncluded('cloudBackupSync') ? 'Local saves continue to be encrypted. They are not backed up or available on another device under the current plan.' : syncSafety.message || (syncSafety.pending ? 'Your latest changes are currently stored on this device only.' : syncSafety.state === 'unknown' ? 'Use Check and back up now to confirm this device is protected.' : 'Your latest changes are protected and available on your verified devices.')}</span>
-                  <small>{featureIncluded('cloudBackupSync') ? `${syncSafety.lastSuccessAt ? `Last successful backup: ${new Date(syncSafety.lastSuccessAt).toLocaleString()}` : 'No successful backup recorded on this device yet.'}${syncSafety.itemCount ? ` · ${syncSafety.itemCount} item(s)` : ''}` : `${getVisibleVaultItems(items).length} vault item(s) stored in this device’s encrypted local copy`}</small>
+                  <small>{featureIncluded('cloudBackupSync') ? `${syncSafety.lastSuccessAt ? `Last successful backup: ${formatAppDate(syncSafety.lastSuccessAt, true)}` : 'No successful backup recorded on this device yet.'}${syncSafety.itemCount ? ` · ${syncSafety.itemCount} item(s)` : ''}` : `${getVisibleVaultItems(items).length} vault item(s) stored in this device’s encrypted local copy`}</small>
                 </div>
               </div>
 
@@ -7995,7 +7994,7 @@ function App() {
                   <p>These controls are only needed when changing devices or recovering an earlier secure copy.</p>
                   <button type="button" className={`secondary-button recovery-check-button ${snapshotHistory.loading ? 'is-working' : ''}`} disabled={snapshotHistory.loading} onClick={() => loadSnapshotHistory(true)}>{snapshotHistory.loading ? <RefreshCw size={17} className="spin-icon" /> : <Database size={17} />} {featureIncluded('cloudBackupSync') ? (snapshotHistory.loading ? 'Checking recovery points...' : 'Checkup recovery points') : 'Recovery points unavailable'}</button>
                   {snapshotHistory.loaded && <p className={`recovery-check-status ${snapshotHistory.snapshots.length ? 'success' : ''}`}>{snapshotHistory.message}</p>}
-                  {!!snapshotHistory.snapshots.length && <p className="recovery-summary">{snapshotHistory.total} encrypted recovery point(s) are available. The latest contains {snapshotHistory.snapshots[0]?.item_count || 0} item(s) from {new Date(snapshotHistory.snapshots[0]?.created_at).toLocaleString()}.</p>}
+                  {!!snapshotHistory.snapshots.length && <p className="recovery-summary">{snapshotHistory.total} encrypted recovery point(s) are available. The latest contains {snapshotHistory.snapshots[0]?.item_count || 0} item(s) from {formatAppDate(snapshotHistory.snapshots[0]?.created_at, true)}.</p>}
                   <button type="button" className="clear-local-vault-link" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>
                 </div>
                   </div>
@@ -8184,7 +8183,7 @@ function App() {
                         </div>
                       </div>
                     )}
-                    <p className="updated">Updated {new Date(viewedItem.updatedAt).toLocaleString()}</p>
+                    <p className="updated">Updated {formatAppDate(viewedItem.updatedAt, true)}</p>
                   </>
                 );
               })()}

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { formatAppDate } from './dateFormat.js';
 import { AlertTriangle, CalendarClock, CheckCircle2, Clock3, Mail, Play, RefreshCw, RotateCcw, Search, Send, XCircle } from 'lucide-react';
 import CustomSelect from './CustomSelect.jsx';
 
@@ -23,12 +24,7 @@ async function requestJson(url, options = {}) {
 }
 
 function dateLabel(value, includeTime = true) {
-  if (!value) return 'Never';
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return 'Never';
-  return new Intl.DateTimeFormat('en-GB', includeTime
-    ? { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-    : { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+  return formatAppDate(value, includeTime, 'Never');
 }
 
 function titleCase(value) {

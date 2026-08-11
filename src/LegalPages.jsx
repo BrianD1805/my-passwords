@@ -2,7 +2,8 @@ import React, { useEffect } from 'react';
 import { ArrowLeft, CreditCard, Lock, Mail, ShieldCheck, UsersRound } from 'lucide-react';
 
 export const LEGAL_VERSION = '2026-08-09';
-export const LEGAL_EFFECTIVE_DATE = '9 August 2026';
+export const LEGAL_EFFECTIVE_DATE = '09/Aug/2026';
+export const LEGAL_DISPLAY_VERSION = '09/Aug/2026';
 export const SUPPORT_EMAIL = 'info@zippyweb.uk';
 export const BUSINESS_NAME = 'ZippyWeb';
 
@@ -30,7 +31,7 @@ function LegalShell({ title, eyebrow, intro, children, embedded = false }) {
         <p className="eyebrow">{eyebrow}</p>
         <h1>{title}</h1>
         <p>{intro}</p>
-        <div className="legal-effective-row"><span>Effective {LEGAL_EFFECTIVE_DATE}</span><span>Document version {LEGAL_VERSION}</span></div>
+        <div className="legal-effective-row"><span>Effective {LEGAL_EFFECTIVE_DATE}</span><span>Document version {LEGAL_DISPLAY_VERSION}</span></div>
       </div>
       {children}
       <section className="legal-contact-card">

@@ -26,7 +26,7 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-0.054H version is aligned', pkg.version === '0.0.54-h' && /Password-Encrypt Ver-0\.054H/.test(main) && /my-passwords-v0\.054H/.test(read('public/sw.js')));
+check('Ver-0.054I version is aligned', pkg.version === '0.0.54-i' && /Password-Encrypt Ver-0\.054I/.test(main) && /my-passwords-v0\.054I/.test(read('public/sw.js')));
 check('Trusted Person heading has a same-line Help and FAQ control', /Trusted Person Planning<\/h3>/.test(main) && /trusted-person-help-button/.test(main) && /Open Trusted Person help and FAQs/.test(main));
 check('Current progress is setup-only and explicitly shows Stage X of 4', /emergencySetupStageNumber/.test(main) && /Stage \{emergencySetupStageNumber\} of 4 setup/.test(main) && /emergencySetupCompleteCount/.test(main));
 check('Current progress panel jumps directly to its setup stage', /goToEmergencySetupStage/.test(main) && /onClick=\{\(\) => goToEmergencySetupStage\(emergencySetupStageNumber\)\}/.test(main) && /scrollIntoView/.test(main));
@@ -44,7 +44,7 @@ check('Reminder confirmation uses a signed expiring token and a second deliberat
 check('Reminder confirmation never starts Emergency Access and is recorded in flow history', /No Emergency Access request has been started/.test(reminderConfirm) && /trusted_person_reminder_confirmed/.test(reminderConfirm) && /trusted_person_reminder_sent/.test(reminderProcess));
 check('Quarterly reminders pause while an Emergency Access request is active', /status=in\.\(requested,waiting,owner_notified,release_ready\)/.test(reminderProcess) && /skippedActiveEmergency/.test(reminderProcess));
 check('Desktop vault login product title is reduced by about five pixels only on desktop', /@media \(min-width: 761px\)/.test(styles) && /#vault-access-card > h1/.test(styles) && /calc\(5vw - 5px\)/.test(styles));
-check('Trusted Person setup is explicitly Stages 1 to 4', /Complete Stages 1–4 in order/.test(main) && /of 4 setup complete/.test(main) && /emergency-flow-step-number\">1</.test(main) && /emergency-flow-step-number\">4</.test(main));
+check('Trusted Person setup is explicitly Stages 1 to 4 without a duplicate setup intro panel', /Stage \{emergencySetupStageNumber\} of 4 setup/.test(main) && !/Complete Stages 1–4 in order/.test(main) && /emergency-flow-step-number\">1</.test(main) && /emergency-flow-step-number\">4</.test(main));
 check('Stages 5 and 6 are clearly separated as emergency-only', /Emergency-only stages/.test(main) && /Stages 5 and 6 are not part of setup/.test(main) && /emergency-flow-step-number\">5</.test(main) && /emergency-flow-step-number\">6</.test(main));
 check('Trusted person details are Step 1 with their own Save button', /Add your trusted person/.test(main) && /Save Step 1/.test(main) && /trusted_person/.test(main));
 check('Emergency package is Step 2 with its own Save button', /Prepare the emergency package/.test(main) && /Save Step 2/.test(main) && /'package'/.test(main));
@@ -55,7 +55,7 @@ check('Emergency-link actions sit on Step 5 dropdown', /placeholder="Emergency l
 check('Waiting-period actions sit on Step 6 dropdown', /placeholder="Waiting-period actions"/.test(main) && /options=\{emergencyWaitingStageOptions\}/.test(main));
 check('Completed stages have a large tick status', /emergency-flow-stage-status/.test(main) && /<Check size=\{29\} strokeWidth=\{3\}/.test(main));
 check('Reset to zero remains in a maintenance dropdown, not the main route', /Manage or reset this flow/.test(main) && /placeholder="Manage flow"/.test(main) && /options=\{emergencyManagementOptions\}/.test(main));
-check('Optional event-history accordion shows dated flow events', /<strong>Event history<\/strong>/.test(main) && /new Date\(event\.occurredAt\)\.toLocaleString\(\)/.test(main));
+check('Optional event-history accordion shows dated flow events', /<strong>Event history<\/strong>/.test(main) && /formatAppDate\(event\.occurredAt, true\)/.test(main));
 check('Flow events remain metadata-only invitation history', /flow_events/.test(flow) && /slice\(0, 120\)/.test(flow) && /buildEmergencyFlowEvents/.test(flow));
 check('Reset to zero removes current flow and audit source', /reset_zero/.test(main) && /resetEmergencyFlowToZero/.test(invite) && /deleteRow\('emergency_access_invitations'/.test(flow));
 check('Reset to zero removes local encrypted Trusted Person plan metadata', /items\.filter\(\(item\) => !isEmergencyAccessMetaItem\(item\)\)/.test(main) && /setEmergencyFlowEvents\(\[\]\)/.test(main));
@@ -81,6 +81,13 @@ check('Admin hard delete blocks Founder account and safely ends active Stripe su
 check('Admin hard delete removes tenant and tenant-scoped residual rows', /deleteRow\('tenants'/.test(detail) && /stripe_reconciliation_runs/.test(detail) && /operational_events/.test(detail));
 check('Deleted-account email exists and gives no deletion reason', /account_deleted/.test(adminEmail) && /account has been deleted/i.test(adminEmail) && !/reason for deletion/i.test(adminEmail));
 check('Hard-delete audit does not retain deleted tenant id', /admin_customer_hard_deleted/.test(detail) && /A customer account was permanently deleted from Admin for testing/.test(detail));
+
+check('Trusted Person help FAQs use one question-answer row and normal-weight answers', /trusted-person-help-faq[\s\S]*?grid-template-columns: 1fr !important/.test(styles) && /trusted-person-help-faq p,[\s\S]*?font-weight: 400 !important/.test(styles));
+check('New Trusted Person plans default release scope to full vault package', /accessScope: 'Full vault access'/.test(main));
+check('Successful Step 1 and Step 2 saves close their editor dropdowns', /stageId = section === 'trusted_person'/.test(main) && /stagePanel\?\.open/.test(main));
+check('Desktop Send invitation action aligns to the right', /@media \(min-width: 761px\)[\s\S]*?\.emergency-flow-stage-action[\s\S]*?justify-content: flex-end/.test(styles));
+check('Duplicate Trusted Person setup intro panel is removed', !/Complete Stages 1–4 in order/.test(main));
+check('App date formatter uses dd\/mmm\/yyyy format', /formatAppDate/.test(main) && /padStart\(2, '0'\)/.test(read('src/dateFormat.js')) && /\$\{day\}\/\$\{month\}\/\$\{year\}/.test(read('src/dateFormat.js')));
 
 if (failed) {
   console.error(`\n${failed} Trusted Person / emergency-flow static check(s) failed; ${passed} passed.`);

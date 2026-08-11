@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { formatAppDate } from './dateFormat.js';
 import { AlertTriangle, BadgePoundSterling, CalendarClock, ChevronRight, Cloud, CreditCard, Eye, EyeOff, FileText, LogOut, Plus, RefreshCw, Save, Search, ShieldCheck, Trash2, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import CustomSelect from './CustomSelect.jsx';
 import AdminCustomerDetail from './AdminCustomerDetail.jsx';
@@ -102,11 +103,7 @@ function planDisplayName(planCode) {
 
 
 function dateLabel(value, includeTime = false) {
-  if (!value) return '—';
-  const options = includeTime
-    ? { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-    : { day: 'numeric', month: 'short', year: 'numeric' };
-  return new Intl.DateTimeFormat('en-GB', options).format(new Date(value));
+  return formatAppDate(value, includeTime, '—');
 }
 
 function planStatusDisplayName(planStatus) {
@@ -559,7 +556,7 @@ export default function AdminApp({ version }) {
                     <div className="admin-sync-main">
                       <strong>{customer.accountName}</strong>
                       <span>{event?.message || (snapshot ? 'Latest encrypted backup is available.' : 'No encrypted backup has been recorded yet.')}</span>
-                      <small>{snapshot ? `Last backup ${new Date(snapshot.created_at).toLocaleString()} · ${snapshot.item_count || 0} item(s)` : 'No backup date'}{event?.created_at ? ` · Last event ${new Date(event.created_at).toLocaleString()}` : ''}</small>
+                      <small>{snapshot ? `Last backup ${formatAppDate(snapshot.created_at, true)} · ${snapshot.item_count || 0} item(s)` : 'No backup date'}{event?.created_at ? ` · Last event ${formatAppDate(event.created_at, true)}` : ''}</small>
                     </div>
                     <div className="admin-sync-meta"><span className={`admin-status ${eventStatus}`}>{eventStatus}</span><small>{diagnostic.eventCount || 0} event(s)</small></div>
                   </article>

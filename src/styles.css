@@ -16084,3 +16084,33 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     padding: 12px 13px;
   }
 }
+
+
+/* Password-Encrypt Ver-0.054I — Trusted Person flow polish and FAQ readability. */
+.trusted-person-help-faq {
+  grid-template-columns: 1fr !important;
+  gap: 10px;
+}
+.trusted-person-help-faq > strong { grid-column: 1; }
+.trusted-person-help-faq details {
+  width: 100%;
+  height: auto;
+}
+.trusted-person-help-faq p,
+.landing-faq-accordion details > p,
+.settings-faq-item > p {
+  font-weight: 400 !important;
+}
+@media (min-width: 761px) {
+  .emergency-flow-stage-action {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .emergency-flow-stage-action .primary-button.compact {
+    margin-left: auto;
+  }
+}
+@media (max-width: 760px) {
+  .emergency-flow-stage-action { justify-content: flex-start; }
+}
