@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-0.055C';
+const VERSION = 'Password-Encrypt Ver-0.055D';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -25,6 +25,7 @@ const SYNC_DEVICE_ID_KEY = 'my-passwords-sync-device-id-v1';
 const ENTITLEMENTS_CACHE_KEY = 'my-passwords-entitlements-v1';
 const PENDING_DOCUMENT_DELETIONS_KEY = 'my-passwords-pending-document-deletions-v1';
 const ACCOUNT_DEVICE_INSTALL_KEY = 'my-passwords-account-device-install-v1';
+const PENDING_ONBOARDING_ACCOUNT_KEY = 'password-encrypt-pending-onboarding-account-v1';
 
 
 const LEGACY_VAULT_BACK_MARKER_KEYS = [
@@ -99,15 +100,51 @@ ensureUbuntuFontStylesheet();
 // Capture the browser's install opportunity as early as possible so Step 3 can
 // still offer the native install prompt even if the event fires before the
 // onboarding screen is reached.
-let capturedPasswordEncryptInstallPrompt = null;
+let capturedPasswordEncryptInstallPrompt = typeof window !== 'undefined' ? (window.__passwordEncryptInstallPrompt || null) : null;
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
     capturedPasswordEncryptInstallPrompt = event;
+    window.__passwordEncryptInstallPrompt = event;
   });
   window.addEventListener('appinstalled', () => {
     capturedPasswordEncryptInstallPrompt = null;
+    window.__passwordEncryptInstallPrompt = null;
   });
+}
+
+function readPendingOnboardingAccount() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const parsed = JSON.parse(window.sessionStorage.getItem(PENDING_ONBOARDING_ACCOUNT_KEY) || 'null');
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePendingOnboardingAccount(account = {}) {
+  if (typeof window === 'undefined') return;
+  const tenantId = String(account.tenantId || '').trim();
+  const userId = String(account.userId || '').trim();
+  if (!tenantId || !userId) return;
+  try {
+    window.sessionStorage.setItem(PENDING_ONBOARDING_ACCOUNT_KEY, JSON.stringify({
+      tenantId,
+      userId,
+      email: String(account.email || '').trim().toLowerCase(),
+      accountName: String(account.accountName || account.tenantName || '').trim(),
+      phoneE164: String(account.phoneE164 || '').trim(),
+      createdAt: new Date().toISOString()
+    }));
+  } catch {
+    // Onboarding still remains protected by the live signed session check.
+  }
+}
+
+function clearPendingOnboardingAccount() {
+  if (typeof window === 'undefined') return;
+  try { window.sessionStorage.removeItem(PENDING_ONBOARDING_ACCOUNT_KEY); } catch {}
 }
 
 function readAccountDeviceInstallId() {
@@ -893,7 +930,58 @@ function readStoredVault() {
   return null;
 }
 
-async function encryptVault(items, masterPassword) {
+function vaultOwnerBindingFromAccount(account = {}) {
+  return {
+    tenantId: String(account.tenantId || '').trim(),
+    userId: String(account.userId || '').trim(),
+    email: String(account.email || '').trim().toLowerCase(),
+    accountName: String(account.accountName || account.tenantName || '').trim()
+  };
+}
+
+function vaultOwnerBindingFromEnvelope(envelope = {}) {
+  return {
+    tenantId: String(envelope.ownerTenantId || '').trim(),
+    userId: String(envelope.ownerUserId || '').trim(),
+    email: String(envelope.ownerEmail || '').trim().toLowerCase(),
+    accountName: String(envelope.ownerAccountName || '').trim()
+  };
+}
+
+function hasCompleteVaultOwnerBinding(binding = {}) {
+  return Boolean(binding.tenantId && binding.userId);
+}
+
+function vaultOwnerBindingsMatch(left = {}, right = {}) {
+  if (!hasCompleteVaultOwnerBinding(left) || !hasCompleteVaultOwnerBinding(right)) return false;
+  return left.tenantId === right.tenantId && left.userId === right.userId;
+}
+
+function applyVaultOwnerBinding(envelope, account = {}) {
+  const existing = vaultOwnerBindingFromEnvelope(envelope || {});
+  const requested = vaultOwnerBindingFromAccount(account);
+  // Once a local encrypted vault is bound to an account, ordinary saves must never
+  // silently move that vault to a different account context.
+  const owner = hasCompleteVaultOwnerBinding(existing) ? existing : requested;
+  if (!hasCompleteVaultOwnerBinding(owner)) return { ...envelope };
+  return {
+    ...envelope,
+    ownerTenantId: owner.tenantId,
+    ownerUserId: owner.userId,
+    ownerEmail: owner.email || '',
+    ownerAccountName: owner.accountName || ''
+  };
+}
+
+function persistCurrentVaultOwnerBinding(account = {}) {
+  const envelope = getLocalEnvelope();
+  if (!envelope) return envelope;
+  const next = applyVaultOwnerBinding(envelope, account);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  return next;
+}
+
+async function encryptVault(items, masterPassword, account = {}) {
   const previousEnvelope = getLocalEnvelope();
   let salt = localStorage.getItem(SALT_KEY) || localStorage.getItem(LEGACY_SALT_KEY);
   if (!salt) {
@@ -904,7 +992,7 @@ async function encryptVault(items, masterPassword) {
   const key = await deriveKey(masterPassword, salt);
   const encoded = new TextEncoder().encode(JSON.stringify(items));
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
-  const envelope = {
+  const envelope = applyVaultOwnerBinding({
     version: VERSION,
     iv: arrayBufferToBase64(iv),
     salt,
@@ -912,7 +1000,7 @@ async function encryptVault(items, masterPassword) {
     updatedAt: new Date().toISOString(),
     cloudSnapshotId: '',
     baseCloudSnapshotId: previousEnvelope?.cloudSnapshotId || previousEnvelope?.baseCloudSnapshotId || ''
-  };
+  }, account);
   localStorage.setItem(SALT_KEY, salt);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
   return envelope;
@@ -1189,8 +1277,8 @@ function cloudSnapshotMatchesEnvelope(snapshot, envelope) {
     && String(snapshot.local_iv || '') === String(envelope.iv || '');
 }
 
-function storeCloudSnapshotLocally(snapshot) {
-  const envelope = {
+function storeCloudSnapshotLocally(snapshot, account = {}) {
+  const envelope = applyVaultOwnerBinding({
     version: VERSION,
     iv: snapshot.local_iv,
     salt: snapshot.local_salt,
@@ -1198,7 +1286,7 @@ function storeCloudSnapshotLocally(snapshot) {
     updatedAt: snapshot.client_updated_at || snapshot.created_at || new Date().toISOString(),
     cloudSnapshotId: snapshot.id || '',
     baseCloudSnapshotId: snapshot.id || ''
-  };
+  }, account);
   localStorage.setItem(SALT_KEY, envelope.salt);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
   return envelope;
@@ -2221,7 +2309,7 @@ function App() {
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
   const [accountStatus, setAccountStatus] = useState({ state: 'local-first', message: 'Your account details help you recover your vault on a new device.' });
-  const [customerSession, setCustomerSession] = useState({ checked: false, authenticated: false, cloudAccess: false, accessCode: '', message: 'Device verification has not been checked yet.' });
+  const [customerSession, setCustomerSession] = useState({ checked: false, authenticated: false, cloudAccess: false, accessCode: '', tenantId: '', userId: '', message: 'Device verification has not been checked yet.' });
   const [accountSecurity, setAccountSecurity] = useState({ loaded: false, loading: false, message: '', user: null, devices: [], sessions: [], deletion: null, currentDeviceId: '', currentSessionId: '', sessionExpiresAt: '' });
   const [accountSecurityModal, setAccountSecurityModal] = useState({ visible: false, mode: '', title: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false, newEmail: '', phoneCountryCode: '+254', phoneCountryIso: 'ke', phoneNumber: '', reason: '' });
   const [accountRecoveryModal, setAccountRecoveryModal] = useState({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false });
@@ -2316,6 +2404,8 @@ function App() {
   const [installStatus, setInstallStatus] = useState(() => isPasswordEncryptInstalled() ? 'installed' : 'waiting');
   const [installMessage, setInstallMessage] = useState(() => isPasswordEncryptInstalled() ? 'Password-Encrypt is already installed on this device.' : 'Install Password-Encrypt for quicker everyday access from your home screen or desktop.');
   const [showInstallOnboarding, setShowInstallOnboarding] = useState(false);
+  const [onboardingSecurityWarning, setOnboardingSecurityWarning] = useState('');
+  const onboardingSessionIsolationRef = useRef(Boolean(readPendingOnboardingAccount()));
   const [showLandingBackToTop, setShowLandingBackToTop] = useState(false);
   const touchReorderRef = useRef({ timer: null, source: '', active: false });
 
@@ -2447,7 +2537,7 @@ function App() {
     }
     closeAccountSecurityModal();
     if (result.currentSessionEnded) {
-      setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', message: result.message });
+      setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', tenantId: '', userId: '', message: result.message });
     } else {
       await loadAccountSecurity({ silent: true });
     }
@@ -2462,7 +2552,7 @@ function App() {
       return;
     }
     closeAccountSecurityModal();
-    setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', message: result.message });
+    setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', tenantId: '', userId: '', message: result.message });
     setAccountSecurity((current) => ({ ...current, loaded: false, devices: [], sessions: [] }));
     showMessage(result.message, 'success');
   }
@@ -2527,7 +2617,7 @@ function App() {
     setBootstrap(next);
     localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next));
     if (result.entitlements) updateEntitlements(result.entitlements);
-    setCustomerSession({ checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: '', message: result.message, session: { deviceId: result.deviceId, expiresAt: result.sessionExpiresAt } });
+    setCustomerSession({ checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: '', tenantId: result.tenantId || next.tenantId || '', userId: result.userId || next.userId || '', message: result.message, session: { deviceId: result.deviceId, expiresAt: result.sessionExpiresAt } });
     setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false });
     showMessage(result.message, 'success');
   }
@@ -3094,6 +3184,7 @@ function App() {
     const handleBeforeInstallPrompt = (event) => {
       event.preventDefault();
       capturedPasswordEncryptInstallPrompt = event;
+      window.__passwordEncryptInstallPrompt = event;
       installPromptRef.current = event;
       setInstallPromptReady(true);
       if (!isPasswordEncryptInstalled()) {
@@ -3103,6 +3194,7 @@ function App() {
     };
     const handleAppInstalled = () => {
       capturedPasswordEncryptInstallPrompt = null;
+      window.__passwordEncryptInstallPrompt = null;
       installPromptRef.current = null;
       setInstallPromptReady(false);
       setInstallStatus('installed');
@@ -3111,7 +3203,8 @@ function App() {
     if (isPasswordEncryptInstalled()) {
       setInstallStatus('installed');
       setInstallMessage('Password-Encrypt is already installed on this device.');
-    } else if (capturedPasswordEncryptInstallPrompt) {
+    } else if (capturedPasswordEncryptInstallPrompt || window.__passwordEncryptInstallPrompt) {
+      capturedPasswordEncryptInstallPrompt = capturedPasswordEncryptInstallPrompt || window.__passwordEncryptInstallPrompt;
       installPromptRef.current = capturedPasswordEncryptInstallPrompt;
       setInstallPromptReady(true);
       setInstallStatus('ready');
@@ -3199,6 +3292,7 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     async function checkSecureSession() {
+      if (onboardingSessionIsolationRef.current) return;
       try {
         const csrfToken = sessionStorage.getItem('mp_customer_csrf') || '';
         const response = await fetch('/.netlify/functions/session-status', {
@@ -3233,15 +3327,15 @@ function App() {
           setBootstrap(next);
           if (result.entitlements) updateEntitlements(result.entitlements);
           const cloudAccess = result.cloudAccess !== false;
-          setCustomerSession({ checked: true, authenticated: true, cloudAccess, accessCode: result.accessCode || '', message: result.message || (cloudAccess ? 'This device is verified for secure backup and syncing.' : 'Cloud features are paused for this account.'), subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), session: result.session || null, deletion: result.deletion || null });
+          setCustomerSession({ checked: true, authenticated: true, cloudAccess, accessCode: result.accessCode || '', tenantId: result.tenantId || '', userId: result.userId || '', message: result.message || (cloudAccess ? 'This device is verified for secure backup and syncing.' : 'Cloud features are paused for this account.'), subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), session: result.session || null, deletion: result.deletion || null });
           setBilling((current) => ({ ...current, subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), planCode: result.subscription?.planCode || result.account?.planCode || current.planCode || 'personal' }));
           setAccountStatus({ state: cloudAccess ? 'ready' : 'access-paused', message: result.message || (cloudAccess ? 'Cloud backup and secure syncing are active on this device.' : 'Cloud backup and syncing are currently paused.') });
         } else {
-          setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: result?.code || 'SESSION_REQUIRED', message: result?.message || 'Verify this device to enable secure backup and syncing.', subscription: null, stripeConfigured: Boolean(result?.stripeConfigured) });
+          setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: result?.code || 'SESSION_REQUIRED', tenantId: '', userId: '', message: result?.message || 'Verify this device to enable secure backup and syncing.', subscription: null, stripeConfigured: Boolean(result?.stripeConfigured) });
           setAccountStatus((current) => current.state === 'ready' ? current : { state: 'session-needed', message: result?.message || 'Verify this device to enable secure backup and syncing.' });
         }
       } catch (error) {
-        if (!cancelled) setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_CHECK_FAILED', message: 'Device verification could not be checked.' });
+        if (!cancelled) setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_CHECK_FAILED', tenantId: '', userId: '', message: 'Device verification could not be checked.' });
       }
     }
     const refreshVisibleSession = () => {
@@ -3263,6 +3357,18 @@ function App() {
     // signed session when connectivity returns.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!hasLocalVault || !customerSession.authenticated) return;
+    const envelope = getLocalEnvelope();
+    const localOwner = vaultOwnerBindingFromEnvelope(envelope || {});
+    const sessionOwner = { tenantId: String(customerSession.tenantId || ''), userId: String(customerSession.userId || '') };
+    if (!hasCompleteVaultOwnerBinding(localOwner) || !hasCompleteVaultOwnerBinding(sessionOwner) || vaultOwnerBindingsMatch(localOwner, sessionOwner)) return;
+    const note = 'Password-Encrypt detected that this browser session changed to a different account. The local vault has been locked and no account data was mixed.';
+    if (!locked) lockVault(note, { force: true });
+    setAccountStatus({ state: 'account-mismatch', message: note });
+    showVerifyOverlay('error', 'Different account detected', note);
+  }, [customerSession.authenticated, customerSession.tenantId, customerSession.userId, hasLocalVault]);
 
   useEffect(() => {
     if (locked || billing.returnState) return;
@@ -3433,7 +3539,7 @@ function App() {
         : (latest?.message || 'Secure backup could not be checked. This device kept its current vault copy.');
       setDeviceStatus((current) => ({ ...current, state: sessionRequired ? 'session-needed' : 'cloud-check-failed', label: note, lastCloudCheckAt: checkedAt }));
       if (sessionRequired) {
-        setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', message: 'Verify this device to enable secure backup and syncing.' });
+        setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', tenantId: '', userId: '', message: 'Verify this device to enable secure backup and syncing.' });
         setAccountStatus({ state: 'session-needed', message: 'Verify this device to enable secure backup and syncing.' });
       }
       const unsyncedEnvelope = getLocalEnvelope();
@@ -3480,7 +3586,7 @@ function App() {
     }
 
     const restoredItems = await decryptEnvelope(latest.snapshot, passwordToUse);
-    storeCloudSnapshotLocally(latest.snapshot);
+    storeCloudSnapshotLocally(latest.snapshot, account);
     setHasLocalVault(true);
     setCreateMode(false);
     setConfirmMasterPassword('');
@@ -3496,6 +3602,13 @@ function App() {
 
   async function ensureAccountIdentity({ silent = false } = {}) {
     if (customerSession.authenticated && bootstrap.tenantId && bootstrap.userId) {
+      const sessionOwner = { tenantId: String(customerSession.tenantId || ''), userId: String(customerSession.userId || '') };
+      const bootstrapOwner = vaultOwnerBindingFromAccount(bootstrap);
+      if (hasCompleteVaultOwnerBinding(sessionOwner) && !vaultOwnerBindingsMatch(sessionOwner, bootstrapOwner)) {
+        const note = 'The verified browser session belongs to a different Password-Encrypt account. No vault or cloud action was performed.';
+        if (!silent) showMessage(note, 'error');
+        return { ok: false, code: 'ACCOUNT_SESSION_MISMATCH', message: note };
+      }
       return { ok: true, account: bootstrap, result: { authenticated: true } };
     }
     const checked = validateAccountIdentity(bootstrap);
@@ -3709,7 +3822,7 @@ function App() {
       if (result.entitlements) updateEntitlements(result.entitlements);
       const verifiedCloudAccess = result.cloudAccess !== false;
       const verifiedMessage = result.message || (verifiedCloudAccess ? 'This device is verified for secure backup and syncing.' : 'This device is verified. The vault remains local because cloud backup is not included in the current plan.');
-      setCustomerSession({ checked: true, authenticated: true, cloudAccess: verifiedCloudAccess, accessCode: result.accessCode || '', message: verifiedMessage, entitlements: result.entitlements || entitlements });
+      setCustomerSession({ checked: true, authenticated: true, cloudAccess: verifiedCloudAccess, accessCode: result.accessCode || '', tenantId: result.tenantId || bootstrap.tenantId || '', userId: result.userId || bootstrap.userId || '', message: verifiedMessage, entitlements: result.entitlements || entitlements });
       setOtpTest((current) => ({
         ...current,
         status: 'verified',
@@ -3760,7 +3873,7 @@ function App() {
   async function performEndCustomerSession() {
     try {
       const result = await postJson('/.netlify/functions/session-status', { action: 'logout' });
-      setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', message: result.message || 'This device is no longer verified.' });
+      setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', tenantId: '', userId: '', message: result.message || 'This device is no longer verified.' });
       setAccountStatus({ state: 'session-needed', message: 'Verify this device again before secure backup or syncing can continue.' });
       showMessage('Device verification ended on this device.', 'success');
     } catch {
@@ -3792,6 +3905,19 @@ function App() {
     try {
       const localVault = readStoredVault();
       let activeAccount = bootstrap;
+      const localEnvelope = localVault ? JSON.parse(localVault.raw) : null;
+      const localOwner = vaultOwnerBindingFromEnvelope(localEnvelope || {});
+      const verifiedSessionOwner = customerSession.authenticated
+        ? { tenantId: String(customerSession.tenantId || ''), userId: String(customerSession.userId || '') }
+        : {};
+      const browserAccountOwner = hasCompleteVaultOwnerBinding(verifiedSessionOwner) ? verifiedSessionOwner : vaultOwnerBindingFromAccount(bootstrap);
+
+      if (localVault && hasCompleteVaultOwnerBinding(localOwner) && hasCompleteVaultOwnerBinding(browserAccountOwner) && !vaultOwnerBindingsMatch(localOwner, browserAccountOwner)) {
+        const note = 'This browser is currently linked to a different Password-Encrypt account than the encrypted vault stored on this device. The vault has not been opened. End or verify the correct account session before trying again.';
+        showVerifyOverlay('error', 'Different account detected', note);
+        showMessage(note, 'error');
+        return;
+      }
 
       if (!localVault) {
         if (fromBiometric) {
@@ -3838,6 +3964,12 @@ function App() {
             showMessage('That master password could not open your cloud backup. Nothing was changed on this device.');
             return;
           }
+          if (!hasCompleteVaultOwnerBinding(localOwner) && customerSession.authenticated) {
+            const note = 'Password-Encrypt could not prove that this older local vault belongs to the account currently verified in this browser. The local fallback was blocked so one account cannot be opened under another account’s session. Verify the correct account or contact support before continuing.';
+            showVerifyOverlay('error', 'Account and vault do not match safely', note);
+            showMessage(note, 'error');
+            return;
+          }
         }
       }
 
@@ -3846,6 +3978,12 @@ function App() {
         if (!existing) throw new Error('Vault could not be decrypted.');
         setMasterPassword(password);
         setItems(existing);
+        if (!hasCompleteVaultOwnerBinding(localOwner) && cloudCheckResult?.latest?.snapshot) {
+          const currentEnvelope = getLocalEnvelope();
+          const exactCloudMatch = cloudSnapshotMatchesEnvelope(cloudCheckResult.latest.snapshot, currentEnvelope);
+          const provenLocalDescendant = Boolean(cloudCheckResult.localNewer && currentEnvelope?.baseCloudSnapshotId && String(currentEnvelope.baseCloudSnapshotId) === String(cloudCheckResult.latest.snapshot.id || ''));
+          if (exactCloudMatch || provenLocalDescendant) persistCurrentVaultOwnerBinding(activeAccount);
+        }
         setDeviceStatus((current) => ({
           ...current,
           state: cloudCheckResult?.conflict ? 'conflict' : cloudCheckResult?.localNewer ? 'local-newer' : cloudCheckResult?.sessionRequired ? 'session-needed' : fromBiometric ? 'secure-device-unlock' : (canCheckCloud ? 'local-fallback' : 'local-only'),
@@ -3902,12 +4040,15 @@ function App() {
         return;
       }
 
-      const newVaultEnvelope = await encryptVault(starterItems, password);
+      const newVaultEnvelope = await encryptVault(starterItems, password, activeAccount);
       setMasterPassword(password);
       setHasLocalVault(true);
       setCreateMode(false);
       setConfirmMasterPassword('');
       setItems(starterItems);
+      clearPendingOnboardingAccount();
+      onboardingSessionIsolationRef.current = false;
+      setOnboardingSecurityWarning('');
       const cloudBackupAvailable = featureIncluded('cloudBackupSync');
       saveSyncSafety(cloudBackupAvailable
         ? { state: 'backup-pending', pending: true, conflict: false, sessionRequired: !customerSession.authenticated, message: 'Your new vault is saved on this device and is waiting to be backed up.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' }
@@ -3935,6 +4076,38 @@ function App() {
     } catch (error) {
       showVerifyOverlay('error', 'Something went wrong', 'We could not unlock your vault. Please check your master password and try again.');
       showMessage('Could not unlock. Check your master password. Nothing new was saved.');
+    }
+  }
+
+  async function verifyOnboardingSessionMatchesAccount() {
+    const expected = readPendingOnboardingAccount() || vaultOwnerBindingFromAccount(bootstrap);
+    if (!hasCompleteVaultOwnerBinding(expected)) {
+      const note = 'The new account identity could not be confirmed. Return to Account Setup and verify the account again before creating a vault.';
+      setOnboardingSecurityWarning(note);
+      return { ok: false, message: note };
+    }
+    try {
+      const result = await postJson('/.netlify/functions/session-status', { action: 'status', ...accountDeviceMetadata() });
+      if (!result.ok || !result.authenticated) {
+        const note = result.message || 'The verified account session is no longer active.';
+        setOnboardingSecurityWarning(note);
+        setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: result.code || 'SESSION_REQUIRED', tenantId: '', userId: '', message: note });
+        return { ok: false, message: note };
+      }
+      const liveBinding = { tenantId: String(result.tenantId || ''), userId: String(result.userId || '') };
+      if (!vaultOwnerBindingsMatch(expected, liveBinding)) {
+        const note = 'A different Password-Encrypt account is still verified in this browser. To protect both vaults, no vault was created. Return to Account Setup and verify this account again.';
+        setOnboardingSecurityWarning(note);
+        setCustomerSession({ checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: 'ACCOUNT_SESSION_MISMATCH', tenantId: liveBinding.tenantId, userId: liveBinding.userId, message: note });
+        return { ok: false, mismatch: true, message: note };
+      }
+      setCustomerSession((current) => ({ ...current, checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: result.accessCode || '', tenantId: liveBinding.tenantId, userId: liveBinding.userId, message: result.message || current.message }));
+      setOnboardingSecurityWarning('');
+      return { ok: true, account: { ...bootstrap, tenantId: liveBinding.tenantId, userId: liveBinding.userId } };
+    } catch (error) {
+      const note = 'Password-Encrypt could not confirm which account is verified in this browser. No vault was created. Please try verification again.';
+      setOnboardingSecurityWarning(note);
+      return { ok: false, message: note, error };
     }
   }
 
@@ -3970,6 +4143,12 @@ function App() {
     }
     if (!customerSession.authenticated) {
       showMessage('Your account verification session is no longer active. Return to the landing page and verify the account again.', 'warning');
+      return;
+    }
+    const liveSession = await verifyOnboardingSessionMatchesAccount();
+    if (!liveSession.ok) {
+      showVerifyOverlay('error', 'Different account session detected', liveSession.message || 'No vault was created.');
+      showMessage(liveSession.message || 'No vault was created.', 'error');
       return;
     }
     if (masterPassword.length < 8) {
@@ -4142,7 +4321,7 @@ function App() {
 
   async function saveItems(nextItems, options = {}) {
     setItems(nextItems);
-    const envelope = await encryptVault(nextItems, masterPassword);
+    const envelope = await encryptVault(nextItems, masterPassword, bootstrap);
     const itemCount = getVisibleVaultItems(nextItems).length;
 
     if (options.autoSync && !featureIncluded('cloudBackupSync')) {
@@ -4740,6 +4919,18 @@ function App() {
       await recordSyncEvent('backup_waiting_for_verification', 'warning', { itemCount, message: note });
       return { ok: false, sessionRequired: true, message: note };
     }
+    const envelopeOwner = vaultOwnerBindingFromEnvelope(envelope);
+    const verifiedSessionOwner = customerSession.authenticated
+      ? { tenantId: String(customerSession.tenantId || ''), userId: String(customerSession.userId || '') }
+      : {};
+    const targetOwner = hasCompleteVaultOwnerBinding(verifiedSessionOwner) ? verifiedSessionOwner : vaultOwnerBindingFromAccount(activeAccount);
+    if (hasCompleteVaultOwnerBinding(envelopeOwner) && hasCompleteVaultOwnerBinding(targetOwner) && !vaultOwnerBindingsMatch(envelopeOwner, targetOwner)) {
+      const note = 'This encrypted vault belongs to a different Password-Encrypt account than the currently verified browser session. Backup was blocked and nothing was uploaded.';
+      setSyncStatus({ state: 'error', message: note, lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount, snapshotCount: snapshotHistory.total });
+      saveSyncSafety({ state: 'account-mismatch', pending: true, conflict: false, sessionRequired: true, message: note, itemCount, lastFailureAt: new Date().toISOString(), acknowledgedAt: '' });
+      if (!silent) showMessage(note, 'error');
+      return { ok: false, code: 'ACCOUNT_VAULT_MISMATCH', accountMismatch: true, message: note };
+    }
     if (syncOperationRef.current) {
       return { ok: false, inProgress: true, message: 'A secure backup is already in progress.' };
     }
@@ -4805,7 +4996,7 @@ function App() {
           : (result.message || 'Secure backup did not complete.');
         setSyncStatus({ state: sessionRequired ? 'warning' : 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount, snapshotCount: snapshotHistory.total });
         if (sessionRequired) {
-          setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', message: 'Verify this device to enable secure backup and syncing.' });
+          setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'SESSION_REQUIRED', tenantId: '', userId: '', message: 'Verify this device to enable secure backup and syncing.' });
           setAccountStatus({ state: 'session-needed', message: 'Verify this device to enable secure backup and syncing.' });
         } else if (accessPaused) {
           setCustomerSession((current) => ({ ...current, checked: true, authenticated: true, cloudAccess: false, accessCode: result.code || 'ACCOUNT_ACCESS_PAUSED', message: note }));
@@ -5317,6 +5508,9 @@ function App() {
   }
 
   function openCreateAccountPopup(preselectedPlanCode = '') {
+    onboardingSessionIsolationRef.current = true;
+    clearPendingOnboardingAccount();
+    setOnboardingSecurityWarning('');
     setSignupLegalModal({ visible: false, page: 'terms' });
     const preferredPlan = publicPlans.find((plan) => plan.code === preselectedPlanCode)
       || publicPlans[Math.floor(publicPlans.length / 2)]
@@ -5340,6 +5534,8 @@ function App() {
   }
 
   function closeCreateAccountPopup() {
+    onboardingSessionIsolationRef.current = false;
+    clearPendingOnboardingAccount();
     setSignupLegalModal({ visible: false, page: 'terms' });
     setIsCreateAccountPopupOpen(false);
     setLandingOnboardingStep(1);
@@ -5398,6 +5594,25 @@ function App() {
     return '';
   }
 
+  async function isolateExistingCustomerSessionForNewOnboarding() {
+    try {
+      // First refresh CSRF for an already-verified account, then deliberately end
+      // that account session before a different tenant is onboarded in this tab.
+      const statusResponse = await fetch('/.netlify/functions/session-status', { method: 'GET', credentials: 'same-origin' });
+      const status = await statusResponse.json().catch(() => ({}));
+      if (status?.csrfToken) sessionStorage.setItem('mp_customer_csrf', status.csrfToken);
+      if (status?.authenticated) {
+        const ended = await postJson('/.netlify/functions/session-status', { action: 'logout' });
+        if (!ended.ok) throw new Error(ended.message || 'The previous account session could not be ended safely.');
+      }
+      sessionStorage.removeItem('mp_customer_csrf');
+      setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'ONBOARDING_ISOLATED', tenantId: '', userId: '', message: 'New-account onboarding is isolated from any previous customer session.' });
+      return true;
+    } catch (error) {
+      throw new Error(error.message || 'Password-Encrypt could not safely isolate this browser from the previous account session.');
+    }
+  }
+
   async function prepareLandingOnboarding() {
     const draft = cleanLandingDraft();
     const validationMessage = validateLandingDraft(draft);
@@ -5408,6 +5623,7 @@ function App() {
     }
     setLandingSignup((current) => ({ ...current, status: 'preparing', message: 'Preparing your secure account...' }));
     try {
+      await isolateExistingCustomerSessionForNewOnboarding();
       const result = await postJson('/.netlify/functions/bootstrap-admin', draft);
       if (!result.ok) throw new Error(result.message || 'Account setup could not continue.');
       const nextAccount = {
@@ -5521,7 +5737,10 @@ function App() {
       };
       setBootstrap(nextAccount);
       if (result.entitlements) updateEntitlements(result.entitlements);
-      setCustomerSession({ checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: result.accessCode || '', message: result.message || 'This device is verified.', entitlements: result.entitlements || entitlements });
+      setCustomerSession({ checked: true, authenticated: true, cloudAccess: result.cloudAccess !== false, accessCode: result.accessCode || '', tenantId: result.tenantId || '', userId: result.userId || '', message: result.message || 'This device is verified.', entitlements: result.entitlements || entitlements });
+      savePendingOnboardingAccount({ ...nextAccount, tenantId: result.tenantId || nextAccount.tenantId, userId: result.userId || nextAccount.userId });
+      onboardingSessionIsolationRef.current = true;
+      setOnboardingSecurityWarning('');
       setLandingSignup((current) => ({
         ...current,
         status: 'complete',
@@ -5541,6 +5760,13 @@ function App() {
 
   function finishLandingOnboarding() {
     const target = landingSignup.existingAccount ? '/vault?entry=existing' : '/vault?entry=onboarding';
+    if (landingSignup.existingAccount) {
+      onboardingSessionIsolationRef.current = false;
+      clearPendingOnboardingAccount();
+    } else {
+      savePendingOnboardingAccount({ ...bootstrap, tenantId: landingSignup.tenantId || bootstrap.tenantId, userId: landingSignup.userId || bootstrap.userId });
+      onboardingSessionIsolationRef.current = true;
+    }
     if (!landingSignup.existingAccount) {
       setOnboardingVaultDraft({
         email: bootstrap.email || landingAccountDraft.email || '',
@@ -5557,24 +5783,58 @@ function App() {
   }
 
 
+  async function waitForPasswordEncryptInstallPrompt(timeoutMs = 4500) {
+    const existing = installPromptRef.current || capturedPasswordEncryptInstallPrompt || window.__passwordEncryptInstallPrompt || null;
+    if (existing) return existing;
+    if ('serviceWorker' in navigator) {
+      await navigator.serviceWorker.ready.catch(() => null);
+    }
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (event = null) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('beforeinstallprompt', onPrompt);
+        window.clearTimeout(timer);
+        resolve(event || installPromptRef.current || capturedPasswordEncryptInstallPrompt || window.__passwordEncryptInstallPrompt || null);
+      };
+      const onPrompt = (event) => {
+        event.preventDefault();
+        capturedPasswordEncryptInstallPrompt = event;
+        window.__passwordEncryptInstallPrompt = event;
+        installPromptRef.current = event;
+        setInstallPromptReady(true);
+        finish(event);
+      };
+      const timer = window.setTimeout(() => finish(null), timeoutMs);
+      window.addEventListener('beforeinstallprompt', onPrompt, { once: true });
+    });
+  }
+
   async function installPasswordEncryptApp() {
     if (isPasswordEncryptInstalled()) {
       setInstallStatus('installed');
       setInstallMessage('Password-Encrypt is already installed on this device.');
       return;
     }
-    const promptEvent = installPromptRef.current;
+    setInstallStatus('prompting');
+    setInstallMessage('Preparing the Password-Encrypt installation prompt...');
+    const promptEvent = await waitForPasswordEncryptInstallPrompt();
     if (!promptEvent) {
       setInstallStatus('manual');
-      setInstallMessage(passwordEncryptInstallInstructions());
+      const ua = navigator.userAgent || '';
+      const chromiumDesktop = /Chrome\/|Edg\//i.test(ua) && !/Android|iPhone|iPad|Mobile/i.test(ua);
+      setInstallMessage(chromiumDesktop
+        ? 'Chrome has not made the native install prompt available yet. Keep this page open briefly and try Install again, or use the install icon in the address bar / browser menu.'
+        : passwordEncryptInstallInstructions());
       return;
     }
-    setInstallStatus('prompting');
     setInstallMessage('Your browser is opening the Password-Encrypt installation prompt...');
     try {
       await promptEvent.prompt();
       const choice = await promptEvent.userChoice;
       capturedPasswordEncryptInstallPrompt = null;
+      window.__passwordEncryptInstallPrompt = null;
       installPromptRef.current = null;
       setInstallPromptReady(false);
       if (choice?.outcome === 'accepted') {
@@ -5582,11 +5842,11 @@ function App() {
         setInstallMessage('Installation accepted. Password-Encrypt can now be opened from your device like an app.');
       } else {
         setInstallStatus('declined');
-        setInstallMessage('Installation was not completed. You can install Password-Encrypt later from your browser menu.');
+        setInstallMessage('Installation was not completed. You can choose Install again when Chrome offers the prompt, or use the browser install icon.');
       }
     } catch {
       setInstallStatus('manual');
-      setInstallMessage(passwordEncryptInstallInstructions());
+      setInstallMessage('The native install prompt was not available. Use the browser install icon/menu, or try Install again after a few seconds.');
     }
   }
 
@@ -7064,6 +7324,7 @@ function App() {
               <div className="master-password-boundary-note compact"><Lock size={18} /><span><strong>Keep this password somewhere safe</strong><small>It is the primary secret that decrypts your vault and cannot be recovered by support.</small></span></div>
             </div>
 
+            {onboardingSecurityWarning && <div className="vault-onboarding-session-note warning onboarding-account-mismatch-warning"><AlertTriangle size={18} /> <span><strong>Account safety check</strong><small>{onboardingSecurityWarning}</small></span></div>}
             {hasLocalVault && <div className="vault-onboarding-session-note warning"><AlertTriangle size={18} /> This device already contains a local encrypted vault. Password-Encrypt will not overwrite it during new-account onboarding. Use a clean browser/device for this new vault, or return to the landing page.</div>}
             {!hasLocalVault && !customerSession.checked && <div className="vault-onboarding-session-note"><RefreshCw size={17} className="spin-icon" /> Checking your verified account session...</div>}
             {customerSession.checked && !customerSession.authenticated && <div className="vault-onboarding-session-note warning"><AlertTriangle size={18} /> Your account verification session has expired. Return to the landing page and verify the account again before creating a vault.</div>}
@@ -7210,9 +7471,6 @@ function App() {
                   <p>Use email verification, then enter the one-time code before opening an existing vault on this device.</p>
                   <div className={`otp-test-panel ${otpTest.status}`}>
                     <div className="otp-test-title"><ShieldCheck size={16} /><strong>One-time code</strong></div>
-                    <div className="otp-channel-toggle premium-toggle email-only-verification" role="group" aria-label="Email OTP delivery">
-                      <button type="button" className="active" onClick={() => chooseOtpChannel('email')}><Mail size={15} /> Email</button>
-                    </div>
                     {otpTest.message && <div className={`otp-status-line ${otpTest.verified ? 'verified' : ''}`}>{otpTest.message}</div>}
                     {otpTest.code && <div className="test-code-box"><span>Recovery code</span><code>{otpTest.code}</code></div>}
                     <div className="otp-flow-row create-vault-otp-row">

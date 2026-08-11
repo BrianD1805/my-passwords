@@ -16609,3 +16609,41 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   }
 }
 
+
+/* Password-Encrypt Ver-0.055D — explicit account/vault mismatch warning. */
+.onboarding-account-mismatch-warning > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.onboarding-account-mismatch-warning strong,
+.onboarding-account-mismatch-warning small {
+  display: block;
+}
+.onboarding-account-mismatch-warning strong {
+  font-weight: 600;
+}
+.onboarding-account-mismatch-warning small {
+  font-size: 14px;
+  line-height: 1.45;
+  color: inherit;
+}
+
+/* Password-Encrypt Ver-0.055D — explicit account/vault mismatch warning. */
+.onboarding-account-mismatch-warning > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.onboarding-account-mismatch-warning strong,
+.onboarding-account-mismatch-warning small {
+  display: block;
+}
+.onboarding-account-mismatch-warning strong {
+  font-weight: 600;
+}
+.onboarding-account-mismatch-warning small {
+  font-size: 14px;
+  line-height: 1.45;
+  color: inherit;
+}

@@ -9,6 +9,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link id="ubuntu-font-stylesheet" href="https://fonts.googleapis.com/css?family=Ubuntu:300,400,500,700&display=swap" rel="stylesheet" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      // Capture Chromium's install event before the React module downloads so
+      // onboarding Step 3 cannot miss the one-shot native install opportunity.
+      window.__passwordEncryptInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (event) {
+        event.preventDefault();
+        window.__passwordEncryptInstallPrompt = event;
+      });
+      window.addEventListener('appinstalled', function () {
+        window.__passwordEncryptInstallPrompt = null;
+      });
+    </script>
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16x16.png" type="image/png" sizes="16x16" />

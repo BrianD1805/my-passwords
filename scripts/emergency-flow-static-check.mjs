@@ -26,7 +26,7 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-0.055C version is aligned', pkg.version === '0.0.55-c' && /Password-Encrypt Ver-0\.055C/.test(main) && /my-passwords-v0\.055C/.test(read('public/sw.js')));
+check('Ver-0.055D version is aligned', pkg.version === '0.0.55-d' && /Password-Encrypt Ver-0\.055D/.test(main) && /my-passwords-v0\.055D/.test(read('public/sw.js')));
 check('Trusted Person heading has a same-line Help and FAQ control', /Trusted Person Planning<\/h3>/.test(main) && /trusted-person-help-button/.test(main) && /Open Trusted Person help and FAQs/.test(main));
 check('Current progress is setup-only and explicitly shows Stage X of 4', /emergencySetupStageNumber/.test(main) && /Stage \{emergencySetupStageNumber\} of 4 setup/.test(main) && /emergencySetupCompleteCount/.test(main));
 check('Current progress panel jumps directly to its setup stage', /goToEmergencySetupStage/.test(main) && /onClick=\{\(\) => goToEmergencySetupStage\(emergencySetupStageNumber\)\}/.test(main) && /scrollIntoView/.test(main));
