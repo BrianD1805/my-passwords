@@ -1,0 +1,26 @@
+Password-Encrypt Ver-0.055C verification results
+
+PASS  13 / 13 Security static checks
+PASS  20 / 20 Reliability static checks
+PASS  35 / 35 Legal/commercial readiness checks
+PASS  36 / 36 Landing/plan UX checks
+PASS  6 / 6 Mobile restoration checks
+PASS  64 / 64 Trusted Person/Emergency Flow checks
+PASS  34 / 34 Onboarding Flow checks
+PASS  70 JS/MJS syntax files checked
+PASS  7 / 7 JSX files parsed/transpiled successfully
+PASS  60 / 60 Netlify Function modules imported successfully
+PASS  CSS brace validation
+
+Ver-0.055C changes verified:
+- Dedicated Vault Setup route resets document scroll to top.
+- Browser-generated new-password hint removed from onboarding master-password fields.
+- Password-manager ignore hints and deliberate field arming retained.
+- Welcome trial email says the trial will end on the displayed date.
+- New-customer journey is Account Setup -> Vault Setup -> Install App.
+- beforeinstallprompt is captured early and invoked from Step 3 where supported.
+- appinstalled and already-installed standalone states are handled.
+- Manual install instructions exist for iPhone/iPad, Android and desktop browsers.
+- Installation can be skipped without blocking access to the newly created vault.
+
+npm run build was not executed in the patch workspace because node_modules are intentionally not installed there.

@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-0.055b';
+const VERSION = 'Password-Encrypt Ver-0.055C';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -96,6 +96,20 @@ function ensureUbuntuFontStylesheet() {
 
 ensureUbuntuFontStylesheet();
 
+// Capture the browser's install opportunity as early as possible so Step 3 can
+// still offer the native install prompt even if the event fires before the
+// onboarding screen is reached.
+let capturedPasswordEncryptInstallPrompt = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    capturedPasswordEncryptInstallPrompt = event;
+  });
+  window.addEventListener('appinstalled', () => {
+    capturedPasswordEncryptInstallPrompt = null;
+  });
+}
+
 function readAccountDeviceInstallId() {
   let value = localStorage.getItem(ACCOUNT_DEVICE_INSTALL_KEY) || '';
   if (!value) {
@@ -119,6 +133,19 @@ function accountDeviceMetadata() {
     browser,
     userAgent
   };
+}
+
+function isPasswordEncryptInstalled() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  return Boolean(window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true);
+}
+
+function passwordEncryptInstallInstructions() {
+  if (typeof navigator === 'undefined') return 'Use your browser menu to install Password-Encrypt as an app.';
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'On iPhone or iPad, tap Share, choose Add to Home Screen, then tap Add.';
+  if (/Android/i.test(ua)) return 'Open your browser menu and choose Install app or Add to Home screen.';
+  return 'Use the install icon in your browser address bar, or open the browser menu and choose Install Password-Encrypt.';
 }
 const DEFAULT_ENTITLEMENTS = Object.freeze({
   version: 1,
@@ -2282,7 +2309,13 @@ function App() {
   });
   const [landingSignup, setLandingSignup] = useState({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
   const [onboardingVaultDraft, setOnboardingVaultDraft] = useState(() => { const saved = readSavedAccount(); return { email: saved.email || '', phoneCountryCode: saved.phoneCountryCode || '+254', phoneCountryIso: saved.phoneCountryIso || 'ke', phoneNumber: saved.phoneNumber || '' }; });
+  const [onboardingSecretFieldsArmed, setOnboardingSecretFieldsArmed] = useState({ master: false, confirm: false });
   const [landingOtp, setLandingOtp] = useState({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
+  const installPromptRef = useRef(null);
+  const [installPromptReady, setInstallPromptReady] = useState(false);
+  const [installStatus, setInstallStatus] = useState(() => isPasswordEncryptInstalled() ? 'installed' : 'waiting');
+  const [installMessage, setInstallMessage] = useState(() => isPasswordEncryptInstalled() ? 'Password-Encrypt is already installed on this device.' : 'Install Password-Encrypt for quicker everyday access from your home screen or desktop.');
+  const [showInstallOnboarding, setShowInstallOnboarding] = useState(false);
   const [showLandingBackToTop, setShowLandingBackToTop] = useState(false);
   const touchReorderRef = useRef({ timer: null, source: '', active: false });
 
@@ -3054,6 +3087,41 @@ function App() {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      capturedPasswordEncryptInstallPrompt = event;
+      installPromptRef.current = event;
+      setInstallPromptReady(true);
+      if (!isPasswordEncryptInstalled()) {
+        setInstallStatus('ready');
+        setInstallMessage('Password-Encrypt is ready to install on this device.');
+      }
+    };
+    const handleAppInstalled = () => {
+      capturedPasswordEncryptInstallPrompt = null;
+      installPromptRef.current = null;
+      setInstallPromptReady(false);
+      setInstallStatus('installed');
+      setInstallMessage('Password-Encrypt is installed and ready to open like an app.');
+    };
+    if (isPasswordEncryptInstalled()) {
+      setInstallStatus('installed');
+      setInstallMessage('Password-Encrypt is already installed on this device.');
+    } else if (capturedPasswordEncryptInstallPrompt) {
+      installPromptRef.current = capturedPasswordEncryptInstallPrompt;
+      setInstallPromptReady(true);
+      setInstallStatus('ready');
+      setInstallMessage('Password-Encrypt is ready to install on this device.');
+    }
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
@@ -3848,7 +3916,8 @@ function App() {
       backNavigationStateRef.current.locked = false;
       backNavigationStateRef.current.activePage = 'home';
       setLocked(false);
-      showVerifyOverlay('success', 'Vault created', 'Your encrypted vault has been created on this device.');
+      if (options.afterCreateOnboardingInstall) hideVerifyOverlay();
+      else showVerifyOverlay('success', 'Vault created', 'Your encrypted vault has been created on this device.');
       if (cloudBackupAvailable) {
         const initialBackup = await syncEncryptedVault({ envelope: newVaultEnvelope, nextItems: starterItems, silent: true });
         if (initialBackup?.ok) showMessage('New secure vault created and backed up.', 'success');
@@ -3857,6 +3926,12 @@ function App() {
         showMessage('New encrypted vault created locally. Cloud backup is not included in this plan.', 'success');
       }
       if (options.setupBiometricAfterPassword) await setupBiometricUnlockForPassword(password, { fromLoginIcon: true });
+      if (options.afterCreateOnboardingInstall) {
+        window.history.replaceState({ onboardingInstall: true }, '', '/vault?entry=install');
+        setShowInstallOnboarding(true);
+        setActivePage('home');
+        window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+      }
     } catch (error) {
       showVerifyOverlay('error', 'Something went wrong', 'We could not unlock your vault. Please check your master password and try again.');
       showMessage('Could not unlock. Check your master password. Nothing new was saved.');
@@ -3905,7 +3980,7 @@ function App() {
       showMessage('The two master password entries do not match. Nothing has been saved.');
       return;
     }
-    await openVaultWithPassword(masterPassword);
+    await openVaultWithPassword(masterPassword, { afterCreateOnboardingInstall: true });
   }
 
   async function unlockVault(event) {
@@ -4925,9 +5000,17 @@ function App() {
   const vaultEntryMode = typeof window !== 'undefined' ? new URLSearchParams(window.location.search || '').get('entry') || '' : '';
   const existingCustomerEntry = isVaultRoute && vaultEntryMode === 'existing';
   const newCustomerOnboardingEntry = isVaultRoute && vaultEntryMode === 'onboarding';
+  const onboardingInstallEntry = isVaultRoute && vaultEntryMode === 'install';
   const isEmergencyInviteRoute = normalisedRoutePath === '/emergency-invite';
   const isTrustedPersonReminderRoute = normalisedRoutePath === '/trusted-person-confirm';
   const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute && !isTrustedPersonReminderRoute;
+
+  useLayoutEffect(() => {
+    if (!newCustomerOnboardingEntry && !onboardingInstallEntry) return;
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [newCustomerOnboardingEntry, onboardingInstallEntry]);
 
   const hasBackDismissibleLayer = Boolean(
     mobileHeaderMenuOpen
@@ -5466,12 +5549,53 @@ function App() {
         phoneNumber: bootstrap.phoneNumber || landingAccountDraft.phoneNumber || ''
       });
     }
+    setOnboardingSecretFieldsArmed({ master: false, confirm: false });
     // Change the SPA route before closing the account-setup popup so React's next
     // render goes directly to vault setup instead of briefly revealing the landing page.
     window.history.replaceState({ onboarding: true }, '', target);
     setIsCreateAccountPopupOpen(false);
   }
 
+
+  async function installPasswordEncryptApp() {
+    if (isPasswordEncryptInstalled()) {
+      setInstallStatus('installed');
+      setInstallMessage('Password-Encrypt is already installed on this device.');
+      return;
+    }
+    const promptEvent = installPromptRef.current;
+    if (!promptEvent) {
+      setInstallStatus('manual');
+      setInstallMessage(passwordEncryptInstallInstructions());
+      return;
+    }
+    setInstallStatus('prompting');
+    setInstallMessage('Your browser is opening the Password-Encrypt installation prompt...');
+    try {
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+      capturedPasswordEncryptInstallPrompt = null;
+      installPromptRef.current = null;
+      setInstallPromptReady(false);
+      if (choice?.outcome === 'accepted') {
+        setInstallStatus('installed');
+        setInstallMessage('Installation accepted. Password-Encrypt can now be opened from your device like an app.');
+      } else {
+        setInstallStatus('declined');
+        setInstallMessage('Installation was not completed. You can install Password-Encrypt later from your browser menu.');
+      }
+    } catch {
+      setInstallStatus('manual');
+      setInstallMessage(passwordEncryptInstallInstructions());
+    }
+  }
+
+  function finishInstallOnboarding() {
+    setShowInstallOnboarding(false);
+    window.history.replaceState({}, '', '/vault');
+    setActivePage('home');
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+  }
 
   function openVaultSection(cat) {
     setCategory(cat);
@@ -6766,7 +6890,7 @@ function App() {
               <header className="item-popup-header create-account-popup-header">
                 <div className="create-account-header-content">
                   <div className="create-account-header-title">
-                    <p className="eyebrow">Step 1 of 2 · Account setup</p>
+                    <p className="eyebrow">Step 1 of 3 · Account setup</p>
                     <h2><UserRoundCheck size={20} /> Create your Password-Encrypt account</h2>
                   </div>
                   <div className="onboarding-progress onboarding-progress-four" aria-label="Account setup progress">
@@ -6776,10 +6900,12 @@ function App() {
                 <button type="button" className="icon-button" onClick={closeCreateAccountPopup} aria-label="Close create account popup"><X size={18} /></button>
               </header>
               <div ref={createAccountPopupBodyRef} className="item-popup-body create-account-popup-body">
-                <div className="onboarding-two-part-roadmap" aria-label="Password-Encrypt onboarding has two parts">
+                <div className="onboarding-three-part-roadmap" aria-label="Password-Encrypt onboarding has three steps">
                   <span className="current"><b>1</b><span><strong>Set up account</strong><small>Details, plan and email verification.</small></span></span>
                   <ChevronRight size={18} />
-                  <span><b>2</b><span><strong>Set up vault</strong><small>Create your private master password next.</small></span></span>
+                  <span><b>2</b><span><strong>Set up vault</strong><small>Create your private master password.</small></span></span>
+                  <ChevronRight size={18} />
+                  <span><b>3</b><span><strong>Install app</strong><small>Add Password-Encrypt to this device for everyday access.</small></span></span>
                 </div>
 
                 {landingOnboardingStep === 1 && (
@@ -6855,7 +6981,7 @@ function App() {
                       <span><strong>Trial ends</strong>{isFounderPlan(bootstrap) ? 'No expiry' : formatAccountDate(landingSignup.trialEndsAt || bootstrap.trialEndsAt, true)}</span>
                     </div>
                     {!landingSignup.existingAccount && Number(landingSignup.trialDays || 0) > 0 && <div className="trial-ready-card"><CalendarClock size={20} /><span><strong>{landingSignup.trialDays}-day trial active</strong><small>Ends {formatAccountDate(landingSignup.trialEndsAt, true)}.</small></span></div>}
-                    <div className="saas-inline-note onboarding-next-step-note"><ShieldCheck size={16} /><span>{landingSignup.existingAccount ? 'This is an existing account. Next, open its existing encrypted vault using the master password you already use.' : 'Step 2 of 2 is next: create your encrypted vault and choose the master password only you know.'}</span></div>
+                    <div className="saas-inline-note onboarding-next-step-note"><ShieldCheck size={16} /><span>{landingSignup.existingAccount ? 'This is an existing account. Next, open its existing encrypted vault using the master password you already use.' : 'Step 2 of 3 is next: create your encrypted vault and choose the master password only you know.'}</span></div>
                   </div>
                 )}
               </div>
@@ -6907,15 +7033,16 @@ function App() {
         <section className="vault-onboarding-card">
           <header className="vault-onboarding-header">
             <div>
-              <p className="eyebrow">Step 2 of 2 · Vault setup</p>
+              <p className="eyebrow">Step 2 of 3 · Vault setup</p>
               <h1><ShieldCheck size={28} /> Create your secure vault</h1>
               <p>Your Password-Encrypt account has been set up. Now create the encrypted vault on this device and choose the master password only you know.</p>
             </div>
           </header>
 
-          <div className="two-step-onboarding-guide" aria-label="Onboarding progress">
+          <div className="three-step-onboarding-guide" aria-label="Onboarding progress">
             <div className="complete"><span><Check size={18} /></span><div><strong>1. Account setup</strong><small>Account details and email verification complete.</small></div></div>
             <div className="current"><span>2</span><div><strong>2. Vault setup</strong><small>Confirm your details and create your master password.</small></div></div>
+            <div><span>3</span><div><strong>3. Install app</strong><small>Recommended for quick everyday access.</small></div></div>
           </div>
 
           <form className="vault-onboarding-form" onSubmit={createVaultFromOnboarding} autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other">
@@ -6932,8 +7059,8 @@ function App() {
 
             <div className="vault-onboarding-section">
               <div className="vault-onboarding-section-heading"><KeyRound size={21} /><div><strong>Create your master password</strong><small>This password encrypts your vault. Password-Encrypt cannot recover or reset it.</small></div></div>
-              <label>Master password<input id="onboarding-master-password" name="vault-onboarding-local-decryption-key" type="password" autoComplete="new-password" spellCheck="false" value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} placeholder="Create your master password" /></label>
-              <label>Confirm master password<input name="vault-onboarding-local-decryption-key-confirmation" type="password" autoComplete="new-password" spellCheck="false" value={confirmMasterPassword} onChange={(event) => setConfirmMasterPassword(event.target.value)} placeholder="Type the same password again" /></label>
+              <label>Master password<input id="onboarding-master-password" name="vault-onboarding-secret-entry" type="password" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!onboardingSecretFieldsArmed.master} onPointerDown={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, master: true }))} onFocus={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, master: true }))} value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} placeholder="Create your master password" /></label>
+              <label>Confirm master password<input name="vault-onboarding-secret-confirmation-entry" type="password" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!onboardingSecretFieldsArmed.confirm} onPointerDown={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, confirm: true }))} onFocus={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, confirm: true }))} value={confirmMasterPassword} onChange={(event) => setConfirmMasterPassword(event.target.value)} placeholder="Type the same password again" /></label>
               <div className="master-password-boundary-note compact"><Lock size={18} /><span><strong>Keep this password somewhere safe</strong><small>It is the primary secret that decrypts your vault and cannot be recovered by support.</small></span></div>
             </div>
 
@@ -6950,6 +7077,52 @@ function App() {
           <p className="version">{VERSION}</p>
         </section>
         <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={() => document.getElementById('onboarding-master-password')?.focus()} />
+        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+      </main>
+    );
+  }
+
+  if ((showInstallOnboarding || onboardingInstallEntry) && hasLocalVault) {
+    const installedNow = installStatus === 'installed' || isPasswordEncryptInstalled();
+    return (
+      <main className="vault-onboarding-screen install-onboarding-screen">
+        <section className="vault-onboarding-card install-onboarding-card">
+          <header className="vault-onboarding-header">
+            <div>
+              <p className="eyebrow">Step 3 of 3 · Install app</p>
+              <h1><MonitorSmartphone size={28} /> Install Password-Encrypt</h1>
+              <p>Your encrypted vault is ready. Installing Password-Encrypt is recommended for quicker everyday access and a cleaner app-style experience.</p>
+            </div>
+          </header>
+
+          <div className="three-step-onboarding-guide" aria-label="Onboarding progress">
+            <div className="complete"><span><Check size={18} /></span><div><strong>1. Account setup</strong><small>Account details and verification complete.</small></div></div>
+            <div className="complete"><span><Check size={18} /></span><div><strong>2. Vault setup</strong><small>Your encrypted vault has been created.</small></div></div>
+            <div className="current"><span>3</span><div><strong>3. Install app</strong><small>{installedNow ? 'Password-Encrypt is installed.' : 'Recommended for everyday use.'}</small></div></div>
+          </div>
+
+          <div className="install-onboarding-content">
+            <section className="vault-onboarding-section install-benefits-section">
+              <div className="vault-onboarding-section-heading"><ShieldCheck size={21} /><div><strong>Why install Password-Encrypt?</strong><small>Your vault remains encrypted; installing simply gives you a faster way to open Password-Encrypt on this device.</small></div></div>
+              <ul className="install-benefits-list">
+                <li><Check size={17} /> Open Password-Encrypt directly from your home screen, Start menu or app launcher.</li>
+                <li><Check size={17} /> Use a cleaner app-style window without normal browser tabs and controls.</li>
+                <li><Check size={17} /> Keep convenient access to the local encrypted vault, including supported offline use.</li>
+              </ul>
+            </section>
+
+            <div className={`vault-onboarding-session-note install-status-note ${installedNow ? 'success' : ''}`} role="status">
+              {installedNow ? <Check size={18} /> : installStatus === 'prompting' ? <RefreshCw size={18} className="spin-icon" /> : <MonitorSmartphone size={18} />}
+              <span>{installMessage || passwordEncryptInstallInstructions()}</span>
+            </div>
+
+            <div className="vault-onboarding-actions install-onboarding-actions">
+              <button type="button" className="secondary-button" onClick={finishInstallOnboarding}>{installedNow ? 'Open my vault' : 'Continue in browser'}</button>
+              {!installedNow && <button type="button" className="primary-button" onClick={installPasswordEncryptApp} disabled={installStatus === 'prompting'}><Download size={18} /> {installPromptReady ? 'Install Password-Encrypt' : 'Install app'}</button>}
+            </div>
+          </div>
+          <p className="version">{VERSION}</p>
+        </section>
         <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
     );

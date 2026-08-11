@@ -92,7 +92,7 @@ function emailDefinition(type, context = {}) {
       heading: 'Welcome to Password-Encrypt',
       paragraphs: [
         `Hello ${displayName},`,
-        `Your <strong>${accountName}</strong> account is ready and your ${planName} trial has started${trialEnd ? ` until ${escapeHtml(trialEnd)}` : ''}.`,
+        `Your <strong>${accountName}</strong> account is ready and your ${planName} trial has started${trialEnd ? ` and will end on ${escapeHtml(trialEnd)}` : ''}.`,
         '<strong>Your Password-Encrypt account details</strong>',
         accountEmail ? `Login email: <strong>${accountEmail}</strong>` : '',
         accountPhone ? `Mobile number: <strong>${accountPhone}</strong>` : '',
