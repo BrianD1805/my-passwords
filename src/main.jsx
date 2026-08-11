@@ -8,7 +8,8 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-0.055';
+const VERSION = 'Password-Encrypt Ver-0.055a';
+const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -1944,7 +1945,7 @@ function DeviceVerificationModal({ state, email, phone, channel = 'email', otp, 
   const isSending = otp?.status === 'requesting';
   const isVerifying = otp?.status === 'verifying';
   const isBusy = isSending || isVerifying;
-  const isSms = channel === 'sms';
+  const isSms = SMS_VERIFICATION_UI_ENABLED && channel === 'sms';
   const destinationAvailable = isSms ? Boolean(phone) : Boolean(email);
   const destinationMasked = isSms ? maskPhone(phone) : maskEmail(email);
   return (
@@ -1957,9 +1958,8 @@ function DeviceVerificationModal({ state, email, phone, channel = 'email', otp, 
         </header>
         <div className="item-popup-body device-verification-popup-body">
           <p>Verify this device before secure backup and syncing can continue.</p>
-          {!hasChallenge && <div className="recovery-channel-switch device-verification-channel-switch" aria-label="Choose verification channel">
-            <button type="button" className={!isSms ? 'active' : ''} onClick={() => onChannelChange('email')} disabled={isBusy}><Mail size={17} /> Email</button>
-            <button type="button" className={isSms ? 'active' : ''} onClick={() => onChannelChange('sms')} disabled={isBusy}><Phone size={17} /> SMS</button>
+          {!hasChallenge && <div className="recovery-channel-switch device-verification-channel-switch email-only-verification" aria-label="Email verification">
+            <button type="button" className="active" onClick={() => onChannelChange('email')} disabled={isBusy}><Mail size={17} /> Email</button>
           </div>}
           <div className="device-verification-email-card">{isSms ? <Phone size={19} /> : <Mail size={19} />}<span><strong>{isSms ? 'SMS code' : 'Email code'}</strong><small>{destinationAvailable ? `The code will be sent to ${destinationMasked}.` : `Add a verified ${isSms ? 'mobile number' : 'email address'} in My Account before continuing.`}</small></span></div>
           {!hasChallenge ? (
@@ -2147,8 +2147,7 @@ function AccountRecoveryModal({ state, setState, onClose, onRequest, onVerify })
       <section className="item-popup-card account-recovery-modal-card">
         <header className="item-popup-header"><h2 id="account-recovery-title"><UserRoundCheck size={21} /> Recover account access</h2><button type="button" className="icon-button" onClick={onClose} disabled={state.busy} aria-label="Close"><X size={19} /></button></header>
         <div className="item-popup-body account-recovery-modal-body">
-          {state.step === 'contact' ? <><p>Use this when setting up a new device, after ending account sessions, or when you can no longer access account services. A verified contact detail restores account, subscription and secure cloud-service access on this device. It does not open or decrypt the vault.</p><div className="recovery-channel-switch"><button type="button" className={state.channel === 'email' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'email', contact: '', message: '' }))}><Mail size={17} /> Email</button><button type="button" className={state.channel === 'sms' ? 'active' : ''} onClick={() => setState((current) => ({ ...current, channel: 'sms', contact: '', message: '' }))}><Phone size={17} /> Mobile</button></div><label>{state.channel === 'email' ? 'Verified email address' : 'Verified mobile number with country code'}<input type={state.channel === 'email' ? 'email' : 'tel'} inputMode={state.channel === 'email' ? 'email' : 'tel'} value={state.contact || ''} onChange={(event) => setState((current) => ({ ...current, contact: event.target.value, message: '' }))} placeholder={state.channel === 'email' ? 'you@example.com' : '+254712345678'} /></label></> : <><div className="account-otp-destination"><ShieldCheck size={20} /><span><strong>Enter your recovery code</strong><small>{state.message}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
-          {state.channel === 'sms' && <p className="sms-carrier-note">Standard message and carrier rates may apply.</p>}
+          {state.step === 'contact' ? <><p>Use this when setting up a new device, after ending account sessions, or when you can no longer access account services. Your verified email restores account, subscription and secure cloud-service access on this device. It does not open or decrypt the vault.</p><div className="recovery-channel-switch email-only-verification"><button type="button" className="active" onClick={() => setState((current) => ({ ...current, channel: 'email', contact: current.contact || '', message: '' }))}><Mail size={17} /> Email</button></div><label>Verified email address<input type="email" inputMode="email" value={state.contact || ''} onChange={(event) => setState((current) => ({ ...current, channel: 'email', contact: event.target.value, message: '' }))} placeholder="you@example.com" /></label></> : <><div className="account-otp-destination"><ShieldCheck size={20} /><span><strong>Enter your recovery code</strong><small>{state.message}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
           {state.message && state.step === 'contact' && <div className="account-modal-message">{state.message}</div>}
           <div className="master-password-boundary-note"><Lock size={20} /><span><strong>Support cannot recover or reset your master password</strong><small>Account recovery can restore the account and subscription, but it does not supply the vault encryption secret. A previously configured Secure device unlock may still provide local access until its next password check.</small></span></div>
         </div>
@@ -2226,7 +2225,7 @@ function App() {
     source: hasLocalVault ? 'local-encrypted-vault-present' : 'no-local-vault'
   });
   const [toasts, setToasts] = useState([]);
-  const [otpTest, setOtpTest] = useState({ status: 'not-requested', challengeId: '', code: '', input: '', message: 'Choose how you would like to receive your one-time code.', verified: false, expiresAt: '' });
+  const [otpTest, setOtpTest] = useState({ status: 'not-requested', challengeId: '', code: '', input: '', message: 'Email verification has not been requested yet.', verified: false, expiresAt: '' });
   const [otpChannel, setOtpChannel] = useState('email');
   const [verifyOverlay, setVerifyOverlay] = useState({ visible: false, status: 'idle', title: '', message: '', focusMasterPassword: false });
   const [deviceVerificationModal, setDeviceVerificationModal] = useState({ visible: false, purpose: '' });
@@ -2265,6 +2264,7 @@ function App() {
   const [isFolderListPopupOpen, setIsFolderListPopupOpen] = useState(false);
   const [showOnboardingDetails, setShowOnboardingDetails] = useState(() => !Boolean(readStoredVault()));
   const [isCreateAccountPopupOpen, setIsCreateAccountPopupOpen] = useState(false);
+  const createAccountPopupBodyRef = useRef(null);
   const [isOpenVaultChoicePopupOpen, setIsOpenVaultChoicePopupOpen] = useState(false);
   const [signupLegalModal, setSignupLegalModal] = useState({ visible: false, page: 'terms' });
   const [isCreateVaultPopupOpen, setIsCreateVaultPopupOpen] = useState(false);
@@ -2281,6 +2281,7 @@ function App() {
     legalAccepted: false
   });
   const [landingSignup, setLandingSignup] = useState({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
+  const [onboardingVaultDraft, setOnboardingVaultDraft] = useState(() => { const saved = readSavedAccount(); return { email: saved.email || '', phoneCountryCode: saved.phoneCountryCode || '+254', phoneCountryIso: saved.phoneCountryIso || 'ke', phoneNumber: saved.phoneNumber || '' }; });
   const [landingOtp, setLandingOtp] = useState({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
   const [showLandingBackToTop, setShowLandingBackToTop] = useState(false);
   const touchReorderRef = useRef({ timer: null, source: '', active: false });
@@ -2891,7 +2892,7 @@ function App() {
   }
 
   function chooseOtpChannel(nextChannel) {
-    const channel = nextChannel === 'sms' ? 'sms' : 'email';
+    const channel = SMS_VERIFICATION_UI_ENABLED && nextChannel === 'sms' ? 'sms' : 'email';
     setOtpChannel(channel);
     setOtpTest({
       status: 'not-requested',
@@ -2912,7 +2913,7 @@ function App() {
       challengeId: '',
       code: '',
       input: '',
-      message: 'Choose email or SMS, then request your one-time code.',
+      message: 'Request an email verification code when you are ready.',
       verified: false,
       expiresAt: ''
     });
@@ -3055,6 +3056,14 @@ function App() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!isCreateAccountPopupOpen) return;
+    const body = createAccountPopupBodyRef.current;
+    if (!body) return;
+    body.scrollTop = 0;
+    if (typeof body.scrollTo === 'function') body.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [isCreateAccountPopupOpen, landingOnboardingStep]);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return undefined;
@@ -3532,7 +3541,7 @@ function App() {
 
 
   async function requestSelectedOtp(options = {}) {
-    if (otpChannel === 'sms') {
+    if (SMS_VERIFICATION_UI_ENABLED && otpChannel === 'sms') {
       await requestSmsOtp(options);
       return;
     }
@@ -3724,7 +3733,8 @@ function App() {
         }
         const accountCheck = await ensureAccountIdentity({ silent: true });
         if (!accountCheck.ok) return;
-        if (!otpTest.verified) {
+        const verifiedOnboardingSession = newCustomerOnboardingEntry && customerSession.authenticated;
+        if (!otpTest.verified && !verifiedOnboardingSession) {
           showVerifyOverlay('error', 'Verify your account first', 'Please verify your email before creating or restoring a vault on this device.');
           showMessage('Please verify your account before creating or restoring a vault on this device.', 'warning');
           return;
@@ -3851,6 +3861,51 @@ function App() {
       showVerifyOverlay('error', 'Something went wrong', 'We could not unlock your vault. Please check your master password and try again.');
       showMessage('Could not unlock. Check your master password. Nothing new was saved.');
     }
+  }
+
+  async function createVaultFromOnboarding(event) {
+    event.preventDefault();
+    if (hasLocalVault) {
+      showMessage('This device already contains a local vault. New-account onboarding will not overwrite it.', 'warning');
+      return;
+    }
+    const enteredEmail = String(onboardingVaultDraft.email || '').trim().toLowerCase();
+    const enteredPhone = buildPhoneE164(onboardingVaultDraft.phoneCountryCode || '+254', onboardingVaultDraft.phoneNumber || '');
+    const verifiedEmail = String(bootstrap.email || '').trim().toLowerCase();
+    const verifiedPhone = bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode || '+254', bootstrap.phoneNumber || '');
+    if (!enteredEmail || !enteredEmail.includes('@')) {
+      showMessage('Enter the email address linked to the account.', 'warning');
+      return;
+    }
+    if (!enteredPhone) {
+      showMessage('Enter the mobile number linked to the account.', 'warning');
+      return;
+    }
+    if (verifiedEmail && enteredEmail !== verifiedEmail) {
+      showMessage('Use the same email address you verified during account setup.', 'warning');
+      return;
+    }
+    if (verifiedPhone && enteredPhone !== verifiedPhone) {
+      showMessage('Use the same mobile number you entered during account setup.', 'warning');
+      return;
+    }
+    if (!customerSession.checked) {
+      showMessage('Please wait while Password-Encrypt checks your verified account session.', 'warning');
+      return;
+    }
+    if (!customerSession.authenticated) {
+      showMessage('Your account verification session is no longer active. Return to the landing page and verify the account again.', 'warning');
+      return;
+    }
+    if (masterPassword.length < 8) {
+      showMessage('Use at least 8 characters for your master password.');
+      return;
+    }
+    if (masterPassword !== confirmMasterPassword) {
+      showMessage('The two master password entries do not match. Nothing has been saved.');
+      return;
+    }
+    await openVaultWithPassword(masterPassword);
   }
 
   async function unlockVault(event) {
@@ -4869,6 +4924,7 @@ function App() {
   const isVaultRoute = ['/vault', '/app', '/login'].includes(normalisedRoutePath);
   const vaultEntryMode = typeof window !== 'undefined' ? new URLSearchParams(window.location.search || '').get('entry') || '' : '';
   const existingCustomerEntry = isVaultRoute && vaultEntryMode === 'existing';
+  const newCustomerOnboardingEntry = isVaultRoute && vaultEntryMode === 'onboarding';
   const isEmergencyInviteRoute = normalisedRoutePath === '/emergency-invite';
   const isTrustedPersonReminderRoute = normalisedRoutePath === '/trusted-person-confirm';
   const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute && !isTrustedPersonReminderRoute;
@@ -5292,7 +5348,7 @@ function App() {
       setLandingAccountDraft((current) => ({ ...current, ...draft, planCode: nextAccount.planCode }));
       setLandingSignup({
         status: 'ready-for-otp',
-        message: result.message || 'Choose email or SMS verification to continue.',
+        message: result.message || 'Use email verification to continue.',
         existingAccount: Boolean(result.existingAccount),
         tenantId: result.tenantId || '',
         userId: result.userId || '',
@@ -5311,12 +5367,12 @@ function App() {
   }
 
   function chooseLandingOtpChannel(nextChannel) {
-    const channel = nextChannel === 'sms' ? 'sms' : 'email';
+    const channel = SMS_VERIFICATION_UI_ENABLED && nextChannel === 'sms' ? 'sms' : 'email';
     setLandingOtp({ status: 'idle', channel, challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
   }
 
   async function sendLandingOnboardingOtp() {
-    const channel = landingOtp.channel === 'sms' ? 'sms' : 'email';
+    const channel = SMS_VERIFICATION_UI_ENABLED && landingOtp.channel === 'sms' ? 'sms' : 'email';
     const email = String(landingAccountDraft.email || '').trim().toLowerCase();
     const phoneE164 = landingAccountDraft.phoneE164 || buildPhoneE164(landingAccountDraft.phoneCountryCode, landingAccountDraft.phoneNumber);
     if (channel === 'email' && !email) return;
@@ -5402,7 +5458,15 @@ function App() {
 
   function finishLandingOnboarding() {
     setIsCreateAccountPopupOpen(false);
-    window.location.assign(landingSignup.existingAccount ? '/vault?entry=existing' : '/vault');
+    if (!landingSignup.existingAccount) {
+      setOnboardingVaultDraft({
+        email: bootstrap.email || landingAccountDraft.email || '',
+        phoneCountryCode: bootstrap.phoneCountryCode || landingAccountDraft.phoneCountryCode || '+254',
+        phoneCountryIso: bootstrap.phoneCountryIso || landingAccountDraft.phoneCountryIso || 'ke',
+        phoneNumber: bootstrap.phoneNumber || landingAccountDraft.phoneNumber || ''
+      });
+    }
+    window.location.assign(landingSignup.existingAccount ? '/vault?entry=existing' : '/vault?entry=onboarding');
   }
 
 
@@ -6699,16 +6763,21 @@ function App() {
               <header className="item-popup-header create-account-popup-header">
                 <div className="create-account-header-content">
                   <div className="create-account-header-title">
-                    <p className="eyebrow">Create Account</p>
-                    <h2><UserRoundCheck size={20} /> Set up your secure vault</h2>
+                    <p className="eyebrow">Step 1 of 2 · Account setup</p>
+                    <h2><UserRoundCheck size={20} /> Create your Password-Encrypt account</h2>
                   </div>
-                  <div className="onboarding-progress onboarding-progress-four" aria-label="Onboarding progress">
+                  <div className="onboarding-progress onboarding-progress-four" aria-label="Account setup progress">
                     {[1, 2, 3, 4].map((step) => <span key={step} className={landingOnboardingStep === step ? 'active' : landingOnboardingStep > step ? 'complete' : ''}>{step}</span>)}
                   </div>
                 </div>
                 <button type="button" className="icon-button" onClick={closeCreateAccountPopup} aria-label="Close create account popup"><X size={18} /></button>
               </header>
-              <div className="item-popup-body create-account-popup-body">
+              <div ref={createAccountPopupBodyRef} className="item-popup-body create-account-popup-body">
+                <div className="onboarding-two-part-roadmap" aria-label="Password-Encrypt onboarding has two parts">
+                  <span className="current"><b>1</b><span><strong>Set up account</strong><small>Details, plan and email verification.</small></span></span>
+                  <ChevronRight size={18} />
+                  <span><b>2</b><span><strong>Set up vault</strong><small>Create your private master password next.</small></span></span>
+                </div>
 
                 {landingOnboardingStep === 1 && (
                   <div className="create-account-step">
@@ -6732,7 +6801,7 @@ function App() {
                 {landingOnboardingStep === 2 && (
                   <div className="create-account-step">
                     <h3>Confirm your plan</h3>
-                    <p>Your free trial starts after successful email or SMS verification. You can manage your subscription from inside the vault before the trial ends.</p>
+                    <p>Your free trial starts after successful email verification. You can manage your subscription from inside the vault before the trial ends.</p>
                     <div className="plan-choice-grid">
                       {publicPlans.map((plan) => <button type="button" key={plan.code} className={landingAccountDraft.planCode === plan.code ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: plan.code })}><strong>{plan.displayName}</strong><span>{plan.description}</span><small>{publicPlanPriceLabel(plan)}</small></button>)}
                       {!publicPlans.length && <div className="no-public-plans"><AlertTriangle size={18} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
@@ -6754,16 +6823,14 @@ function App() {
                       <span><strong>Plan</strong>{landingSignup.planName || planDisplayName(landingAccountDraft.planCode)}</span>
                     </div>
                     {landingSignup.message && <div className={`onboarding-status-message ${landingSignup.status}`}>{landingSignup.message}</div>}
-                    <div className="recovery-channel-switch onboarding-verification-channel" aria-label="Choose account verification channel">
-                      <button type="button" className={landingOtp.channel !== 'sms' ? 'active' : ''} onClick={() => chooseLandingOtpChannel('email')} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><Mail size={17} /> Email</button>
-                      <button type="button" className={landingOtp.channel === 'sms' ? 'active' : ''} onClick={() => chooseLandingOtpChannel('sms')} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><Phone size={17} /> SMS</button>
+                    <div className="recovery-channel-switch onboarding-verification-channel email-only-verification" aria-label="Email account verification">
+                      <button type="button" className="active" onClick={() => chooseLandingOtpChannel('email')} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><Mail size={17} /> Email</button>
                     </div>
                     <div className={`landing-otp-card ${landingOtp.status}`}>
-                      <div className="landing-otp-heading">{landingOtp.channel === 'sms' ? <Phone size={19} /> : <Mail size={19} />}<span><strong>{landingOtp.channel === 'sms' ? 'SMS verification code' : 'Email verification code'}</strong><small>The code expires after 10 minutes.</small></span></div>
+                      <div className="landing-otp-heading"><Mail size={19} /><span><strong>Email verification code</strong><small>The code expires after 10 minutes.</small></span></div>
                       {landingOtp.status === 'idle' || landingOtp.status === 'error' ? (
-                        <button type="button" className="primary-button" onClick={sendLandingOnboardingOtp} disabled={landingOtp.status === 'sending'}>{landingOtp.channel === 'sms' ? <Phone size={17} /> : <Mail size={17} />} Send {landingOtp.channel === 'sms' ? 'SMS' : 'email'} code</button>
+                        <button type="button" className="primary-button" onClick={() => { chooseLandingOtpChannel('email'); sendLandingOnboardingOtp(); }} disabled={landingOtp.status === 'sending'}><Mail size={17} /> Send email code</button>
                       ) : null}
-                      {landingOtp.channel === 'sms' && <p className="sms-carrier-note">Standard message and carrier rates may apply.</p>}
                       {landingOtp.status !== 'idle' && <p className={`landing-otp-message ${landingOtp.status}`}>{landingOtp.message}</p>}
                       {landingOtp.testCode && <div className="test-code-box"><span>Local test code</span><code>{landingOtp.testCode}</code></div>}
                       {['sent', 'verifying', 'error'].includes(landingOtp.status) && landingOtp.challengeId && (
@@ -6779,7 +6846,7 @@ function App() {
                 {landingOnboardingStep === 4 && (
                   <div className="create-account-step onboarding-complete-step">
                     <div className="onboarding-complete-icon"><ShieldCheck size={30} /></div>
-                    <h3>{landingSignup.existingAccount ? 'Account verified on this device' : 'Your account is ready'}</h3>
+                    <h3>{landingSignup.existingAccount ? 'Account verified on this device' : 'Step 1 complete — your account is ready'}</h3>
                     <p>{landingSignup.message || 'Account verification completed successfully.'}</p>
                     <div className="account-summary-card onboarding-final-summary">
                       <span><strong>Account</strong>{bootstrap.accountName || landingAccountDraft.accountName}</span>
@@ -6788,8 +6855,7 @@ function App() {
                       <span><strong>Trial ends</strong>{isFounderPlan(bootstrap) ? 'No expiry' : formatAccountDate(landingSignup.trialEndsAt || bootstrap.trialEndsAt, true)}</span>
                     </div>
                     {!landingSignup.existingAccount && Number(landingSignup.trialDays || 0) > 0 && <div className="trial-ready-card"><CalendarClock size={20} /><span><strong>{landingSignup.trialDays}-day trial active</strong><small>Ends {formatAccountDate(landingSignup.trialEndsAt, true)}.</small></span></div>}
-                    <div className="saas-inline-note"><ShieldCheck size={16} /><span>{landingSignup.existingAccount ? 'Next, open your existing encrypted vault on this device using its existing master password.' : 'Next, create your local encrypted vault and choose your private master password.'}</span></div>
-                    {landingSignup.welcomeEmailSent && <p className="welcome-email-note"><Mail size={16} /> A welcome email has been sent.</p>}
+                    <div className="saas-inline-note onboarding-next-step-note"><ShieldCheck size={16} /><span>{landingSignup.existingAccount ? 'This is an existing account. Next, open its existing encrypted vault using the master password you already use.' : 'Step 2 of 2 is next: create your encrypted vault on a separate vault-setup screen and choose the master password only you know.'}</span></div>
                   </div>
                 )}
               </div>
@@ -6798,7 +6864,7 @@ function App() {
                 {landingOnboardingStep === 1 && <button type="button" className="primary-button" onClick={() => { const draft = cleanLandingDraft(); const error = validateLandingDraft(draft); if (error && !error.includes('plan')) return showMessage(error, 'warning'); updateLandingDraft(draft); setLandingOnboardingStep(2); }}>Continue</button>}
                 {landingOnboardingStep === 2 && <button type="button" className="primary-button" onClick={prepareLandingOnboarding} disabled={landingSignup.status === 'preparing' || !publicPlans.length || !landingAccountDraft.legalAccepted}>{landingSignup.status === 'preparing' ? <RefreshCw size={17} className="spin-icon" /> : <ShieldCheck size={17} />} {landingSignup.status === 'preparing' ? 'Preparing...' : 'Continue to verification'}</button>}
                 {landingOnboardingStep === 3 && <button type="button" className="secondary-button" onClick={closeCreateAccountPopup}>Finish later</button>}
-                {landingOnboardingStep === 4 && <button type="button" className="primary-button" onClick={finishLandingOnboarding}><Unlock size={18} /> Continue to secure vault setup</button>}
+                {landingOnboardingStep === 4 && <button type="button" className="primary-button" onClick={finishLandingOnboarding}><Unlock size={18} /> {landingSignup.existingAccount ? 'Open existing vault' : 'Continue to Step 2 — Create vault'}</button>}
               </footer>
             </section>
           </div>
@@ -6830,6 +6896,61 @@ function App() {
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} phone={bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)} channel={otpChannel} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onChannelChange={chooseOtpChannel} onSend={() => requestSelectedOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+      </main>
+    );
+  }
+
+  if (locked && newCustomerOnboardingEntry) {
+    const onboardingPhone = buildPhoneE164(onboardingVaultDraft.phoneCountryCode, onboardingVaultDraft.phoneNumber) || bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber);
+    return (
+      <main className="vault-onboarding-screen">
+        <section className="vault-onboarding-card">
+          <header className="vault-onboarding-header">
+            <div>
+              <p className="eyebrow">Step 2 of 2 · Vault setup</p>
+              <h1><ShieldCheck size={28} /> Create your secure vault</h1>
+              <p>Your Password-Encrypt account has been set up. Now create the encrypted vault on this device and choose the master password only you know.</p>
+            </div>
+          </header>
+
+          <div className="two-step-onboarding-guide" aria-label="Onboarding progress">
+            <div className="complete"><span><Check size={18} /></span><div><strong>1. Account setup</strong><small>Account details and email verification complete.</small></div></div>
+            <div className="current"><span>2</span><div><strong>2. Vault setup</strong><small>Confirm your details and create your master password.</small></div></div>
+          </div>
+
+          <form className="vault-onboarding-form" onSubmit={createVaultFromOnboarding} autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other">
+            <div className="vault-onboarding-section">
+              <div className="vault-onboarding-section-heading"><UserRoundCheck size={21} /><div><strong>Confirm your account details</strong><small>Use the same email and mobile number you entered during account setup.</small></div></div>
+              <label>Email address<input type="email" value={onboardingVaultDraft.email || ''} onChange={(event) => setOnboardingVaultDraft((current) => ({ ...current, email: event.target.value }))} placeholder="you@example.com" /></label>
+              <label>Mobile number</label>
+              <div className="phone-combo-field">
+                <CountryPicker countryCode={onboardingVaultDraft.phoneCountryCode || '+254'} countryIso={onboardingVaultDraft.phoneCountryIso || 'ke'} onChange={(country) => setOnboardingVaultDraft((current) => ({ ...current, phoneCountryCode: country.code, phoneCountryIso: country.iso }))} />
+                <input inputMode="tel" value={onboardingVaultDraft.phoneNumber || ''} onChange={(event) => setOnboardingVaultDraft((current) => ({ ...current, phoneNumber: event.target.value }))} placeholder="712345678" />
+              </div>
+              {onboardingPhone && <small className="vault-onboarding-contact-preview">Account mobile: {maskPhone(onboardingPhone)}</small>}
+            </div>
+
+            <div className="vault-onboarding-section">
+              <div className="vault-onboarding-section-heading"><KeyRound size={21} /><div><strong>Create your master password</strong><small>This password encrypts your vault. Password-Encrypt cannot recover or reset it.</small></div></div>
+              <label>Master password<input id="onboarding-master-password" name="vault-onboarding-local-decryption-key" type="password" autoComplete="new-password" spellCheck="false" value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} placeholder="Create your master password" /></label>
+              <label>Confirm master password<input name="vault-onboarding-local-decryption-key-confirmation" type="password" autoComplete="new-password" spellCheck="false" value={confirmMasterPassword} onChange={(event) => setConfirmMasterPassword(event.target.value)} placeholder="Type the same password again" /></label>
+              <div className="master-password-boundary-note compact"><Lock size={18} /><span><strong>Keep this password somewhere safe</strong><small>It is the primary secret that decrypts your vault and cannot be recovered by support.</small></span></div>
+            </div>
+
+            {hasLocalVault && <div className="vault-onboarding-session-note warning"><AlertTriangle size={18} /> This device already contains a local encrypted vault. Password-Encrypt will not overwrite it during new-account onboarding. Use a clean browser/device for this new vault, or return to the landing page.</div>}
+            {!hasLocalVault && !customerSession.checked && <div className="vault-onboarding-session-note"><RefreshCw size={17} className="spin-icon" /> Checking your verified account session...</div>}
+            {customerSession.checked && !customerSession.authenticated && <div className="vault-onboarding-session-note warning"><AlertTriangle size={18} /> Your account verification session has expired. Return to the landing page and verify the account again before creating a vault.</div>}
+            {message && <p className="message">{message}</p>}
+
+            <div className="vault-onboarding-actions">
+              <button type="button" className="secondary-button" onClick={() => window.location.assign('/')}><ArrowLeft size={17} /> Back to landing page</button>
+              <button type="submit" className="primary-button" disabled={hasLocalVault || !customerSession.checked || !customerSession.authenticated}><ShieldCheck size={18} /> Create Secure Vault</button>
+            </div>
+          </form>
+          <p className="version">{VERSION}</p>
+        </section>
+        <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={() => document.getElementById('onboarding-master-password')?.focus()} />
+        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
     );
   }
@@ -6870,10 +6991,10 @@ function App() {
             </>
           ) : (
             <>
-              <p className="intro">Create your encrypted vault on this device, or verify your account to open an existing secure backup.</p>
-              <div className="create-vault-entry-actions">
-                <button type="button" className="primary-button" onClick={() => { setCreateMode(true); setIsCreateVaultPopupOpen(true); }}><Plus size={18} /> Create Vault</button>
-                <button type="button" className="secondary-button" onClick={() => { setCreateMode(false); setIsCreateVaultPopupOpen(true); }}><RefreshCw size={17} /> Open Existing Vault</button>
+              <p className="intro">This vault access screen is for existing Password-Encrypt customers. New customers create an account first, then use the separate vault setup screen.</p>
+              <div className="create-vault-entry-actions existing-vault-entry-actions">
+                <button type="button" className="primary-button" onClick={() => { setCreateMode(false); setIsCreateVaultPopupOpen(true); }}><RefreshCw size={17} /> Open Existing Vault</button>
+                <button type="button" className="secondary-button" onClick={() => window.location.assign('/')}><ArrowLeft size={17} /> New customer — start on landing page</button>
               </div>
             </>
           )}
@@ -6913,17 +7034,16 @@ function App() {
 
                 <div className="create-account-step">
                   <h3>Verify your account</h3>
-                  <p>Choose email or SMS, then enter the one-time code before creating or opening the vault on this device.</p>
+                  <p>Use email verification, then enter the one-time code before opening an existing vault on this device.</p>
                   <div className={`otp-test-panel ${otpTest.status}`}>
                     <div className="otp-test-title"><ShieldCheck size={16} /><strong>One-time code</strong></div>
-                    <div className={`otp-channel-toggle premium-toggle ${otpChannel}`} role="tablist" aria-label="Choose OTP delivery method">
-                      <button type="button" className={otpChannel === 'email' ? 'active' : ''} onClick={() => chooseOtpChannel('email')}><Mail size={15} /> Email</button>
-                      <button type="button" className={otpChannel === 'sms' ? 'active' : ''} onClick={() => chooseOtpChannel('sms')}><Phone size={15} /> SMS</button>
+                    <div className="otp-channel-toggle premium-toggle email-only-verification" role="group" aria-label="Email OTP delivery">
+                      <button type="button" className="active" onClick={() => chooseOtpChannel('email')}><Mail size={15} /> Email</button>
                     </div>
                     {otpTest.message && <div className={`otp-status-line ${otpTest.verified ? 'verified' : ''}`}>{otpTest.message}</div>}
                     {otpTest.code && <div className="test-code-box"><span>Recovery code</span><code>{otpTest.code}</code></div>}
                     <div className="otp-flow-row create-vault-otp-row">
-                      <button type="button" className="secondary-button otp-send-button" onClick={() => requestSelectedOtp()} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Sending...' : (otpChannel === 'email' ? 'Send email OTP' : 'Send SMS OTP')}</button>
+                      <button type="button" className="secondary-button otp-send-button" onClick={() => { chooseOtpChannel('email'); requestEmailOtp(); }} disabled={otpTest.status === 'requesting'}>{otpTest.status === 'requesting' ? 'Sending...' : 'Send email OTP'}</button>
                       <input inputMode="numeric" value={otpTest.input} onChange={(e) => setOtpTest({ ...otpTest, input: e.target.value })} placeholder="Enter 6-digit OTP" />
                       <button type="button" className="secondary-button otp-verify-button" onClick={verifyTestOtp} disabled={otpTest.status === 'verifying'}>Verify OTP</button>
                     </div>
@@ -7573,14 +7693,14 @@ function App() {
                 </details>
 
                 <details className="settings-drilldown">
-                  <summary><span className="settings-directory-icon"><Mail size={21} /></span><span className="settings-directory-copy"><strong>Contact details & recovery</strong><small>Verified email and mobile details used to recover account access.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
+                  <summary><span className="settings-directory-icon"><Mail size={21} /></span><span className="settings-directory-copy"><strong>Contact details & recovery</strong><small>Email recovery plus the mobile contact number saved on your account.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <section className="account-contact-card settings-inner-card">
                 <div className="account-management-heading"><div><p className="eyebrow">Verified contact details</p><h3>Account recovery contacts</h3></div>{customerSession.authenticated && <button type="button" className="icon-button" onClick={() => loadAccountSecurity()} disabled={accountSecurity.loading} aria-label="Refresh account security"><RefreshCw size={18} className={accountSecurity.loading ? 'is-rotating' : ''} /></button>}</div>
-                <p>Changes are completed only after a one-time code verifies the new contact detail.</p>
+                <p>Email changes are completed only after a one-time code verifies the new address. Your mobile number remains on file as a contact detail.</p>
                 <div className="account-contact-list">
                   <article><span className="account-contact-icon"><Mail size={20} /></span><div><strong>{accountSecurity.user?.email || bootstrap.email || 'Email not set'}</strong><small>{accountSecurity.user?.emailVerified === false ? 'Verification required' : 'Verified recovery email'}</small></div><button type="button" className="secondary-button" onClick={() => openAccountSecurityAction('change-email', { newEmail: accountSecurity.user?.email || bootstrap.email || '', verifyExisting: accountSecurity.user?.emailVerified === false })} disabled={!customerSession.authenticated}>{accountSecurity.user?.emailVerified === false ? 'Verify' : 'Change'}</button></article>
-                  <article><span className="account-contact-icon"><Phone size={20} /></span><div><strong>{accountSecurity.user?.phoneMasked || maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'Mobile not set'}</strong><small>{accountSecurity.user?.phoneVerified === false ? 'Verification required' : 'Verified recovery mobile'}</small></div><button type="button" className="secondary-button" onClick={() => openAccountSecurityAction('change-phone', { phoneCountryCode: accountSecurity.user?.phoneCountryCode || bootstrap.phoneCountryCode || '+254', phoneNumber: accountSecurity.user?.phoneNumber || bootstrap.phoneNumber || '', verifyExisting: accountSecurity.user?.phoneVerified === false })} disabled={!customerSession.authenticated}>{accountSecurity.user?.phoneVerified === false ? 'Verify' : 'Change'}</button></article>
+                  <article><span className="account-contact-icon"><Phone size={20} /></span><div><strong>{accountSecurity.user?.phoneMasked || maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'Mobile not set'}</strong><small>Mobile number on file</small></div>{SMS_VERIFICATION_UI_ENABLED && <button type="button" className="secondary-button" onClick={() => openAccountSecurityAction('change-phone', { phoneCountryCode: accountSecurity.user?.phoneCountryCode || bootstrap.phoneCountryCode || '+254', phoneNumber: accountSecurity.user?.phoneNumber || bootstrap.phoneNumber || '', verifyExisting: accountSecurity.user?.phoneVerified === false })} disabled={!customerSession.authenticated}>{accountSecurity.user?.phoneVerified === false ? 'Verify' : 'Change'}</button>}</article>
                 </div>
               </section>
 

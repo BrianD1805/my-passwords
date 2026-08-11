@@ -514,7 +514,7 @@ export default function AdminApp({ version }) {
                     </span>
                     <span className="admin-customer-directory-plan"><small>Plan</small><strong>{customer.planName || planDisplayName(customer.planCode)}</strong><em>{paymentStatus}</em></span>
                     <span className="admin-customer-directory-health"><small>Last sign-in</small><strong>{dateLabel(customer.lastSignInAt, true)}</strong><em>Backup {dateLabel(customer.lastSuccessfulBackupAt, true)}</em></span>
-                    <span className="admin-customer-directory-status"><span className={`admin-status ${customer.accountStatus}`}>{planStatusDisplayName(customer.accountStatus)}</span><span className={`admin-status ${customer.verification?.status === 'verified' ? 'success' : 'warning'}`}>{customer.verification?.status === 'verified' ? 'Verified' : 'Verify'}</span></span>
+                    <span className="admin-customer-directory-status"><span className={`admin-status ${customer.accountStatus}`}>{planStatusDisplayName(customer.accountStatus)}</span><span className={`admin-status ${customer.verification?.emailVerified ? 'success' : 'warning'}`}>{customer.verification?.emailVerified ? 'Email verified' : 'Verify email'}</span></span>
                     <ChevronRight size={22} />
                   </button>
                 );
