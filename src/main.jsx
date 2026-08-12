@@ -1,14 +1,14 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, ArrowLeft, ArrowUp, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Save, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowUp, Bell, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Save, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.000';
+const VERSION = 'Password-Encrypt Ver-1.001';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -26,6 +26,7 @@ const ENTITLEMENTS_CACHE_KEY = 'my-passwords-entitlements-v1';
 const PENDING_DOCUMENT_DELETIONS_KEY = 'my-passwords-pending-document-deletions-v1';
 const ACCOUNT_DEVICE_INSTALL_KEY = 'my-passwords-account-device-install-v1';
 const PENDING_ONBOARDING_ACCOUNT_KEY = 'password-encrypt-pending-onboarding-account-v1';
+const PUSH_BINDING_KEY = 'password-encrypt-push-binding-v1';
 
 
 const LEGACY_VAULT_BACK_MARKER_KEYS = [
@@ -1292,6 +1293,43 @@ function storeCloudSnapshotLocally(snapshot, account = {}) {
   return envelope;
 }
 
+function readPushBinding() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PUSH_BINDING_KEY) || 'null');
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePushBinding(tenantId, userId) {
+  try { localStorage.setItem(PUSH_BINDING_KEY, JSON.stringify({ tenantId: String(tenantId || ''), userId: String(userId || '') })); }
+  catch { /* Notification delivery must not depend on local storage being writable. */ }
+}
+
+function clearPushBinding() {
+  try { localStorage.removeItem(PUSH_BINDING_KEY); }
+  catch { /* Ignore restricted local storage contexts. */ }
+}
+
+function pushNotificationsSupported() {
+  return typeof window !== 'undefined'
+    && 'Notification' in window
+    && 'serviceWorker' in navigator
+    && 'PushManager' in window;
+}
+
+function pushPermissionState() {
+  return pushNotificationsSupported() ? Notification.permission : 'unsupported';
+}
+
+function urlBase64ToUint8Array(value) {
+  const normal = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normal + '='.repeat((4 - (normal.length % 4)) % 4);
+  const raw = window.atob(padded);
+  return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
+}
+
 async function postJson(url, payload, options = {}) {
   const csrfToken = sessionStorage.getItem('mp_customer_csrf') || '';
   const response = await fetch(url, {
@@ -2350,6 +2388,17 @@ function App() {
   const [biometricStatus, setBiometricStatus] = useState(() => ({ supported: isBiometricUnlockSupported(), label: isBiometricUnlockSupported() ? friendlyBiometricName() : 'Not supported on this browser/device', state: readBiometricUnlockRecord() ? 'enabled' : 'available' }));
   const [activePage, setActivePage] = useState('home');
   const [activeSettingsSection, setActiveSettingsSection] = useState('overview');
+  const [pushNotifications, setPushNotifications] = useState(() => ({
+    loaded: false,
+    loading: false,
+    supported: pushNotificationsSupported(),
+    configured: false,
+    permission: pushPermissionState(),
+    enabledThisDevice: false,
+    activeCount: 0,
+    publicKey: '',
+    message: ''
+  }));
   const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = useState(false);
   const [exitAppConfirmationOpen, setExitAppConfirmationOpen] = useState(false);
   const backNavigationStateRef = useRef({});
@@ -2440,6 +2489,139 @@ function App() {
 
   function openSubscriptionSettings() {
     openSettingsSection('subscription');
+  }
+
+  async function loadPushNotificationStatus({ silent = false } = {}) {
+    const supported = pushNotificationsSupported();
+    if (!supported) {
+      setPushNotifications((current) => ({ ...current, loaded: true, loading: false, supported: false, configured: false, permission: 'unsupported', enabledThisDevice: false, message: 'Push notifications are not supported by this browser or device.' }));
+      return null;
+    }
+    if (!customerSession.authenticated) {
+      setPushNotifications((current) => ({ ...current, loaded: true, loading: false, supported: true, permission: pushPermissionState(), enabledThisDevice: false, message: 'Verify this device to manage push notifications.' }));
+      return null;
+    }
+    setPushNotifications((current) => ({ ...current, loading: true, message: silent ? current.message : 'Checking push notifications...' }));
+    try {
+      const response = await fetch('/.netlify/functions/push-subscription', { credentials: 'same-origin', cache: 'no-store' });
+      const result = await response.json().catch(() => ({ ok: false, message: 'Push notification status returned an invalid response.' }));
+      if (!response.ok || !result.ok) throw new Error(result.message || 'Push notification status could not be loaded.');
+      const registration = await navigator.serviceWorker.ready;
+      const browserSubscription = await registration.pushManager.getSubscription();
+      const permission = pushPermissionState();
+      const binding = readPushBinding();
+      const bindingMatches = Boolean(
+        binding
+        && String(binding.tenantId || '') === String(customerSession.tenantId || '')
+        && String(binding.userId || '') === String(customerSession.userId || '')
+      );
+      let activeCount = Number(result.activeCount || 0);
+      let publicKey = result.publicKey || '';
+      let enabledThisDevice = permission === 'granted' && Boolean(browserSubscription) && bindingMatches;
+
+      // A deliberate logout or device removal pauses the server-side subscription.
+      // Re-verifying the same locally-bound account safely restores it without
+      // asking the browser for notification permission again. Never auto-rebind
+      // a browser subscription that belongs to a different account.
+      if (result.configured && enabledThisDevice && browserSubscription?.endpoint) {
+        try {
+          const synced = await postJson('/.netlify/functions/push-subscription', { action: 'subscribe', subscription: browserSubscription.toJSON() });
+          if (synced?.ok) {
+            activeCount = Number(synced.activeCount || activeCount || 1);
+            publicKey = synced.publicKey || publicKey;
+          } else {
+            enabledThisDevice = false;
+          }
+        } catch {
+          enabledThisDevice = false;
+        }
+      }
+
+      const linkedToAnotherAccount = Boolean(browserSubscription) && !bindingMatches;
+      const next = {
+        loaded: true,
+        loading: false,
+        supported: true,
+        configured: Boolean(result.configured),
+        permission,
+        enabledThisDevice,
+        activeCount,
+        publicKey,
+        message: !result.configured
+          ? 'Push delivery still needs its server keys configured.'
+          : enabledThisDevice
+            ? 'Push notifications are active on this device.'
+            : permission === 'denied'
+              ? 'Notifications are blocked in this browser. Allow them in the site or app permissions to enable push alerts.'
+              : linkedToAnotherAccount
+                ? 'Push notifications on this browser are linked to another Password-Encrypt account. Enable them here to use this account instead.'
+                : 'Push notifications are available but not enabled on this device.'
+      };
+      setPushNotifications(next);
+      return { ...result, activeCount, publicKey, browserSubscription, permission, bindingMatches };
+    } catch (error) {
+      const message = error.message || 'Push notification status could not be loaded.';
+      setPushNotifications((current) => ({ ...current, loaded: true, loading: false, permission: pushPermissionState(), message }));
+      if (!silent) showMessage(message, 'error');
+      return null;
+    }
+  }
+
+  async function enablePushNotifications() {
+    if (!pushNotificationsSupported()) {
+      showMessage('Push notifications are not supported by this browser or device.', 'error');
+      return;
+    }
+    if (!customerSession.authenticated) {
+      showMessage('Verify this device before enabling push notifications.', 'error');
+      return;
+    }
+    setPushNotifications((current) => ({ ...current, loading: true, message: 'Enabling push notifications...' }));
+    try {
+      let config = pushNotifications.configured && pushNotifications.publicKey ? pushNotifications : await loadPushNotificationStatus({ silent: true });
+      const publicKey = config?.publicKey || pushNotifications.publicKey || '';
+      if (!publicKey) throw new Error('Push notifications are not configured on the server yet.');
+      let permission = Notification.permission;
+      if (permission !== 'granted') permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        setPushNotifications((current) => ({ ...current, loading: false, permission, enabledThisDevice: false, message: permission === 'denied' ? 'Notifications are blocked in this browser.' : 'Notification permission was not granted.' }));
+        return;
+      }
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+      }
+      const result = await postJson('/.netlify/functions/push-subscription', { action: 'subscribe', subscription: subscription.toJSON() });
+      if (!result.ok) throw new Error(result.message || 'Push notification subscription could not be saved.');
+      savePushBinding(customerSession.tenantId, customerSession.userId);
+      setPushNotifications((current) => ({ ...current, loaded: true, loading: false, supported: true, configured: true, permission: 'granted', enabledThisDevice: true, activeCount: Number(result.activeCount || current.activeCount || 1), publicKey: result.publicKey || current.publicKey, message: 'Push notifications are active on this device.' }));
+      showMessage('Push notifications are now active on this device.', 'success');
+    } catch (error) {
+      const message = error.message || 'Push notifications could not be enabled.';
+      setPushNotifications((current) => ({ ...current, loading: false, permission: pushPermissionState(), message }));
+      showMessage(message, 'error');
+    }
+  }
+
+  async function disablePushNotifications() {
+    if (!pushNotificationsSupported()) return;
+    setPushNotifications((current) => ({ ...current, loading: true, message: 'Disabling push notifications...' }));
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription?.endpoint) {
+        await postJson('/.netlify/functions/push-subscription', { action: 'unsubscribe', endpoint: subscription.endpoint }).catch(() => null);
+        await subscription.unsubscribe().catch(() => false);
+      }
+      clearPushBinding();
+      setPushNotifications((current) => ({ ...current, loaded: true, loading: false, permission: pushPermissionState(), enabledThisDevice: false, activeCount: Math.max(0, Number(current.activeCount || 0) - (subscription ? 1 : 0)), message: 'Push notifications are disabled on this device.' }));
+      showMessage('Push notifications are disabled on this device. Email alerts remain active.', 'success');
+    } catch (error) {
+      const message = error.message || 'Push notifications could not be disabled.';
+      setPushNotifications((current) => ({ ...current, loading: false, message }));
+      showMessage(message, 'error');
+    }
   }
 
   async function loadAccountSecurity({ silent = false } = {}) {
@@ -3358,6 +3540,29 @@ function App() {
     // signed session when connectivity returns.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!customerSession.authenticated) {
+      setPushNotifications((current) => ({ ...current, loaded: false, loading: false, permission: pushPermissionState(), enabledThisDevice: false, activeCount: 0, message: '' }));
+      return;
+    }
+    loadPushNotificationStatus({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerSession.authenticated, customerSession.userId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const openTarget = params.get('open');
+    if (!['emergency', 'notifications', 'settings'].includes(openTarget || '')) return;
+    if (locked || !customerSession.authenticated) return;
+    setActivePage('settings');
+    setActiveSettingsSection(openTarget === 'settings' ? 'overview' : openTarget);
+    params.delete('open');
+    const query = params.toString();
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash || ''}`);
+    scrollSettingsToTop();
+  }, [locked, customerSession.authenticated]);
 
   useEffect(() => {
     if (!hasLocalVault || !customerSession.authenticated) return;
@@ -8052,6 +8257,12 @@ function App() {
                     <span className={`settings-directory-state ${!featureIncluded('cloudBackupSync') ? '' : syncSafety.conflict || syncSafety.pending ? 'attention' : 'safe'}`}>{!featureIncluded('cloudBackupSync') ? 'Local only' : syncSafety.conflict ? 'Review' : syncSafety.pending ? 'Action needed' : syncSafety.state === 'unknown' ? 'Check' : 'Up to date'}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
+                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('notifications')}>
+                    <span className="settings-directory-icon"><Bell size={22} /></span>
+                    <span className="settings-directory-copy"><strong>Push Notifications</strong><small>Emergency Access alerts and important Password-Encrypt updates.</small></span>
+                    <span className={`settings-directory-state ${pushNotifications.enabledThisDevice ? 'safe' : pushNotifications.permission === 'denied' ? 'attention' : ''}`}>{pushNotifications.enabledThisDevice ? 'Active' : pushNotifications.permission === 'denied' ? 'Blocked' : 'Off'}</span>
+                    <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
+                  </button>
                 </section>
 
                 <section className="settings-directory-group" aria-labelledby="settings-protection-group">
@@ -8222,6 +8433,53 @@ function App() {
                   </div>
                 </details>
               </div>
+            </section>
+          )}
+
+          {activeSettingsSection === 'notifications' && (
+            <section className="settings-section-panel push-settings-panel" aria-label="Push Notifications">
+              <div className="settings-section-heading">
+                <p className="eyebrow">Push Notifications</p>
+                <h3><Bell size={20} /> Important alerts on this device</h3>
+                <p>Receive timely Password-Encrypt alerts even when the app is not open. Email alerts continue to work alongside push notifications.</p>
+              </div>
+
+              <section className={`push-status-card ${pushNotifications.enabledThisDevice ? 'active' : pushNotifications.permission === 'denied' ? 'blocked' : ''}`}>
+                <div className="push-status-main">
+                  <span className="push-status-icon"><Bell size={22} /></span>
+                  <div>
+                    <strong>{pushNotifications.enabledThisDevice ? 'Push notifications are active' : pushNotifications.permission === 'denied' ? 'Notifications are blocked' : !pushNotifications.supported ? 'Push notifications are unavailable on this device' : !pushNotifications.configured && pushNotifications.loaded ? 'Push notifications are temporarily unavailable' : 'Push notifications are off'}</strong>
+                    <p>{pushNotifications.enabledThisDevice
+                      ? 'This device can receive Emergency Access warnings and important Password-Encrypt updates.'
+                      : pushNotifications.permission === 'denied'
+                        ? 'Allow notifications for Password-Encrypt in your browser or app permissions, then return here to enable them.'
+                        : !pushNotifications.supported
+                          ? 'This browser or device does not currently provide the web push features Password-Encrypt needs.'
+                          : !pushNotifications.configured && pushNotifications.loaded
+                            ? 'Push alerts cannot be enabled right now. Your existing email notifications are unaffected.'
+                            : 'Turn on push notifications to receive important alerts on this device.'}</p>
+                  </div>
+                </div>
+                <div className="push-status-actions">
+                  {pushNotifications.enabledThisDevice
+                    ? <button type="button" className="secondary-button" onClick={disablePushNotifications} disabled={pushNotifications.loading}>Turn off on this device</button>
+                    : pushNotifications.supported && pushNotifications.permission !== 'denied' && (pushNotifications.configured || !pushNotifications.loaded)
+                      ? <button type="button" className="primary-button" onClick={enablePushNotifications} disabled={pushNotifications.loading}>{pushNotifications.loading ? 'Working...' : 'Enable push notifications'}</button>
+                      : null}
+                  <button type="button" className="secondary-button" onClick={() => loadPushNotificationStatus()} disabled={pushNotifications.loading || !customerSession.authenticated}><RefreshCw size={17} className={pushNotifications.loading ? 'is-rotating' : ''} /> Refresh</button>
+                </div>
+                {pushNotifications.enabledThisDevice && pushNotifications.activeCount > 1 && <small className="push-device-count">Push is also active on {pushNotifications.activeCount - 1} other registered device{pushNotifications.activeCount - 1 === 1 ? '' : 's'} for this account.</small>}
+                {pushNotifications.message && !pushNotifications.enabledThisDevice && <small className="push-status-message">{pushNotifications.message}</small>}
+              </section>
+
+              <div className="push-alert-list">
+                <article><Bell size={20} /><div><strong>Trusted Person status</strong><span>Know when your trusted person accepts or declines the nomination, or confirms a routine Trusted Person reminder.</span></div></article>
+                <article><AlertTriangle size={20} /><div><strong>Emergency Access request</strong><span>Receive an urgent owner alert as soon as your trusted person starts Emergency Access so you can review or cancel during the waiting period.</span></div></article>
+                <article><UsersRound size={20} /><div><strong>Emergency package release</strong><span>Know when the waiting period completes without cancellation and the prepared emergency package becomes available.</span></div></article>
+                <article><ShieldCheck size={20} /><div><strong>Important service updates</strong><span>Password-Encrypt Admin can send important app-wide notices to users who have chosen to receive push notifications.</span></div></article>
+              </div>
+
+              <div className="push-privacy-note"><ShieldCheck size={19} /><span><strong>Private by design</strong><small>Push notifications contain status messages only. Passwords, card details, secure notes, documents, master passwords and other vault contents are never placed in push notification text.</small></span></div>
             </section>
           )}
 
@@ -8410,6 +8668,18 @@ function App() {
               </div>
 
               {!featureIncluded('emergencyAccess') && <div className="plan-feature-unavailable"><UsersRound size={21} /><span><strong>Emergency Access is not included</strong><small>Your existing encrypted vault items remain available. Upgrade or ask Admin for an entitlement override to configure and manage a trusted person.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('emergencyAccess')}>Review plan</button></div>}
+
+              {featureIncluded('emergencyAccess') && pushNotifications.supported && pushNotifications.configured && (
+                <div className={`emergency-push-alert-card ${pushNotifications.enabledThisDevice ? 'active' : pushNotifications.permission === 'denied' ? 'blocked' : ''}`}>
+                  <span className="emergency-push-alert-icon"><Bell size={20} /></span>
+                  <div><strong>{pushNotifications.enabledThisDevice ? 'Emergency push alerts are active' : pushNotifications.permission === 'denied' ? 'Emergency push alerts are blocked' : 'Turn on Emergency Access push alerts'}</strong><small>{pushNotifications.enabledThisDevice ? 'This device will receive an immediate push warning if your trusted person starts Emergency Access.' : pushNotifications.permission === 'denied' ? 'Notifications are blocked in this browser or app. Review Push Notifications in Settings for guidance.' : 'Recommended: receive an immediate owner warning on this device if your trusted person starts Emergency Access.'}</small></div>
+                  {pushNotifications.enabledThisDevice
+                    ? <button type="button" className="secondary-button" onClick={() => openSettingsSection('notifications')}>Manage</button>
+                    : pushNotifications.permission === 'denied'
+                      ? <button type="button" className="secondary-button" onClick={() => openSettingsSection('notifications')}>Review</button>
+                      : <button type="button" className="secondary-button" onClick={enablePushNotifications} disabled={pushNotifications.loading}>{pushNotifications.loading ? 'Working...' : 'Enable'}</button>}
+                </div>
+              )}
 
               <button type="button" className={`emergency-current-stage-card emergency-current-stage-glance emergency-current-stage-button ${emergencyInvitationAccepted ? 'ready' : ''}`} aria-label={`Current setup progress. Stage ${emergencySetupStageNumber} of 4. ${emergencySetupProgress.title}. Tap to go to this stage.`} onClick={() => goToEmergencySetupStage(emergencySetupStageNumber)}>
                 <div className="emergency-current-progress-meta">

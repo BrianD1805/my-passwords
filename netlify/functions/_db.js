@@ -1,4 +1,4 @@
-export const APP_VERSION = 'Password-Encrypt Ver-1.000';
+export const APP_VERSION = 'Password-Encrypt Ver-1.001';
 
 export function jsonResponse(statusCode, body, extraHeaders = {}) {
   if (Number(statusCode) >= 500) queueFunctionFailureResponse(statusCode, body);
@@ -59,7 +59,10 @@ export function getEnvironmentFlags() {
     has_TWILIO_AUTH_TOKEN: Boolean(process.env.TWILIO_AUTH_TOKEN),
     has_TWILIO_VERIFY_SERVICE_SID: Boolean(process.env.TWILIO_VERIFY_SERVICE_SID),
     has_TWILIO_MESSAGING_SERVICE_SID: Boolean(process.env.TWILIO_MESSAGING_SERVICE_SID),
-    has_TWILIO_FROM_NUMBER: Boolean(process.env.TWILIO_FROM_NUMBER)
+    has_TWILIO_FROM_NUMBER: Boolean(process.env.TWILIO_FROM_NUMBER),
+    has_PUSH_VAPID_PUBLIC_KEY: Boolean(process.env.PUSH_VAPID_PUBLIC_KEY),
+    has_PUSH_VAPID_PRIVATE_KEY: Boolean(process.env.PUSH_VAPID_PRIVATE_KEY),
+    has_PUSH_VAPID_SUBJECT: Boolean(process.env.PUSH_VAPID_SUBJECT)
   };
 }
 

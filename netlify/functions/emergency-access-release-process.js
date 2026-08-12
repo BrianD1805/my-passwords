@@ -1,6 +1,7 @@
 import { APP_VERSION, insertRow, publicId, selectRows, updateRow } from './_db.js';
 import { finishScheduledCheck, recordFunctionFailure, recordOperationalEvent, startScheduledCheck } from './_operations.js';
 import { recordEmergencyFlowEvent } from './_emergency-flow.js';
+import { sendTemplatePushToUser } from './_push.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 function lte(value) { return `lte.${encodeURIComponent(value)}`; }
@@ -124,6 +125,29 @@ async function processRequest(request) {
     await updateRow('emergency_access_requests', `id=${eq(current.id)}`, { metadata: currentMetadata, updated_at: now }).catch(() => null);
     current = { ...current, metadata: currentMetadata };
   }
+
+  if (!currentMetadata.owner_release_push_processed_at) {
+    const pushResult = await sendTemplatePushToUser({
+      templateKey: 'emergency_package_released',
+      tenantId: current.tenant_id,
+      userId: current.user_id,
+      variables: { contactName: invitation.contact_name || current.contact_name || 'your trusted person' },
+      urgency: 'high',
+      requireInteraction: false,
+      triggerSource: 'emergency_access_release',
+      metadata: { invitation_id: invitation.id, request_id: current.id }
+    }).catch(() => null);
+    currentMetadata = {
+      ...currentMetadata,
+      owner_release_push_processed_at: new Date().toISOString(),
+      owner_release_push_delivered: Number(pushResult?.delivered || 0),
+      version: APP_VERSION
+    };
+    await updateRow('emergency_access_requests', `id=${eq(current.id)}`, { metadata: currentMetadata, updated_at: new Date().toISOString() }).catch(() => null);
+    current = { ...current, metadata: currentMetadata };
+    if (pushResult?.delivered > 0) await recordEmergencyFlowEvent(invitation.id, { type: 'owner_release_push_sent', title: 'Owner release push sent', message: 'The account owner was notified that the waiting period completed and the prepared package is available.', occurredAt: new Date().toISOString(), metadata: { requestId: current.id, delivered: pushResult.delivered } }).catch(() => null);
+  }
+
   if (currentMetadata.release_ready_email_sent || invitation.metadata?.release_ready_email_sent) {
     await recordEmergencyFlowEvent(invitation.id, { type: 'release_ready', title: 'Emergency package ready', message: 'The waiting period completed without cancellation. The prepared emergency package is now available to the trusted person.', occurredAt: currentMetadata.release_ready_at || now, metadata: { requestId: current.id } }).catch(() => null);
     return { requestId: current.id, status: 'release_ready', email: 'already_sent' };

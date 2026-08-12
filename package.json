@@ -1,7 +1,7 @@
 {
   "name": "my-passwords",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,8 @@
     "ux:check": "node scripts/landing-ux-static-check.mjs",
     "mobile:check": "node scripts/mobile-regression-static-check.mjs",
     "emergency:check": "node scripts/emergency-flow-static-check.mjs",
-    "onboarding:check": "node scripts/onboarding-flow-static-check.mjs"
+    "onboarding:check": "node scripts/onboarding-flow-static-check.mjs",
+    "push:check": "node scripts/push-notification-static-check.mjs"
   },
   "dependencies": {
     "lucide-react": "1.16.0",

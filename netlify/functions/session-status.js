@@ -1,4 +1,4 @@
-import { APP_VERSION, jsonResponse, parseBody, selectRows } from './_db.js';
+import { APP_VERSION, jsonResponse, parseBody, selectRows, updateRow } from './_db.js';
 import { clearCustomerSession } from './_auth.js';
 import { revokeSession, upgradeOrRenewCustomerSession, validateCustomerSession } from './_account-session.js';
 import { evaluateTenantAccess, loadTenantSubscription, trialDaysRemaining } from './_trial.js';
@@ -22,6 +22,12 @@ export async function handler(event) {
     if (validation.ok && validation.session?.sessionId) {
       try { assertCsrf(event, validation.session, 'customer'); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
       await revokeSession(validation.session.sessionId, 'ended_on_device').catch(() => null);
+      if (validation.session.deviceId) {
+        const now = new Date().toISOString();
+        await updateRow('push_subscriptions', `tenant_id=${eq(validation.session.tenantId)}&user_id=${eq(validation.session.userId)}&device_id=${eq(validation.session.deviceId)}&status=${eq('active')}`, {
+          status: 'disabled', disabled_at: now, disabled_reason: 'Account session ended on this device.', updated_at: now
+        }).catch(() => null);
+      }
     }
     return jsonResponse(200, { ok: true, version: APP_VERSION, authenticated: false, cloudAccess: false, message: 'Device verification ended.' }, { 'set-cookie': clearCustomerSession(event) });
   }

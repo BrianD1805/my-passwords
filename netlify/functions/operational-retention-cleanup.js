@@ -13,17 +13,18 @@ export async function runOperationalRetentionCleanup({ triggerSource = 'schedule
     const metadataBefore = new Date(Date.now() - 180 * 86400000).toISOString();
     const reconciliationsBefore = new Date(Date.now() - 365 * 86400000).toISOString();
     const deletionHistoryBefore = new Date(Date.now() - 365 * 86400000).toISOString();
-    const [eventsDeleted, checksDeleted, reconciliationsDeleted, customerEmailsDeleted, adminEmailsDeleted, smsLogsDeleted, deletionRequestsDeleted] = await Promise.all([
+    const [eventsDeleted, checksDeleted, reconciliationsDeleted, customerEmailsDeleted, adminEmailsDeleted, smsLogsDeleted, pushLogsDeleted, deletionRequestsDeleted] = await Promise.all([
       deleteRows(`operational_events?retention_until=lt.${encodeURIComponent(now)}`),
       deleteRows(`scheduled_check_runs?created_at=lt.${encodeURIComponent(metadataBefore)}`),
       deleteRows(`stripe_reconciliation_runs?created_at=lt.${encodeURIComponent(reconciliationsBefore)}`),
       deleteRows(`customer_email_log?created_at=lt.${encodeURIComponent(metadataBefore)}`),
       deleteRows(`admin_email_log?created_at=lt.${encodeURIComponent(metadataBefore)}`),
       deleteRows(`sms_delivery_log?created_at=lt.${encodeURIComponent(metadataBefore)}`),
+      deleteRows(`push_notification_log?retention_until=lt.${encodeURIComponent(now)}`),
       deleteRows(`account_deletion_requests?status=in.(completed,cancelled)&created_at=lt.${encodeURIComponent(deletionHistoryBefore)}`)
     ]);
-    const total = eventsDeleted + checksDeleted + reconciliationsDeleted + customerEmailsDeleted + adminEmailsDeleted + smsLogsDeleted + deletionRequestsDeleted;
-    const summary = { eventsDeleted, checksDeleted, reconciliationsDeleted, customerEmailsDeleted, adminEmailsDeleted, smsLogsDeleted, deletionRequestsDeleted };
+    const total = eventsDeleted + checksDeleted + reconciliationsDeleted + customerEmailsDeleted + adminEmailsDeleted + smsLogsDeleted + pushLogsDeleted + deletionRequestsDeleted;
+    const summary = { eventsDeleted, checksDeleted, reconciliationsDeleted, customerEmailsDeleted, adminEmailsDeleted, smsLogsDeleted, pushLogsDeleted, deletionRequestsDeleted };
     await finishScheduledCheck(run, { status: 'success', itemsChecked: total, issuesFound: 0, summary });
     return { ok: true, version: APP_VERSION, ...summary };
   } catch (error) {

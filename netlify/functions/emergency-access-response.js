@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { resolveTenantEntitlements } from './_entitlements.js';
 import { assertBrowserAction, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
 import { recordEmergencyFlowEvent } from './_emergency-flow.js';
+import { sendTemplatePushToUser } from './_push.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -97,7 +98,7 @@ export async function handler(event) {
 
   try {
     await consumeRateLimit(event, { scope: 'emergency_invite_response', identifier: tokenHash(token), limit: 10, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
-    const rows = await selectRows('emergency_access_invitations', `select=id,tenant_id,status,expires_at,contact_name,contact_email,invite_url,waiting_period,access_scope,metadata&invite_token_hash=${eq(tokenHash(token))}&limit=1`);
+    const rows = await selectRows('emergency_access_invitations', `select=id,tenant_id,user_id,status,expires_at,contact_name,contact_email,invite_url,waiting_period,access_scope,metadata&invite_token_hash=${eq(tokenHash(token))}&limit=1`);
     const invitation = rows?.[0];
     if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'This invitation link was not found or has expired.' });
     const entitlementContext = await resolveTenantEntitlements(invitation.tenant_id, { includeUsage: false });
@@ -146,6 +147,18 @@ export async function handler(event) {
       message: responseStatus === 'accepted' ? 'The trusted person accepted the nomination. No vault contents were released.' : 'The trusted person declined the nomination. No access was granted.',
       occurredAt: now
     }).catch(() => null);
+
+    if (invitation.status !== responseStatus) {
+      await sendTemplatePushToUser({
+        templateKey: responseStatus === 'accepted' ? 'trusted_person_accepted' : 'trusted_person_declined',
+        tenantId: invitation.tenant_id,
+        userId: invitation.user_id,
+        variables: { contactName: invitation.contact_name || 'Your trusted person' },
+        urgency: responseStatus === 'declined' ? 'high' : 'normal',
+        triggerSource: 'emergency_access_response',
+        metadata: { invitation_id: invitation.id, response: responseStatus }
+      }).catch(() => null);
+    }
 
     return jsonResponse(200, {
       ok: true,

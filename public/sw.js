@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-passwords-v1.000';
+const CACHE_NAME = 'my-passwords-v1.001';
 const RUNTIME_CACHE = `${CACHE_NAME}-runtime`;
 const APP_ROUTES = ['/', '/vault', '/admin', '/terms', '/privacy', '/billing-terms', '/trusted-person-confirm', '/index.html'];
 const STATIC_SHELL = ['/manifest.webmanifest', '/favicon.ico', '/favicon-32x32.png', '/favicon-16x16.png', '/apple-touch-icon.png', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png', '/icons/splash-icon.png', '/images/password-encrypt-brand.png', '/images/password-encrypt-og.png', '/offline.html', '/offline.js'];
@@ -91,6 +91,51 @@ async function networkWithRuntimeFallback(request) {
     return (await cache.match(request)) || Response.error();
   }
 }
+
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { title: 'Password-Encrypt', body: event.data ? event.data.text() : '' };
+  }
+  const title = String(payload.title || 'Password-Encrypt').slice(0, 80);
+  const options = {
+    body: String(payload.body || '').slice(0, 220),
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: String(payload.tag || 'password-encrypt').slice(0, 80),
+    renotify: true,
+    requireInteraction: Boolean(payload.requireInteraction),
+    data: { url: String(payload.url || '/vault') }
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    let targetUrl = new URL('/vault', self.location.origin);
+    try {
+      const candidate = new URL(event.notification?.data?.url || '/vault', self.location.origin);
+      if (candidate.origin === self.location.origin) targetUrl = candidate;
+    } catch {
+      // Use the safe vault fallback.
+    }
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of windows) {
+      if (!('focus' in client)) continue;
+      try {
+        if ('navigate' in client) await client.navigate(targetUrl.href);
+      } catch {
+        // If navigation is unavailable, focus the existing app window.
+      }
+      return client.focus();
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(targetUrl.href);
+    return undefined;
+  })());
+});
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;

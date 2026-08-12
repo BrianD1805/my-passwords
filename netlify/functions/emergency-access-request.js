@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { resolveTenantEntitlements } from './_entitlements.js';
 import { assertBrowserAction, assertCsrf, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
 import { recordEmergencyFlowEvent } from './_emergency-flow.js';
+import { sendTemplatePushToUser } from './_push.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -286,6 +287,23 @@ export async function handler(event) {
     }
 
     if (notification.sent) await recordEmergencyFlowEvent(invitation.id, { type: 'owner_notified', title: 'Account owner notified', message: 'The account owner was emailed that the emergency waiting period has started.', occurredAt: new Date().toISOString(), metadata: { requestId } }).catch(() => null);
+
+    const pushAlert = await sendTemplatePushToUser({
+      templateKey: 'emergency_access_requested',
+      tenantId: invitation.tenant_id,
+      userId: invitation.user_id,
+      variables: {
+        contactName: invitation.contact_name || 'Your trusted person',
+        waitingPeriod: invitation.waiting_period || '7 days',
+        waitingEndsAt
+      },
+      urgency: 'high',
+      requireInteraction: true,
+      triggerSource: 'emergency_access_request',
+      metadata: { invitation_id: invitation.id, request_id: requestId, waiting_ends_at: waitingEndsAt }
+    }).catch(() => null);
+
+    if (pushAlert?.delivered > 0) await recordEmergencyFlowEvent(invitation.id, { type: 'owner_push_notified', title: 'Owner push alert sent', message: 'A push notification was sent to the account owner that the emergency waiting period has started.', occurredAt: new Date().toISOString(), metadata: { requestId, delivered: pushAlert.delivered } }).catch(() => null);
 
     return jsonResponse(200, {
       ok: true,

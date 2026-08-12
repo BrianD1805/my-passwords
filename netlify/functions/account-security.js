@@ -106,6 +106,7 @@ export async function handler(event) {
       await updateRow('users', `id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}`, { email: change.requested_value, email_verified: true, updated_at: now });
       await updateRow('account_contact_changes', `id=${eq(change.id)}`, { status: 'verified', verified_at: now, updated_at: now });
       await updateRow('account_sessions', `user_id=${eq(session.userId)}&status=${eq('active')}&id=neq.${encodeURIComponent(session.sessionId || '')}`, { status: 'revoked', revoked_at: now, revoked_reason: 'email_changed', updated_at: now }).catch(() => null);
+      if (session.deviceId) await updateRow('push_subscriptions', `tenant_id=${eq(session.tenantId)}&user_id=${eq(session.userId)}&device_id=neq.${encodeURIComponent(session.deviceId)}&status=${eq('active')}`, { status: 'disabled', disabled_at: now, disabled_reason: 'Other account sessions ended after email change.', updated_at: now }).catch(() => null);
       await audit(session, 'account_email_changed', { previous_masked: maskEmail(change.previous_value), new_masked: maskEmail(change.requested_value) });
       const emailChangedContext = { displayName: user.display_name || '', newEmailMasked: maskEmail(change.requested_value), changedAt: now };
       await sendCustomerLifecycleEmail({
@@ -145,6 +146,7 @@ export async function handler(event) {
       await updateRow('users', `id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}`, { phone_e164: change.requested_value, phone_country_code: change.phone_country_code, phone_number: change.phone_number, phone_verified: true, updated_at: now });
       await updateRow('account_contact_changes', `id=${eq(change.id)}`, { status: 'verified', verified_at: now, updated_at: now });
       await updateRow('account_sessions', `user_id=${eq(session.userId)}&status=${eq('active')}&id=neq.${encodeURIComponent(session.sessionId || '')}`, { status: 'revoked', revoked_at: now, revoked_reason: 'phone_changed', updated_at: now }).catch(() => null);
+      if (session.deviceId) await updateRow('push_subscriptions', `tenant_id=${eq(session.tenantId)}&user_id=${eq(session.userId)}&device_id=neq.${encodeURIComponent(session.deviceId)}&status=${eq('active')}`, { status: 'disabled', disabled_at: now, disabled_reason: 'Other account sessions ended after mobile change.', updated_at: now }).catch(() => null);
       await audit(session, 'account_phone_changed', { previous_masked: maskPhone(change.previous_value), new_masked: maskPhone(change.requested_value) });
       if (user.email && user.email_verified) {
         await sendCustomerLifecycleEmail({
@@ -163,6 +165,10 @@ export async function handler(event) {
       const devices = await selectRows('account_devices', `select=id,device_name&user_id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}&id=${eq(deviceId)}&limit=1`);
       if (!devices?.[0]) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'That verified device was not found.' });
       await revokeDeviceSessions({ userId: session.userId, deviceId, reason: 'removed_by_customer' });
+      const disabledAt = new Date().toISOString();
+      await updateRow('push_subscriptions', `tenant_id=${eq(session.tenantId)}&user_id=${eq(session.userId)}&device_id=${eq(deviceId)}&status=${eq('active')}`, {
+        status: 'disabled', disabled_at: disabledAt, disabled_reason: 'Verified device removed by customer.', updated_at: disabledAt
+      }).catch(() => null);
       await audit(session, 'verified_device_removed', { device_id: deviceId, device_name: devices[0].device_name || '' });
       const current = deviceId === session.deviceId;
       return jsonResponse(200, { ok: true, version: APP_VERSION, currentSessionEnded: current, message: current ? 'This device was removed and its account session ended.' : 'The selected device and its account sessions were removed.' }, current ? { 'set-cookie': clearCustomerSession(event) } : {});
@@ -170,6 +176,10 @@ export async function handler(event) {
 
     if (action === 'revoke_all_sessions') {
       await revokeAllCustomerSessions({ tenantId: session.tenantId, userId: session.userId, reason: 'ended_all_by_customer' });
+      const disabledAt = new Date().toISOString();
+      await updateRow('push_subscriptions', `tenant_id=${eq(session.tenantId)}&user_id=${eq(session.userId)}&status=${eq('active')}`, {
+        status: 'disabled', disabled_at: disabledAt, disabled_reason: 'All account sessions ended by customer.', updated_at: disabledAt
+      }).catch(() => null);
       await audit(session, 'all_account_sessions_ended');
       return jsonResponse(200, { ok: true, version: APP_VERSION, authenticated: false, message: 'All account sessions have ended. Verify a device again to use cloud account features.' }, { 'set-cookie': clearCustomerSession(event) });
     }

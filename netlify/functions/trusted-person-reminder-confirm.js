@@ -2,6 +2,7 @@ import { APP_VERSION, jsonResponse, parseBody, requirePost, selectRows, updateRo
 import { assertBrowserAction, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
 import { verifyTrustedPersonReminderToken } from './_trusted-person-reminder-token.js';
 import { recordEmergencyFlowEvent } from './_emergency-flow.js';
+import { sendTemplatePushToUser } from './_push.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 
@@ -17,7 +18,7 @@ export async function handler(event) {
   try {
     await consumeRateLimit(event, { scope: 'trusted_person_reminder_confirm', identifier: token, limit: 10, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
     const payload = verifyTrustedPersonReminderToken(token);
-    const rows = await selectRows('emergency_access_invitations', `select=id,status,contact_name,accepted_at,metadata&id=${eq(payload.invitationId)}&limit=1`);
+    const rows = await selectRows('emergency_access_invitations', `select=id,tenant_id,user_id,status,contact_name,accepted_at,metadata&id=${eq(payload.invitationId)}&limit=1`);
     const invitation = rows?.[0];
     if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'This Trusted Person reminder is no longer available.' });
     if (String(invitation.status || '').toLowerCase() !== 'accepted') {
@@ -54,6 +55,16 @@ export async function handler(event) {
     await recordEmergencyFlowEvent(invitation.id, {
       type: 'trusted_person_reminder_confirmed', title: 'Trusted Person reminder confirmed',
       message: 'The trusted person confirmed that they are still happy to remain the nominated trusted person.', occurredAt: now
+    }).catch(() => null);
+
+    await sendTemplatePushToUser({
+      templateKey: 'trusted_person_reminder_confirmed',
+      tenantId: invitation.tenant_id,
+      userId: invitation.user_id,
+      variables: { contactName: invitation.contact_name || 'Your trusted person' },
+      urgency: 'normal',
+      triggerSource: 'trusted_person_reminder_confirm',
+      metadata: { invitation_id: invitation.id, confirmed_at: now }
     }).catch(() => null);
 
     return jsonResponse(200, {

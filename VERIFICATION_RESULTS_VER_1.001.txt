@@ -1,0 +1,40 @@
+Password-Encrypt Ver-1.001 — Verification Results
+Date: 2026-08-12
+Feature: Push Notifications
+
+PASS  Security static checks: 13/13
+PASS  Reliability static checks: 20/20
+PASS  Legal/commercial readiness checks: 35/35
+PASS  Landing/plan UX static checks: 36/36
+PASS  Mobile restoration checks: 6/6
+PASS  Trusted Person / Emergency Flow static checks: 64/64
+PASS  Onboarding flow static checks: 52/52
+PASS  Push Notification static checks: 24/24
+PASS  JSX parser: src/main.jsx
+PASS  JSX parser: src/AdminApp.jsx
+PASS  JSX parser: src/AdminPushNotifications.jsx
+PASS  Modified Netlify/server JavaScript syntax checks
+PASS  VAPID generation script syntax check
+PASS  VAPID key generator output-shape check
+
+Push-specific coverage includes:
+- Customer-session tenant/user/device scoping
+- Browser CSRF protection
+- Server-only VAPID private key
+- RFC-style P-256 ECDH + HKDF SHA-256 + AES-128-GCM Web Push payload encryption
+- ES256 VAPID authentication
+- Same-origin notification click routing
+- Expired endpoint auto-disable
+- Customer opt-in permission flow
+- Local account/subscription binding to prevent cross-account silent rebind
+- Push disable on explicit logout, device removal and end-all-sessions
+- Trusted Person accepted/declined owner alerts
+- High-priority Emergency Access request owner alert
+- One-time final package release owner alert
+- Trusted Person reminder confirmation owner alert
+- Admin template editing and one-shot broadcast
+- Admin CSRF/session protection and audit trail
+- RLS/service-role database controls
+- 180-day push log retention and scheduled cleanup
+
+Note: The uploaded source archive did not contain node_modules. No npm install was run in the build workspace, so a full Vite production bundle was not executed here. Static regression suites, JSX parsing and JavaScript syntax validation all passed.

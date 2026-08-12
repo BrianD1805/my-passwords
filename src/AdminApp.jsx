@@ -5,6 +5,7 @@ import CustomSelect from './CustomSelect.jsx';
 import AdminCustomerDetail from './AdminCustomerDetail.jsx';
 import AdminAutomatedEmails from './AdminAutomatedEmails.jsx';
 import AdminHealth from './AdminHealth.jsx';
+import AdminPushNotifications from './AdminPushNotifications.jsx';
 
 async function requestJson(url, options = {}) {
   try {
@@ -132,6 +133,8 @@ function adminAuditSummary(entry) {
   if (metadata.plan_code) details.push(`Plan: ${planDisplayName(metadata.plan_code)}`);
   if (metadata.email_type) details.push(`Email: ${planStatusDisplayName(metadata.email_type)}`);
   if (metadata.stripe_sync_status) details.push(`Stripe: ${planStatusDisplayName(metadata.stripe_sync_status)}`);
+  if (metadata.template_key) details.push(`Push: ${planStatusDisplayName(metadata.template_key)}`);
+  if (metadata.subscriptions_targeted !== undefined) details.push(`Push: ${Number(metadata.subscriptions_targeted || 0)} targeted · ${Number(metadata.delivered || 0)} delivered`);
   if (metadata.message) details.push(String(metadata.message));
   if (metadata.error) details.push(`Error: ${String(metadata.error)}`);
   return details.join(' · ') || 'Recorded Admin action';
@@ -432,6 +435,7 @@ export default function AdminApp({ version }) {
         <button type="button" className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>Billing Events</button>
         <button type="button" className={activeTab === 'sync' ? 'active' : ''} onClick={() => setActiveTab('sync')}>Sync Health</button>
         <button type="button" className={activeTab === 'emails' ? 'active' : ''} onClick={() => setActiveTab('emails')}>Automated Emails</button>
+        <button type="button" className={activeTab === 'push' ? 'active' : ''} onClick={() => setActiveTab('push')}>Push Notifications</button>
         <button type="button" className={activeTab === 'health' ? 'active' : ''} onClick={() => setActiveTab('health')}>Health</button>
         <button type="button" className={activeTab === 'audit' ? 'active' : ''} onClick={() => setActiveTab('audit')}>Admin Audit</button>
       </nav>
@@ -574,6 +578,14 @@ export default function AdminApp({ version }) {
           onSessionExpired={(message) => { setAuth({ checking: false, authenticated: false, message: message || 'Admin sign-in is required.' }); setSelectedCustomerId(''); }}
           setGlobalNotice={setNotice}
           onOpenCustomer={(tenantId) => { setSelectedCustomerId(tenantId); setActiveTab('customers'); }}
+        />
+      )}
+
+
+      {activeTab === 'push' && (
+        <AdminPushNotifications
+          onSessionExpired={(message) => { setAuth({ checking: false, authenticated: false, message: message || 'Admin sign-in is required.' }); setSelectedCustomerId(''); }}
+          setGlobalNotice={setNotice}
         />
       )}
 
