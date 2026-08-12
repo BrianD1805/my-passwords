@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.001';
+const VERSION = 'Password-Encrypt Ver-1.001.01';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -2324,6 +2324,34 @@ function ExitAppConfirmationModal({ visible, onStay, onExit }) {
   );
 }
 
+function PushActivationPromptModal({ visible, permission, loading, onClose, onEnable, onReview }) {
+  if (!visible) return null;
+  const blocked = permission === 'denied';
+  return (
+    <div className="item-popup-layer push-activation-prompt-layer" role="presentation">
+      <button type="button" className="item-popup-backdrop" onClick={loading ? undefined : onClose} aria-label="Close push notification prompt" />
+      <section className="item-popup-card push-activation-prompt-card" role="dialog" aria-modal="true" aria-labelledby="push-activation-prompt-title">
+        <header className="item-popup-header">
+          <h2 id="push-activation-prompt-title"><Bell size={21} /> Push notifications</h2>
+          <button type="button" className="icon-button" onClick={onClose} disabled={loading} aria-label="Close"><X size={19} /></button>
+        </header>
+        <div className="item-popup-body push-activation-prompt-body">
+          <div className={`push-activation-prompt-icon ${blocked ? 'blocked' : ''}`}><Bell size={27} /></div>
+          <p>{blocked ? 'Push notifications are currently blocked on this device.' : 'Push notifications are not active on this device.'}</p>
+          <div className="master-password-boundary-note compact"><ShieldCheck size={18} /><span><strong>Keep important account alerts close</strong><small>Password-Encrypt can alert you immediately if your trusted person starts Emergency Access, even when you are not actively using the app.</small></span></div>
+          {blocked && <p className="push-activation-prompt-help">Allow notifications in this browser or installed app permissions, then return to Push Notifications in Settings.</p>}
+        </div>
+        <footer className="item-popup-footer push-activation-prompt-footer">
+          <button type="button" className="secondary-button" onClick={onClose} disabled={loading}>Not now</button>
+          {blocked
+            ? <button type="button" className="primary-button" onClick={onReview}>Review settings</button>
+            : <button type="button" className="primary-button" onClick={onEnable} disabled={loading}>{loading ? 'Activating...' : 'Activate notifications'}</button>}
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function App() {
   const [locked, setLocked] = useState(true);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -2399,6 +2427,8 @@ function App() {
     publicKey: '',
     message: ''
   }));
+  const [pushActivationPromptOpen, setPushActivationPromptOpen] = useState(false);
+  const pushActivationPromptShownRef = useRef(false);
   const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = useState(false);
   const [exitAppConfirmationOpen, setExitAppConfirmationOpen] = useState(false);
   const backNavigationStateRef = useRef({});
@@ -3549,6 +3579,13 @@ function App() {
     loadPushNotificationStatus({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerSession.authenticated, customerSession.userId]);
+
+  useEffect(() => {
+    if (locked || !customerSession.authenticated || !pushNotifications.loaded || pushActivationPromptShownRef.current) return;
+    if (!pushNotifications.supported || !pushNotifications.configured || pushNotifications.enabledThisDevice) return;
+    pushActivationPromptShownRef.current = true;
+    setPushActivationPromptOpen(true);
+  }, [locked, customerSession.authenticated, pushNotifications.loaded, pushNotifications.supported, pushNotifications.configured, pushNotifications.enabledThisDevice]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -9192,6 +9229,14 @@ function App() {
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} phone={bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)} channel={otpChannel} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onChannelChange={chooseOtpChannel} onSend={() => requestSelectedOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} />
       <ExitAppConfirmationModal visible={exitAppConfirmationOpen} onStay={() => setExitAppConfirmationOpen(false)} onExit={confirmExitApp} />
+      <PushActivationPromptModal
+        visible={pushActivationPromptOpen}
+        permission={pushNotifications.permission}
+        loading={pushNotifications.loading}
+        onClose={() => setPushActivationPromptOpen(false)}
+        onEnable={() => { setPushActivationPromptOpen(false); enablePushNotifications(); }}
+        onReview={() => { setPushActivationPromptOpen(false); openSettingsSection('notifications'); }}
+      />
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       <footer className="app-version-footer"><span>{VERSION}</span><span className="app-version-footer-separator"> · </span><span>secure private vault</span></footer>
     </main>

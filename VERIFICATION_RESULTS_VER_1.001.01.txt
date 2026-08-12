@@ -1,0 +1,313 @@
+Password-Encrypt Ver-1.001.01 — Verification Results
+Generated 2026-08-12
+
+
+> my-passwords@1.1.1 security:check
+> node scripts/security-static-check.mjs
+
+PASS  Vault server identity comes from validated session
+PASS  Documents are scoped to session tenant and user
+PASS  Account profile is scoped to session tenant and user
+PASS  Billing context is derived from validated customer session
+PASS  Emergency Access owner identity is overwritten from session
+PASS  Production cookies use __Host prefix and SameSite Strict
+PASS  Production session signing requires dedicated secrets
+PASS  Security HMAC controls require dedicated production session secret
+PASS  Stripe webhook has atomic replay ledger claim
+PASS  Browser no longer sends identity in sync/document URLs
+PASS  Browser sensitive POST helper sends request marker and CSRF
+PASS  Signup plan is validated against server-side published plan data
+PASS  Stripe checkout uses server-loaded plan and validated billing session
+
+All 13 security static checks passed.
+
+
+> my-passwords@1.1.1 reliability:check
+> node scripts/reliability-static-check.mjs
+
+PASS  Ver-1.001.01 version and cache are aligned
+PASS  Operational monitoring tables use RLS and service-role-only grants
+PASS  Operational metadata has a sensitive-key denylist and text redaction
+PASS  Failed functions create sanitised operational events
+PASS  Stripe webhook failures create critical operational alerts
+PASS  Resend failures are tracked without storing recipient addresses in operational events
+PASS  Vault backup failures and sync conflicts feed operational monitoring
+PASS  Account/trial and Emergency Access checks have scheduled run history
+PASS  Database backup verification uses the Supabase Management API and never returns the access token
+PASS  Backup verification treats unavailable managed backups as non-failing and recognises physical backup dates
+PASS  Backup verification detects the Supabase organization Free plan before judging backup rows
+PASS  Health dashboard is admin-session protected and mutating actions require CSRF
+PASS  Stripe reconciliation is preview-first, expires, and refreshes only the existing linked subscription
+PASS  Stripe reconciliation compares CurrentPeriodEnd as an instant, not raw timestamp text
+PASS  Customer support diagnostics query metadata only
+PASS  Browser error reporting excludes exception messages and stacks
+PASS  Monitoring and cleanup schedules are configured
+PASS  Operational retention rules do not delete customer vault data
+PASS  Resolved sync-conflict alerts create an acknowledgement checkpoint and are not reopened by the same historical rows
+PASS  Operations health covers database, Stripe, email, backup, sync, functions and scheduled processors
+
+All 20 reliability static checks passed.
+
+
+> my-passwords@1.1.1 legal:check
+> node scripts/legal-readiness-check.mjs
+
+PASS  Ver-1.001.01 app/server/package/service-worker versions align
+PASS  Public Terms, Privacy and Billing routes are implemented and included in the PWA shell
+PASS  Public landing page links all legal policies
+PASS  New signup requires explicit current Terms and Privacy acceptance in browser
+PASS  Trial signup Screen 1 requires Terms and Privacy only
+PASS  Signup Terms and Privacy open in an in-app popup instead of a new browser tab
+PASS  Closing a signup legal policy returns to the preserved signup state
+PASS  Server independently enforces current legal acceptance for new accounts
+PASS  Trial signup audit records Terms and Privacy acceptance only
+PASS  Terms describe client-side encryption without absolute security promise
+PASS  Privacy policy explicitly avoids absolute zero-knowledge claim
+PASS  Emergency Access disclosure covers waiting period, secure link and document limitation
+PASS  Trial wording states no automatic paid conversion
+PASS  Cancellation and refund terms preserve mandatory consumer rights
+PASS  Tax wording does not falsely claim tax-inclusive pricing
+PASS  Stripe invoice and receipt wording identifies Stripe-hosted records
+PASS  Business and support identity are published
+PASS  Retention cleanup covers operational, email, SMS and deletion history metadata
+PASS  Privacy lists current infrastructure/payment/communications processors
+PASS  Customer-facing lifecycle/admin emails link Terms, Privacy and Billing policies
+PASS  Family and Business remain reserved future plans for Personal-only launch
+PASS  Secure device unlock is disclosed as local wrapped-master-password storage
+PASS  Current customer-facing code avoids absolute master-password storage/access claims
+PASS  Stripe Tax is opt-in and disabled unless the server setting is explicitly enabled
+PASS  Commercial, data-processing, claims and support launch documentation is present
+PASS  Privacy discloses essential browser storage and external font/flag resources
+PASS  Password-Encrypt is the customer-facing product name across live app/legal/PWA shell
+PASS  Vault home header uses the customer vault name instead of the product name
+PASS  Ubuntu is forcibly applied throughout desktop and mobile UI
+PASS  Legal document version is aligned client and server after the product rename
+PASS  Landing plan area prominently states that trial takes no credit card details
+PASS  Paid checkout requires explicit billing-policy acknowledgement in the browser
+PASS  Stripe checkout independently enforces current billing-policy acknowledgement
+PASS  Paid billing-policy acceptance is recorded in audit metadata
+PASS  Create-account progress indicators render in the sticky popup header
+
+All 35 legal/commercial readiness checks passed.
+
+
+> my-passwords@1.1.1 ux:check
+> node scripts/landing-ux-static-check.mjs
+
+PASS  Footer keeps one-line trust wording and shifts desktop links right by 35px
+PASS  Admin typography has lighter hierarchy overrides
+PASS  Emergency Access explicitly describes next of kin and incapacity
+PASS  Plan cards suppress duplicated document/storage limit marketing rows
+PASS  Plan item limit is editable and public
+PASS  Server entitlements enforce item limit metadata
+PASS  Mobile plans stack vertically with the original layout restored
+PASS  Customer subscription shows plan usage meters with total account storage
+PASS  Total account storage counts encrypted vault backup plus encrypted documents
+PASS  FAQ uses click-to-reveal disclosure rows
+PASS  Choose your plan is positioned after Simple setup
+PASS  Standalone Privacy and security panel is removed and security guidance moved into FAQ
+PASS  Plan cards have increased 31px spacing without reintroducing a carousel
+PASS  Plans use viewport reveal motion with reduced-motion fallback
+PASS  Plan item copy is concise without the parenthetical item-type list
+PASS  Landing FAQs use premium numbered disclosure styling
+PASS  Account, subscription, Vault Safety and Trusted Person use multi-open Settings-style drill-down sections
+PASS  Ubuntu is locked across landing, vault and Admin using real Ubuntu weights
+PASS  Landing hierarchy carries lighter weights throughout
+PASS  Emergency package title can be fully cleared before retyping
+PASS  Subscription overview no longer has the long introductory paragraph
+PASS  Cross-device check has visible busy and completion feedback
+PASS  Vault Safety redundant device/backup/conflict explainer panels are removed
+PASS  Recovery point check has clearer label and working feedback
+PASS  Everything important appears before Next of Kin spotlight
+PASS  Trial payment note no longer mentions Stripe Checkout
+PASS  Admin login no longer shows Return to Password-Encrypt
+PASS  Mobile landing has 5px more side padding
+PASS  Everything important remains before Next of Kin on mobile flow
+PASS  Mobile hero hides CTA row and security highlight pills only at mobile breakpoint
+PASS  FAQ has stronger blue premium treatment without drop shadows
+PASS  Uploaded favicon artwork is wired into browser and Apple icon links
+PASS  PWA manifest uses new 192, 512 and maskable PNG icons
+PASS  Startup and offline splash keep a circular new icon
+PASS  Open Graph and sharing metadata use the new favicon artwork
+PASS  Service worker precaches current favicon, PWA, splash and sharing assets
+
+All 36 landing/plan UX static checks passed.
+
+
+> my-passwords@1.1.1 mobile:check
+> node scripts/mobile-regression-static-check.mjs
+
+PASS  mobile landing uses 16px outer side margins
+PASS  plans stack vertically on mobile
+PASS  mobile carousel prompt removed
+PASS  mobile plan row has no horizontal carousel overflow
+PASS  FAQ standard mobile panel padding restored
+PASS  no root or landing page overflow lock is applied
+
+All 6 mobile restoration checks passed.
+
+
+> my-passwords@1.1.1 emergency:check
+> node scripts/emergency-flow-static-check.mjs
+
+PASS  Ver-1.001.01 version is aligned
+PASS  Trusted Person heading has a same-line Help and FAQ control
+PASS  Current progress is setup-only and explicitly shows Stage X of 4
+PASS  Current progress panel jumps directly to its setup stage
+PASS  Trusted Person help and all FAQs are consolidated in one popup
+PASS  Current stage uses the approved three-pixel corner wrap
+PASS  Editable stage details are visually separate from the wrapped stage header
+PASS  Owner Trusted Person stage auto-checks every 30 seconds while the page is open
+PASS  Automatic status checks only save encrypted plan metadata when the server state changed
+PASS  Stage 4 tells the owner acceptance is checked automatically
+PASS  Final package release remains on the scheduled five-minute processor
+PASS  Trusted Person reminder processor runs daily and sends only when three calendar months are due
+PASS  Quarterly reminder email is searchable and asks for confirmation
+PASS  Trusted Person help explains the quarterly reminder without implying access
+PASS  Reminder confirmation uses a signed expiring token and a second deliberate browser action
+PASS  Reminder confirmation never starts Emergency Access and is recorded in flow history
+PASS  Quarterly reminders pause while an Emergency Access request is active
+PASS  Desktop vault login product title is reduced by about five pixels only on desktop
+PASS  Trusted Person setup is explicitly Stages 1 to 4 without a duplicate setup intro panel
+PASS  Stages 5 and 6 are clearly separated as emergency-only
+PASS  Trusted person details are Step 1 with their own Save button
+PASS  Emergency package is Step 2 with its own Save button
+PASS  Invitation cannot be sent until Steps 1 and 2 are saved
+PASS  Primary invitation action sits directly on Step 3
+PASS  Invitation follow-up actions sit on Step 4 dropdown
+PASS  Emergency-link actions sit on Step 5 dropdown
+PASS  Step 5 relies on automatic request checking and removes the redundant manual check action
+PASS  Step 5 access-link action labels are short enough for desktop and mobile
+PASS  Trusted Person action dropdown options use lighter readable typography
+PASS  Waiting-period actions sit on Step 6 dropdown
+PASS  Completed stages have a large tick status
+PASS  Reset to zero remains in a maintenance dropdown, not the main route
+PASS  Optional event-history accordion shows dated flow events
+PASS  Flow events remain metadata-only invitation history
+PASS  Reset to zero removes current flow and audit source
+PASS  Reset to zero removes local encrypted Trusted Person plan metadata
+PASS  Stage 1 recipient email has no internal stage label
+PASS  Stage 1 email explains Password-Encrypt and identifies owner
+PASS  Stage 1 email includes public landing-page link
+PASS  Accepted invitation page is confirmation-only
+PASS  Stage 2 email is searchable and has no internal numbering
+PASS  Stage 2 resend email uses the same searchable subject
+PASS  Waiting-period owner email explains cancellation and no release yet
+PASS  Release email removes internal final-stage wording
+PASS  Release email explains the 30-day availability window
+PASS  Release-ready requests store a 30-day expiry
+PASS  Expired final links are rejected server-side
+PASS  Final package page shows expiry and focused FAQ before package
+PASS  Stale FAQ is hidden after final package release
+PASS  Released records are sorted alphanumerically
+PASS  Emergency package supports TXT download
+PASS  Emergency package supports DOCX download without external package
+PASS  Downloaded package warns that exported data is readable and sensitive
+PASS  Admin customer detail includes explicit permanent-delete action
+PASS  Admin hard delete blocks Founder account and safely ends active Stripe subscription
+PASS  Admin hard delete removes tenant and tenant-scoped residual rows
+PASS  Deleted-account email exists and gives no deletion reason
+PASS  Hard-delete audit does not retain deleted tenant id
+PASS  Trusted Person help FAQs use one question-answer row and normal-weight answers
+PASS  New Trusted Person plans default release scope to full vault package
+PASS  Successful Step 1 and Step 2 saves close their editor dropdowns
+PASS  Desktop Send invitation action aligns to the right
+PASS  Duplicate Trusted Person setup intro panel is removed
+PASS  App date formatter uses dd/mmm/yyyy format
+
+All 64 Trusted Person / emergency-flow static checks passed.
+
+
+> my-passwords@1.1.1 onboarding:check
+> node scripts/onboarding-flow-static-check.mjs
+
+PASS  Ver-1.001.01 app/package/service-worker versions align
+PASS  Landing Open My Vault opens an existing/new customer choice
+PASS  Choice clearly separates existing customer from new customer
+PASS  Existing customer route carries explicit existing-entry intent
+PASS  Existing-customer restore failure cannot switch into create mode
+PASS  Existing-vault verification no longer shows a redundant single Email selector
+PASS  New-account onboarding isolates any previously verified customer session
+PASS  Pending onboarding account identity is retained across the Account Setup to Vault Setup handoff
+PASS  Vault creation requires the live signed session to match the account just onboarded
+PASS  New encrypted vault envelopes are bound to tenant and user identity
+PASS  A bound local vault is blocked when the verified browser account differs
+PASS  Cross-account cloud backup is blocked before upload
+PASS  Changing the verified browser account locks an already-open bound vault
+PASS  Older unbound local vault cannot fall back after a different cloud vault rejects the password
+PASS  Generic no-local-vault screen no longer offers Create Vault
+PASS  Existing account discovered during signup finishes through existing-customer route
+PASS  New signup finishes through dedicated onboarding vault route
+PASS  Dedicated onboarding vault screen collects email, mobile and master password
+PASS  Dedicated onboarding screen requires active verified customer session
+PASS  Dedicated onboarding refuses to overwrite an existing local vault
+PASS  Create Account explains the three-step onboarding journey
+PASS  Create Account popup resets scroll position when its internal stage changes
+PASS  Dedicated Vault Setup route explicitly resets document scroll to the top
+PASS  Redundant email-channel selector is hidden during email-only onboarding
+PASS  Step 2 wording is concise and references three-step onboarding
+PASS  Step 1 to Step 2 transition changes SPA route before closing popup
+PASS  Step 1 to Step 2 transition does not navigate through the landing page
+PASS  Master-password fields no longer request browser-generated new-password suggestions
+PASS  Master-password fields retain password-manager ignore hints
+PASS  Creating the new vault advances to Step 3 install onboarding
+PASS  Install onboarding explains why installing is recommended
+PASS  PWA install prompt is captured and invoked where supported
+PASS  PWA install opportunity is captured in the document before the React module loads
+PASS  Step 3 waits briefly for Chrome to expose a late install prompt instead of immediately giving up
+PASS  Manifest has a stable app id matching the vault start route
+PASS  Installed-app state is detected and appinstalled is handled
+PASS  Install onboarding provides manual platform instructions when native prompt is unavailable
+PASS  Install onboarding can continue into the vault without forcing installation
+PASS  Welcome-email sent notice is removed from customer UI
+PASS  Welcome trial wording says the trial will end on the date
+PASS  Welcome email contains account email, mobile, vault name and plan details
+PASS  Welcome email explicitly excludes the master password
+PASS  Welcome email receives the stored account phone and email
+PASS  SMS verification UI is disabled while implementation remains available
+PASS  Admin verification presentation no longer depends on mobile SMS verification
+PASS  Three-step onboarding has desktop and mobile styling
+PASS  Vault-login key icon is shown only after Secure device unlock has been configured
+PASS  Vault-login key action blurs fields and never focuses the master-password keyboard
+PASS  Secure device unlock setup is performed from Settings rather than the login key
+PASS  Step 2 clears stale Step 1 legal warnings during the route handoff
+PASS  Onboarding master-password fields use browser-resistant masked text where supported
+PASS  Account Setup and Vault Setup fields carry password-manager ignore metadata
+
+All 52 onboarding flow static checks passed.
+
+
+> my-passwords@1.1.1 push:check
+> node scripts/push-notification-static-check.mjs
+
+PASS  Ver-1.001.01 app/server/package/service-worker versions align
+PASS  Push subscriptions are bound to validated customer sessions
+PASS  Push subscription writes require CSRF browser action protection
+PASS  VAPID private key remains server-side
+PASS  Push payload encryption uses ECDH, HKDF and AES-128-GCM
+PASS  Expired push endpoints are disabled automatically
+PASS  Service worker handles push and notification click
+PASS  Notification clicks are restricted to same-origin targets
+PASS  Customer UI requires an explicit notification permission action
+PASS  Trusted Person settings promote owner push alerts
+PASS  Admin push controls require validated Admin session and CSRF
+PASS  Admin can edit automatic push text
+PASS  Admin can send one broadcast to all active subscriptions
+PASS  Trusted Person acceptance and decline trigger owner push
+PASS  Emergency Access request triggers high-priority owner push
+PASS  Emergency package release triggers owner push once
+PASS  Trusted Person reminder confirmation triggers owner push
+PASS  Push database tables use RLS and service-role grants
+PASS  Automatic notification templates are seeded for Trusted Person owner control
+PASS  Push UI states that vault contents never enter notification text
+PASS  Push subscriptions are locally bound to the signed-in account
+PASS  Browser subscriptions are never silently rebound to another account
+PASS  Ending sessions or removing devices disables their push subscriptions
+PASS  Push delivery logs have retention and scheduled cleanup
+PASS  App opening automatically prompts when push is available but inactive
+PASS  Blocked browser notification permission routes user to review settings
+PASS  Admin notification types use a single dropdown selector
+PASS  Admin broadcast appears before automatic notification editor
+PASS  Admin template Save stays disabled until content changes
+
+All 29 push notification static checks passed.

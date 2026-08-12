@@ -35,6 +35,13 @@ function toDraft(template = {}) {
   };
 }
 
+function sameEditableTemplate(a = {}, b = {}) {
+  return String(a.title || '') === String(b.title || '')
+    && String(a.body || '') === String(b.body || '')
+    && String(a.targetUrl || '/vault') === String(b.targetUrl || '/vault')
+    && Boolean(a.isEnabled) === Boolean(b.isEnabled);
+}
+
 const BROADCAST_TARGETS = [
   { value: '/vault', label: 'Vault home' },
   { value: '/vault?open=notifications', label: 'Push Notifications settings' },
@@ -46,17 +53,24 @@ export default function AdminPushNotifications({ onSessionExpired, setGlobalNoti
   const [busyKey, setBusyKey] = useState('');
   const [data, setData] = useState({ templates: [], recentLogs: [], summary: {}, configuration: {} });
   const [drafts, setDrafts] = useState({});
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState('');
   const [broadcast, setBroadcast] = useState({ title: '', body: '', targetUrl: '/vault' });
   const [notice, setNotice] = useState('');
 
   const sortedDrafts = useMemo(() => Object.values(drafts).sort((a, b) => String(a.displayName).localeCompare(String(b.displayName))), [drafts]);
+  const templateOptions = useMemo(() => sortedDrafts.map((draft) => ({ value: draft.templateKey, label: draft.displayName })), [sortedDrafts]);
+  const selectedDraft = drafts[selectedTemplateKey] || sortedDrafts[0] || null;
+  const selectedOriginal = selectedDraft ? toDraft((data.templates || []).find((template) => template.template_key === selectedDraft.templateKey) || {}) : null;
+  const selectedHasChanges = Boolean(selectedDraft && selectedOriginal && !sameEditableTemplate(selectedDraft, selectedOriginal));
 
   useEffect(() => { load(); }, []);
 
   function applyData(result) {
     const templates = result.templates || [];
+    const nextDrafts = Object.fromEntries(templates.map((template) => [template.template_key, toDraft(template)]));
     setData({ templates, recentLogs: result.recentLogs || [], summary: result.summary || {}, configuration: result.configuration || {} });
-    setDrafts(Object.fromEntries(templates.map((template) => [template.template_key, toDraft(template)])));
+    setDrafts(nextDrafts);
+    setSelectedTemplateKey((current) => current && nextDrafts[current] ? current : (templates[0]?.template_key || ''));
   }
 
   async function load() {
@@ -78,7 +92,8 @@ export default function AdminPushNotifications({ onSessionExpired, setGlobalNoti
 
   async function saveTemplate(templateKey) {
     const draft = drafts[templateKey];
-    if (!draft) return;
+    const original = toDraft((data.templates || []).find((template) => template.template_key === templateKey) || {});
+    if (!draft || sameEditableTemplate(draft, original)) return;
     setBusyKey(templateKey);
     setNotice('Saving push notification text...');
     const result = await requestJson('/.netlify/functions/admin-push-notifications', {
@@ -93,6 +108,7 @@ export default function AdminPushNotifications({ onSessionExpired, setGlobalNoti
       return;
     }
     applyData(result);
+    setSelectedTemplateKey(templateKey);
     setNotice(result.message || 'Push notification text saved.');
     setGlobalNotice?.(result.message || 'Push notification text saved.');
   }
@@ -142,34 +158,39 @@ export default function AdminPushNotifications({ onSessionExpired, setGlobalNoti
         </div>
       </section>
 
-      <section className="admin-panel">
-        <div className="admin-panel-heading"><div><p className="eyebrow">Trusted Person flow</p><h2>Automatic notification text</h2></div><span>{sortedDrafts.length} notification types</span></div>
-        <p className="admin-panel-intro">These messages are sent automatically to the vault owner at important Trusted Person stages. Placeholders such as <code>{'{contactName}'}</code> and <code>{'{waitingPeriod}'}</code> are filled at send time.</p>
-        <div className="admin-push-template-list">
-          {sortedDrafts.map((draft) => (
-            <article className="admin-push-template-card" key={draft.templateKey}>
-              <div className="admin-push-template-heading">
-                <div><strong>{draft.displayName}</strong><span>{draft.description}</span></div>
-                <label className="admin-push-enabled"><input type="checkbox" checked={draft.isEnabled} onChange={(event) => updateDraft(draft.templateKey, { isEnabled: event.target.checked })} /> Enabled</label>
-              </div>
-              <label>Notification title<input maxLength="80" value={draft.title} onChange={(event) => updateDraft(draft.templateKey, { title: event.target.value })} /></label>
-              <label>Notification text<textarea rows="3" maxLength="220" value={draft.body} onChange={(event) => updateDraft(draft.templateKey, { body: event.target.value })} /></label>
-              <div className="admin-push-template-footer"><small>{draft.body.length}/220 characters{draft.updatedAt ? ` · Updated ${formatAppDate(draft.updatedAt, true)}` : ''}</small><button type="button" className="primary-button" onClick={() => saveTemplate(draft.templateKey)} disabled={Boolean(busyKey)}><Save size={17} /> {busyKey === draft.templateKey ? 'Saving...' : 'Save'}</button></div>
-            </article>
-          ))}
-          {!sortedDrafts.length && !loading && <div className="admin-empty">No push notification templates were returned. Run the Ver-1.001 database migration.</div>}
-        </div>
-      </section>
-
-      <section className="admin-panel">
+      <section className="admin-panel admin-push-broadcast-panel">
         <div className="admin-panel-heading"><div><p className="eyebrow">Broadcast</p><h2>Send to all enabled users</h2></div><span>{data.summary?.activeSubscriptions || 0} registered device(s)</span></div>
         <p className="admin-panel-intro">This sends one notification immediately to every active push subscription. Users who have not enabled push notifications are not contacted.</p>
         <form className="admin-push-broadcast-form" onSubmit={sendBroadcast}>
           <label>Notification title<input maxLength="80" value={broadcast.title} onChange={(event) => setBroadcast({ ...broadcast, title: event.target.value })} placeholder="Password-Encrypt update" /></label>
           <label>Notification text<textarea rows="4" maxLength="220" value={broadcast.body} onChange={(event) => setBroadcast({ ...broadcast, body: event.target.value })} placeholder="Write the message users should see..." /></label>
           <label>Open when tapped<CustomSelect value={broadcast.targetUrl} ariaLabel="Choose where the push notification opens" options={BROADCAST_TARGETS} onChange={(targetUrl) => setBroadcast({ ...broadcast, targetUrl })} /></label>
-          <div className="admin-push-broadcast-footer"><small>{broadcast.body.length}/220 characters</small><button type="submit" className="primary-button" disabled={busyKey === 'broadcast' || !data.configuration?.configured}><Send size={17} /> {busyKey === 'broadcast' ? 'Sending...' : 'Send push to all users'}</button></div>
+          <div className="admin-push-broadcast-footer"><small>{broadcast.body.length}/220 characters</small><button type="submit" className="primary-button" disabled={busyKey === 'broadcast' || !data.configuration?.configured || !broadcast.title.trim() || !broadcast.body.trim()}><Send size={17} /> {busyKey === 'broadcast' ? 'Sending...' : 'Send push to all users'}</button></div>
         </form>
+      </section>
+
+      <section className="admin-panel">
+        <div className="admin-panel-heading"><div><p className="eyebrow">Trusted Person flow</p><h2>Automatic notification text</h2></div><span>{sortedDrafts.length} notification types</span></div>
+        <p className="admin-panel-intro">Choose the notification type you want to work on. Placeholders such as <code>{'{contactName}'}</code> and <code>{'{waitingPeriod}'}</code> are filled at send time.</p>
+        {sortedDrafts.length > 0 && (
+          <div className="admin-push-template-picker">
+            <label>Notification type<CustomSelect value={selectedDraft?.templateKey || ''} ariaLabel="Choose push notification type" options={templateOptions} onChange={setSelectedTemplateKey} /></label>
+          </div>
+        )}
+        <div className="admin-push-template-list admin-push-template-single">
+          {selectedDraft && (
+            <article className="admin-push-template-card" key={selectedDraft.templateKey}>
+              <div className="admin-push-template-heading">
+                <div><strong>{selectedDraft.displayName}</strong><span>{selectedDraft.description}</span></div>
+                <label className="admin-push-enabled"><input type="checkbox" checked={selectedDraft.isEnabled} onChange={(event) => updateDraft(selectedDraft.templateKey, { isEnabled: event.target.checked })} /> Enabled</label>
+              </div>
+              <label>Notification title<input maxLength="80" value={selectedDraft.title} onChange={(event) => updateDraft(selectedDraft.templateKey, { title: event.target.value })} /></label>
+              <label>Notification text<textarea rows="3" maxLength="220" value={selectedDraft.body} onChange={(event) => updateDraft(selectedDraft.templateKey, { body: event.target.value })} /></label>
+              <div className="admin-push-template-footer"><small>{selectedDraft.body.length}/220 characters{selectedDraft.updatedAt ? ` · Updated ${formatAppDate(selectedDraft.updatedAt, true)}` : ''}</small><button type="button" className="primary-button" onClick={() => saveTemplate(selectedDraft.templateKey)} disabled={Boolean(busyKey) || !selectedHasChanges}><Save size={17} /> {busyKey === selectedDraft.templateKey ? 'Saving...' : 'Save'}</button></div>
+            </article>
+          )}
+          {!sortedDrafts.length && !loading && <div className="admin-empty">No push notification templates were returned. Run the Ver-1.001 database migration.</div>}
+        </div>
       </section>
 
       <section className="admin-panel">

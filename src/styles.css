@@ -17022,3 +17022,75 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     flex-direction: column;
   }
 }
+
+/* Password-Encrypt Ver-1.001.01 — Push Notifications edits */
+.push-activation-prompt-card {
+  width: min(560px, calc(100vw - 50px));
+}
+
+.push-activation-prompt-body {
+  display: grid;
+  gap: 16px;
+}
+
+.push-activation-prompt-body > p {
+  margin: 0;
+  color: #42576b;
+  line-height: 1.6;
+}
+
+.push-activation-prompt-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: #edf6fb;
+  color: #336699;
+}
+
+.push-activation-prompt-icon.blocked {
+  background: #f5f6f8;
+  color: #6f7d8c;
+}
+
+.push-activation-prompt-help {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #f6f8fa;
+  border: 1px solid #e0e6ec;
+  font-size: .92rem;
+}
+
+.push-activation-prompt-footer {
+  gap: 12px;
+}
+
+.admin-push-template-picker {
+  max-width: 620px;
+  margin-bottom: 14px;
+}
+
+.admin-push-template-picker label {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-push-template-single {
+  max-width: 100%;
+}
+
+.admin-push-template-footer .primary-button:disabled {
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .push-activation-prompt-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .push-activation-prompt-footer button {
+    width: 100%;
+  }
+}

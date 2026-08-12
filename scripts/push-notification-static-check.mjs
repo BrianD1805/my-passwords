@@ -26,7 +26,7 @@ function check(label, condition) {
   else { failed += 1; console.error(`FAIL  ${label}`); }
 }
 
-check('Ver-1.001 app/server/package/service-worker versions align', pkg.version === '1.1.0' && /Password-Encrypt Ver-1\.001/.test(main) && /Password-Encrypt Ver-1\.001/.test(db) && /my-passwords-v1\.001/.test(sw));
+check('Ver-1.001.01 app/server/package/service-worker versions align', pkg.version === '1.1.1' && /Password-Encrypt Ver-1\.001\.01/.test(main) && /Password-Encrypt Ver-1\.001\.01/.test(db) && /my-passwords-v1\.001\.01/.test(sw));
 check('Push subscriptions are bound to validated customer sessions', /validateCustomerSession/.test(subscription) && /session\.tenantId/.test(subscription) && /session\.userId/.test(subscription) && /assertBrowserAction/.test(subscription));
 check('Push subscription writes require CSRF browser action protection', /kind: 'customer', csrf: true/.test(subscription));
 check('VAPID private key remains server-side', /PUSH_VAPID_PRIVATE_KEY/.test(helper) && !/PUSH_VAPID_PRIVATE_KEY/.test(main));
@@ -50,9 +50,14 @@ check('Push subscriptions are locally bound to the signed-in account', /PUSH_BIN
 check('Browser subscriptions are never silently rebound to another account', /Never auto-rebind/.test(main) && /linkedToAnotherAccount/.test(main));
 check('Ending sessions or removing devices disables their push subscriptions', /push_subscriptions/.test(sessionStatus) && /Account session ended on this device/.test(sessionStatus) && /Verified device removed by customer/.test(accountSecurity) && /All account sessions ended by customer/.test(accountSecurity));
 check('Push delivery logs have retention and scheduled cleanup', /retention_until timestamptz not null default/.test(migration) && /push_notification_log\?retention_until=lt/.test(retention));
+check('App opening automatically prompts when push is available but inactive', /pushActivationPromptShownRef/.test(main) && /!pushNotifications\.enabledThisDevice/.test(main) && /setPushActivationPromptOpen\(true\)/.test(main) && /Activate notifications/.test(main) && main.lastIndexOf('<PushActivationPromptModal') > main.indexOf('const inviteStatusText'));
+check('Blocked browser notification permission routes user to review settings', /permission === 'denied'/.test(main) && /Review settings/.test(main) && /openSettingsSection\('notifications'\)/.test(main));
+check('Admin notification types use a single dropdown selector', /admin-push-template-picker/.test(admin) && /Choose push notification type/.test(admin) && /selectedDraft/.test(admin));
+check('Admin broadcast appears before automatic notification editor', admin.indexOf('Send to all enabled users') >= 0 && admin.indexOf('Send to all enabled users') < admin.indexOf('Automatic notification text'));
+check('Admin template Save stays disabled until content changes', /selectedHasChanges/.test(admin) && /disabled=\{Boolean\(busyKey\) \|\| !selectedHasChanges\}/.test(admin));
 
 if (failed) {
   console.error(`\n${failed} push notification static check(s) failed.`);
   process.exit(1);
 }
-console.log('\nAll 24 push notification static checks passed.');
+console.log('\nAll 29 push notification static checks passed.');
