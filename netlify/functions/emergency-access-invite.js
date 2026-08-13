@@ -283,6 +283,7 @@ export async function handler(event) {
         releaseScope: packageSummary.releaseScope || invitation.access_scope || 'Emergency Info folder only',
         fullVaultAccess: Boolean(packageSummary.fullVaultAccess),
         itemCount: Number(packageSummary.itemCount || 0),
+        documentCount: Number(packageSummary.documentCount || 0),
         preparedAt: packageSummary.preparedAt || now,
         title: packageSummary.title || 'Emergency vault package',
         version: APP_VERSION
@@ -298,7 +299,7 @@ export async function handler(event) {
         },
         updated_at: now
       });
-      const events = await recordEmergencyFlowEvent(invitationId, { type: 'package_saved', title: 'Emergency package saved', message: 'The owner updated the encrypted emergency package.', occurredAt: now, metadata: { releaseScope: cleanSummary.releaseScope, itemCount: cleanSummary.itemCount } });
+      const events = await recordEmergencyFlowEvent(invitationId, { type: 'package_saved', title: 'Emergency package saved', message: 'The owner updated the encrypted emergency package.', occurredAt: now, metadata: { releaseScope: cleanSummary.releaseScope, itemCount: cleanSummary.itemCount, documentCount: cleanSummary.documentCount } });
       return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, packageSavedAt: now, packageSummary: cleanSummary, events, message: 'Emergency release package encrypted and saved for the secure invite link.' });
     }
 

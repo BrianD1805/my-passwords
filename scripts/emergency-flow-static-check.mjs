@@ -18,6 +18,8 @@ const adminEmail = read('netlify/functions/_admin-email.js');
 const pkg = JSON.parse(read('package.json'));
 const styles = read('src/styles.css');
 const netlify = read('netlify.toml');
+const emergencyDocument = read('netlify/functions/emergency-access-document.js');
+const emergencyDocumentMigration = read('db/migrations/2026-08-13_emergency_access_documents_ver_1_001_03.sql');
 
 let passed = 0;
 let failed = 0;
@@ -26,7 +28,7 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-1.001.02 version is aligned', pkg.version === '1.1.2' && /Password-Encrypt Ver-1\.001\.02/.test(main) && /my-passwords-v1\.001\.02/.test(read('public/sw.js')));
+check('Ver-1.001.03 version is aligned', pkg.version === '1.1.3' && /Password-Encrypt Ver-1\.001\.03/.test(main) && /my-passwords-v1\.001\.03/.test(read('public/sw.js')));
 check('Trusted Person heading has a same-line Help and FAQ control', /Trusted Person Planning<\/h3>/.test(main) && /trusted-person-help-button/.test(main) && /Open Trusted Person help and FAQs/.test(main));
 check('Current progress is setup-only and explicitly shows Stage X of 4', /emergencySetupStageNumber/.test(main) && /Stage \{emergencySetupStageNumber\} of 4 setup/.test(main) && /emergencySetupCompleteCount/.test(main));
 check('Current progress panel jumps directly to its setup stage', /goToEmergencySetupStage/.test(main) && /onClick=\{\(\) => goToEmergencySetupStage\(emergencySetupStageNumber\)\}/.test(main) && /scrollIntoView/.test(main));
@@ -78,6 +80,12 @@ check('Stale FAQ is hidden after final package release', /!\(isOpenStep && emerg
 check('Released records are sorted alphanumerically', /sortEmergencyReleasedItems/.test(main) && /localeCompare\(titleB/.test(main));
 check('Emergency package supports TXT download', /downloadEmergencyText/.test(main) && /Download TXT/.test(main));
 check('Emergency package supports DOCX download without external package', /downloadEmergencyDocx/.test(main) && /application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document/.test(main) && /Download DOCX/.test(main));
+check('Full-vault Emergency Package prepares stored documents in the unlocked owner browser', /prepareEmergencyReleasedDocuments/.test(main) && /loadStoredDocumentDataUrl\(item\)/.test(main) && /encryptEmergencyDocumentData\(dataUrl, inviteToken\)/.test(main) && /action: 'save'/.test(main));
+check('Emergency document copies have a dedicated RLS-protected service-role table', /create table if not exists public\.emergency_access_documents/.test(emergencyDocumentMigration) && /enable row level security/.test(emergencyDocumentMigration) && /revoke all on table public\.emergency_access_documents from anon, authenticated/.test(emergencyDocumentMigration) && /grant select, insert, update, delete on public\.emergency_access_documents to service_role/.test(emergencyDocumentMigration));
+check('Owner emergency-document save and prune actions require customer session and CSRF protection', /getCustomerAccess\(event\)/.test(emergencyDocument) && /assertBrowserAction\(event, \{ session: access\.session, kind: 'customer', csrf: true \}\)/.test(emergencyDocument) && /action === 'prune'/.test(emergencyDocument) && /action !== 'save'/.test(emergencyDocument));
+check('Trusted Person document open requires accepted invite, release-ready request and unexpired release link', /action === 'open'/.test(emergencyDocument) && /!== 'accepted'/.test(emergencyDocument) && /status=eq\.release_ready/.test(emergencyDocument) && /EMERGENCY_PACKAGE_EXPIRED/.test(emergencyDocument));
+check('Released Emergency Package offers individual documents and one ZIP containing TXT, DOCX and Documents folder', /downloadReleasedEmergencyDocument/.test(main) && /Download package \+ documents/.test(main) && /Password-Encrypt-Emergency-Package\.txt/.test(main) && /Password-Encrypt-Emergency-Package\.docx/.test(main) && /Documents\/\$\{String\(index \+ 1\)/.test(main));
+check('Emergency package summary records released document count without vault document contents', /documentCount: releasePackage\.documentCount/.test(main) && /documentCount/.test(invite) && !/encrypted_blob/.test(invite));
 check('Downloaded package warns that exported data is readable and sensitive', /Downloaded files contain sensitive information in readable form/.test(main));
 check('Admin customer detail includes explicit permanent-delete action', /hard_delete_account/.test(admin) && /Delete account permanently/.test(admin) && /confirmText: 'DELETE'/.test(admin));
 check('Admin hard delete blocks Founder account and safely ends active Stripe subscription', /Founder account cannot be hard deleted/.test(detail) && /stripeRequest\(`subscriptions\//.test(detail) && /method: 'DELETE'/.test(detail));

@@ -26,7 +26,7 @@ function check(label, ok) {
   else { console.error(`FAIL  ${label}`); failed += 1; }
 }
 
-check('Ver-1.001.02 app/server/package/service-worker versions align', pkg.version === '1.1.2' && /Password-Encrypt Ver-1\.001\.02/.test(main) && /Password-Encrypt Ver-1\.001\.02/.test(server) && /my-passwords-v1\.001\.02/.test(sw));
+check('Ver-1.001.03 app/server/package/service-worker versions align', pkg.version === '1.1.3' && /Password-Encrypt Ver-1\.001\.03/.test(main) && /Password-Encrypt Ver-1\.001\.03/.test(server) && /my-passwords-v1\.001\.03/.test(sw));
 check('Public Terms, Privacy and Billing routes are implemented and included in the PWA shell', /'\/terms': 'terms'/.test(legal) && /'\/privacy': 'privacy'/.test(legal) && /'\/billing-terms': 'billing'/.test(legal) && /'\/terms'/.test(sw) && /'\/privacy'/.test(sw) && /'\/billing-terms'/.test(sw));
 check('Public landing page links all legal policies', /href="\/terms"/.test(main) && /href="\/privacy"/.test(main) && /href="\/billing-terms"/.test(main));
 check('New signup requires explicit current Terms and Privacy acceptance in browser', /legalAccepted/.test(main) && /LEGAL_VERSION/.test(main) && /Please read and agree to the Terms of Service and Privacy Policy/.test(main));
@@ -40,7 +40,7 @@ check('Server independently enforces current legal acceptance for new accounts',
 check('Trial signup audit records Terms and Privacy acceptance only', /legal_acceptance/.test(bootstrap) && /accepted_at: now/.test(bootstrap) && /terms_of_service/.test(bootstrap) && /privacy_policy/.test(bootstrap) && !/documents: \['terms_of_service', 'privacy_policy', 'subscription_cancellation_refund_policy'\]/.test(bootstrap));
 check('Terms describe client-side encryption without absolute security promise', /Client-side encrypted vault/.test(legal) && /AES-GCM/.test(legal) && /PBKDF2-SHA-256/.test(legal) && /No online service can promise absolute security/.test(legal));
 check('Privacy policy explicitly avoids absolute zero-knowledge claim', /avoid an absolute “zero knowledge”/.test(legal) && /master password is not intentionally sent to or stored/.test(legal));
-check('Emergency Access disclosure covers waiting period, secure link and document limitation', /Emergency Access is an intentional disclosure mechanism/.test(legal) && /Anyone who gains control of that link/.test(legal) && /uploaded document files are not currently/.test(legal));
+check('Emergency Access disclosure covers waiting period, secure link and prepared document release', /Emergency Access is an intentional disclosure mechanism/.test(legal) && /Anyone who gains control of that link/.test(legal) && /re-encrypted specifically for the Trusted Person link/.test(legal) && /included as downloadable document copies/.test(legal));
 check('Trial wording states no automatic paid conversion', /Creating the trial does not start a paid subscription/.test(main) && /paid subscription begins only/.test(legal));
 check('Cancellation and refund terms preserve mandatory consumer rights', /Mandatory consumer rights/.test(legal) && /If local law gives you a cooling-off/.test(legal));
 check('Tax wording does not falsely claim tax-inclusive pricing', /does not by itself promise that a price is tax-inclusive/.test(legal));

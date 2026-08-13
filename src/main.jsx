@@ -1,14 +1,14 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, ArrowLeft, ArrowUp, Bell, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Save, Settings, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowUp, Bell, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Save, Settings, Share2, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.001.02';
+const VERSION = 'Password-Encrypt Ver-1.001.03';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -610,6 +610,7 @@ const EMERGENCY_ACCESS_META_CATEGORY = '__my_passwords_emergency_access_meta';
 const EMERGENCY_ACCESS_META_ID = '__my_passwords_emergency_access_plan';
 const DOCUMENTS_CATEGORY = 'Documents';
 const CARDS_CATEGORY = 'Cards';
+const FAVOURITES_VIEW = '__favourites__';
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 const ALLOWED_DOCUMENT_EXTENSIONS = ['txt', 'md', 'csv', 'xls', 'xlsx', 'doc', 'docx', 'pdf'];
 const ALLOWED_DOCUMENT_MIME_TYPES = [
@@ -1053,7 +1054,18 @@ async function decryptEmergencyReleasePackage(envelope, inviteToken) {
   return JSON.parse(new TextDecoder().decode(decrypted));
 }
 
-function buildEmergencyReleasePackage(plan, vaultItems, account) {
+async function encryptEmergencyDocumentData(dataUrl, inviteToken) {
+  const token = String(inviteToken || '').trim();
+  if (!token) throw new Error('Emergency invite token is missing.');
+  const salt = arrayBufferToBase64(crypto.getRandomValues(new Uint8Array(16)));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(token, salt);
+  const encoded = new TextEncoder().encode(String(dataUrl || ''));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+  return { encryptedBlob: arrayBufferToBase64(encrypted), localSalt: salt, localIv: arrayBufferToBase64(iv) };
+}
+
+function buildEmergencyReleasePackage(plan, vaultItems, account, releasedDocuments = []) {
   const scope = String(plan?.accessScope || 'Emergency Info folder only');
   const fullAccess = scope === 'Full vault access';
   const visibleItems = getVisibleVaultItems(vaultItems);
@@ -1082,8 +1094,10 @@ function buildEmergencyReleasePackage(plan, vaultItems, account) {
       payload: item.payload || {},
       updatedAt: item.updatedAt || ''
     })),
+    releasedDocuments: Array.isArray(releasedDocuments) ? releasedDocuments : [],
+    documentCount: Array.isArray(releasedDocuments) ? releasedDocuments.length : 0,
     notes: fullAccess
-      ? 'The owner selected Full vault access. This package includes saved vault records that were available in the unlocked vault when the package was prepared. Encrypted document file downloads are not separately decrypted in this first full-access foundation.'
+      ? 'The owner selected Full vault access. This package includes saved vault records and prepared document copies that were available in the unlocked vault when the package was prepared.'
       : 'The owner selected Emergency Info only. This package includes Emergency Info records and the owner-written emergency package fields.'
   };
 }
@@ -1133,6 +1147,13 @@ function emergencyPackagePlainText(packageData, releaseExpiresAt = '') {
         const label = String(key).replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase());
         lines.push(`${label}: ${String(value)}`);
       }
+    }
+  }
+  const releasedDocuments = Array.isArray(packageData?.releasedDocuments) ? packageData.releasedDocuments : [];
+  if (releasedDocuments.length) {
+    lines.push('', 'RELEASED DOCUMENTS');
+    for (const documentMeta of releasedDocuments) {
+      lines.push(`${documentMeta.fileName || documentMeta.title || 'Document'}${documentMeta.fileSize ? ` (${formatFileSize(documentMeta.fileSize)})` : ''}`);
     }
   }
   if (packageData?.notes) pushSection('Package note', packageData.notes);
@@ -1216,17 +1237,21 @@ function xmlEscape(value) {
   return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
-function downloadEmergencyDocx(packageData, releaseExpiresAt = '') {
+function emergencyDocxBytes(packageData, releaseExpiresAt = '') {
   const lines = emergencyPackagePlainText(packageData, releaseExpiresAt).split(/\r?\n/);
   const paragraphs = lines.map((line) => `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(line || ' ')}</w:t></w:r></w:p>`).join('');
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
   const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
   const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
-  const zipBytes = makeStoreZip([
+  return makeStoreZip([
     { name: '[Content_Types].xml', data: contentTypes },
     { name: '_rels/.rels', data: rels },
     { name: 'word/document.xml', data: documentXml }
   ]);
+}
+
+function downloadEmergencyDocx(packageData, releaseExpiresAt = '') {
+  const zipBytes = emergencyDocxBytes(packageData, releaseExpiresAt);
   const blob = new Blob([zipBytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -2035,6 +2060,29 @@ function triggerDocumentDownload(item, dataUrl) {
 }
 
 
+function dataUrlToBytes(dataUrl) {
+  const value = String(dataUrl || '');
+  const commaIndex = value.indexOf(',');
+  if (!value.startsWith('data:') || commaIndex < 0) throw new Error('Document data is not available in a shareable format.');
+  const header = value.slice(5, commaIndex);
+  const payload = value.slice(commaIndex + 1);
+  const base64 = /;base64(?:;|$)/i.test(header);
+  const mimeType = (header.split(';')[0] || 'application/octet-stream').trim() || 'application/octet-stream';
+  if (base64) {
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return { bytes, mimeType };
+  }
+  return { bytes: new TextEncoder().encode(decodeURIComponent(payload)), mimeType };
+}
+
+function safeDownloadFileName(value, fallback = 'document') {
+  const clean = String(value || '').trim().replace(/[\/:*?"<>|\u0000-\u001f]/g, '-').replace(/^\.+/, '').slice(0, 180);
+  return clean || fallback;
+}
+
+
 function VerificationOverlay({ state, onClose, onFocusMasterPassword }) {
   if (!state?.visible) return null;
   const isWorking = state.status === 'working';
@@ -2449,6 +2497,9 @@ function App() {
   const [pendingDeleteItemId, setPendingDeleteItemId] = useState('');
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [downloadingDocId, setDownloadingDocId] = useState('');
+  const [sharingDocId, setSharingDocId] = useState('');
+  const [emergencyDocumentBusyId, setEmergencyDocumentBusyId] = useState('');
+  const [emergencyPackageDownloadBusy, setEmergencyPackageDownloadBusy] = useState(false);
   const [isFolderPopupOpen, setIsFolderPopupOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isSavingFolder, setIsSavingFolder] = useState(false);
@@ -4780,36 +4831,52 @@ function App() {
     };
   }
 
-  async function downloadStoredDocument(item) {
+  async function loadStoredDocumentDataUrl(item) {
     const file = item?.payload?.file;
-    if (!file) return showMessage('No document file is attached to this item.', 'warning');
-    if (file.dataUrl) {
-      triggerDocumentDownload(item, file.dataUrl);
-      return;
-    }
+    if (!file) throw new Error('No document file is attached to this item.');
+    if (file.dataUrl) return file.dataUrl;
     const documentId = file.externalDocumentId || item.id;
-    if (!file.storedExternally || !documentId) {
-      showMessage('This document file is not available for download.', 'warning');
-      return;
-    }
-    if (!bootstrap.tenantId || !bootstrap.userId) {
-      showMessage('Save your account details before downloading stored documents.', 'warning');
-      return;
-    }
-    setDownloadingDocId(item.id);
+    if (!file.storedExternally || !documentId) throw new Error('This document file is not available.');
+    if (!bootstrap.tenantId || !bootstrap.userId) throw new Error('Save your account details before opening stored documents.');
+    const response = await fetch(`/.netlify/functions/document-blob?documentId=${encodeURIComponent(documentId)}`, { credentials: 'same-origin' });
+    const result = await response.json();
+    if (!response.ok || !result.ok || !result.document) throw new Error(result.message || 'Document could not be loaded.');
+    return decryptDocumentData(result.document, masterPassword);
+  }
+
+  async function downloadStoredDocument(item) {
+    setDownloadingDocId(item?.id || 'document');
     try {
-      const response = await fetch(`/.netlify/functions/document-blob?documentId=${encodeURIComponent(documentId)}`);
-      const result = await response.json();
-      if (!response.ok || !result.ok || !result.document) {
-        throw new Error(result.message || 'Document could not be loaded.');
-      }
-      const dataUrl = await decryptDocumentData(result.document, masterPassword);
+      const dataUrl = await loadStoredDocumentDataUrl(item);
       triggerDocumentDownload(item, dataUrl);
       showMessage('Document downloaded securely.', 'success');
     } catch (error) {
       showMessage(error.message || 'Document could not be downloaded. Please try again.', 'error');
     } finally {
       setDownloadingDocId('');
+    }
+  }
+
+  async function shareStoredDocument(item) {
+    if (!navigator?.share) {
+      showMessage('Document sharing is not available in this browser. Use Download instead.', 'warning');
+      return;
+    }
+    setSharingDocId(item?.id || 'document');
+    try {
+      const dataUrl = await loadStoredDocumentDataUrl(item);
+      const { bytes, mimeType } = dataUrlToBytes(dataUrl);
+      const storedFile = item?.payload?.file || {};
+      const fileName = safeDownloadFileName(storedFile.name || `${item?.title || 'document'}.${storedFile.extension || 'txt'}`);
+      const shareFile = new File([bytes], fileName, { type: storedFile.type || mimeType || 'application/octet-stream' });
+      if (navigator.canShare && !navigator.canShare({ files: [shareFile] })) {
+        throw new Error('This device cannot share this document type directly. Use Download instead.');
+      }
+      await navigator.share({ files: [shareFile], title: fileName });
+    } catch (error) {
+      if (error?.name !== 'AbortError') showMessage(error.message || 'The document could not be shared.', 'error');
+    } finally {
+      setSharingDocId('');
     }
   }
 
@@ -5394,7 +5461,7 @@ function App() {
     return visibleItems.filter((item) => {
       const text = `${item.title} ${item.category} ${item.payload?.url || ''} ${item.payload?.username || ''} ${item.payload?.notes || ''}`.toLowerCase();
       const matchesSearch = activeSearch ? text.includes(activeSearch) : true;
-      const matchesFolder = activeSearch ? true : (!category ? true : category === 'All' ? true : item.category === category);
+      const matchesFolder = activeSearch ? true : (!category ? true : category === 'All' ? true : category === FAVOURITES_VIEW ? Boolean(item.favourite) : item.category === category);
       return matchesSearch && matchesFolder;
     }).sort(compareVaultResults);
   }, [visibleItems, query, category]);
@@ -6111,7 +6178,7 @@ function App() {
       showEntitlementUpgrade('items', `This plan includes up to ${itemLimit} vault item${itemLimit === 1 ? '' : 's'}. Delete an item or review your plan before adding another.`);
       return;
     }
-    const preferredCategory = category && category !== 'All' ? category : 'Passwords';
+    const preferredCategory = category && !['All', FAVOURITES_VIEW].includes(category) ? category : 'Passwords';
     setEditingItemId('');
     setForm(emptyForm(preferredCategory));
     setShowFormSecret(false);
@@ -6324,13 +6391,55 @@ function App() {
   }
 
 
+  async function prepareEmergencyReleasedDocuments(planToSave, currentItems, inviteToken) {
+    const fullAccess = String(planToSave?.accessScope || '') === 'Full vault access';
+    const documentItems = fullAccess
+      ? getVisibleVaultItems(currentItems).filter((item) => item.category === DOCUMENTS_CATEGORY && item?.payload?.file)
+      : [];
+    const prepared = [];
+    for (const item of documentItems) {
+      const file = item.payload.file;
+      const dataUrl = await loadStoredDocumentDataUrl(item);
+      const encrypted = await encryptEmergencyDocumentData(dataUrl, inviteToken);
+      const result = await postJson('/.netlify/functions/emergency-access-document', {
+        action: 'save',
+        invitationId: planToSave.invitationId,
+        sourceDocumentId: item.id,
+        fileName: file.name || `${item.title || 'document'}.${file.extension || 'txt'}`,
+        fileType: file.type || 'application/octet-stream',
+        fileExtension: file.extension || getFileExtension(file.name || ''),
+        fileSize: Number(file.size || 0),
+        encryptedBlob: encrypted.encryptedBlob,
+        localSalt: encrypted.localSalt,
+        localIv: encrypted.localIv
+      });
+      if (!result.ok) throw new Error(result.message || `The document ${file.name || item.title || ''} could not be prepared for Emergency Access.`);
+      prepared.push({
+        sourceDocumentId: item.id,
+        title: item.title || file.name || 'Document',
+        fileName: file.name || item.title || 'Document',
+        fileType: file.type || 'application/octet-stream',
+        fileExtension: file.extension || getFileExtension(file.name || ''),
+        fileSize: Number(file.size || 0)
+      });
+    }
+    const pruneResult = await postJson('/.netlify/functions/emergency-access-document', {
+      action: 'prune',
+      invitationId: planToSave.invitationId,
+      keepSourceDocumentIds: prepared.map((documentMeta) => documentMeta.sourceDocumentId)
+    });
+    if (!pruneResult.ok) throw new Error(pruneResult.message || 'Old Emergency Access document copies could not be cleaned up.');
+    return prepared;
+  }
+
   async function saveEmergencyReleasePackageForPlan(planToSave = emergencyDraft, currentItems = items) {
     if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
     const inviteUrl = planToSave.invitationUrl || '';
     const inviteToken = tokenFromInviteUrl(inviteUrl);
     if (!planToSave.invitationId || !inviteToken) return { ok: false, skipped: true, message: 'Invite link is not ready yet.' };
     if (!bootstrap.tenantId || !bootstrap.userId) return { ok: false, skipped: true, message: 'Account details are missing.' };
-    const releasePackage = buildEmergencyReleasePackage(planToSave, currentItems, bootstrap);
+    const releasedDocuments = await prepareEmergencyReleasedDocuments(planToSave, currentItems, inviteToken);
+    const releasePackage = buildEmergencyReleasePackage(planToSave, currentItems, bootstrap, releasedDocuments);
     const envelope = await encryptEmergencyReleasePackage(releasePackage, inviteToken);
     const result = await postJson('/.netlify/functions/emergency-access-invite', {
       action: 'save_package',
@@ -6340,6 +6449,7 @@ function App() {
         releaseScope: releasePackage.releaseScope,
         fullVaultAccess: releasePackage.fullVaultAccess,
         itemCount: releasePackage.itemCount,
+        documentCount: releasePackage.documentCount || 0,
         preparedAt: releasePackage.preparedAt,
         title: releasePackage.title
       }
@@ -6707,6 +6817,74 @@ function App() {
       }
     } catch (error) {
       // Silent status refresh: the page still works if the trusted person taps the buttons manually.
+    }
+  }
+
+  function currentEmergencyInviteToken() {
+    const params = new URLSearchParams(window.location.search || '');
+    return params.get('token') || '';
+  }
+
+  async function loadReleasedEmergencyDocument(documentMeta, token = currentEmergencyInviteToken()) {
+    if (!token) throw new Error('This Emergency Access link is missing its secure token.');
+    const result = await postJson('/.netlify/functions/emergency-access-document', {
+      action: 'open',
+      token,
+      sourceDocumentId: documentMeta?.sourceDocumentId || ''
+    });
+    if (!result.ok || !result.document) throw new Error(result.message || 'The released document could not be opened.');
+    const dataUrl = await decryptDocumentData(result.document, token);
+    return { dataUrl, record: result.document };
+  }
+
+  async function downloadReleasedEmergencyDocument(documentMeta) {
+    setEmergencyDocumentBusyId(documentMeta?.sourceDocumentId || 'document');
+    try {
+      const { dataUrl } = await loadReleasedEmergencyDocument(documentMeta);
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = safeDownloadFileName(documentMeta?.fileName || documentMeta?.title || 'Emergency-Document');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      setEmergencyRequestState((current) => ({ ...current, message: error.message || 'The released document could not be downloaded.' }));
+    } finally {
+      setEmergencyDocumentBusyId('');
+    }
+  }
+
+  async function downloadEmergencyPackageZip(packageData, releaseExpiresAt = '') {
+    const releasedDocuments = Array.isArray(packageData?.releasedDocuments) ? packageData.releasedDocuments : [];
+    if (!releasedDocuments.length) return;
+    const token = currentEmergencyInviteToken();
+    setEmergencyPackageDownloadBusy(true);
+    try {
+      const entries = [
+        { name: 'Password-Encrypt-Emergency-Package.txt', data: emergencyPackagePlainText(packageData, releaseExpiresAt) },
+        { name: 'Password-Encrypt-Emergency-Package.docx', data: emergencyDocxBytes(packageData, releaseExpiresAt) }
+      ];
+      for (let index = 0; index < releasedDocuments.length; index += 1) {
+        const documentMeta = releasedDocuments[index];
+        const { dataUrl } = await loadReleasedEmergencyDocument(documentMeta, token);
+        const { bytes } = dataUrlToBytes(dataUrl);
+        const fileName = safeDownloadFileName(documentMeta?.fileName || documentMeta?.title || `Document-${index + 1}`);
+        entries.push({ name: `Documents/${String(index + 1).padStart(2, '0')}-${fileName}`, data: bytes });
+      }
+      const zipBytes = makeStoreZip(entries);
+      const blob = new Blob([zipBytes], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'Password-Encrypt-Emergency-Package-with-Documents.zip';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setEmergencyRequestState((current) => ({ ...current, message: error.message || 'The complete Emergency Package could not be downloaded.' }));
+    } finally {
+      setEmergencyPackageDownloadBusy(false);
     }
   }
 
@@ -7085,9 +7263,23 @@ function App() {
                         ))}
                       </div>
                     )}
+                    {!!emergencyReleasePackage.releasedDocuments?.length && (
+                      <div className="emergency-released-documents">
+                        <strong>Released documents</strong>
+                        <span className="emergency-released-documents-note">These files were re-encrypted specifically for this Emergency Access package.</span>
+                        {emergencyReleasePackage.releasedDocuments.map((documentMeta) => (
+                          <article className="emergency-released-document" key={documentMeta.sourceDocumentId}>
+                            <FileText size={20} />
+                            <div><strong>{documentMeta.fileName || documentMeta.title || 'Document'}</strong><small>{documentMeta.fileSize ? formatFileSize(documentMeta.fileSize) : 'Stored document'}{documentMeta.fileExtension ? ` · ${String(documentMeta.fileExtension).toUpperCase()}` : ''}</small></div>
+                            <button type="button" className="secondary-button" onClick={() => downloadReleasedEmergencyDocument(documentMeta)} disabled={emergencyDocumentBusyId === documentMeta.sourceDocumentId}><Download size={15} /> {emergencyDocumentBusyId === documentMeta.sourceDocumentId ? 'Preparing...' : 'Download'}</button>
+                          </article>
+                        ))}
+                      </div>
+                    )}
                     <div className="emergency-package-download-card">
                       <div><strong>Download a copy</strong><span>Downloaded files contain sensitive information in readable form. Store them somewhere safe and private.</span></div>
                       <div className="emergency-package-download-actions">
+                        {!!emergencyReleasePackage.releasedDocuments?.length && <button type="button" className="primary-button" onClick={() => downloadEmergencyPackageZip(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)} disabled={emergencyPackageDownloadBusy}><Download size={16} /> {emergencyPackageDownloadBusy ? 'Preparing package...' : 'Download package + documents'}</button>}
                         <button type="button" className="secondary-button" onClick={() => downloadEmergencyText(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)}><Download size={16} /> Download TXT</button>
                         <button type="button" className="secondary-button" onClick={() => downloadEmergencyDocx(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)}><FileText size={16} /> Download DOCX</button>
                       </div>
@@ -8070,7 +8262,7 @@ function App() {
             </div>
             <div className="home-quick-summary">
               <span><strong>{visibleItems.length}</strong> Item{visibleItems.length === 1 ? '' : 's'}</span>
-              <span><strong>{visibleItems.filter((item) => item.favourite).length}</strong> favourite item{visibleItems.filter((item) => item.favourite).length === 1 ? '' : 's'}</span>
+              <button type="button" className={`summary-action favourite-summary-pill ${category === FAVOURITES_VIEW ? 'active' : ''}`} onClick={() => { setQuery(''); openVaultSection(FAVOURITES_VIEW); }} aria-label="Show all favourite items"><Star size={14} fill="currentColor" /><strong>{visibleItems.filter((item) => item.favourite).length}</strong> favourite item{visibleItems.filter((item) => item.favourite).length === 1 ? '' : 's'}</button>
               <div className="folder-action-group">
                 <button type="button" className="summary-action add-folder-chip" onClick={() => setIsFolderPopupOpen(true)}><Plus size={14} /> New folder</button>
                 <button type="button" className="premium-more-folder-button" onClick={() => setIsFolderListPopupOpen(true)} aria-label="Manage folders"><MoreHorizontal size={21} /></button>
@@ -8528,9 +8720,28 @@ function App() {
                 
               </div>
 
-              {isFounderPlan(bootstrap) ? (
-                <section className="subscription-founder-card settings-inner-card"><ShieldCheck size={24} /><div><strong>Permanent Founder access</strong><p>Your Founder Plan does not expire and does not require Stripe Billing.</p></div></section>
-              ) : (() => {
+              {isFounderPlan(bootstrap) ? (() => {
+                const localVaultItems = getVisibleVaultItems(items).length;
+                const usedItems = Math.max(localVaultItems, Number(entitlements?.usage?.vaultItems || 0));
+                const usedDocuments = Number(entitlements?.usage?.documents || 0);
+                const usedStorageMb = Number(entitlements?.usage?.storageMb || 0);
+                return <div className="settings-drilldown-stack">
+                  <details className="settings-drilldown" open>
+                    <summary><span className="settings-directory-icon"><ShieldCheck size={21} /></span><span className="settings-directory-copy"><strong>Subscription overview</strong><small>Founder access and current account usage.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
+                    <div className="settings-drilldown-content">
+                      <section className="subscription-founder-card settings-inner-card founder-subscription-overview">
+                        <ShieldCheck size={24} />
+                        <div className="founder-subscription-copy"><strong>Permanent Founder access</strong><p>Your Founder Plan does not expire, has no plan limits and does not require Stripe Billing.</p></div>
+                        <div className="founder-usage-grid" aria-label="Founder plan usage">
+                          <span><strong>Total vault items</strong>{usedItems}</span>
+                          <span><strong>Encrypted documents</strong>{usedDocuments}</span>
+                          <span><strong>Account storage used</strong>{usedStorageMb.toFixed(2)} MB</span>
+                        </div>
+                      </section>
+                    </div>
+                  </details>
+                </div>;
+              })() : (() => {
                 const currentSubscription = billing.subscription || customerSession.subscription || null;
                 const lifecycleState = subscriptionLifecycleState(currentSubscription, bootstrap);
                 const lifecycleLabel = subscriptionLifecycleLabel(currentSubscription, bootstrap);
@@ -8780,6 +8991,7 @@ function App() {
                             { value: 'Full vault access', label: 'Full vault access' }
                           ]} onChange={(accessScope) => setEmergencyDraft({ ...emergencyDraft, accessScope })} /></label>
                         </div>
+                        {emergencyDraft.accessScope === 'Full vault access' && <div className="emergency-document-release-note"><FileText size={17} /><span><strong>Stored documents are included</strong><small>When you save this package while your vault is unlocked, your stored document files are prepared as separate encrypted copies for this Trusted Person arrangement. They are released only if the waiting period completes without cancellation.</small></span></div>}
                         <div className="emergency-package-notes-grid">
                           <label className="emergency-access-notes-label">Emergency message<textarea value={emergencyDraft.emergencyPackageMessage || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageMessage: e.target.value })} placeholder="Write the message your trusted person should see first if the waiting period ends." /></label>
                           <label className="emergency-access-notes-label">Important contacts<textarea value={emergencyDraft.emergencyPackageContacts || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageContacts: e.target.value })} placeholder="Solicitor, doctor, accountant, family contacts, executor, insurance contact..." /></label>
@@ -8978,6 +9190,7 @@ function App() {
             <div className="item-popup-body">
               <div className="view-item-meta">
                 <span className="category-pill">{viewedItem.category}</span>
+                {viewedItem.category === DOCUMENTS_CATEGORY && <button type="button" className="category-pill document-share-pill" onClick={() => shareStoredDocument(viewedItem)} disabled={sharingDocId === viewedItem.id} aria-label={`Share ${viewedItem.title || 'document'}`} title="Share document"><Share2 size={14} /> {sharingDocId === viewedItem.id ? 'Preparing...' : 'Share'}</button>}
                 {viewedItem.favourite && <span className="category-pill favourite-mini"><Star size={14} fill="currentColor" /> Favourite</span>}
               </div>
               {(() => {
