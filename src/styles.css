@@ -17410,3 +17410,44 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   .emergency-release-folder-body { padding: 10px; }
   .emergency-zip-instructions { padding: 13px 14px; }
 }
+
+
+/* Password-Encrypt Ver-1.002.02 — wider mobile Emergency Package release */
+@media (max-width: 700px) {
+  .public-landing-page.emergency-invite-page {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 12px 5px 22px !important;
+    background: #fff !important;
+  }
+
+  .emergency-invite-page .emergency-invite-shell {
+    width: 100%;
+    max-width: none;
+    gap: 10px;
+  }
+
+  .emergency-invite-page .emergency-invite-card {
+    width: 100%;
+    padding: 18px 5px 20px;
+    border-radius: 20px;
+    background: #fff;
+  }
+
+  .emergency-invite-page .emergency-request-card {
+    width: 100%;
+    max-width: none;
+    margin: 14px 0 6px;
+    padding: 12px 5px;
+  }
+
+  .emergency-invite-page .emergency-package-viewer {
+    width: 100%;
+    padding: 5px;
+  }
+
+  .emergency-invite-page .emergency-release-folder-body {
+    padding: 5px;
+  }
+}
