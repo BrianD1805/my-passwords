@@ -67,7 +67,7 @@ async function markReleaseReadyIfDue(request) {
     release_foundation_ready: true,
     release_ready_at: now,
     release_expires_at: new Date(Date.now() + EMERGENCY_PACKAGE_ACCESS_MS).toISOString(),
-    release_note: 'Waiting period ended. The owner-prepared emergency package is ready if it has been saved.',
+    release_note: 'Emergency package ready.',
     release_ready_email_pending: !request.metadata?.release_ready_email_sent
   };
   const updated = await updateRow('emergency_access_requests', `id=${eq(request.id)}`, {
@@ -202,7 +202,7 @@ export async function handler(event) {
         packageSummary: String(currentRequest?.status || '').toLowerCase() === 'release_ready' ? (invitation.metadata?.emergency_package_summary || null) : null,
         message: currentRequest?.id
           ? (String(currentRequest.status || '').toLowerCase() === 'release_ready'
-              ? 'The waiting period has ended. The owner-prepared emergency package is ready if it has been saved.'
+              ? ''
               : 'Emergency access request is active. The owner can cancel before the waiting period ends.')
           : ''
       });
@@ -226,7 +226,7 @@ export async function handler(event) {
         packageEnvelope: String(currentRequest.status || '').toLowerCase() === 'release_ready' ? (invitation.metadata?.emergency_package_envelope || null) : null,
         packageSummary: String(currentRequest.status || '').toLowerCase() === 'release_ready' ? (invitation.metadata?.emergency_package_summary || null) : null,
         message: String(currentRequest.status || '').toLowerCase() === 'release_ready'
-          ? 'The waiting period has ended. The owner-prepared emergency package is ready if it has been saved.'
+          ? ''
           : 'Emergency access request is already active. The owner has until the waiting period ends to cancel it. No vault contents have been released.'
       });
     }

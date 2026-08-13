@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.001.03';
+const VERSION = 'Password-Encrypt Ver-1.002.01';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -1117,6 +1117,51 @@ function sortEmergencyReleasedItems(items = []) {
     if (rankDiff) return rankDiff;
     return titleA.localeCompare(titleB, undefined, { numeric: true, sensitivity: 'base' });
   });
+}
+
+function sortEmergencyFolderNames(folderNames = []) {
+  const rank = (value) => {
+    const first = String(value || '').trim().charAt(0);
+    if (/^[A-Za-z]$/.test(first)) return 0;
+    if (/^[0-9]$/.test(first)) return 1;
+    return 2;
+  };
+  return [...folderNames].sort((a, b) => {
+    const nameA = String(a || '').trim();
+    const nameB = String(b || '').trim();
+    const rankDiff = rank(nameA) - rank(nameB);
+    if (rankDiff) return rankDiff;
+    return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
+function buildEmergencyReleaseFolders(items = [], releasedDocuments = []) {
+  const grouped = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    const folderName = String(item?.category || 'Other').trim() || 'Other';
+    if (!grouped.has(folderName)) grouped.set(folderName, []);
+    grouped.get(folderName).push(item);
+  }
+
+  grouped.delete(DOCUMENTS_CATEGORY);
+  const documents = [...(Array.isArray(releasedDocuments) ? releasedDocuments : [])].sort((a, b) => {
+    const nameA = String(a?.fileName || a?.title || 'Document').trim();
+    const nameB = String(b?.fileName || b?.title || 'Document').trim();
+    const firstRank = (value) => /^[A-Za-z]$/.test(value.charAt(0)) ? 0 : /^[0-9]$/.test(value.charAt(0)) ? 1 : 2;
+    const rankDiff = firstRank(nameA) - firstRank(nameB);
+    if (rankDiff) return rankDiff;
+    return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+  const folders = [{
+    name: DOCUMENTS_CATEGORY,
+    items: [],
+    documents
+  }];
+
+  for (const folderName of sortEmergencyFolderNames([...grouped.keys()])) {
+    folders.push({ name: folderName, items: sortEmergencyReleasedItems(grouped.get(folderName) || []), documents: [] });
+  }
+  return folders;
 }
 
 function emergencyPackagePlainText(packageData, releaseExpiresAt = '') {
@@ -6808,7 +6853,7 @@ function App() {
         setEmergencyReleasePackage(releasedPackage);
         setEmergencyRequestState({
           status: ready ? 'release-ready' : 'requested',
-          message: result.message || (ready ? 'The waiting period has ended. The emergency package release screen is ready.' : 'Emergency access request is active. The owner can cancel before the waiting period ends.'),
+          message: ready ? '' : (result.message || 'Emergency access request is active. The owner can cancel before the waiting period ends.'),
           releaseReady: ready,
           waitingEndsAt: result.waitingEndsAt || '',
           packageSummary: result.packageSummary || null,
@@ -6856,7 +6901,6 @@ function App() {
 
   async function downloadEmergencyPackageZip(packageData, releaseExpiresAt = '') {
     const releasedDocuments = Array.isArray(packageData?.releasedDocuments) ? packageData.releasedDocuments : [];
-    if (!releasedDocuments.length) return;
     const token = currentEmergencyInviteToken();
     setEmergencyPackageDownloadBusy(true);
     try {
@@ -6876,7 +6920,7 @@ function App() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'Password-Encrypt-Emergency-Package-with-Documents.zip';
+      link.download = 'Password-Encrypt-Emergency-Package.zip';
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -6950,7 +6994,7 @@ function App() {
       setEmergencyReleasePackage(releasedPackage);
       setEmergencyRequestState({
         status: ready ? 'release-ready' : 'requested',
-        message: result.message || 'Emergency access request recorded. No vault contents have been released.',
+        message: ready ? '' : (result.message || 'Emergency access request recorded. No vault contents have been released.'),
         releaseReady: ready,
         waitingEndsAt: result.waitingEndsAt || '',
         packageSummary: result.packageSummary || null,
@@ -7162,7 +7206,7 @@ function App() {
     const pageIntro = acceptedInvitePage
       ? 'You have accepted the invitation. No vault information has been released. A separate secure Request Emergency Access link has been emailed to you for future use.'
       : isOpenStep
-        ? 'This secure page is used after the waiting period has ended. If the account owner has not cancelled the request, the prepared emergency package can be opened here.'
+        ? ''
         : isRequestStep
           ? 'Use this secure page only if you need to request emergency access. The account owner will be notified and the waiting period will start. No vault contents are released at this step.'
           : 'You have been nominated as a trusted person. This does not give you access to any passwords today. If you accept, a separate secure Request Emergency Access link will be emailed to you for future use. You do not need a Password-Encrypt account or app; this secure link works in your browser.';
@@ -7174,7 +7218,7 @@ function App() {
             <div className="preview-lock-icon"><UsersRound size={26} /></div>
             <p className="eyebrow">Emergency Access</p>
             <h1>{pageTitle}</h1>
-            <p>{pageIntro}</p>
+            {pageIntro && <p>{pageIntro}</p>}
             {emergencyStep === 'invite' && inviteAcceptance.message && <div className={`emergency-invite-status ${inviteAcceptance.status}`}>{inviteAcceptance.message}</div>}
             {emergencyRequestState.message && <div className={`emergency-invite-status ${emergencyRequestState.status}`}>{emergencyRequestState.message}</div>}
             {emergencyStep === 'invite' && !['accepted', 'declined'].includes(inviteAcceptance.status) && (
@@ -7187,7 +7231,7 @@ function App() {
               <div className="emergency-request-card">
                 <strong>{emergencyRequestState.status === 'release-ready' ? 'Emergency package ready' : isOpenStep ? 'Waiting period not finished yet' : 'Request access when needed'}</strong>
                 <p>{emergencyRequestState.status === 'release-ready'
-                  ? 'The waiting period has ended. If the owner prepared a release package, it can now be opened here. Full vault records are shown only when the owner deliberately selected Full vault access.'
+                  ? `This is the prepared release package that ${emergencyReleasePackage?.ownerName || 'the account owner'} prepared for you. Download it below.`
                   : isOpenStep
                     ? 'This is the open-access page, but the emergency package is not ready yet. Please check the waiting period, or look for the fresh email when access is ready.'
                     : 'This starts the waiting period and notifies the account owner. If the request is not cancelled before the waiting period ends, the selected emergency package will become available here. It still does not reveal any vault contents today.'}</p>
@@ -7222,7 +7266,7 @@ function App() {
                     <ShieldCheck size={18} />
                     <div>
                       <strong>Emergency package ready</strong>
-                      <span>The selected emergency package is marked as ready. If the owner selected Full vault access, the prepared vault records are shown below.</span>
+                      <span>The selected emergency package is available to download in full as a ZIP file, or you may download individual items.</span>
                     </div>
                   </div>
                 )}
@@ -7230,62 +7274,83 @@ function App() {
                   <div className="emergency-invite-status error">{emergencyReleasePackage.error}</div>
                 )}
                 {emergencyRequestState.status === 'release-ready' && emergencyReleasePackage && !emergencyReleasePackage.error && (
-                  <div className="emergency-package-viewer">
-                    <div className="emergency-package-viewer-head">
-                      <strong>{emergencyReleasePackage.title || 'Emergency package'}</strong>
-                      <span>{emergencyReleasePackage.releaseScope || 'Emergency Info folder only'} · {emergencyReleasePackage.itemCount || 0} item(s)</span>
-                    </div>
-                    {emergencyReleasePackage.message && <p>{emergencyReleasePackage.message}</p>}
-                    {emergencyReleasePackage.importantContacts && <div><strong>Important contacts</strong><pre>{emergencyReleasePackage.importantContacts}</pre></div>}
-                    {emergencyReleasePackage.documentsAndLocations && <div><strong>Documents and locations</strong><pre>{emergencyReleasePackage.documentsAndLocations}</pre></div>}
-                    {emergencyReleasePackage.checklist && <div><strong>Checklist</strong><pre>{emergencyReleasePackage.checklist}</pre></div>}
-                    {emergencyReleasePackage.ownerInstructions && <div><strong>Owner instructions</strong><pre>{emergencyReleasePackage.ownerInstructions}</pre></div>}
-                    {!!emergencyReleasePackage.items?.length && (
-                      <div className="emergency-released-items">
-                        <strong>Released vault records</strong>
-                        {sortEmergencyReleasedItems(emergencyReleasePackage.items).map((item) => (
-                          <article className="emergency-released-item" key={item.id}>
-                            <div><strong>{item.title}</strong><span>{item.category}</span></div>
-                            {item.payload?.url && <p><b>URL:</b> {item.payload.url}</p>}
-                            {item.payload?.username && <p><b>Username:</b> {item.payload.username}</p>}
-                            {item.payload?.password && <p><b>Password:</b> {item.payload.password}</p>}
-                            {item.payload?.notes && <pre>{item.payload.notes}</pre>}
-                            {item.category === 'Cards' && (
-                              <div className="emergency-card-fields">
-                                {item.payload?.cardNickname && <p><b>Nickname:</b> {item.payload.cardNickname}</p>}
-                                {item.payload?.cardName && <p><b>Name on card:</b> {item.payload.cardName}</p>}
-                                {item.payload?.cardNumber && <p><b>Number:</b> {item.payload.cardNumber}</p>}
-                                {item.payload?.cardExpiry && <p><b>Expiry:</b> {item.payload.cardExpiry}</p>}
-                                {item.payload?.cardCcv && <p><b>CCV:</b> {item.payload.cardCcv}</p>}
-                              </div>
-                            )}
-                          </article>
-                        ))}
-                      </div>
-                    )}
-                    {!!emergencyReleasePackage.releasedDocuments?.length && (
-                      <div className="emergency-released-documents">
-                        <strong>Released documents</strong>
-                        <span className="emergency-released-documents-note">These files were re-encrypted specifically for this Emergency Access package.</span>
-                        {emergencyReleasePackage.releasedDocuments.map((documentMeta) => (
-                          <article className="emergency-released-document" key={documentMeta.sourceDocumentId}>
-                            <FileText size={20} />
-                            <div><strong>{documentMeta.fileName || documentMeta.title || 'Document'}</strong><small>{documentMeta.fileSize ? formatFileSize(documentMeta.fileSize) : 'Stored document'}{documentMeta.fileExtension ? ` · ${String(documentMeta.fileExtension).toUpperCase()}` : ''}</small></div>
-                            <button type="button" className="secondary-button" onClick={() => downloadReleasedEmergencyDocument(documentMeta)} disabled={emergencyDocumentBusyId === documentMeta.sourceDocumentId}><Download size={15} /> {emergencyDocumentBusyId === documentMeta.sourceDocumentId ? 'Preparing...' : 'Download'}</button>
-                          </article>
-                        ))}
-                      </div>
-                    )}
-                    <div className="emergency-package-download-card">
-                      <div><strong>Download a copy</strong><span>Downloaded files contain sensitive information in readable form. Store them somewhere safe and private.</span></div>
+                  <>
+                    <div className="emergency-package-download-card emergency-package-download-card-top">
+                      <div><strong>Download the emergency package</strong><span>Download the complete package as one ZIP file, or use the folders below to open and download individual items.</span></div>
                       <div className="emergency-package-download-actions">
-                        {!!emergencyReleasePackage.releasedDocuments?.length && <button type="button" className="primary-button" onClick={() => downloadEmergencyPackageZip(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)} disabled={emergencyPackageDownloadBusy}><Download size={16} /> {emergencyPackageDownloadBusy ? 'Preparing package...' : 'Download package + documents'}</button>}
+                        <button type="button" className="primary-button" onClick={() => downloadEmergencyPackageZip(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)} disabled={emergencyPackageDownloadBusy}><Download size={16} /> {emergencyPackageDownloadBusy ? 'Preparing ZIP...' : 'Download full ZIP'}</button>
                         <button type="button" className="secondary-button" onClick={() => downloadEmergencyText(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)}><Download size={16} /> Download TXT</button>
                         <button type="button" className="secondary-button" onClick={() => downloadEmergencyDocx(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)}><FileText size={16} /> Download DOCX</button>
                       </div>
                     </div>
-                    <small>{emergencyReleasePackage.notes}</small>
-                  </div>
+                    <div className="emergency-zip-instructions">
+                      <strong>How to open the full ZIP download</strong>
+                      <p>After downloading, open your device's Files or File Explorer app and find <b>Password-Encrypt-Emergency-Package.zip</b>. On Windows, right-click it and choose <b>Extract All</b>. On Android or iPhone/iPad, tap the ZIP file and choose <b>Extract</b> or <b>Uncompress</b>. Open the extracted folder to view the package files and any released documents.</p>
+                    </div>
+                    <div className="emergency-package-viewer">
+                      <div className="emergency-package-viewer-head">
+                        <strong>{emergencyReleasePackage.title || 'Emergency package'}</strong>
+                        <span>{emergencyReleasePackage.releaseScope || 'Emergency Info folder only'} · {emergencyReleasePackage.itemCount || 0} item(s)</span>
+                      </div>
+                      <div className="emergency-release-folders">
+                        {buildEmergencyReleaseFolders(emergencyReleasePackage.items, emergencyReleasePackage.releasedDocuments).map((folder) => {
+                          const folderCount = folder.documents.length + folder.items.length;
+                          return (
+                            <details className="emergency-release-folder" key={folder.name}>
+                              <summary>
+                                <span className="emergency-release-folder-title"><ChevronRight size={18} className="emergency-release-folder-chevron" />{folder.name}</span>
+                                <span className="emergency-release-folder-count">{folderCount}</span>
+                              </summary>
+                              <div className="emergency-release-folder-body">
+                                {folder.name === DOCUMENTS_CATEGORY && !folder.documents.length && <p className="emergency-release-folder-empty">No documents were included in this emergency package.</p>}
+                                {folder.documents.map((documentMeta) => (
+                                  <article className="emergency-released-document" key={documentMeta.sourceDocumentId}>
+                                    <FileText size={20} />
+                                    <div><strong>{documentMeta.fileName || documentMeta.title || 'Document'}</strong><small>{documentMeta.fileSize ? formatFileSize(documentMeta.fileSize) : 'Stored document'}{documentMeta.fileExtension ? ` · ${String(documentMeta.fileExtension).toUpperCase()}` : ''}</small></div>
+                                    <button type="button" className="secondary-button" onClick={() => downloadReleasedEmergencyDocument(documentMeta)} disabled={emergencyDocumentBusyId === documentMeta.sourceDocumentId}><Download size={15} /> {emergencyDocumentBusyId === documentMeta.sourceDocumentId ? 'Preparing...' : 'Download'}</button>
+                                  </article>
+                                ))}
+                                {folder.name !== DOCUMENTS_CATEGORY && folder.items.map((item) => (
+                                  <article className="emergency-released-item" key={item.id}>
+                                    <div><strong>{item.title}</strong><span>{item.category}</span></div>
+                                    {item.payload?.url && <p><b>URL:</b> {item.payload.url}</p>}
+                                    {item.payload?.username && <p><b>Username:</b> {item.payload.username}</p>}
+                                    {item.payload?.password && <p><b>Password:</b> {item.payload.password}</p>}
+                                    {item.payload?.notes && <pre>{item.payload.notes}</pre>}
+                                    {item.category === 'Cards' && (
+                                      <div className="emergency-card-fields">
+                                        {item.payload?.cardNickname && <p><b>Nickname:</b> {item.payload.cardNickname}</p>}
+                                        {item.payload?.cardName && <p><b>Name on card:</b> {item.payload.cardName}</p>}
+                                        {item.payload?.cardNumber && <p><b>Number:</b> {item.payload.cardNumber}</p>}
+                                        {item.payload?.cardExpiry && <p><b>Expiry:</b> {item.payload.cardExpiry}</p>}
+                                        {item.payload?.cardCcv && <p><b>CCV:</b> {item.payload.cardCcv}</p>}
+                                      </div>
+                                    )}
+                                  </article>
+                                ))}
+                                {folder.name !== DOCUMENTS_CATEGORY && !folder.items.length && <p className="emergency-release-folder-empty">No items were included in this folder.</p>}
+                              </div>
+                            </details>
+                          );
+                        })}
+                      </div>
+                      {(emergencyReleasePackage.message || emergencyReleasePackage.importantContacts || emergencyReleasePackage.documentsAndLocations || emergencyReleasePackage.checklist || emergencyReleasePackage.ownerInstructions) && (
+                        <details className="emergency-release-folder emergency-package-notes-folder">
+                          <summary>
+                            <span className="emergency-release-folder-title"><ChevronRight size={18} className="emergency-release-folder-chevron" />Package notes &amp; instructions</span>
+                          </summary>
+                          <div className="emergency-release-folder-body emergency-package-notes-body">
+                            {emergencyReleasePackage.message && <div><strong>Emergency message</strong><pre>{emergencyReleasePackage.message}</pre></div>}
+                            {emergencyReleasePackage.importantContacts && <div><strong>Important contacts</strong><pre>{emergencyReleasePackage.importantContacts}</pre></div>}
+                            {emergencyReleasePackage.documentsAndLocations && <div><strong>Documents and locations</strong><pre>{emergencyReleasePackage.documentsAndLocations}</pre></div>}
+                            {emergencyReleasePackage.checklist && <div><strong>Checklist</strong><pre>{emergencyReleasePackage.checklist}</pre></div>}
+                            {emergencyReleasePackage.ownerInstructions && <div><strong>Owner instructions</strong><pre>{emergencyReleasePackage.ownerInstructions}</pre></div>}
+                          </div>
+                        </details>
+                      )}
+                      <small>{emergencyReleasePackage.notes}</small>
+                    </div>
+                  </>
                 )}
                 {isRequestStep && <button type="button" className={`secondary-button emergency-request-button ${['requested', 'release-ready'].includes(emergencyRequestState.status) ? 'success' : ''}`} disabled={emergencyRequestState.status === 'working' || emergencyRequestState.status === 'requested' || emergencyRequestState.status === 'release-ready'} onClick={requestEmergencyAccessFromInvite}>
                   {emergencyRequestState.status === 'working' ? <RefreshCw size={17} className="spin-icon" /> : ['requested', 'release-ready'].includes(emergencyRequestState.status) ? <ShieldCheck size={17} /> : <AlertTriangle size={17} />}

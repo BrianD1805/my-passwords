@@ -17327,3 +17327,86 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
 .emergency-document-release-note > span { display: grid; gap: 3px; }
 .emergency-document-release-note strong { font-weight: 700; }
 .emergency-document-release-note small { color: #64788b; line-height: 1.45; }
+
+/* Password-Encrypt Ver-1.002.01 — Emergency Package release layout */
+.emergency-package-download-card-top {
+  margin-top: 12px;
+}
+
+.emergency-zip-instructions {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid #cbdbe7;
+  border-radius: 16px;
+  background: #f7fafc;
+  color: #425c72;
+}
+.emergency-zip-instructions strong { color: #244b6a; }
+.emergency-zip-instructions p { margin: 0; line-height: 1.55; }
+
+.emergency-release-folders {
+  display: grid;
+  gap: 10px;
+}
+
+.emergency-release-folder {
+  border: 1px solid #d4e0e9;
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden;
+}
+.emergency-release-folder > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 15px;
+  cursor: pointer;
+  list-style: none;
+  background: #f7fafc;
+  color: #244b6a;
+  font-weight: 700;
+}
+.emergency-release-folder > summary::-webkit-details-marker { display: none; }
+.emergency-release-folder-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.emergency-release-folder-chevron {
+  flex: 0 0 auto;
+  transition: transform .16s ease;
+}
+.emergency-release-folder[open] .emergency-release-folder-chevron { transform: rotate(90deg); }
+.emergency-release-folder-count {
+  flex: 0 0 auto;
+  min-width: 28px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e9f2f8;
+  color: #336699;
+  text-align: center;
+  font-size: .82rem;
+}
+.emergency-release-folder-body {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-top: 1px solid #e1e9ef;
+}
+.emergency-release-folder-empty {
+  margin: 0 !important;
+  padding: 6px 2px;
+  color: #6b7d8d;
+}
+.emergency-package-notes-folder { margin-top: 2px; }
+.emergency-package-notes-body > div { display: grid; gap: 5px; }
+.emergency-package-notes-body > div > strong { color: #244b6a; }
+
+@media (max-width: 700px) {
+  .emergency-release-folder > summary { padding: 13px; }
+  .emergency-release-folder-body { padding: 10px; }
+  .emergency-zip-instructions { padding: 13px 14px; }
+}
