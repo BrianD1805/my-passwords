@@ -17023,7 +17023,7 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   }
 }
 
-/* Password-Encrypt Ver-1.001.01 — Push Notifications edits */
+/* Password-Encrypt Ver-1.001.02 — Push Notifications popup and wording edits */
 .push-activation-prompt-card {
   width: min(560px, calc(100vw - 50px));
 }
@@ -17063,7 +17063,125 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
 }
 
 .push-activation-prompt-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
   gap: 12px;
+}
+
+
+.admin-push-confirm-window {
+  width: min(620px, 100%);
+  max-height: calc(100dvh - 150px);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border: 1px solid var(--mp-border, #d5e1eb);
+  border-radius: 28px;
+  background: var(--mp-surface, #fff);
+}
+
+.admin-push-confirm-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px 20px;
+  border-top: 3px solid var(--mp-primary, #336699);
+  border-bottom: 1px solid var(--mp-border, #e2eaf1);
+  background: var(--mp-surface, #fff);
+}
+
+.admin-push-confirm-header h2,
+.admin-push-confirm-header p {
+  margin: 0;
+}
+
+.admin-push-confirm-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: 16px;
+  padding: 24px 24px 30px;
+}
+
+.admin-push-confirm-intro {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.admin-push-confirm-intro p {
+  margin: 0;
+  color: #42576b;
+  line-height: 1.6;
+}
+
+.admin-push-confirm-icon {
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: #edf6fb;
+  color: #336699;
+}
+
+.admin-push-confirm-preview,
+.admin-push-confirm-warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--mp-border, #d7e2ec);
+  border-radius: 16px;
+}
+
+.admin-push-confirm-preview {
+  color: #336699;
+  background: #f7fafc;
+}
+
+.admin-push-confirm-warning {
+  color: #9a6500;
+  background: #fffaf0;
+  border-color: #e8c985;
+}
+
+.admin-push-confirm-preview span,
+.admin-push-confirm-warning span {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-push-confirm-preview strong,
+.admin-push-confirm-warning strong {
+  color: var(--mp-text, #14263b);
+}
+
+.admin-push-confirm-preview small,
+.admin-push-confirm-warning small {
+  color: #647688;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.admin-push-confirm-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 18px 24px 22px;
+  border-top: 1px solid var(--mp-border, #e2eaf1);
+  background: var(--mp-surface, #fff);
 }
 
 .admin-push-template-picker {
@@ -17088,9 +17206,27 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   .push-activation-prompt-footer {
     flex-direction: column-reverse;
     align-items: stretch;
+    gap: 10px;
   }
 
   .push-activation-prompt-footer button {
     width: 100%;
+  }
+
+  .admin-push-confirm-header,
+  .admin-push-confirm-body,
+  .admin-push-confirm-footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .admin-push-confirm-footer {
+    flex-direction: column-reverse;
+    gap: 10px;
+  }
+
+  .admin-push-confirm-footer button {
+    width: 100%;
+    justify-content: center;
   }
 }

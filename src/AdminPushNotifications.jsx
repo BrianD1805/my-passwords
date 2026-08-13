@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Bell, RefreshCw, Save, Send, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Bell, RefreshCw, Save, Send, ShieldCheck, X } from 'lucide-react';
 import CustomSelect from './CustomSelect.jsx';
 import { formatAppDate } from './dateFormat.js';
 
@@ -55,6 +55,7 @@ export default function AdminPushNotifications({ onSessionExpired, setGlobalNoti
   const [drafts, setDrafts] = useState({});
   const [selectedTemplateKey, setSelectedTemplateKey] = useState('');
   const [broadcast, setBroadcast] = useState({ title: '', body: '', targetUrl: '/vault' });
+  const [broadcastConfirmOpen, setBroadcastConfirmOpen] = useState(false);
   const [notice, setNotice] = useState('');
 
   const sortedDrafts = useMemo(() => Object.values(drafts).sort((a, b) => String(a.displayName).localeCompare(String(b.displayName))), [drafts]);
@@ -113,13 +114,17 @@ export default function AdminPushNotifications({ onSessionExpired, setGlobalNoti
     setGlobalNotice?.(result.message || 'Push notification text saved.');
   }
 
-  async function sendBroadcast(event) {
+  function sendBroadcast(event) {
     event.preventDefault();
     if (!broadcast.title.trim() || !broadcast.body.trim()) {
       setNotice('Enter a broadcast title and message first.');
       return;
     }
-    if (!window.confirm('Send this push notification now to every registered device where a Password-Encrypt user has enabled push notifications?')) return;
+    setBroadcastConfirmOpen(true);
+  }
+
+  async function confirmBroadcast() {
+    if (busyKey === 'broadcast') return;
     setBusyKey('broadcast');
     setNotice('Sending push notification to all enabled users...');
     const result = await requestJson('/.netlify/functions/admin-push-notifications', {
@@ -133,6 +138,7 @@ export default function AdminPushNotifications({ onSessionExpired, setGlobalNoti
       setGlobalNotice?.(result.message || 'Push broadcast could not be sent.');
       return;
     }
+    setBroadcastConfirmOpen(false);
     applyData(result);
     setNotice(result.message || 'Push broadcast finished.');
     setGlobalNotice?.(result.message || 'Push broadcast finished.');
@@ -200,6 +206,26 @@ export default function AdminPushNotifications({ onSessionExpired, setGlobalNoti
           {!data.recentLogs?.length && !loading && <div className="admin-empty">No push notifications have been sent yet.</div>}
         </div>
       </section>
+
+      {broadcastConfirmOpen && (
+        <div className="admin-modal-overlay admin-push-confirm-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && busyKey !== 'broadcast') setBroadcastConfirmOpen(false); }}>
+          <section className="admin-push-confirm-window" role="dialog" aria-modal="true" aria-labelledby="admin-push-confirm-title">
+            <header className="admin-push-confirm-header">
+              <div><p className="eyebrow">Broadcast push</p><h2 id="admin-push-confirm-title">Send notification to all enabled users?</h2></div>
+              <button type="button" className="admin-window-close" onClick={() => setBroadcastConfirmOpen(false)} disabled={busyKey === 'broadcast'} aria-label="Close broadcast confirmation"><X size={22} /></button>
+            </header>
+            <div className="admin-push-confirm-body">
+              <div className="admin-push-confirm-intro"><div className="admin-push-confirm-icon"><Send size={23} /></div><p>This will send the notification immediately to every registered device where a Password-Encrypt user has enabled push notifications.</p></div>
+              <div className="admin-push-confirm-preview"><Bell size={19} /><span><strong>{broadcast.title}</strong><small>{broadcast.body}</small></span></div>
+              <div className="admin-push-confirm-warning"><AlertTriangle size={19} /><span><strong>Check the message before sending</strong><small>Once a push notification has been delivered to a device, it cannot be recalled.</small></span></div>
+            </div>
+            <footer className="admin-push-confirm-footer">
+              <button type="button" className="secondary-button" onClick={() => setBroadcastConfirmOpen(false)} disabled={busyKey === 'broadcast'}>Cancel</button>
+              <button type="button" className="primary-button" onClick={confirmBroadcast} disabled={busyKey === 'broadcast'}><Send size={17} /> {busyKey === 'broadcast' ? 'Sending...' : 'Send notification'}</button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {notice && <div className="admin-notice">{notice}</div>}
     </section>

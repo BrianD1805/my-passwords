@@ -6,6 +6,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const pkg = JSON.parse(read('package.json'));
 const main = read('src/main.jsx');
 const admin = read('src/AdminPushNotifications.jsx');
+const css = read('src/styles.css');
 const sw = read('public/sw.js');
 const db = read('netlify/functions/_db.js');
 const helper = read('netlify/functions/_push.js');
@@ -26,7 +27,7 @@ function check(label, condition) {
   else { failed += 1; console.error(`FAIL  ${label}`); }
 }
 
-check('Ver-1.001.01 app/server/package/service-worker versions align', pkg.version === '1.1.1' && /Password-Encrypt Ver-1\.001\.01/.test(main) && /Password-Encrypt Ver-1\.001\.01/.test(db) && /my-passwords-v1\.001\.01/.test(sw));
+check('Ver-1.001.02 app/server/package/service-worker versions align', pkg.version === '1.1.2' && /Password-Encrypt Ver-1\.001\.02/.test(main) && /Password-Encrypt Ver-1\.001\.02/.test(db) && /my-passwords-v1\.001\.02/.test(sw));
 check('Push subscriptions are bound to validated customer sessions', /validateCustomerSession/.test(subscription) && /session\.tenantId/.test(subscription) && /session\.userId/.test(subscription) && /assertBrowserAction/.test(subscription));
 check('Push subscription writes require CSRF browser action protection', /kind: 'customer', csrf: true/.test(subscription));
 check('VAPID private key remains server-side', /PUSH_VAPID_PRIVATE_KEY/.test(helper) && !/PUSH_VAPID_PRIVATE_KEY/.test(main));
@@ -55,9 +56,12 @@ check('Blocked browser notification permission routes user to review settings', 
 check('Admin notification types use a single dropdown selector', /admin-push-template-picker/.test(admin) && /Choose push notification type/.test(admin) && /selectedDraft/.test(admin));
 check('Admin broadcast appears before automatic notification editor', admin.indexOf('Send to all enabled users') >= 0 && admin.indexOf('Send to all enabled users') < admin.indexOf('Automatic notification text'));
 check('Admin template Save stays disabled until content changes', /selectedHasChanges/.test(admin) && /disabled=\{Boolean\(busyKey\) \|\| !selectedHasChanges\}/.test(admin));
+check('Admin broadcast confirmation uses Password-Encrypt popup instead of browser confirm', /broadcastConfirmOpen/.test(admin) && /admin-push-confirm-window/.test(admin) && /Send notification to all enabled users\?/.test(admin) && !/window\.confirm/.test(admin));
+check('Push activation prompt uses generic account and Admin message wording', /Activate push notifications on this device\./.test(main) && /Password-Encrypt account and Admin messages/.test(main) && !/if your trusted person starts Emergency Access, even when you are not actively using the app/.test(main));
+check('Push activation popup buttons have explicit spacing on mobile', /\.push-activation-prompt-footer \{[\s\S]*?display:\s*flex;[\s\S]*?gap:\s*12px;/.test(css) && /@media \(max-width: 720px\) \{[\s\S]*?\.push-activation-prompt-footer \{[\s\S]*?gap:\s*10px;/.test(css));
 
 if (failed) {
   console.error(`\n${failed} push notification static check(s) failed.`);
   process.exit(1);
 }
-console.log('\nAll 29 push notification static checks passed.');
+console.log('\nAll 32 push notification static checks passed.');

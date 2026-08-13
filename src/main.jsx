@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.001.01';
+const VERSION = 'Password-Encrypt Ver-1.001.02';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -2337,8 +2337,8 @@ function PushActivationPromptModal({ visible, permission, loading, onClose, onEn
         </header>
         <div className="item-popup-body push-activation-prompt-body">
           <div className={`push-activation-prompt-icon ${blocked ? 'blocked' : ''}`}><Bell size={27} /></div>
-          <p>{blocked ? 'Push notifications are currently blocked on this device.' : 'Push notifications are not active on this device.'}</p>
-          <div className="master-password-boundary-note compact"><ShieldCheck size={18} /><span><strong>Keep important account alerts close</strong><small>Password-Encrypt can alert you immediately if your trusted person starts Emergency Access, even when you are not actively using the app.</small></span></div>
+          <p>{blocked ? 'Push notifications are currently blocked on this device.' : 'Activate push notifications on this device.'}</p>
+          <div className="master-password-boundary-note compact"><ShieldCheck size={18} /><span><strong>Don't miss important account messages</strong><small>It is important to activate push notifications so you can receive Password-Encrypt account and Admin messages, security notices and other important service alerts, even when you are not using the app.</small></span></div>
           {blocked && <p className="push-activation-prompt-help">Allow notifications in this browser or installed app permissions, then return to Push Notifications in Settings.</p>}
         </div>
         <footer className="item-popup-footer push-activation-prompt-footer">
