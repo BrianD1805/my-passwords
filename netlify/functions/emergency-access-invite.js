@@ -272,9 +272,11 @@ export async function handler(event) {
       const userId = sessionUserId;
       const packageEnvelope = body.packageEnvelope || null;
       const packageSummary = body.packageSummary || {};
+      const importCodeHash = String(body.importCodeHash || '').trim().toLowerCase();
       if (!invitationId || !tenantId || !userId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are missing.' });
+      if (packageEnvelope?.keyMode === 'emergency-import-code-v1' && !/^[a-f0-9]{64}$/.test(importCodeHash)) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Emergency Package import-code details are incomplete.' });
       if (!packageEnvelope?.encrypted || !packageEnvelope?.salt || !packageEnvelope?.iv) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Emergency package data is incomplete.' });
-      const rows = await selectRows('emergency_access_invitations', `select=id,status,access_scope,metadata&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
+      const rows = await selectRows('emergency_access_invitations', `select=id,status,access_scope,metadata,emergency_import_code_hash&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(invitationId)}&limit=1`);
       const invitation = rows?.[0];
       if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Invitation was not found.' });
       if (invitation.status === 'cancelled') return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'This invitation has been cancelled. Reset it and send a fresh invitation first.' });
@@ -294,7 +296,10 @@ export async function handler(event) {
       const sourceFingerprint = String(body.sourceFingerprint || '').trim().slice(0, 128);
       const refreshReason = String(body.refreshReason || 'manual_package_save').trim().slice(0, 80);
       const existingFingerprint = String(invitation.metadata?.emergency_package_source_fingerprint || '');
-      if (sourceFingerprint && existingFingerprint === sourceFingerprint && invitation.metadata?.emergency_package_envelope?.encrypted) {
+      const existingEnvelope = invitation.metadata?.emergency_package_envelope || null;
+      const importFormatCurrent = existingEnvelope?.keyMode === 'emergency-import-code-v1'
+        && String(invitation.emergency_import_code_hash || '') === importCodeHash;
+      if (sourceFingerprint && existingFingerprint === sourceFingerprint && existingEnvelope?.encrypted && importFormatCurrent) {
         return jsonResponse(200, {
           ok: true,
           unchanged: true,
@@ -317,6 +322,7 @@ export async function handler(event) {
       };
       await updateRow('emergency_access_invitations', `id=${eq(invitationId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, {
         access_scope: cleanSummary.releaseScope,
+        emergency_import_code_hash: packageEnvelope?.keyMode === 'emergency-import-code-v1' ? importCodeHash : null,
         metadata: {
           ...(invitation.metadata || {}),
           version: APP_VERSION,

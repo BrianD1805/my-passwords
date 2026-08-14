@@ -14,6 +14,17 @@ function tokenHash(token) {
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'my-passwords-emergency-invite';
   return createHash('sha256').update(`${token}:${secret}`).digest('hex');
 }
+function normaliseImportCode(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 20);
+}
+
+function importCodeHash(value) {
+  return createHash('sha256').update(`Password-Encrypt emergency import code v1:${normaliseImportCode(value)}`).digest('hex');
+}
+
+function normaliseEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
 
 function waitingPeriodMs(value) {
   const text = String(value || '7 days').toLowerCase();
@@ -159,6 +170,47 @@ export async function handler(event) {
       await updateRow('emergency_access_requests', `id=${eq(requestId)}&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}`, { status: 'cancelled', cancelled_at: now, updated_at: now });
       if (request?.invitation_id) await recordEmergencyFlowEvent(request.invitation_id, { type: 'request_cancelled', title: 'Emergency request cancelled', message: 'The account owner cancelled the emergency request before release.', occurredAt: now, metadata: { requestId } }).catch(() => null);
       return jsonResponse(200, { ok: true, version: APP_VERSION, requestId, status: 'cancelled', message: 'Emergency access request cancelled. No vault access has been released.' });
+    }
+
+    if (action === 'redeem_import_code') {
+      const session = await getActiveCustomerSession(event);
+      if (!session) return jsonResponse(401, { ok: false, version: APP_VERSION, code: 'SESSION_REQUIRED', message: 'Verify this device before importing an Emergency Package.' });
+      try { assertCsrf(event, session, 'customer'); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
+      const importCode = normaliseImportCode(body.importCode);
+      if (importCode.length !== 20) return jsonResponse(400, { ok: false, version: APP_VERSION, code: 'IMPORT_CODE_INVALID', message: 'Enter the complete 20-character Emergency Package import code.' });
+      const codeHash = importCodeHash(importCode);
+      await consumeRateLimit(event, { scope: 'emergency_import_code', identifier: `${session.userId}:${codeHash}`, limit: 12, windowSeconds: 15 * 60, blockSeconds: 60 * 60 });
+      const invitationRows = await selectRows('emergency_access_invitations', `select=id,status,contact_email,contact_name,metadata,emergency_import_code_hash&emergency_import_code_hash=${eq(codeHash)}&limit=1`).catch(() => []);
+      const importInvitation = invitationRows?.[0];
+      if (!importInvitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, code: 'IMPORT_CODE_NOT_FOUND', message: 'That Emergency Package import code was not recognised. Check the code shown on the released package.' });
+      const userRows = await selectRows('users', `select=email,email_verified&id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}&limit=1`).catch(() => []);
+      const recipientUser = userRows?.[0];
+      if (!recipientUser?.email_verified || normaliseEmail(recipientUser.email) !== normaliseEmail(importInvitation.contact_email)) {
+        return jsonResponse(403, { ok: false, version: APP_VERSION, code: 'IMPORT_IDENTITY_MISMATCH', message: 'This Emergency Package was released to a different email address. Sign in to the Password-Encrypt account that uses the nominated email address.' });
+      }
+      if (String(importInvitation.status || '').toLowerCase() !== 'accepted') return jsonResponse(403, { ok: false, version: APP_VERSION, code: 'IMPORT_NOT_AVAILABLE', message: 'This Emergency Package is not available for import.' });
+      const requestRows = await selectRows('emergency_access_requests', `select=*&invitation_id=${eq(importInvitation.id)}&status=in.(requested,waiting,owner_notified,release_ready)&order=requested_at.desc&limit=1`).catch(() => []);
+      let importRequest = requestRows?.[0]?.id ? await markReleaseReadyIfDue(requestRows[0]) : null;
+      importRequest = await ensureReleaseWindow(importRequest);
+      if (!importRequest?.id || String(importRequest.status || '').toLowerCase() !== 'release_ready') return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'IMPORT_NOT_RELEASED', message: 'The Emergency Package has not been released yet.' });
+      if (releaseWindowExpired(importRequest)) return jsonResponse(410, { ok: false, version: APP_VERSION, code: 'EMERGENCY_PACKAGE_EXPIRED', message: 'This Emergency Package import code expired when the 30-day release period ended.' });
+      const packageEnvelope = importInvitation.metadata?.emergency_package_envelope || null;
+      if (!packageEnvelope?.encrypted || packageEnvelope?.keyMode !== 'emergency-import-code-v1') {
+        return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'IMPORT_CODE_PACKAGE_REFRESH_REQUIRED', message: 'This package was prepared with an older release format. The account owner must refresh the Emergency Package before code import can be used.' });
+      }
+      await recordEmergencyFlowEvent(importInvitation.id, { type: 'import_code_redeemed', title: 'Emergency Package import code checked', message: 'The nominated Password-Encrypt user securely connected the released package to their own account.', occurredAt: new Date().toISOString(), metadata: { recipient_user_id: session.userId, requestId: importRequest.id } }).catch(() => null);
+      return jsonResponse(200, {
+        ok: true,
+        version: APP_VERSION,
+        invitationId: importInvitation.id,
+        requestId: importRequest.id,
+        ownerName: importInvitation.metadata?.owner_name || 'Account owner',
+        contactName: importInvitation.contact_name || '',
+        releaseExpiresAt: importRequest?.metadata?.release_expires_at || '',
+        packageEnvelope,
+        packageSummary: importInvitation.metadata?.emergency_package_summary || null,
+        message: 'Emergency Package found and identity confirmed.'
+      });
     }
 
     const token = String(body.token || '').trim();

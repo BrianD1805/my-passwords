@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.005.01';
+const VERSION = 'Password-Encrypt Ver-1.005.02';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -28,8 +28,6 @@ const ACCOUNT_DEVICE_INSTALL_KEY = 'my-passwords-account-device-install-v1';
 const PENDING_ONBOARDING_ACCOUNT_KEY = 'password-encrypt-pending-onboarding-account-v1';
 const PUSH_BINDING_KEY = 'password-encrypt-push-binding-v1';
 const PUSH_PROMPT_SUPPRESSION_KEY = 'password-encrypt-push-prompt-suppressed-v1';
-const EMERGENCY_IMPORT_HANDOFF_KEY = 'password-encrypt-emergency-import-handoff-v1';
-const EMERGENCY_IMPORT_HANDOFF_MAX_AGE_MS = 60 * 60 * 1000;
 
 
 const LEGACY_VAULT_BACK_MARKER_KEYS = [
@@ -373,7 +371,7 @@ const SETTINGS_FAQS = [
   {
     category: 'Emergency Access',
     question: 'Does my next of kin or trusted person need a Password-Encrypt account?',
-    answer: 'No. Emergency Access is intended for a next of kin or another trusted person you nominate. The standard flow works through secure browser links, so they can accept the invitation, request access and open the released package without installing the app or creating their own vault. If the trusted person already uses Password-Encrypt, a released package can also be imported into their own encrypted vault as a separate Emergency Package folder.'
+    answer: 'No. Emergency Access is intended for a next of kin or another trusted person you nominate. The standard flow works through secure browser links, so they can accept the invitation, request access and open the released package without installing the app or creating their own vault. If the trusted person already uses Password-Encrypt, the released page also shows a secure Import Code. They can enter that code from Emergency Info → Emergency Access inside their own vault and add the released package as a separate Emergency Package folder.'
   },
   {
     category: 'Emergency Access',
@@ -1038,17 +1036,52 @@ function tokenFromInviteUrl(inviteUrl) {
   }
 }
 
+const EMERGENCY_IMPORT_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const EMERGENCY_IMPORT_CODE_LENGTH = 20;
+
+function normaliseEmergencyImportCode(value) {
+  const compact = String(value || '').toUpperCase().replace(/[^A-Z2-9]/g, '');
+  return compact.slice(0, EMERGENCY_IMPORT_CODE_LENGTH);
+}
+
+function formatEmergencyImportCode(value) {
+  const compact = normaliseEmergencyImportCode(value);
+  return compact.match(/.{1,4}/g)?.join('-') || compact;
+}
+
+async function deriveEmergencyImportCode(inviteToken) {
+  const token = String(inviteToken || '').trim();
+  if (!token) throw new Error('Emergency invite token is missing.');
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`Password-Encrypt emergency import v1:${token}`)));
+  let compact = '';
+  for (let index = 0; index < EMERGENCY_IMPORT_CODE_LENGTH; index += 1) compact += EMERGENCY_IMPORT_CODE_ALPHABET[digest[index] & 31];
+  return formatEmergencyImportCode(compact);
+}
+
+async function emergencyImportCodeHash(value) {
+  return sha256Hex(`Password-Encrypt emergency import code v1:${normaliseEmergencyImportCode(value)}`);
+}
+
+async function emergencyReleaseCredential(envelope, credential, credentialType = 'invite-token') {
+  if (String(envelope?.keyMode || '') === 'emergency-import-code-v1') {
+    return credentialType === 'import-code' ? formatEmergencyImportCode(credential) : deriveEmergencyImportCode(credential);
+  }
+  return String(credential || '');
+}
+
 async function encryptEmergencyReleasePackage(packageData, inviteToken) {
   const token = String(inviteToken || '').trim();
   if (!token) throw new Error('Emergency invite token is missing.');
+  const importCode = await deriveEmergencyImportCode(token);
   const salt = arrayBufferToBase64(crypto.getRandomValues(new Uint8Array(16)));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(token, salt);
+  const key = await deriveKey(importCode, salt);
   const encoded = new TextEncoder().encode(JSON.stringify(packageData));
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
   return {
     version: VERSION,
-    packageVersion: '1',
+    packageVersion: '2',
+    keyMode: 'emergency-import-code-v1',
     algorithm: 'AES-GCM/PBKDF2-SHA256',
     salt,
     iv: arrayBufferToBase64(iv),
@@ -1057,9 +1090,10 @@ async function encryptEmergencyReleasePackage(packageData, inviteToken) {
   };
 }
 
-async function decryptEmergencyReleasePackage(envelope, inviteToken) {
+async function decryptEmergencyReleasePackage(envelope, credential, credentialType = 'invite-token') {
   if (!envelope?.encrypted || !envelope?.salt || !envelope?.iv) throw new Error('Emergency package is not available yet.');
-  const key = await deriveKey(String(inviteToken || ''), envelope.salt);
+  const releaseCredential = await emergencyReleaseCredential(envelope, credential, credentialType);
+  const key = await deriveKey(releaseCredential, envelope.salt);
   const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToArrayBuffer(envelope.iv) }, key, base64ToArrayBuffer(envelope.encrypted));
   return JSON.parse(new TextDecoder().decode(decrypted));
 }
@@ -1067,12 +1101,13 @@ async function decryptEmergencyReleasePackage(envelope, inviteToken) {
 async function encryptEmergencyDocumentData(dataUrl, inviteToken) {
   const token = String(inviteToken || '').trim();
   if (!token) throw new Error('Emergency invite token is missing.');
+  const importCode = await deriveEmergencyImportCode(token);
   const salt = arrayBufferToBase64(crypto.getRandomValues(new Uint8Array(16)));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(token, salt);
+  const key = await deriveKey(importCode, salt);
   const encoded = new TextEncoder().encode(String(dataUrl || ''));
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
-  return { encryptedBlob: arrayBufferToBase64(encrypted), localSalt: salt, localIv: arrayBufferToBase64(iv) };
+  return { encryptedBlob: arrayBufferToBase64(encrypted), localSalt: salt, localIv: arrayBufferToBase64(iv), encryptionScope: 'emergency_import_code_v1' };
 }
 
 async function sha256Hex(value) {
@@ -1993,37 +2028,6 @@ function updateEmergencyAccessHubPackageFolder(vaultItems, originalName, nextNam
   return list;
 }
 
-function saveEmergencyImportHandoff(token) {
-  const clean = String(token || '').trim();
-  if (!clean || typeof window === 'undefined') return false;
-  try {
-    window.sessionStorage.setItem(EMERGENCY_IMPORT_HANDOFF_KEY, JSON.stringify({ token: clean, createdAt: Date.now() }));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function readEmergencyImportHandoff() {
-  if (typeof window === 'undefined') return null;
-  try {
-    const parsed = JSON.parse(window.sessionStorage.getItem(EMERGENCY_IMPORT_HANDOFF_KEY) || 'null');
-    if (!parsed?.token || !Number(parsed?.createdAt) || Date.now() - Number(parsed.createdAt) > EMERGENCY_IMPORT_HANDOFF_MAX_AGE_MS) {
-      window.sessionStorage.removeItem(EMERGENCY_IMPORT_HANDOFF_KEY);
-      return null;
-    }
-    return parsed;
-  } catch {
-    try { window.sessionStorage.removeItem(EMERGENCY_IMPORT_HANDOFF_KEY); } catch {}
-    return null;
-  }
-}
-
-function clearEmergencyImportHandoff() {
-  if (typeof window === 'undefined') return;
-  try { window.sessionStorage.removeItem(EMERGENCY_IMPORT_HANDOFF_KEY); } catch {}
-}
-
 function getVisibleVaultItems(vaultItems) {
   return Array.isArray(vaultItems) ? vaultItems.filter((item) => !isInternalMetaItem(item)) : [];
 }
@@ -2778,14 +2782,7 @@ function App() {
   const [inviteAcceptance, setInviteAcceptance] = useState({ status: 'idle', message: '' });
   const [emergencyRequestState, setEmergencyRequestState] = useState({ status: 'idle', message: '' });
   const [emergencyReleasePackage, setEmergencyReleasePackage] = useState(null);
-  const [emergencyImportState, setEmergencyImportState] = useState({ visible: false, status: 'idle', message: '', packageData: null, token: '', releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: false });
-  const emergencyImportLoadRef = useRef(false);
-  // Ver-1.005.01: resolve the import-entry flag before effects run.
-  // The route-level emergencyImportEntry constant is declared later with the other route helpers;
-  // reading it here previously hit JavaScript's temporal dead zone and triggered the startup fallback.
-  const emergencyImportEntryRequested = typeof window !== 'undefined'
-    && ['/vault', '/app', '/login'].includes((window.location.pathname.length > 1 ? window.location.pathname.replace(/\/+$/, '') : window.location.pathname) || '/vault')
-    && new URLSearchParams(window.location.search || '').get('emergencyImport') === '1';
+  const [emergencyImportState, setEmergencyImportState] = useState({ visible: false, status: 'code-entry', message: '', codeInput: '', importCode: '', packageData: null, releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: false });
   const [trustedPersonReminderConfirmation, setTrustedPersonReminderConfirmation] = useState({ status: 'idle', message: '', ownerName: '', contactName: '', confirmedAt: '' });
   const [trustedPersonHelpOpen, setTrustedPersonHelpOpen] = useState(false);
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
@@ -3953,12 +3950,6 @@ function App() {
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash || ''}`);
     scrollSettingsToTop();
   }, [locked, customerSession.authenticated]);
-
-  useEffect(() => {
-    if (!emergencyImportEntryRequested || locked || emergencyImportLoadRef.current) return;
-    emergencyImportLoadRef.current = true;
-    loadEmergencyPackageForVaultImport().finally(() => { emergencyImportLoadRef.current = false; });
-  }, [emergencyImportEntryRequested, locked]);
 
   useEffect(() => {
     if (!hasLocalVault || !customerSession.authenticated) return;
@@ -5820,7 +5811,6 @@ function App() {
   const isVaultRoute = ['/vault', '/app', '/login'].includes(normalisedRoutePath);
   const vaultSearchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search || '') : new URLSearchParams();
   const vaultEntryMode = vaultSearchParams.get('entry') || '';
-  const emergencyImportEntry = isVaultRoute && vaultSearchParams.get('emergencyImport') === '1';
   const existingCustomerEntry = isVaultRoute && vaultEntryMode === 'existing';
   const newCustomerOnboardingEntry = isVaultRoute && vaultEntryMode === 'onboarding';
   const onboardingInstallEntry = isVaultRoute && vaultEntryMode === 'install';
@@ -5854,6 +5844,7 @@ function App() {
     || signupLegalModal.visible
     || billingLegalModalOpen
     || trustedPersonHelpOpen
+    || emergencyImportState.visible
     || isCreateAccountPopupOpen
     || isOpenVaultChoicePopupOpen
     || isCreateVaultPopupOpen
@@ -6747,7 +6738,8 @@ function App() {
       const file = item.payload.file;
       const sourceFingerprint = await buildEmergencyDocumentSourceFingerprint(item);
       const existing = existingBySource.get(String(item.id || ''));
-      const alreadyCurrent = existing?.metadata?.source_fingerprint === sourceFingerprint;
+      const alreadyCurrent = existing?.metadata?.source_fingerprint === sourceFingerprint
+        && existing?.metadata?.encryption_scope === 'emergency_import_code_v1';
       if (!alreadyCurrent) {
         const dataUrl = await loadStoredDocumentDataUrl(item);
         const encrypted = await encryptEmergencyDocumentData(dataUrl, inviteToken);
@@ -6763,7 +6755,8 @@ function App() {
           fileSize: Number(file.size || 0),
           encryptedBlob: encrypted.encryptedBlob,
           localSalt: encrypted.localSalt,
-          localIv: encrypted.localIv
+          localIv: encrypted.localIv,
+          encryptionScope: encrypted.encryptionScope || 'emergency_import_code_v1'
         });
         if (!result.ok) {
           const error = new Error(result.message || `The document ${file.name || item.title || ''} could not be prepared for Emergency Access.`);
@@ -6804,12 +6797,15 @@ function App() {
       return { ok: false, skipped: true, code: 'EMERGENCY_PACKAGE_FROZEN' };
     }
     const sourceFingerprint = await buildEmergencyPackageSourceFingerprint(planToSave, currentItems);
+    const importCode = await deriveEmergencyImportCode(inviteToken);
+    const importCodeHash = await emergencyImportCodeHash(importCode);
     const releasedDocuments = await prepareEmergencyReleasedDocuments(planToSave, currentItems, inviteToken);
     const releasePackage = buildEmergencyReleasePackage(planToSave, currentItems, bootstrap, releasedDocuments);
     const envelope = await encryptEmergencyReleasePackage(releasePackage, inviteToken);
     const result = await postJson('/.netlify/functions/emergency-access-invite', {
       action: 'save_package',
       invitationId: planToSave.invitationId,
+      importCodeHash,
       sourceFingerprint,
       refreshReason: options.refreshReason || 'manual_package_save',
       packageEnvelope: envelope,
@@ -7225,7 +7221,7 @@ function App() {
         if (result.code === 'EMERGENCY_PACKAGE_EXPIRED') {
           setInviteAcceptance({ status: 'accepted', message: '' });
           setEmergencyReleasePackage(null);
-          setEmergencyRequestState({ status: 'expired', message: result.message || 'This Emergency Package link has expired.', releaseReady: false, waitingEndsAt: '', releaseExpiresAt: '', packageSummary: null });
+          setEmergencyRequestState({ status: 'expired', message: result.message || 'This Emergency Package link has expired.', releaseReady: false, waitingEndsAt: '', releaseExpiresAt: '', packageSummary: null, importCode: '' });
         }
         return;
       }
@@ -7243,6 +7239,7 @@ function App() {
           try { releasedPackage = await decryptEmergencyReleasePackage(result.packageEnvelope, token); }
           catch (packageError) { releasedPackage = { error: packageError.message || 'Emergency package could not be opened.' }; }
         }
+        const importCode = ready && result.packageEnvelope?.keyMode === 'emergency-import-code-v1' ? await deriveEmergencyImportCode(token) : '';
         setEmergencyReleasePackage(releasedPackage);
         setEmergencyRequestState({
           status: ready ? 'release-ready' : 'requested',
@@ -7250,7 +7247,8 @@ function App() {
           releaseReady: ready,
           waitingEndsAt: result.waitingEndsAt || '',
           packageSummary: result.packageSummary || null,
-          releaseExpiresAt: result.releaseExpiresAt || ''
+          releaseExpiresAt: result.releaseExpiresAt || '',
+          importCode
         });
       }
     } catch (error) {
@@ -7271,7 +7269,22 @@ function App() {
       sourceDocumentId: documentMeta?.sourceDocumentId || ''
     });
     if (!result.ok || !result.document) throw new Error(result.message || 'The released document could not be opened.');
-    const dataUrl = await decryptDocumentData(result.document, token);
+    const encryptionScope = String(result.document?.metadata?.encryption_scope || 'trusted_person_invite_token');
+    const documentCredential = encryptionScope === 'emergency_import_code_v1' ? await deriveEmergencyImportCode(token) : token;
+    const dataUrl = await decryptDocumentData(result.document, documentCredential);
+    return { dataUrl, record: result.document };
+  }
+
+  async function loadReleasedEmergencyDocumentForImport(documentMeta, importCode) {
+    const cleanCode = formatEmergencyImportCode(importCode);
+    if (normaliseEmergencyImportCode(cleanCode).length !== EMERGENCY_IMPORT_CODE_LENGTH) throw new Error('The Emergency Package import code is incomplete.');
+    const result = await postJson('/.netlify/functions/emergency-access-document', {
+      action: 'open_import',
+      importCode: cleanCode,
+      sourceDocumentId: documentMeta?.sourceDocumentId || ''
+    });
+    if (!result.ok || !result.document) throw new Error(result.message || 'The released document could not be opened for import.');
+    const dataUrl = await decryptDocumentData(result.document, cleanCode);
     return { dataUrl, record: result.document };
   }
 
@@ -7325,45 +7338,40 @@ function App() {
     }
   }
 
-  function clearEmergencyImportRouteMarker() {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search || '');
-    params.delete('emergencyImport');
-    const query = params.toString();
-    window.history.replaceState(window.history.state || {}, document.title, `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash || ''}`);
+  function openEmergencyImportCodeModal() {
+    setEmergencyImportState({ visible: true, status: 'code-entry', message: '', codeInput: '', importCode: '', packageData: null, releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: false });
   }
 
-  function beginEmergencyPackageVaultImport() {
-    const token = currentEmergencyInviteToken();
-    if (!token || emergencyRequestState.status !== 'release-ready' || !emergencyReleasePackage || emergencyReleasePackage.error) {
-      setEmergencyRequestState((current) => ({ ...current, message: 'The released Emergency Package must be open before it can be imported.' }));
-      return;
-    }
-    if (!saveEmergencyImportHandoff(token)) {
-      setEmergencyRequestState((current) => ({ ...current, message: 'This browser could not safely hand the Emergency Package to your vault. Download the ZIP instead.' }));
-      return;
-    }
-    window.location.assign('/vault?entry=existing&emergencyImport=1');
+  function closeEmergencyImportModal() {
+    setEmergencyImportState({ visible: false, status: 'code-entry', message: '', codeInput: '', importCode: '', packageData: null, releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: false });
   }
 
-  function closeEmergencyImportModal({ keepHandoff = false } = {}) {
-    setEmergencyImportState((current) => ({ ...current, visible: false, busy: false }));
-    if (!keepHandoff) clearEmergencyImportHandoff();
-    clearEmergencyImportRouteMarker();
+  function updateEmergencyImportCodeInput(value) {
+    const compact = normaliseEmergencyImportCode(value);
+    setEmergencyImportState((current) => ({ ...current, codeInput: formatEmergencyImportCode(compact), message: current.status === 'error' ? '' : current.message, status: current.status === 'error' ? 'code-entry' : current.status }));
   }
 
-  async function loadEmergencyPackageForVaultImport() {
-    const handoff = readEmergencyImportHandoff();
-    if (!handoff?.token) {
-      setEmergencyImportState({ visible: true, status: 'error', message: 'The Emergency Package import handoff has expired. Return to the Emergency Access link and choose Import into my vault again.', packageData: null, token: '', releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: false });
+  async function checkEmergencyPackageImportCode() {
+    const importCode = formatEmergencyImportCode(emergencyImportState.codeInput);
+    if (normaliseEmergencyImportCode(importCode).length !== EMERGENCY_IMPORT_CODE_LENGTH) {
+      setEmergencyImportState((current) => ({ ...current, status: 'error', message: 'Enter the complete Emergency Package import code.', busy: false }));
       return;
     }
-    setEmergencyImportState({ visible: true, status: 'loading', message: 'Checking the released Emergency Package...', packageData: null, token: handoff.token, releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: true });
+    if (!customerSession.authenticated || customerSession.cloudAccess === false) {
+      showMessage('Verify this device before connecting an Emergency Package to your vault.', 'warning');
+      openDeviceVerification();
+      return;
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setEmergencyImportState((current) => ({ ...current, status: 'error', message: 'Connect to the internet before checking an Emergency Package import code.', busy: false }));
+      return;
+    }
+    setEmergencyImportState((current) => ({ ...current, status: 'loading', busy: true, message: 'Checking the released Emergency Package...' }));
     try {
-      const result = await postJson('/.netlify/functions/emergency-access-request', { action: 'status', token: handoff.token });
-      if (!result.ok) throw new Error(result.message || 'The Emergency Package could not be checked.');
-      if (!(result.releaseReady || result.status === 'release_ready') || !result.packageEnvelope) throw new Error('The Emergency Package is not ready to import.');
-      const packageData = await decryptEmergencyReleasePackage(result.packageEnvelope, handoff.token);
+      const result = await postJson('/.netlify/functions/emergency-access-request', { action: 'redeem_import_code', importCode });
+      if (!result.ok) throw new Error(result.message || 'The Emergency Package import code could not be checked.');
+      if (!result.packageEnvelope) throw new Error('The released Emergency Package is not available for import.');
+      const packageData = await decryptEmergencyReleasePackage(result.packageEnvelope, importCode, 'import-code');
       const fingerprint = await sha256Hex(JSON.stringify(result.packageEnvelope));
       const hub = getVisibleVaultItems(items).find(isEmergencyAccessHubItem);
       const existingPackage = emergencyAccessHubPackages(hub).find((entry) => entry?.fingerprint === fingerprint)
@@ -7371,16 +7379,17 @@ function App() {
       setEmergencyImportState({
         visible: true,
         status: existingPackage?.folderName ? 'duplicate' : 'ready',
-        message: existingPackage?.folderName ? 'This Emergency Package is already stored in your vault.' : 'The released package is ready to import into your encrypted vault.',
+        message: existingPackage?.folderName ? 'This Emergency Package is already stored in your vault.' : 'Emergency Package found. Check the details below, then add it to your vault.',
+        codeInput: importCode,
+        importCode,
         packageData,
-        token: handoff.token,
         releaseExpiresAt: result.releaseExpiresAt || '',
         fingerprint,
         duplicateFolder: existingPackage?.folderName || '',
         busy: false
       });
     } catch (error) {
-      setEmergencyImportState({ visible: true, status: 'error', message: error.message || 'The Emergency Package could not be prepared for import.', packageData: null, token: handoff.token, releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: false });
+      setEmergencyImportState((current) => ({ ...current, status: 'error', busy: false, message: error.message || 'The Emergency Package import code could not be checked.' }));
     }
   }
 
@@ -7394,9 +7403,9 @@ function App() {
 
   async function importEmergencyPackageIntoVault() {
     const packageData = emergencyImportState.packageData;
-    const token = emergencyImportState.token;
+    const importCode = emergencyImportState.importCode;
     const fingerprint = emergencyImportState.fingerprint;
-    if (!packageData || !token || !fingerprint) return;
+    if (!packageData || !importCode || !fingerprint) return;
     if (!customerSession.authenticated || customerSession.cloudAccess === false) {
       showMessage('Verify this device before importing the Emergency Package into your vault.', 'warning');
       openDeviceVerification();
@@ -7479,7 +7488,7 @@ function App() {
       }
 
       for (const documentMeta of releasedDocuments) {
-        const { dataUrl } = await loadReleasedEmergencyDocument(documentMeta, token);
+        const { dataUrl } = await loadReleasedEmergencyDocumentForImport(documentMeta, importCode);
         const itemId = crypto.randomUUID();
         const storedFile = await uploadEncryptedDocumentBlob({
           name: documentMeta?.fileName || documentMeta?.title || 'Emergency document',
@@ -7520,8 +7529,6 @@ function App() {
         releaseExpiresAt: emergencyImportState.releaseExpiresAt || ''
       });
       const syncResult = await saveItems(next, { autoSync: true, silentAutoSync: true, emergencyRefreshReason: 'received_emergency_package_import' });
-      clearEmergencyImportHandoff();
-      clearEmergencyImportRouteMarker();
       setEmergencyImportState((current) => ({ ...current, visible: false, status: 'complete', busy: false, duplicateFolder: folderName, message: 'Emergency Package imported.' }));
       setQuery('');
       openVaultSection(folderName);
@@ -7591,6 +7598,7 @@ function App() {
         try { releasedPackage = await decryptEmergencyReleasePackage(result.packageEnvelope, token); }
         catch (packageError) { releasedPackage = { error: packageError.message || 'Emergency package could not be opened.' }; }
       }
+      const importCode = ready && result.packageEnvelope?.keyMode === 'emergency-import-code-v1' ? await deriveEmergencyImportCode(token) : '';
       setEmergencyReleasePackage(releasedPackage);
       setEmergencyRequestState({
         status: ready ? 'release-ready' : 'requested',
@@ -7598,7 +7606,8 @@ function App() {
         releaseReady: ready,
         waitingEndsAt: result.waitingEndsAt || '',
         packageSummary: result.packageSummary || null,
-        releaseExpiresAt: result.releaseExpiresAt || ''
+        releaseExpiresAt: result.releaseExpiresAt || '',
+        importCode
       });
     } catch (error) {
       const note = error.name === 'AbortError'
@@ -7883,12 +7892,22 @@ function App() {
                         <button type="button" className="secondary-button" onClick={() => downloadEmergencyDocx(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)}><FileText size={16} /> Download DOCX</button>
                       </div>
                     </div>
-                    <div className="emergency-vault-import-card">
+                    <div className="emergency-vault-import-card emergency-import-code-release-card">
                       <div>
-                        <strong>Already use Password-Encrypt?</strong>
-                        <span>Import this released Emergency Package into your own encrypted vault as a new folder. The imported copy remains in your vault after this 30-day release link expires.</span>
+                        <strong>Use Password-Encrypt?</strong>
+                        {emergencyRequestState.importCode ? (
+                          <>
+                            <span>Open your own Password-Encrypt vault, then go to <b>Emergency Info → Emergency Access → Import Emergency Package</b> and enter this code.</span>
+                            <div className="emergency-import-code-display">
+                              <code>{emergencyRequestState.importCode}</code>
+                              <button type="button" className="icon-button" onClick={() => copyText('Import code', emergencyRequestState.importCode)} aria-label="Copy Emergency Package import code" title="Copy import code"><Copy size={17} /></button>
+                            </div>
+                            <small>The code works only for the Password-Encrypt account using the email address nominated for this Emergency Access arrangement, and only while this released package remains available.</small>
+                          </>
+                        ) : (
+                          <span>This package was prepared before secure Import Codes were enabled. You can still use the ZIP and individual downloads above.</span>
+                        )}
                       </div>
-                      <button type="button" className="secondary-button emergency-vault-import-button" onClick={beginEmergencyPackageVaultImport}><Upload size={16} /> Import into my vault</button>
                     </div>
                     <div className="emergency-zip-instructions">
                       <strong>How to open the full ZIP download</strong>
@@ -9886,8 +9905,19 @@ function App() {
             <div className="item-popup-body emergency-import-popup-body">
               {emergencyImportState.status === 'loading' ? (
                 <div className="emergency-import-loading"><RefreshCw size={22} className="spin-icon" /><strong>Checking the released package...</strong><span>Please keep this page open.</span></div>
-              ) : emergencyImportState.status === 'error' ? (
-                <div className="emergency-invite-status error">{emergencyImportState.message}</div>
+              ) : ['code-entry', 'error'].includes(emergencyImportState.status) ? (
+                <>
+                  <div className="emergency-import-code-intro">
+                    <KeyRound size={24} />
+                    <div><strong>Enter the Emergency Package Import Code</strong><span>The code is shown on the released Emergency Package page. It securely connects that released package to your Password-Encrypt account.</span></div>
+                  </div>
+                  <label className="emergency-import-code-field">
+                    <span>Import Code</span>
+                    <input type="text" inputMode="text" autoCapitalize="characters" autoCorrect="off" spellCheck="false" maxLength={24} placeholder="ABCD-EFGH-JKLM-NPQR-STUV" value={emergencyImportState.codeInput} onChange={(event) => updateEmergencyImportCodeInput(event.target.value)} />
+                  </label>
+                  <div className="emergency-import-notice"><strong>Protected by your nominated identity</strong><span>The code works only after this device is verified and the email on your Password-Encrypt account matches the email nominated by the package owner.</span></div>
+                  {emergencyImportState.status === 'error' && <div className="emergency-invite-status error">{emergencyImportState.message}</div>}
+                </>
               ) : (
                 <>
                   <div className="emergency-import-hero">
@@ -9899,8 +9929,7 @@ function App() {
                   ) : (
                     <>
                       <p>This will create a new vault folder for the package and copy the released items into your own encrypted Password-Encrypt vault.</p>
-                      <div className="emergency-import-notice"><strong>Kept separate from your own records</strong><span>Imported items keep their original type, but stay together in one Emergency Package folder. The imported copy remains in your vault until you delete it.</span></div>
-                      {!customerSession.authenticated && <div className="emergency-invite-status warning">Verify this device before importing so the package and its documents can be protected by your account.</div>}
+                      <div className="emergency-import-notice"><strong>Kept separate from your own records</strong><span>Imported items keep their original type, but stay together in one Emergency Package folder. Documents are re-encrypted into your own vault before they are stored.</span></div>
                     </>
                   )}
                 </>
@@ -9908,10 +9937,12 @@ function App() {
             </div>
             <div className="item-popup-footer emergency-import-popup-footer">
               <button type="button" className="secondary-button" onClick={() => closeEmergencyImportModal()} disabled={emergencyImportState.busy}>Cancel</button>
-              {emergencyImportState.status === 'duplicate' ? (
+              {['code-entry', 'error'].includes(emergencyImportState.status) ? (
+                <button type="button" className="primary-button" onClick={checkEmergencyPackageImportCode} disabled={emergencyImportState.busy || normaliseEmergencyImportCode(emergencyImportState.codeInput).length !== EMERGENCY_IMPORT_CODE_LENGTH}><KeyRound size={16} /> Check code</button>
+              ) : emergencyImportState.status === 'duplicate' ? (
                 <button type="button" className="primary-button" onClick={() => openImportedEmergencyFolder(emergencyImportState.duplicateFolder)}>Open imported folder</button>
               ) : emergencyImportState.status === 'ready' ? (
-                <button type="button" className="primary-button" onClick={importEmergencyPackageIntoVault} disabled={emergencyImportState.busy}><Upload size={16} /> {customerSession.authenticated ? 'Import package' : 'Verify & import'}</button>
+                <button type="button" className="primary-button" onClick={importEmergencyPackageIntoVault} disabled={emergencyImportState.busy}><Upload size={16} /> Add to my vault</button>
               ) : null}
             </div>
           </article>
@@ -9947,6 +9978,11 @@ function App() {
                         <div><strong>Your Trusted Person Access</strong><span>Choose who should receive your prepared Emergency Package if they ever need to request access.</span></div>
                         <button type="button" className="secondary-button" onClick={() => { closeViewItem(); setActivePage('settings'); setActiveSettingsSection('emergency'); scrollSettingsToTop(); }}>Manage</button>
                       </div>
+                      <div className="emergency-access-hub-card emergency-access-import-card">
+                        <KeyRound size={22} />
+                        <div><strong>Import Emergency Package</strong><span>Enter an Import Code from a released Emergency Package to add it as a separate folder in this vault.</span></div>
+                        <button type="button" className="secondary-button" onClick={() => { closeViewItem(); openEmergencyImportCodeModal(); }}>Enter code</button>
+                      </div>
                       <div className="emergency-access-hub-received">
                         <strong>Emergency Packages received</strong>
                         {receivedPackages.length ? receivedPackages.map((received) => (
@@ -9956,7 +9992,7 @@ function App() {
                           </button>
                         )) : <p>No Emergency Packages have been imported into this vault yet.</p>}
                       </div>
-                      <p className="emergency-access-hub-note">When someone releases an Emergency Package to you, choose <strong>Import into my vault</strong> on their secure release page. Password-Encrypt will keep that received package together in its own folder here.</p>
+                      <p className="emergency-access-hub-note">When someone releases an Emergency Package to you, copy the Import Code shown on their secure release page and enter it above. Password-Encrypt keeps the received package together in its own folder here.</p>
                     </div>
                   );
                 }

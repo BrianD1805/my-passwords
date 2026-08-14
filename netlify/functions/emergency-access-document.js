@@ -9,6 +9,15 @@ function tokenHash(token) {
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'my-passwords-emergency-invite';
   return createHash('sha256').update(`${token}:${secret}`).digest('hex');
 }
+function normaliseImportCode(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 20);
+}
+function importCodeHash(value) {
+  return createHash('sha256').update(`Password-Encrypt emergency import code v1:${normaliseImportCode(value)}`).digest('hex');
+}
+function normaliseEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
 function releaseExpired(request) {
   const value = request?.metadata?.release_expires_at || '';
   if (!value) return false;
@@ -29,6 +38,39 @@ export async function handler(event) {
   const body = parseBody(event);
   const action = clean(body.action, 40).toLowerCase();
 
+  if (action === 'open_import') {
+    let secured;
+    try { secured = await ownerAccess(event); }
+    catch (error) { return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not check account access.', error: error.message }); }
+    if (secured.error) return secured.error;
+    const { session } = secured.access;
+    const importCode = normaliseImportCode(body.importCode);
+    const sourceDocumentId = clean(body.sourceDocumentId, 180);
+    if (importCode.length !== 20 || !sourceDocumentId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Import code and document details are required.' });
+    await consumeRateLimit(event, { scope: 'emergency_document_import_open', identifier: `${session.userId}:${importCodeHash(importCode)}`, limit: 90, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
+    try {
+      const invitationRows = await selectRows('emergency_access_invitations', `select=id,status,contact_email,emergency_import_code_hash&emergency_import_code_hash=${eq(importCodeHash(importCode))}&limit=1`);
+      const invitation = invitationRows?.[0];
+      if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, code: 'IMPORT_CODE_NOT_FOUND', message: 'That Emergency Package import code was not recognised.' });
+      const userRows = await selectRows('users', `select=email,email_verified&id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}&limit=1`).catch(() => []);
+      const user = userRows?.[0];
+      if (!user?.email_verified || normaliseEmail(user.email) !== normaliseEmail(invitation.contact_email)) {
+        return jsonResponse(403, { ok: false, version: APP_VERSION, code: 'IMPORT_IDENTITY_MISMATCH', message: 'This Emergency Package was released to a different email address. Sign in to the Password-Encrypt account that uses the nominated email address.' });
+      }
+      const requests = await selectRows('emergency_access_requests', `select=id,status,metadata&invitation_id=${eq(invitation.id)}&status=eq.release_ready&order=updated_at.desc&limit=1`);
+      const request = requests?.[0];
+      if (!request?.id) return jsonResponse(403, { ok: false, version: APP_VERSION, code: 'IMPORT_NOT_RELEASED', message: 'This Emergency Package has not been released yet.' });
+      if (releaseExpired(request)) return jsonResponse(410, { ok: false, version: APP_VERSION, code: 'EMERGENCY_PACKAGE_EXPIRED', message: 'This Emergency Package import code has expired.' });
+      const rows = await selectRows('emergency_access_documents', `select=source_document_id,file_name,file_type,file_extension,file_size,encrypted_blob,local_salt,local_iv,metadata,updated_at&invitation_id=${eq(invitation.id)}&source_document_id=${eq(sourceDocumentId)}&limit=1`);
+      const document = rows?.[0];
+      if (!document?.encrypted_blob) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'This released document is not available.' });
+      if (String(document?.metadata?.encryption_scope || '') !== 'emergency_import_code_v1') return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'IMPORT_CODE_PACKAGE_REFRESH_REQUIRED', message: 'This document was prepared with an older Emergency Package version. The account owner must refresh the package before code import can be used.' });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, document });
+    } catch (error) {
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'The Emergency Package document could not be opened for import.', error: error.message });
+    }
+  }
+
   if (action === 'open') {
     const token = String(body.token || '').trim();
     const sourceDocumentId = clean(body.sourceDocumentId, 180);
@@ -43,7 +85,7 @@ export async function handler(event) {
       const request = requests?.[0];
       if (!request?.id) return jsonResponse(403, { ok: false, version: APP_VERSION, message: 'The Emergency Access waiting period has not completed.' });
       if (releaseExpired(request)) return jsonResponse(410, { ok: false, version: APP_VERSION, code: 'EMERGENCY_PACKAGE_EXPIRED', message: 'This Emergency Package link has expired.' });
-      const rows = await selectRows('emergency_access_documents', `select=source_document_id,file_name,file_type,file_extension,file_size,encrypted_blob,local_salt,local_iv,updated_at&invitation_id=${eq(invitation.id)}&source_document_id=${eq(sourceDocumentId)}&limit=1`);
+      const rows = await selectRows('emergency_access_documents', `select=source_document_id,file_name,file_type,file_extension,file_size,encrypted_blob,local_salt,local_iv,metadata,updated_at&invitation_id=${eq(invitation.id)}&source_document_id=${eq(sourceDocumentId)}&limit=1`);
       const document = rows?.[0];
       if (!document?.encrypted_blob) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'This released document is not available.' });
       return jsonResponse(200, { ok: true, version: APP_VERSION, document });
@@ -101,6 +143,7 @@ export async function handler(event) {
   const localIv = String(body.localIv || '').trim();
   const sourceFingerprint = clean(body.sourceFingerprint, 128);
   const sourceUpdatedAt = clean(body.sourceUpdatedAt, 80);
+  const encryptionScope = clean(body.encryptionScope || 'trusted_person_invite_token', 80);
   if (!sourceDocumentId || !fileName || !encryptedBlob || !localSalt || !localIv) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Document metadata and encrypted content are required.' });
   if (fileSize > 10 * 1024 * 1024) return jsonResponse(413, { ok: false, version: APP_VERSION, code: 'DOCUMENT_TOO_LARGE', message: 'Documents larger than 10 MB are not supported.' });
 
@@ -120,7 +163,7 @@ export async function handler(event) {
       encrypted_blob: encryptedBlob,
       local_salt: localSalt,
       local_iv: localIv,
-      metadata: { version: APP_VERSION, encryption_scope: 'trusted_person_invite_token', owner_plaintext_sent_to_server: false, source_fingerprint: sourceFingerprint, source_updated_at: sourceUpdatedAt },
+      metadata: { version: APP_VERSION, encryption_scope: encryptionScope, owner_plaintext_sent_to_server: false, source_fingerprint: sourceFingerprint, source_updated_at: sourceUpdatedAt },
       updated_at: new Date().toISOString()
     }, 'invitation_id,source_document_id');
     return jsonResponse(200, { ok: true, version: APP_VERSION, sourceDocumentId, fileName, fileSize });

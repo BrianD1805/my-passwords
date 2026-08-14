@@ -17591,7 +17591,7 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   }
 }
 
-/* Password-Encrypt Ver-1.005.01 — received Emergency Package vault import */
+/* Password-Encrypt Ver-1.005.02 — received Emergency Package vault import */
 .emergency-vault-import-card {
   display: flex;
   align-items: center;
@@ -17680,4 +17680,75 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   .emergency-import-popup-footer button { width: 100%; justify-content: center; }
   .emergency-access-hub-card { grid-template-columns: auto minmax(0, 1fr); }
   .emergency-access-hub-card .secondary-button { grid-column: 1 / -1; width: 100%; justify-content: center; }
+}
+
+/* Password-Encrypt Ver-1.005.02 — Emergency Package Import Code flow */
+.emergency-import-code-release-card > div { width: 100%; }
+.emergency-import-code-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+  padding: 11px 12px;
+  border: 1px solid #c9dce9;
+  border-radius: 14px;
+  background: #ffffff;
+}
+.emergency-import-code-display code {
+  min-width: 0;
+  color: #173a5d;
+  font-family: "Ubuntu", system-ui, sans-serif;
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: .055em;
+  overflow-wrap: anywhere;
+}
+.emergency-import-code-release-card small {
+  display: block;
+  margin-top: 5px;
+  color: #718294;
+  line-height: 1.45;
+}
+.emergency-import-code-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d4e1eb;
+  border-radius: 16px;
+  background: #f6fafc;
+  color: #336699;
+}
+.emergency-import-code-intro > div { display: grid; gap: 4px; }
+.emergency-import-code-intro strong { color: #20364d; }
+.emergency-import-code-intro span { color: #65798b; line-height: 1.45; }
+.emergency-import-code-field { display: grid; gap: 7px; }
+.emergency-import-code-field > span { color: #314e67; font-weight: 600; }
+.emergency-import-code-field input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 1px solid #cbd9e3;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #173a5d;
+  font: inherit;
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+  outline: none;
+}
+.emergency-import-code-field input:focus {
+  border-color: #6f9ec2;
+  box-shadow: 0 0 0 3px rgba(51,102,153,.10);
+}
+.emergency-access-import-card { background: #ffffff; }
+
+@media (max-width: 700px) {
+  .emergency-import-code-display { padding: 10px; }
+  .emergency-import-code-display code { font-size: .92rem; letter-spacing: .035em; }
+  .emergency-import-code-intro { padding: 13px; }
 }
