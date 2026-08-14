@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.004';
+const VERSION = 'Password-Encrypt Ver-1.004.01';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -27,6 +27,7 @@ const PENDING_DOCUMENT_DELETIONS_KEY = 'my-passwords-pending-document-deletions-
 const ACCOUNT_DEVICE_INSTALL_KEY = 'my-passwords-account-device-install-v1';
 const PENDING_ONBOARDING_ACCOUNT_KEY = 'password-encrypt-pending-onboarding-account-v1';
 const PUSH_BINDING_KEY = 'password-encrypt-push-binding-v1';
+const PUSH_PROMPT_SUPPRESSION_KEY = 'password-encrypt-push-prompt-suppressed-v1';
 
 
 const LEGACY_VAULT_BACK_MARKER_KEYS = [
@@ -1454,6 +1455,23 @@ function clearPushBinding() {
   catch { /* Ignore restricted local storage contexts. */ }
 }
 
+function pushPromptSuppressionKey(account = {}) {
+  const tenantId = String(account?.tenantId || '').trim() || 'unknown-tenant';
+  const userId = String(account?.userId || '').trim() || 'unknown-user';
+  const deviceId = typeof getSyncDeviceId === 'function' ? getSyncDeviceId() : 'browser';
+  return `${PUSH_PROMPT_SUPPRESSION_KEY}:${tenantId}:${userId}:${deviceId}`;
+}
+
+function isPushActivationPromptSuppressed(account = {}) {
+  try { return localStorage.getItem(pushPromptSuppressionKey(account)) === '1'; }
+  catch { return false; }
+}
+
+function suppressPushActivationPrompt(account = {}) {
+  try { localStorage.setItem(pushPromptSuppressionKey(account), '1'); }
+  catch { /* Restricted storage must not block normal app use. */ }
+}
+
 function pushNotificationsSupported() {
   return typeof window !== 'undefined'
     && 'Notification' in window
@@ -2276,9 +2294,6 @@ function DeviceVerificationModal({ state, email, phone, channel = 'email', otp, 
         </header>
         <div className="item-popup-body device-verification-popup-body">
           <p>Verify this device before secure backup and syncing can continue.</p>
-          {!hasChallenge && <div className="recovery-channel-switch device-verification-channel-switch email-only-verification" aria-label="Email verification">
-            <button type="button" className="active" onClick={() => onChannelChange('email')} disabled={isBusy}><Mail size={17} /> Email</button>
-          </div>}
           <div className="device-verification-email-card">{isSms ? <Phone size={19} /> : <Mail size={19} />}<span><strong>{isSms ? 'SMS code' : 'Email code'}</strong><small>{destinationAvailable ? `The code will be sent to ${destinationMasked}.` : `Add a verified ${isSms ? 'mobile number' : 'email address'} in My Account before continuing.`}</small></span></div>
           {!hasChallenge ? (
             <div className="device-verification-step-card">
@@ -2489,7 +2504,7 @@ function ExitAppConfirmationModal({ visible, onStay, onExit }) {
   );
 }
 
-function PushActivationPromptModal({ visible, permission, loading, onClose, onEnable, onReview }) {
+function PushActivationPromptModal({ visible, permission, loading, onClose, onSuppress, onEnable, onReview }) {
   if (!visible) return null;
   const blocked = permission === 'denied';
   return (
@@ -2507,7 +2522,8 @@ function PushActivationPromptModal({ visible, permission, loading, onClose, onEn
           {blocked && <p className="push-activation-prompt-help">Allow notifications in this browser or installed app permissions, then return to Push Notifications in Settings.</p>}
         </div>
         <footer className="item-popup-footer push-activation-prompt-footer">
-          <button type="button" className="secondary-button" onClick={onClose} disabled={loading}>Not now</button>
+          <button type="button" className="secondary-button" onClick={onClose} disabled={loading}>Decide later</button>
+          <button type="button" className="secondary-button push-prompt-suppress-button" onClick={onSuppress} disabled={loading}>Don't show again</button>
           {blocked
             ? <button type="button" className="primary-button" onClick={onReview}>Review settings</button>
             : <button type="button" className="primary-button" onClick={onEnable} disabled={loading}>{loading ? 'Activating...' : 'Activate notifications'}</button>}
@@ -3745,6 +3761,11 @@ function App() {
   }, []);
 
   useEffect(() => {
+    pushActivationPromptShownRef.current = false;
+    setPushActivationPromptOpen(false);
+  }, [customerSession.userId]);
+
+  useEffect(() => {
     if (!customerSession.authenticated) {
       setPushNotifications((current) => ({ ...current, loaded: false, loading: false, permission: pushPermissionState(), enabledThisDevice: false, activeCount: 0, message: '' }));
       return;
@@ -3756,9 +3777,10 @@ function App() {
   useEffect(() => {
     if (locked || !customerSession.authenticated || !pushNotifications.loaded || pushActivationPromptShownRef.current) return;
     if (!pushNotifications.supported || !pushNotifications.configured || pushNotifications.enabledThisDevice) return;
+    if (isPushActivationPromptSuppressed(customerSession)) return;
     pushActivationPromptShownRef.current = true;
     setPushActivationPromptOpen(true);
-  }, [locked, customerSession.authenticated, pushNotifications.loaded, pushNotifications.supported, pushNotifications.configured, pushNotifications.enabledThisDevice]);
+  }, [locked, customerSession.authenticated, customerSession.tenantId, customerSession.userId, pushNotifications.loaded, pushNotifications.supported, pushNotifications.configured, pushNotifications.enabledThisDevice]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -6508,12 +6530,17 @@ function App() {
         try { await saveEmergencyReleasePackageForPlan(saved, next, { refreshReason: section === 'package' ? 'manual_package_save' : 'trusted_person_details_save' }); }
         catch (packageError) { showMessage(packageError.message || 'Plan saved, but the emergency release package could not be refreshed.', 'warning'); return; }
       }
-      showMessage(successMessage, 'success');
       const stageId = section === 'trusted_person' ? 'emergency-stage-1' : section === 'package' ? 'emergency-stage-2' : '';
+      const nextStageId = section === 'trusted_person' ? 'emergency-stage-2' : section === 'package' ? 'emergency-stage-3' : '';
       if (stageId) {
         const stagePanel = document.getElementById(stageId);
         if (stagePanel?.open) stagePanel.open = false;
+        window.requestAnimationFrame(() => {
+          const nextStage = nextStageId ? document.getElementById(nextStageId) : null;
+          nextStage?.scrollIntoView?.({ behavior: 'auto', block: 'nearest' });
+        });
       }
+      showMessage(successMessage, 'success');
     } catch (error) {
       showMessage('Emergency access plan could not be saved. Please try again.', 'error');
     } finally {
@@ -7562,6 +7589,16 @@ function App() {
                 <p>No. This secure page works in your browser.</p>
               </details>
             </div>}
+            {emergencyStep === 'invite' && (
+              <div className="emergency-invite-about-card">
+                <ShieldCheck size={20} />
+                <div>
+                  <strong>About Password-Encrypt</strong>
+                  <p>Password-Encrypt is a private encrypted vault for passwords, documents and other important personal information. Trusted Person Access lets an account owner prepare protected information for someone they trust without giving that person immediate access to the vault.</p>
+                  <a href="/">Learn more about Password-Encrypt</a>
+                </div>
+              </div>
+            )}
           </article>
           <footer className="landing-footer emergency-invite-footer"><span>© 2026 Password-Encrypt</span><button type="button" onClick={openVaultApp}>Open My Vault</button></footer>
         </section>
@@ -9717,6 +9754,7 @@ function App() {
         permission={pushNotifications.permission}
         loading={pushNotifications.loading}
         onClose={() => setPushActivationPromptOpen(false)}
+        onSuppress={() => { suppressPushActivationPrompt(customerSession); setPushActivationPromptOpen(false); }}
         onEnable={() => { setPushActivationPromptOpen(false); enablePushNotifications(); }}
         onReview={() => { setPushActivationPromptOpen(false); openSettingsSection('notifications'); }}
       />

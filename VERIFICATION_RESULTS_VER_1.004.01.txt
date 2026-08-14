@@ -1,0 +1,24 @@
+Password-Encrypt Ver-1.004.01 — Verification Results
+
+PASS  Security static checks: 13/13
+PASS  Reliability static checks: 20/20
+PASS  Legal/commercial readiness checks: 35/35
+PASS  Landing/plan UX static checks: 36/36
+PASS  Mobile restoration checks: 6/6
+PASS  Trusted Person / Emergency Flow checks: 75/75
+PASS  Onboarding flow checks: 52/52
+PASS  Push notification checks: 32/32
+PASS  Ver-1.004.01 feature checks: 43/43
+
+Ver-1.004.01 feature coverage includes:
+- Stable Trusted Person stage save/close behavior with next-stage visibility
+- Per-device/account push reminder suppression with Decide later / Don't show again / Activate notifications
+- Redundant Email selector removed from Verify this device popup
+- Stage 2 checked for accidental direct device-verification triggers
+- Trusted person nomination page includes About Password-Encrypt and landing link
+- Admin customer status badges aligned in a fixed column
+- Ver-1.004 maintained Emergency Package behavior retained
+
+No Supabase SQL changes.
+No Netlify environment-variable changes.
+Existing VAPID keys remain unchanged.

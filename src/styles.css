@@ -17505,3 +17505,88 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
 @media (max-width: 860px) {
   .emergency-package-freshness-card { padding: 12px; gap: 9px; }
 }
+
+
+/* Password-Encrypt Ver-1.004.01 — Emergency Package UX and minor fixes */
+.settings-emergency-panel .emergency-flow-roadmap,
+.settings-emergency-panel .emergency-flow-stage {
+  overflow-anchor: none;
+}
+
+.push-activation-prompt-footer {
+  flex-wrap: wrap;
+}
+.push-activation-prompt-footer .push-prompt-suppress-button {
+  color: #536b82;
+}
+
+.emergency-invite-about-card {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #d7e2ec;
+  border-radius: 16px;
+  background: #f7fafc;
+  color: #336699;
+}
+.emergency-invite-about-card > div {
+  display: grid;
+  gap: 7px;
+}
+.emergency-invite-about-card strong {
+  color: #20364d;
+}
+.emergency-invite-about-card p {
+  margin: 0;
+  color: #5f7182;
+  line-height: 1.55;
+}
+.emergency-invite-about-card a {
+  justify-self: start;
+  color: #336699;
+  font-weight: 800;
+  text-decoration: none;
+}
+.emergency-invite-about-card a:hover,
+.emergency-invite-about-card a:focus-visible {
+  text-decoration: underline;
+}
+
+.admin-customer-directory-status {
+  width: 190px;
+  display: grid;
+  justify-items: start;
+  justify-self: end;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+@media (min-width: 1181px) {
+  .admin-customer-directory-card {
+    grid-template-columns: minmax(250px, 1.6fr) minmax(145px, .7fr) minmax(190px, .85fr) 190px auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .push-activation-prompt-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .push-activation-prompt-footer button {
+    width: 100%;
+    justify-content: center;
+  }
+  .emergency-invite-about-card {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .admin-customer-directory-status {
+    display: none;
+  }
+}
