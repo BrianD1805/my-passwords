@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.004.01';
+const VERSION = 'Password-Encrypt Ver-1.005';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -28,6 +28,8 @@ const ACCOUNT_DEVICE_INSTALL_KEY = 'my-passwords-account-device-install-v1';
 const PENDING_ONBOARDING_ACCOUNT_KEY = 'password-encrypt-pending-onboarding-account-v1';
 const PUSH_BINDING_KEY = 'password-encrypt-push-binding-v1';
 const PUSH_PROMPT_SUPPRESSION_KEY = 'password-encrypt-push-prompt-suppressed-v1';
+const EMERGENCY_IMPORT_HANDOFF_KEY = 'password-encrypt-emergency-import-handoff-v1';
+const EMERGENCY_IMPORT_HANDOFF_MAX_AGE_MS = 60 * 60 * 1000;
 
 
 const LEGACY_VAULT_BACK_MARKER_KEYS = [
@@ -371,7 +373,7 @@ const SETTINGS_FAQS = [
   {
     category: 'Emergency Access',
     question: 'Does my next of kin or trusted person need a Password-Encrypt account?',
-    answer: 'No. Emergency Access is intended for a next of kin or another trusted person you nominate. The standard flow works through secure browser links, so they can accept the invitation, request access and open the released package without installing the app or creating their own vault.'
+    answer: 'No. Emergency Access is intended for a next of kin or another trusted person you nominate. The standard flow works through secure browser links, so they can accept the invitation, request access and open the released package without installing the app or creating their own vault. If the trusted person already uses Password-Encrypt, a released package can also be imported into their own encrypted vault as a separate Emergency Package folder.'
   },
   {
     category: 'Emergency Access',
@@ -720,14 +722,16 @@ const starterItems = [
   },
   {
     id: crypto.randomUUID(),
-    title: 'Emergency Access Note',
+    title: 'Emergency Access',
     category: 'Emergency Info',
     favourite: false,
     payload: {
       url: '',
-      username: 'Trusted person access',
-      password: 'Not enabled yet',
-      notes: 'Emergency access planning note. Keep this updated with trusted contact guidance when the feature is enabled.'
+      username: '',
+      password: '',
+      notes: 'Manage your own Trusted Person Access and any Emergency Packages you receive here.',
+      systemAction: 'emergency_access_hub',
+      receivedPackages: []
     },
     updatedAt: new Date().toISOString()
   }
@@ -1924,6 +1928,102 @@ function isInternalMetaItem(item) {
   return isFolderMetaItem(item) || isEmergencyAccessMetaItem(item);
 }
 
+function isLegacyEmergencyAccessStarterItem(item) {
+  return item?.category === 'Emergency Info'
+    && item?.title === 'Emergency Access Note'
+    && item?.payload?.username === 'Trusted person access'
+    && item?.payload?.password === 'Not enabled yet'
+    && item?.payload?.notes === 'Emergency access planning note. Keep this updated with trusted contact guidance when the feature is enabled.';
+}
+
+function isEmergencyAccessHubItem(item) {
+  return item?.payload?.systemAction === 'emergency_access_hub' || isLegacyEmergencyAccessStarterItem(item);
+}
+
+function isEmergencyImportedItem(item) {
+  return Boolean(item?.payload?.emergencyImport?.readOnlyArchive);
+}
+
+function effectiveVaultItemType(item) {
+  return String(item?.payload?.emergencyImport?.sourceCategory || item?.category || 'Passwords');
+}
+
+function emergencyAccessHubPackages(item) {
+  return Array.isArray(item?.payload?.receivedPackages) ? item.payload.receivedPackages : [];
+}
+
+function upsertEmergencyAccessHubItem(vaultItems, receivedPackage = null) {
+  const list = Array.isArray(vaultItems) ? [...vaultItems] : [];
+  const existingIndex = list.findIndex(isEmergencyAccessHubItem);
+  const existing = existingIndex >= 0 ? list[existingIndex] : null;
+  const packages = emergencyAccessHubPackages(existing);
+  const nextPackages = receivedPackage?.fingerprint
+    ? [receivedPackage, ...packages.filter((entry) => entry?.fingerprint !== receivedPackage.fingerprint)].slice(0, 20)
+    : packages;
+  const hub = {
+    id: existing?.id || crypto.randomUUID(),
+    title: 'Emergency Access',
+    category: 'Emergency Info',
+    favourite: Boolean(existing?.favourite),
+    payload: {
+      url: '',
+      username: '',
+      password: '',
+      notes: 'Manage your own Trusted Person Access and any Emergency Packages you receive here.',
+      systemAction: 'emergency_access_hub',
+      receivedPackages: nextPackages
+    },
+    updatedAt: new Date().toISOString()
+  };
+  if (existingIndex >= 0) list[existingIndex] = hub;
+  else list.unshift(hub);
+  return list;
+}
+
+function updateEmergencyAccessHubPackageFolder(vaultItems, originalName, nextName = '') {
+  const list = Array.isArray(vaultItems) ? [...vaultItems] : [];
+  const index = list.findIndex(isEmergencyAccessHubItem);
+  if (index < 0) return list;
+  const hub = list[index];
+  const originalLower = normaliseFolderName(originalName).toLowerCase();
+  const packages = emergencyAccessHubPackages(hub)
+    .filter((entry) => nextName || String(entry?.folderName || '').toLowerCase() !== originalLower)
+    .map((entry) => String(entry?.folderName || '').toLowerCase() === originalLower ? { ...entry, folderName: nextName } : entry);
+  list[index] = { ...hub, payload: { ...(hub.payload || {}), receivedPackages: packages }, updatedAt: new Date().toISOString() };
+  return list;
+}
+
+function saveEmergencyImportHandoff(token) {
+  const clean = String(token || '').trim();
+  if (!clean || typeof window === 'undefined') return false;
+  try {
+    window.sessionStorage.setItem(EMERGENCY_IMPORT_HANDOFF_KEY, JSON.stringify({ token: clean, createdAt: Date.now() }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readEmergencyImportHandoff() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const parsed = JSON.parse(window.sessionStorage.getItem(EMERGENCY_IMPORT_HANDOFF_KEY) || 'null');
+    if (!parsed?.token || !Number(parsed?.createdAt) || Date.now() - Number(parsed.createdAt) > EMERGENCY_IMPORT_HANDOFF_MAX_AGE_MS) {
+      window.sessionStorage.removeItem(EMERGENCY_IMPORT_HANDOFF_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    try { window.sessionStorage.removeItem(EMERGENCY_IMPORT_HANDOFF_KEY); } catch {}
+    return null;
+  }
+}
+
+function clearEmergencyImportHandoff() {
+  if (typeof window === 'undefined') return;
+  try { window.sessionStorage.removeItem(EMERGENCY_IMPORT_HANDOFF_KEY); } catch {}
+}
+
 function getVisibleVaultItems(vaultItems) {
   return Array.isArray(vaultItems) ? vaultItems.filter((item) => !isInternalMetaItem(item)) : [];
 }
@@ -1979,6 +2079,56 @@ function upsertFolderMetaItem(vaultItems, folders, folderOrder, favouriteFolders
 function folderExists(folder, folders) {
   const target = normaliseFolderName(folder).toLowerCase();
   return folders.some((entry) => entry.toLowerCase() === target);
+}
+
+function cleanEmergencyImportOwnerName(value) {
+  return String(value || 'Account owner').replace(/[\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 36) || 'Account owner';
+}
+
+function emergencyImportFolderName(ownerName, currentFolders = [], preparedAt = '') {
+  const owner = cleanEmergencyImportOwnerName(ownerName);
+  const base = `Emergency Package — ${owner}`;
+  if (!folderExists(base, currentFolders)) return base;
+  const date = preparedAt ? String(preparedAt).slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const dated = `${base} — ${date}`;
+  if (!folderExists(dated, currentFolders)) return dated;
+  let counter = 2;
+  while (folderExists(`${dated} (${counter})`, currentFolders)) counter += 1;
+  return `${dated} (${counter})`;
+}
+
+function emergencyImportedNotes(item) {
+  const payload = item?.payload || {};
+  const sourceCategory = String(item?.category || 'Other');
+  const lines = [];
+  if (payload.notes) lines.push(String(payload.notes));
+  if (sourceCategory === CARDS_CATEGORY) {
+    const cardLines = [
+      payload.cardNickname ? `Card nickname: ${payload.cardNickname}` : '',
+      payload.cardName ? `Name on card: ${payload.cardName}` : '',
+      payload.cardNumber ? `Card number: ${payload.cardNumber}` : '',
+      payload.cardExpiry ? `Expiry: ${payload.cardExpiry}` : '',
+      payload.cardCcv ? `CCV: ${payload.cardCcv}` : ''
+    ].filter(Boolean);
+    if (cardLines.length) lines.push(cardLines.join('\n'));
+  }
+  return lines.join('\n\n').trim();
+}
+
+function emergencyPackageOverviewNotes(packageData, releaseExpiresAt = '') {
+  const blocks = [
+    `Emergency Package received from ${packageData?.ownerName || 'the account owner'}.`,
+    packageData?.preparedAt ? `Prepared: ${formatAppDate(packageData.preparedAt, true)}` : '',
+    packageData?.releaseScope ? `Release scope: ${packageData.releaseScope}` : '',
+    releaseExpiresAt ? `Original secure release link expiry: ${formatAppDate(releaseExpiresAt, true)}` : '',
+    packageData?.message ? `Emergency message\n${packageData.message}` : '',
+    packageData?.importantContacts ? `Important contacts\n${packageData.importantContacts}` : '',
+    packageData?.documentsAndLocations ? `Documents and locations\n${packageData.documentsAndLocations}` : '',
+    packageData?.checklist ? `Checklist\n${packageData.checklist}` : '',
+    packageData?.ownerInstructions ? `Owner instructions\n${packageData.ownerInstructions}` : '',
+    'This imported copy is stored inside your encrypted Password-Encrypt vault and remains there until you delete it.'
+  ].filter(Boolean);
+  return blocks.join('\n\n');
 }
 
 const VAULT_RESULT_COLLATOR = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
@@ -2628,6 +2778,8 @@ function App() {
   const [inviteAcceptance, setInviteAcceptance] = useState({ status: 'idle', message: '' });
   const [emergencyRequestState, setEmergencyRequestState] = useState({ status: 'idle', message: '' });
   const [emergencyReleasePackage, setEmergencyReleasePackage] = useState(null);
+  const [emergencyImportState, setEmergencyImportState] = useState({ visible: false, status: 'idle', message: '', packageData: null, token: '', releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: false });
+  const emergencyImportLoadRef = useRef(false);
   const [trustedPersonReminderConfirmation, setTrustedPersonReminderConfirmation] = useState({ status: 'idle', message: '', ownerName: '', contactName: '', confirmedAt: '' });
   const [trustedPersonHelpOpen, setTrustedPersonHelpOpen] = useState(false);
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
@@ -3797,6 +3949,12 @@ function App() {
   }, [locked, customerSession.authenticated]);
 
   useEffect(() => {
+    if (!emergencyImportEntry || locked || emergencyImportLoadRef.current) return;
+    emergencyImportLoadRef.current = true;
+    loadEmergencyPackageForVaultImport().finally(() => { emergencyImportLoadRef.current = false; });
+  }, [emergencyImportEntry, locked]);
+
+  useEffect(() => {
     if (!hasLocalVault || !customerSession.authenticated) return;
     const envelope = getLocalEnvelope();
     const localOwner = vaultOwnerBindingFromEnvelope(envelope || {});
@@ -3842,6 +4000,14 @@ function App() {
   }, [locked, billing.returnState]);
 
   useEffect(() => {
+    if (locked) return;
+    const legacyHub = items.find(isLegacyEmergencyAccessStarterItem);
+    if (!legacyHub) return;
+    const next = upsertEmergencyAccessHubItem(items);
+    saveItems(next, { autoSync: true, silentAutoSync: true, refreshEmergencyPackage: false }).catch(() => null);
+  }, [locked, items]);
+
+  useEffect(() => {
     if (!locked) setEmergencyDraft(getEmergencyAccessPlan(items));
   }, [locked, items]);
 
@@ -3851,7 +4017,7 @@ function App() {
   }, [locked, isOnline, customerSession.authenticated]);
 
   useEffect(() => {
-    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || isCreateAccountPopupOpen || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || exitAppConfirmationOpen;
+    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || isCreateAccountPopupOpen || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
     document.body.classList.toggle('app-popup-open', popupOpen);
     if (popupOpen) {
       window.requestAnimationFrame(() => {
@@ -3861,7 +4027,7 @@ function App() {
       });
     }
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateAccountPopupOpen, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, exitAppConfirmationOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateAccountPopupOpen, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
 
   useEffect(() => {
     if (locked || !featureIncluded('cloudBackupSync') || !syncSafety.pending || syncing || syncPromptShown || syncSafetyModal.visible || deviceVerificationModal.visible) return undefined;
@@ -5612,7 +5778,7 @@ function App() {
     const hasFolder = Boolean(category);
     if (!activeSearch && !hasFolder) return [];
     return visibleItems.filter((item) => {
-      const text = `${item.title} ${item.category} ${item.payload?.url || ''} ${item.payload?.username || ''} ${item.payload?.notes || ''}`.toLowerCase();
+      const text = `${item.title} ${item.category} ${item.payload?.emergencyImport?.sourceCategory || ''} ${item.payload?.url || ''} ${item.payload?.username || ''} ${item.payload?.notes || ''}`.toLowerCase();
       const matchesSearch = activeSearch ? text.includes(activeSearch) : true;
       const matchesFolder = activeSearch ? true : (!category ? true : category === 'All' ? true : category === FAVOURITES_VIEW ? Boolean(item.favourite) : item.category === category);
       return matchesSearch && matchesFolder;
@@ -5646,7 +5812,9 @@ function App() {
   const routePath = typeof window !== 'undefined' ? window.location.pathname : '/vault';
   const normalisedRoutePath = routePath.length > 1 ? routePath.replace(/\/+$/, '') : routePath;
   const isVaultRoute = ['/vault', '/app', '/login'].includes(normalisedRoutePath);
-  const vaultEntryMode = typeof window !== 'undefined' ? new URLSearchParams(window.location.search || '').get('entry') || '' : '';
+  const vaultSearchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search || '') : new URLSearchParams();
+  const vaultEntryMode = vaultSearchParams.get('entry') || '';
+  const emergencyImportEntry = isVaultRoute && vaultSearchParams.get('emergencyImport') === '1';
   const existingCustomerEntry = isVaultRoute && vaultEntryMode === 'existing';
   const newCustomerOnboardingEntry = isVaultRoute && vaultEntryMode === 'onboarding';
   const onboardingInstallEntry = isVaultRoute && vaultEntryMode === 'install';
@@ -6434,12 +6602,13 @@ function App() {
     try {
       const now = new Date().toISOString();
       const renamedItems = items.map((item) => !isInternalMetaItem(item) && String(item.category || '').toLowerCase() === originalName.toLowerCase()
-        ? { ...item, category: nextName, updatedAt: now }
+        ? { ...item, category: nextName, payload: isEmergencyImportedItem(item) ? { ...(item.payload || {}), emergencyImport: { ...(item.payload?.emergencyImport || {}), folderName: nextName } } : item.payload, updatedAt: now }
         : item);
       const nextFolders = customFolders.map((folder) => folder.toLowerCase() === originalName.toLowerCase() ? nextName : folder);
       const nextOrder = savedFolderOrder.map((folder) => folder.toLowerCase() === originalName.toLowerCase() ? nextName : folder);
       const nextFavourites = favouriteFolderNames.map((folder) => folder.toLowerCase() === originalName.toLowerCase() ? nextName : folder);
-      const next = upsertFolderMetaItem(renamedItems, nextFolders, nextOrder, nextFavourites);
+      let next = upsertFolderMetaItem(renamedItems, nextFolders, nextOrder, nextFavourites);
+      next = updateEmergencyAccessHubPackageFolder(next, originalName, nextName);
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       if (String(category || '').toLowerCase() === originalName.toLowerCase()) setCategory(nextName);
       closeFolderManager();
@@ -6464,14 +6633,15 @@ function App() {
       const reassignedItems = items.map((item) => {
         if (!isInternalMetaItem(item) && String(item.category || '').toLowerCase() === originalName.toLowerCase()) {
           movedItemCount += 1;
-          return { ...item, category: 'Passwords', updatedAt: now };
+          return { ...item, category: 'Passwords', payload: isEmergencyImportedItem(item) ? { ...(item.payload || {}), emergencyImport: { ...(item.payload?.emergencyImport || {}), folderName: 'Passwords', detached: true } } : item.payload, updatedAt: now };
         }
         return item;
       });
       const nextFolders = customFolders.filter((folder) => folder.toLowerCase() !== originalName.toLowerCase());
       const nextOrder = savedFolderOrder.filter((folder) => folder.toLowerCase() !== originalName.toLowerCase());
       const nextFavourites = favouriteFolderNames.filter((folder) => folder.toLowerCase() !== originalName.toLowerCase());
-      const next = upsertFolderMetaItem(reassignedItems, nextFolders, nextOrder, nextFavourites);
+      let next = upsertFolderMetaItem(reassignedItems, nextFolders, nextOrder, nextFavourites);
+      next = updateEmergencyAccessHubPackageFolder(next, originalName, '');
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       if (String(category || '').toLowerCase() === originalName.toLowerCase()) setCategory('Passwords');
       closeFolderManager();
@@ -7149,6 +7319,213 @@ function App() {
     }
   }
 
+  function clearEmergencyImportRouteMarker() {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search || '');
+    params.delete('emergencyImport');
+    const query = params.toString();
+    window.history.replaceState(window.history.state || {}, document.title, `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash || ''}`);
+  }
+
+  function beginEmergencyPackageVaultImport() {
+    const token = currentEmergencyInviteToken();
+    if (!token || emergencyRequestState.status !== 'release-ready' || !emergencyReleasePackage || emergencyReleasePackage.error) {
+      setEmergencyRequestState((current) => ({ ...current, message: 'The released Emergency Package must be open before it can be imported.' }));
+      return;
+    }
+    if (!saveEmergencyImportHandoff(token)) {
+      setEmergencyRequestState((current) => ({ ...current, message: 'This browser could not safely hand the Emergency Package to your vault. Download the ZIP instead.' }));
+      return;
+    }
+    window.location.assign('/vault?entry=existing&emergencyImport=1');
+  }
+
+  function closeEmergencyImportModal({ keepHandoff = false } = {}) {
+    setEmergencyImportState((current) => ({ ...current, visible: false, busy: false }));
+    if (!keepHandoff) clearEmergencyImportHandoff();
+    clearEmergencyImportRouteMarker();
+  }
+
+  async function loadEmergencyPackageForVaultImport() {
+    const handoff = readEmergencyImportHandoff();
+    if (!handoff?.token) {
+      setEmergencyImportState({ visible: true, status: 'error', message: 'The Emergency Package import handoff has expired. Return to the Emergency Access link and choose Import into my vault again.', packageData: null, token: '', releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: false });
+      return;
+    }
+    setEmergencyImportState({ visible: true, status: 'loading', message: 'Checking the released Emergency Package...', packageData: null, token: handoff.token, releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: true });
+    try {
+      const result = await postJson('/.netlify/functions/emergency-access-request', { action: 'status', token: handoff.token });
+      if (!result.ok) throw new Error(result.message || 'The Emergency Package could not be checked.');
+      if (!(result.releaseReady || result.status === 'release_ready') || !result.packageEnvelope) throw new Error('The Emergency Package is not ready to import.');
+      const packageData = await decryptEmergencyReleasePackage(result.packageEnvelope, handoff.token);
+      const fingerprint = await sha256Hex(JSON.stringify(result.packageEnvelope));
+      const hub = getVisibleVaultItems(items).find(isEmergencyAccessHubItem);
+      const existingPackage = emergencyAccessHubPackages(hub).find((entry) => entry?.fingerprint === fingerprint)
+        || getVisibleVaultItems(items).map((item) => item?.payload?.emergencyImport).find((entry) => entry?.fingerprint === fingerprint && !entry?.detached);
+      setEmergencyImportState({
+        visible: true,
+        status: existingPackage?.folderName ? 'duplicate' : 'ready',
+        message: existingPackage?.folderName ? 'This Emergency Package is already stored in your vault.' : 'The released package is ready to import into your encrypted vault.',
+        packageData,
+        token: handoff.token,
+        releaseExpiresAt: result.releaseExpiresAt || '',
+        fingerprint,
+        duplicateFolder: existingPackage?.folderName || '',
+        busy: false
+      });
+    } catch (error) {
+      setEmergencyImportState({ visible: true, status: 'error', message: error.message || 'The Emergency Package could not be prepared for import.', packageData: null, token: handoff.token, releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: false });
+    }
+  }
+
+  function openImportedEmergencyFolder(folderName) {
+    if (!folderName) return;
+    closeEmergencyImportModal();
+    setQuery('');
+    openVaultSection(folderName);
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+  }
+
+  async function importEmergencyPackageIntoVault() {
+    const packageData = emergencyImportState.packageData;
+    const token = emergencyImportState.token;
+    const fingerprint = emergencyImportState.fingerprint;
+    if (!packageData || !token || !fingerprint) return;
+    if (!customerSession.authenticated || customerSession.cloudAccess === false) {
+      showMessage('Verify this device before importing the Emergency Package into your vault.', 'warning');
+      openDeviceVerification();
+      return;
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      showMessage('Connect to the internet before importing the Emergency Package and its documents.', 'warning');
+      return;
+    }
+
+    const sourceItems = (Array.isArray(packageData.items) ? packageData.items : []).filter((item) => String(item?.category || '') !== DOCUMENTS_CATEGORY);
+    const releasedDocuments = Array.isArray(packageData.releasedDocuments) ? packageData.releasedDocuments : [];
+    if (releasedDocuments.length && !featureIncluded('documents')) {
+      showEntitlementUpgrade('documents', 'This Emergency Package includes documents. Your current plan must include encrypted document storage to import the complete package into your vault.');
+      return;
+    }
+
+    const visibleCount = getVisibleVaultItems(items).length;
+    const hasHub = getVisibleVaultItems(items).some(isEmergencyAccessHubItem);
+    const addedVisibleItems = 1 + sourceItems.length + releasedDocuments.length + (hasHub ? 0 : 1);
+    const itemLimit = Number(entitlements?.limits?.itemLimit || 0);
+    if (itemLimit > 0 && visibleCount + addedVisibleItems > itemLimit) {
+      showEntitlementUpgrade('items', `This Emergency Package needs ${addedVisibleItems} new vault items, which would exceed your current plan limit.`);
+      return;
+    }
+    const documentLimit = Number(entitlements?.limits?.documentLimit || 0);
+    const currentDocumentUsage = Number(entitlements?.usage?.documents || 0);
+    if (documentLimit > 0 && currentDocumentUsage + releasedDocuments.length > documentLimit) {
+      showEntitlementUpgrade('documents', `This Emergency Package contains ${releasedDocuments.length} document${releasedDocuments.length === 1 ? '' : 's'}, which would exceed your current encrypted document limit.`);
+      return;
+    }
+
+    const currentFolders = [...BUILT_IN_CATEGORIES, ...getCustomFolders(items)];
+    const folderName = emergencyImportFolderName(packageData.ownerName, currentFolders, packageData.preparedAt);
+    const importedAt = new Date().toISOString();
+    const commonImport = {
+      fingerprint,
+      ownerName: packageData.ownerName || 'Account owner',
+      preparedAt: packageData.preparedAt || '',
+      importedAt,
+      folderName,
+      readOnlyArchive: true
+    };
+    const importedItems = [];
+    const uploadedDocumentEntries = [];
+    setEmergencyImportState((current) => ({ ...current, status: 'importing', busy: true, message: releasedDocuments.length ? 'Importing the package and securely copying its documents...' : 'Importing the package into your encrypted vault...' }));
+
+    try {
+      importedItems.push({
+        id: crypto.randomUUID(),
+        title: `Emergency Package — ${packageData.ownerName || 'Account owner'}`,
+        category: folderName,
+        favourite: false,
+        payload: {
+          url: '', username: '', password: '', file: null,
+          notes: emergencyPackageOverviewNotes(packageData, emergencyImportState.releaseExpiresAt),
+          emergencyImport: { ...commonImport, sourceCategory: 'Notes', packageOverview: true }
+        },
+        updatedAt: importedAt
+      });
+
+      for (const sourceItem of sourceItems) {
+        const sourcePayload = { ...(sourceItem?.payload || {}) };
+        delete sourcePayload.file;
+        delete sourcePayload.systemAction;
+        delete sourcePayload.receivedPackages;
+        importedItems.push({
+          id: crypto.randomUUID(),
+          title: sourceItem?.title || 'Imported emergency item',
+          category: folderName,
+          favourite: false,
+          payload: {
+            ...sourcePayload,
+            notes: sourcePayload.notes || emergencyImportedNotes(sourceItem),
+            file: null,
+            emergencyImport: { ...commonImport, sourceCategory: String(sourceItem?.category || 'Other'), sourceItemId: sourceItem?.id || '' }
+          },
+          updatedAt: sourceItem?.updatedAt || importedAt
+        });
+      }
+
+      for (const documentMeta of releasedDocuments) {
+        const { dataUrl } = await loadReleasedEmergencyDocument(documentMeta, token);
+        const itemId = crypto.randomUUID();
+        const storedFile = await uploadEncryptedDocumentBlob({
+          name: documentMeta?.fileName || documentMeta?.title || 'Emergency document',
+          type: documentMeta?.fileType || 'application/octet-stream',
+          size: Number(documentMeta?.fileSize || 0),
+          extension: documentMeta?.fileExtension || getFileExtension(documentMeta?.fileName || ''),
+          dataUrl
+        }, itemId);
+        uploadedDocumentEntries.push({ documentId: storedFile.externalDocumentId || itemId, tenantId: bootstrap.tenantId, userId: bootstrap.userId });
+        importedItems.push({
+          id: itemId,
+          title: documentMeta?.title || String(documentMeta?.fileName || 'Emergency document').replace(/\.[^/.]+$/, ''),
+          category: folderName,
+          favourite: false,
+          payload: {
+            url: '', username: '', password: '',
+            notes: `Imported document from ${packageData.ownerName || 'the account owner'}'s released Emergency Package.`,
+            file: storedFile,
+            emergencyImport: { ...commonImport, sourceCategory: DOCUMENTS_CATEGORY, sourceItemId: documentMeta?.sourceDocumentId || '' }
+          },
+          updatedAt: importedAt
+        });
+      }
+
+      let next = [...importedItems, ...items];
+      const customFolders = getCustomFolders(next);
+      const nextCustomFolders = folderExists(folderName, customFolders) ? customFolders : [...customFolders, folderName];
+      const nextOrder = [...getFolderOrder(next).filter((name) => name !== folderName), folderName];
+      next = upsertFolderMetaItem(next, nextCustomFolders, nextOrder, getFavouriteFolders(next));
+      next = upsertEmergencyAccessHubItem(next, {
+        fingerprint,
+        folderName,
+        ownerName: packageData.ownerName || 'Account owner',
+        preparedAt: packageData.preparedAt || '',
+        importedAt,
+        itemCount: importedItems.length,
+        documentCount: releasedDocuments.length,
+        releaseExpiresAt: emergencyImportState.releaseExpiresAt || ''
+      });
+      const syncResult = await saveItems(next, { autoSync: true, silentAutoSync: true, emergencyRefreshReason: 'received_emergency_package_import' });
+      clearEmergencyImportHandoff();
+      clearEmergencyImportRouteMarker();
+      setEmergencyImportState((current) => ({ ...current, visible: false, status: 'complete', busy: false, duplicateFolder: folderName, message: 'Emergency Package imported.' }));
+      setQuery('');
+      openVaultSection(folderName);
+      showMessage(`Emergency Package imported into “${folderName}”.${syncResult?.ok && !syncResult?.offline ? '' : ' The local encrypted copy is saved, but secure backup still needs attention.'}`, syncResult?.ok && !syncResult?.offline ? 'success' : 'warning');
+    } catch (error) {
+      for (const entry of uploadedDocumentEntries) await removeStoredDocumentBlob(entry, { silent: true }).catch(() => null);
+      setEmergencyImportState((current) => ({ ...current, status: 'error', busy: false, message: error.message || 'The Emergency Package could not be imported. No vault items were added.' }));
+    }
+  }
+
   async function confirmTrustedPersonReminder() {
     const params = new URLSearchParams(window.location.search || '');
     const token = params.get('token') || '';
@@ -7499,6 +7876,13 @@ function App() {
                         <button type="button" className="secondary-button" onClick={() => downloadEmergencyText(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)}><Download size={16} /> Download TXT</button>
                         <button type="button" className="secondary-button" onClick={() => downloadEmergencyDocx(emergencyReleasePackage, emergencyRequestState.releaseExpiresAt)}><FileText size={16} /> Download DOCX</button>
                       </div>
+                    </div>
+                    <div className="emergency-vault-import-card">
+                      <div>
+                        <strong>Already use Password-Encrypt?</strong>
+                        <span>Import this released Emergency Package into your own encrypted vault as a new folder. The imported copy remains in your vault after this 30-day release link expires.</span>
+                      </div>
+                      <button type="button" className="secondary-button emergency-vault-import-button" onClick={beginEmergencyPackageVaultImport}><Upload size={16} /> Import into my vault</button>
                     </div>
                     <div className="emergency-zip-instructions">
                       <strong>How to open the full ZIP download</strong>
@@ -8554,7 +8938,7 @@ function App() {
             </div>
             <div className="home-quick-summary">
               <span><strong>{visibleItems.length}</strong> Item{visibleItems.length === 1 ? '' : 's'}</span>
-              <button type="button" className={`summary-action favourite-summary-pill ${category === FAVOURITES_VIEW ? 'active' : ''}`} onClick={() => { setQuery(''); openVaultSection(FAVOURITES_VIEW); }} aria-label="Show all favourite items"><Star size={14} fill="currentColor" /><strong>{visibleItems.filter((item) => item.favourite).length}</strong> favourite item{visibleItems.filter((item) => item.favourite).length === 1 ? '' : 's'}</button>
+              <button type="button" className={`summary-action favourite-summary-pill ${category === FAVOURITES_VIEW ? 'active' : ''}`} onClick={() => { setQuery(''); openVaultSection(FAVOURITES_VIEW); }} aria-label="Show all favourite items"><Star size={14} fill="currentColor" /><strong>{visibleItems.filter((item) => item.favourite).length}</strong> {visibleItems.filter((item) => item.favourite).length === 1 ? 'Favourite' : 'Favourites'}</button>
               <div className="folder-action-group">
                 <button type="button" className="summary-action add-folder-chip" onClick={() => setIsFolderPopupOpen(true)}><Plus size={14} /> New folder</button>
                 <button type="button" className="premium-more-folder-button" onClick={() => setIsFolderListPopupOpen(true)} aria-label="Manage folders"><MoreHorizontal size={21} /></button>
@@ -9485,6 +9869,49 @@ function App() {
       )}
 
 
+      {emergencyImportState.visible && (
+        <div className="item-popup-layer" role="dialog" aria-modal="true" aria-label="Import Emergency Package">
+          <button type="button" className="item-popup-backdrop" onClick={() => closeEmergencyImportModal()} aria-label="Close Emergency Package import" />
+          <article className="item-popup-card emergency-import-popup-card">
+            <div className="item-popup-header">
+              <h2><ShieldCheck size={20} /> Import Emergency Package</h2>
+              <button type="button" className="icon-button" onClick={() => closeEmergencyImportModal()} aria-label="Close"><X size={18} /></button>
+            </div>
+            <div className="item-popup-body emergency-import-popup-body">
+              {emergencyImportState.status === 'loading' ? (
+                <div className="emergency-import-loading"><RefreshCw size={22} className="spin-icon" /><strong>Checking the released package...</strong><span>Please keep this page open.</span></div>
+              ) : emergencyImportState.status === 'error' ? (
+                <div className="emergency-invite-status error">{emergencyImportState.message}</div>
+              ) : (
+                <>
+                  <div className="emergency-import-hero">
+                    <ShieldCheck size={24} />
+                    <div><strong>{emergencyImportState.packageData?.ownerName || 'Emergency Package'}</strong><span>{emergencyImportState.packageData?.itemCount || 0} released item(s) · {emergencyImportState.packageData?.documentCount || 0} document(s)</span></div>
+                  </div>
+                  {emergencyImportState.status === 'duplicate' ? (
+                    <div className="emergency-import-notice"><strong>Already imported</strong><span>This exact released package is already stored in <b>{emergencyImportState.duplicateFolder}</b>. Password-Encrypt will not create a duplicate copy.</span></div>
+                  ) : (
+                    <>
+                      <p>This will create a new vault folder for the package and copy the released items into your own encrypted Password-Encrypt vault.</p>
+                      <div className="emergency-import-notice"><strong>Kept separate from your own records</strong><span>Imported items keep their original type, but stay together in one Emergency Package folder. The imported copy remains in your vault until you delete it.</span></div>
+                      {!customerSession.authenticated && <div className="emergency-invite-status warning">Verify this device before importing so the package and its documents can be protected by your account.</div>}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="item-popup-footer emergency-import-popup-footer">
+              <button type="button" className="secondary-button" onClick={() => closeEmergencyImportModal()} disabled={emergencyImportState.busy}>Cancel</button>
+              {emergencyImportState.status === 'duplicate' ? (
+                <button type="button" className="primary-button" onClick={() => openImportedEmergencyFolder(emergencyImportState.duplicateFolder)}>Open imported folder</button>
+              ) : emergencyImportState.status === 'ready' ? (
+                <button type="button" className="primary-button" onClick={importEmergencyPackageIntoVault} disabled={emergencyImportState.busy}><Upload size={16} /> {customerSession.authenticated ? 'Import package' : 'Verify & import'}</button>
+              ) : null}
+            </div>
+          </article>
+        </div>
+      )}
+
       {viewedItem && (
         <div className="item-popup-layer" role="dialog" aria-modal="true" aria-label="View vault item">
           <button type="button" className="item-popup-backdrop" onClick={closeViewItem} aria-label="Close item popup" />
@@ -9496,15 +9923,41 @@ function App() {
             <div className="item-popup-body">
               <div className="view-item-meta">
                 <span className="category-pill">{viewedItem.category}</span>
-                {viewedItem.category === DOCUMENTS_CATEGORY && <button type="button" className="category-pill document-share-pill" onClick={() => shareStoredDocument(viewedItem)} disabled={sharingDocId === viewedItem.id} aria-label={`Share ${viewedItem.title || 'document'}`} title="Share document"><Share2 size={14} /> {sharingDocId === viewedItem.id ? 'Preparing...' : 'Share'}</button>}
+                {isEmergencyImportedItem(viewedItem) && <span className="category-pill emergency-import-source-pill">From {effectiveVaultItemType(viewedItem)}</span>}
+                {effectiveVaultItemType(viewedItem) === DOCUMENTS_CATEGORY && <button type="button" className="category-pill document-share-pill" onClick={() => shareStoredDocument(viewedItem)} disabled={sharingDocId === viewedItem.id} aria-label={`Share ${viewedItem.title || 'document'}`} title="Share document"><Share2 size={14} /> {sharingDocId === viewedItem.id ? 'Preparing...' : 'Share'}</button>}
                 {viewedItem.favourite && <span className="category-pill favourite-mini"><Star size={14} fill="currentColor" /> Favourite</span>}
               </div>
               {(() => {
                 const visible = !!showSecrets[viewedItem.id];
-                const isNote = viewedItem.category === 'Notes';
-                const isChecklist = viewedItem.category === 'Checklists';
-                const isDocument = viewedItem.category === DOCUMENTS_CATEGORY;
-                const isCard = viewedItem.category === CARDS_CATEGORY;
+                const itemType = effectiveVaultItemType(viewedItem);
+                const importedItem = isEmergencyImportedItem(viewedItem);
+                const emergencyHub = isEmergencyAccessHubItem(viewedItem);
+                if (emergencyHub) {
+                  const receivedPackages = emergencyAccessHubPackages(viewedItem);
+                  return (
+                    <div className="emergency-access-hub-view">
+                      <div className="emergency-access-hub-card">
+                        <UsersRound size={22} />
+                        <div><strong>Your Trusted Person Access</strong><span>Choose who should receive your prepared Emergency Package if they ever need to request access.</span></div>
+                        <button type="button" className="secondary-button" onClick={() => { closeViewItem(); setActivePage('settings'); setActiveSettingsSection('emergency'); scrollSettingsToTop(); }}>Manage</button>
+                      </div>
+                      <div className="emergency-access-hub-received">
+                        <strong>Emergency Packages received</strong>
+                        {receivedPackages.length ? receivedPackages.map((received) => (
+                          <button type="button" className="emergency-access-package-link" key={received.fingerprint} onClick={() => { closeViewItem(); setQuery(''); openVaultSection(received.folderName); }}>
+                            <span><b>{received.ownerName || 'Account owner'}</b><small>{received.importedAt ? `Imported ${formatAppDate(received.importedAt, true)}` : 'Imported package'} · {received.itemCount || 0} item(s)</small></span>
+                            <ChevronRight size={18} />
+                          </button>
+                        )) : <p>No Emergency Packages have been imported into this vault yet.</p>}
+                      </div>
+                      <p className="emergency-access-hub-note">When someone releases an Emergency Package to you, choose <strong>Import into my vault</strong> on their secure release page. Password-Encrypt will keep that received package together in its own folder here.</p>
+                    </div>
+                  );
+                }
+                const isNote = itemType === 'Notes';
+                const isChecklist = itemType === 'Checklists';
+                const isDocument = itemType === DOCUMENTS_CATEGORY;
+                const isCard = itemType === CARDS_CATEGORY;
                 const storedDocument = viewedItem.payload?.file;
                 const checklistRows = isChecklist ? parseChecklistNotes(viewedItem.payload?.notes) : [];
                 return (
@@ -9607,7 +10060,7 @@ function App() {
                         <span className="app-field-label">Checklist</span>
                         <div className="checklist-display">
                           {checklistRows.length ? checklistRows.map((row) => (
-                            <button type="button" key={`${viewedItem.id}-${row.index}-${row.text}`} className={row.done ? 'checklist-line done' : 'checklist-line'} onClick={() => toggleChecklistLine(viewedItem, row.index)}>
+                            <button type="button" key={`${viewedItem.id}-${row.index}-${row.text}`} className={row.done ? 'checklist-line done' : 'checklist-line'} onClick={() => { if (!importedItem) toggleChecklistLine(viewedItem, row.index); }} disabled={importedItem}>
                               <span className="check-box">{row.done ? '✓' : ''}</span>
                               <span>{row.text}</span>
                             </button>
@@ -9630,9 +10083,9 @@ function App() {
             </div>
             <div className="item-popup-footer view-item-footer">
               <div className="view-action-row">
-                <button type="button" className="secondary-button view-action-button" onClick={() => editViewedItem(viewedItem)} aria-label="Edit item"><Pencil size={16} /> <span>Edit</span></button>
-                <button type="button" className="secondary-button view-action-button" onClick={() => toggleFavourite(viewedItem.id)} aria-label={viewedItem.favourite ? 'Unfavourite item' : 'Favourite item'}><Star size={16} fill={viewedItem.favourite ? 'currentColor' : 'none'} /> <span>{viewedItem.favourite ? 'Unfavourite' : 'Favourite'}</span></button>
-                <button type="button" className="secondary-button danger-soft view-action-button" onClick={() => requestDeleteItem(viewedItem)} aria-label="Delete item"><Trash2 size={16} /> <span>Delete</span></button>
+                {!isEmergencyAccessHubItem(viewedItem) && !isEmergencyImportedItem(viewedItem) && <button type="button" className="secondary-button view-action-button" onClick={() => editViewedItem(viewedItem)} aria-label="Edit item"><Pencil size={16} /> <span>Edit</span></button>}
+                {!isEmergencyAccessHubItem(viewedItem) && <button type="button" className="secondary-button view-action-button" onClick={() => toggleFavourite(viewedItem.id)} aria-label={viewedItem.favourite ? 'Unfavourite item' : 'Favourite item'}><Star size={16} fill={viewedItem.favourite ? 'currentColor' : 'none'} /> <span>{viewedItem.favourite ? 'Unfavourite' : 'Favourite'}</span></button>}
+                {!isEmergencyAccessHubItem(viewedItem) && <button type="button" className="secondary-button danger-soft view-action-button" onClick={() => requestDeleteItem(viewedItem)} aria-label="Delete item"><Trash2 size={16} /> <span>Delete</span></button>}
               </div>
               <button type="button" className="primary-button view-done-button" onClick={closeViewItem}>Done</button>
             </div>
@@ -9712,7 +10165,7 @@ function App() {
                 <details><summary>What are Stages 5 and 6?</summary><p>Stages 5 and 6 are emergency-only. They are not part of setup and remain dormant unless your trusted person later uses their saved Emergency Access link in a genuine emergency.</p></details>
                 <details><summary>What happens when Emergency Access is requested?</summary><p>Your chosen waiting period starts and you are notified. No vault contents are released while the waiting period is active, and you can cancel the request before the waiting period ends.</p></details>
                 <details><summary>Will my trusted person receive the latest version of my vault?</summary><p>Yes, for the folders and documents you chose to release. While the Trusted Person arrangement is active, Password-Encrypt refreshes the prepared package whenever included vault information changes and again when the unlocked vault comes online. Because the server cannot decrypt your vault by itself, the app must be unlocked and online for a refresh to complete. When the waiting period finishes, that latest prepared package is frozen as the release snapshot so later vault changes are not silently shared.</p></details>
-                <details><summary>Does my trusted person need the Password-Encrypt app?</summary><p>No. Invitation, confirmation and Emergency Access links open in a normal browser. They do not need to install the PWA or create their own vault.</p></details>
+                <details><summary>Does my trusted person need the Password-Encrypt app?</summary><p>No. Invitation, confirmation and Emergency Access links open in a normal browser. They do not need to install the PWA or create their own vault. If they already use Password-Encrypt, the released package page also lets them import the package into their own encrypted vault as a separate Emergency Package folder.</p></details>
                 <details><summary>How will they know when the waiting period has ended?</summary><p>Password-Encrypt checks the waiting period automatically. When it completes without cancellation, the trusted person is emailed a secure link to the emergency package you prepared. That released-package link remains available for 30 days.</p></details>
                 <details><summary>What is Full vault access?</summary><p>Full vault access is an explicit next-of-kin option that prepares the selected emergency package without saving or sending your master password.</p></details>
                 <details><summary>What does Reset to zero do?</summary><p>Reset to zero removes the trusted person, invitation and request records, secure links, emergency-package setup and the flow audit history so you can start again from Stage 1.</p></details>

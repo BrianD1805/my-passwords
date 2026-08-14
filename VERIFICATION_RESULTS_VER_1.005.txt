@@ -1,0 +1,40 @@
+Password-Encrypt Ver-1.005 — Verification Results
+Date: 2026-08-14
+
+PASS  Security static checks: 13/13
+PASS  Reliability static checks: 20/20
+PASS  Legal/commercial readiness checks: 35/35
+PASS  Landing/plan UX checks: 36/36
+PASS  Mobile regression checks: 6/6
+PASS  Trusted Person / Emergency Flow checks: 75/75
+PASS  Onboarding flow checks: 52/52
+PASS  Push Notification checks: 32/32
+PASS  Ver-1.005 feature checks: 21/21
+PASS  Node syntax checks: all Netlify function .js files and static-check .mjs files
+
+Ver-1.005 feature coverage includes:
+- Favourite pill singular/plural wording.
+- Functional Emergency Access hub in the default Emergency Info folder.
+- Safe upgrade of the untouched legacy Emergency Access starter note.
+- Released-package Import into my vault route for existing Password-Encrypt users.
+- Short-lived session-only emergency release token handoff.
+- Existing verified customer/device requirement.
+- Re-fetch and decrypt only after nominee vault unlock.
+- Duplicate package fingerprint protection without storing the release token in vault metadata.
+- One custom Emergency Package folder per imported release.
+- Preservation of original item types inside the received folder.
+- Protection against a released source record injecting another Emergency Access hub.
+- Released documents decrypted from the release and re-encrypted into nominee document storage.
+- Item/document entitlement preflight to prevent silent partial imports.
+- Received-package overview item and Emergency Access hub history.
+- Read-only imported archive records.
+- Received-folder rename reference alignment.
+- Subscriber import wording in FAQ and Emergency Access legal text.
+- Responsive import/hub styling.
+
+Production Vite build note:
+The uploaded full-source package does not contain node_modules and dependencies were deliberately not installed in the packaging runtime. Therefore the Vite production build itself was not executed here. Run `npm run build` in the existing local Password-Encrypt project after overwriting with this version; the existing local environment contains the installed project dependencies.
+
+Database/environment changes:
+- No new Supabase SQL required.
+- No new Netlify environment variables required.
