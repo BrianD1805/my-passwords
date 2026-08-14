@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.005';
+const VERSION = 'Password-Encrypt Ver-1.005.01';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -2780,6 +2780,12 @@ function App() {
   const [emergencyReleasePackage, setEmergencyReleasePackage] = useState(null);
   const [emergencyImportState, setEmergencyImportState] = useState({ visible: false, status: 'idle', message: '', packageData: null, token: '', releaseExpiresAt: '', fingerprint: '', duplicateFolder: '', busy: false });
   const emergencyImportLoadRef = useRef(false);
+  // Ver-1.005.01: resolve the import-entry flag before effects run.
+  // The route-level emergencyImportEntry constant is declared later with the other route helpers;
+  // reading it here previously hit JavaScript's temporal dead zone and triggered the startup fallback.
+  const emergencyImportEntryRequested = typeof window !== 'undefined'
+    && ['/vault', '/app', '/login'].includes((window.location.pathname.length > 1 ? window.location.pathname.replace(/\/+$/, '') : window.location.pathname) || '/vault')
+    && new URLSearchParams(window.location.search || '').get('emergencyImport') === '1';
   const [trustedPersonReminderConfirmation, setTrustedPersonReminderConfirmation] = useState({ status: 'idle', message: '', ownerName: '', contactName: '', confirmedAt: '' });
   const [trustedPersonHelpOpen, setTrustedPersonHelpOpen] = useState(false);
   const [isItemPopupOpen, setIsItemPopupOpen] = useState(false);
@@ -3949,10 +3955,10 @@ function App() {
   }, [locked, customerSession.authenticated]);
 
   useEffect(() => {
-    if (!emergencyImportEntry || locked || emergencyImportLoadRef.current) return;
+    if (!emergencyImportEntryRequested || locked || emergencyImportLoadRef.current) return;
     emergencyImportLoadRef.current = true;
     loadEmergencyPackageForVaultImport().finally(() => { emergencyImportLoadRef.current = false; });
-  }, [emergencyImportEntry, locked]);
+  }, [emergencyImportEntryRequested, locked]);
 
   useEffect(() => {
     if (!hasLocalVault || !customerSession.authenticated) return;

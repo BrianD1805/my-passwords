@@ -17,7 +17,7 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-1.005 app/server/package/service-worker versions align', pkg.version === '1.5.0' && /Password-Encrypt Ver-1\.005/.test(main) && /Password-Encrypt Ver-1\.005/.test(db) && /my-passwords-v1\.005/.test(sw));
+check('Ver-1.005.01 app/server/package/service-worker versions align', pkg.version === '1.5.1' && /Password-Encrypt Ver-1\.005\.01/.test(main) && /Password-Encrypt Ver-1\.005\.01/.test(db) && /my-passwords-v1\.005\.01/.test(sw));
 check('Favourite pill uses 0 Favourites / 1 Favourite / 2 Favourites grammar', /=== 1 \? 'Favourite' : 'Favourites'/.test(main) && !/favourite item\{/.test(main));
 check('Default Emergency Info starter item is a functional Emergency Access hub', /title: 'Emergency Access'/.test(main) && /systemAction: 'emergency_access_hub'/.test(main) && /receivedPackages: \[\]/.test(main));
 check('Legacy untouched Emergency Access Note is safely upgraded', /isLegacyEmergencyAccessStarterItem/.test(main) && /upsertEmergencyAccessHubItem\(items\)/.test(main));
