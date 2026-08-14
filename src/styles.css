@@ -17451,3 +17451,57 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     padding: 5px;
   }
 }
+
+/* Password-Encrypt Ver-1.004 — Emergency Package mobile spacing and footer polish */
+@media (max-width: 700px) {
+  .emergency-invite-page .emergency-package-viewer-head {
+    padding: 8px 3px 14px;
+  }
+
+  .emergency-invite-page .emergency-release-owner-note {
+    display: block;
+    margin-top: 10px;
+    padding-top: 4px;
+  }
+
+  .emergency-invite-page .emergency-invite-footer {
+    width: 100%;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .emergency-invite-page .emergency-invite-footer span,
+  .emergency-invite-page .emergency-invite-footer button {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+
+/* Password-Encrypt Ver-1.004 — maintained Emergency Package freshness */
+.emergency-package-freshness-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 14px;
+  padding: 13px 14px;
+  border: 1px solid #cbd9e5;
+  border-radius: 15px;
+  background: #f5f9fc;
+  color: #173a5d;
+}
+.emergency-package-freshness-card > svg { flex: 0 0 auto; margin-top: 2px; }
+.emergency-package-freshness-card > span { display: grid; gap: 4px; min-width: 0; }
+.emergency-package-freshness-card strong { font-weight: 700; }
+.emergency-package-freshness-card small { color: #60758a; line-height: 1.45; }
+.emergency-package-freshness-card.refreshing { background: #f4f8fb; }
+.emergency-package-freshness-card.pending { background: #fff9ed; border-color: #e7d3a9; }
+.emergency-package-freshness-card.pending > svg { color: #986b18; }
+.emergency-package-freshness-card.frozen { background: #f5f6f7; border-color: #d5dadd; }
+.emergency-package-freshness-card.frozen > svg { color: #66727c; }
+@media (max-width: 860px) {
+  .emergency-package-freshness-card { padding: 12px; gap: 9px; }
+}

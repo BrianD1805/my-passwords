@@ -63,6 +63,18 @@ export async function handler(event) {
   if (!invitationId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Invitation details are required.' });
   const invitationRows = await selectRows('emergency_access_invitations', `select=id,status&tenant_id=${eq(session.tenantId)}&user_id=${eq(session.userId)}&id=${eq(invitationId)}&limit=1`).catch(() => []);
   if (!invitationRows?.[0]?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Emergency invitation was not found for this account.' });
+  const requestRows = await selectRows('emergency_access_requests', `select=id,status,released_at&tenant_id=${eq(session.tenantId)}&user_id=${eq(session.userId)}&invitation_id=${eq(invitationId)}&order=created_at.desc&limit=1`).catch(() => []);
+  const latestRequest = requestRows?.[0] || null;
+  const packageFrozen = Boolean(latestRequest?.released_at || ['release_ready', 'released'].includes(String(latestRequest?.status || '').toLowerCase()));
+
+  if (action === 'inventory') {
+    const documents = await selectRows('emergency_access_documents', `select=source_document_id,file_name,file_type,file_extension,file_size,metadata,updated_at&invitation_id=${eq(invitationId)}&tenant_id=${eq(session.tenantId)}&user_id=${eq(session.userId)}&limit=500`).catch(() => []);
+    return jsonResponse(200, { ok: true, version: APP_VERSION, frozen: packageFrozen, documents: documents || [] });
+  }
+
+  if (packageFrozen) {
+    return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'EMERGENCY_PACKAGE_FROZEN', message: 'The Emergency Package has already been released and is frozen as the release snapshot.' });
+  }
 
   if (action === 'prune') {
     const keep = new Set((Array.isArray(body.keepSourceDocumentIds) ? body.keepSourceDocumentIds : []).map((value) => clean(value, 180)).filter(Boolean));
@@ -87,6 +99,8 @@ export async function handler(event) {
   const encryptedBlob = String(body.encryptedBlob || '').trim();
   const localSalt = String(body.localSalt || '').trim();
   const localIv = String(body.localIv || '').trim();
+  const sourceFingerprint = clean(body.sourceFingerprint, 128);
+  const sourceUpdatedAt = clean(body.sourceUpdatedAt, 80);
   if (!sourceDocumentId || !fileName || !encryptedBlob || !localSalt || !localIv) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Document metadata and encrypted content are required.' });
   if (fileSize > 10 * 1024 * 1024) return jsonResponse(413, { ok: false, version: APP_VERSION, code: 'DOCUMENT_TOO_LARGE', message: 'Documents larger than 10 MB are not supported.' });
 
@@ -106,7 +120,7 @@ export async function handler(event) {
       encrypted_blob: encryptedBlob,
       local_salt: localSalt,
       local_iv: localIv,
-      metadata: { version: APP_VERSION, encryption_scope: 'trusted_person_invite_token', owner_plaintext_sent_to_server: false },
+      metadata: { version: APP_VERSION, encryption_scope: 'trusted_person_invite_token', owner_plaintext_sent_to_server: false, source_fingerprint: sourceFingerprint, source_updated_at: sourceUpdatedAt },
       updated_at: new Date().toISOString()
     }, 'invitation_id,source_document_id');
     return jsonResponse(200, { ok: true, version: APP_VERSION, sourceDocumentId, fileName, fileSize });

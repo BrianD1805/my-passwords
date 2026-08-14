@@ -20,7 +20,7 @@ function check(label, condition) {
   else { console.error(`FAIL  ${label}`); failures += 1; }
 }
 
-check('Ver-1.002.02 app/package/service-worker versions align', pkg.version === '1.2.2' && /Password-Encrypt Ver-1\.002\.02/.test(main) && /my-passwords-v1\.002\.02/.test(sw));
+check('Ver-1.004 app/package/service-worker versions align', pkg.version === '1.4.0' && /Password-Encrypt Ver-1\.004/.test(main) && /my-passwords-v1\.004/.test(sw));
 check('Landing Open My Vault opens an existing/new customer choice', /function openVaultApp\(\)[\s\S]*isPublicLandingRoute[\s\S]*setIsOpenVaultChoicePopupOpen\(true\)/.test(main));
 check('Choice clearly separates existing customer from new customer', /Yes — I’m an existing customer/.test(main) && /No — I’m new to Password-Encrypt/.test(main));
 check('Existing customer route carries explicit existing-entry intent', /window\.location\.assign\('\/vault\?entry=existing'\)/.test(main) && /vaultEntryMode === 'existing'/.test(main));

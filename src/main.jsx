@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.002.02';
+const VERSION = 'Password-Encrypt Ver-1.004';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -376,6 +376,11 @@ const SETTINGS_FAQS = [
     category: 'Emergency Access',
     question: 'What happens after an Emergency Access request?',
     answer: 'A waiting period begins and the owner is notified. The owner can cancel during that period. If the waiting period ends without cancellation, only the selected emergency package or scope becomes available.'
+  },
+  {
+    category: 'Emergency Access',
+    question: 'Will my trusted person receive the latest version of my vault?',
+    answer: 'Password-Encrypt keeps the prepared Emergency Package refreshed from the unlocked vault while the Trusted Person arrangement is active. The app must be online and unlocked because the server cannot decrypt the vault itself. When the waiting period finishes, the latest prepared package is frozen as the release snapshot so later changes are not silently shared.'
   },
   {
     category: 'Account',
@@ -1065,6 +1070,73 @@ async function encryptEmergencyDocumentData(dataUrl, inviteToken) {
   return { encryptedBlob: arrayBufferToBase64(encrypted), localSalt: salt, localIv: arrayBufferToBase64(iv) };
 }
 
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(value || '')));
+  return Array.from(new Uint8Array(digest)).map((part) => part.toString(16).padStart(2, '0')).join('');
+}
+
+function emergencyPackageRelevantItems(plan, vaultItems) {
+  const scope = String(plan?.accessScope || 'Emergency Info folder only');
+  const visibleItems = getVisibleVaultItems(vaultItems);
+  return scope === 'Full vault access'
+    ? visibleItems
+    : visibleItems.filter((item) => String(item?.category || '') === 'Emergency Info');
+}
+
+function emergencyPackageFingerprintItem(item) {
+  const file = item?.payload?.file || null;
+  const documentMetadata = item?.category === DOCUMENTS_CATEGORY && file
+    ? {
+        name: file.name || '',
+        type: file.type || '',
+        extension: file.extension || '',
+        size: Number(file.size || 0),
+        storedExternally: Boolean(file.storedExternally),
+        blobId: file.blobId || file.storageId || file.objectKey || file.path || ''
+      }
+    : null;
+  return {
+    id: item?.id || '',
+    title: item?.title || '',
+    category: item?.category || '',
+    favourite: Boolean(item?.favourite),
+    updatedAt: item?.updatedAt || '',
+    payload: documentMetadata ? { document: documentMetadata } : (item?.payload || {})
+  };
+}
+
+async function buildEmergencyPackageSourceFingerprint(plan, vaultItems) {
+  const source = {
+    accessScope: String(plan?.accessScope || 'Emergency Info folder only'),
+    enabled: plan?.emergencyPackageEnabled !== false,
+    title: String(plan?.emergencyPackageTitle || ''),
+    message: String(plan?.emergencyPackageMessage || ''),
+    contacts: String(plan?.emergencyPackageContacts || ''),
+    documents: String(plan?.emergencyPackageDocuments || ''),
+    checklist: String(plan?.emergencyPackageChecklist || ''),
+    instructions: String(plan?.instructions || ''),
+    items: emergencyPackageRelevantItems(plan, vaultItems).map(emergencyPackageFingerprintItem)
+  };
+  return sha256Hex(JSON.stringify(source));
+}
+
+async function buildEmergencyDocumentSourceFingerprint(item) {
+  const file = item?.payload?.file || {};
+  return sha256Hex(JSON.stringify({
+    id: item?.id || '',
+    title: item?.title || '',
+    updatedAt: item?.updatedAt || '',
+    file: {
+      name: file.name || '',
+      type: file.type || '',
+      extension: file.extension || '',
+      size: Number(file.size || 0),
+      storedExternally: Boolean(file.storedExternally),
+      blobId: file.blobId || file.storageId || file.objectKey || file.path || ''
+    }
+  }));
+}
+
 function buildEmergencyReleasePackage(plan, vaultItems, account, releasedDocuments = []) {
   const scope = String(plan?.accessScope || 'Emergency Info folder only');
   const fullAccess = scope === 'Full vault access';
@@ -1097,7 +1169,7 @@ function buildEmergencyReleasePackage(plan, vaultItems, account, releasedDocumen
     releasedDocuments: Array.isArray(releasedDocuments) ? releasedDocuments : [],
     documentCount: Array.isArray(releasedDocuments) ? releasedDocuments.length : 0,
     notes: fullAccess
-      ? 'The owner selected Full vault access. This package includes saved vault records and prepared document copies that were available in the unlocked vault when the package was prepared.'
+      ? 'The owner selected Full vault access. Password-Encrypt kept this prepared package updated from the owner’s unlocked vault while the Trusted Person arrangement remained active, then froze this release snapshot when the waiting period completed.'
       : 'The owner selected Emergency Info only. This package includes Emergency Info records and the owner-written emergency package fields.'
   };
 }
@@ -2532,6 +2604,11 @@ function App() {
   const [emergencyInviteState, setEmergencyInviteState] = useState({ status: 'idle', message: '' });
   const [emergencyFlowEvents, setEmergencyFlowEvents] = useState([]);
   const [emergencySaveState, setEmergencySaveState] = useState('idle');
+  const [emergencyPackageFreshness, setEmergencyPackageFreshness] = useState({ state: 'idle', lastRefreshedAt: '', message: '' });
+  const emergencyPackageRefreshTimerRef = useRef(null);
+  const emergencyPackageRefreshInFlightRef = useRef(false);
+  const emergencyPackageRefreshQueuedRef = useRef(null);
+  const emergencyPackageFrozenInvitationRef = useRef('');
   const [inviteAcceptance, setInviteAcceptance] = useState({ status: 'idle', message: '' });
   const [emergencyRequestState, setEmergencyRequestState] = useState({ status: 'idle', message: '' });
   const [emergencyReleasePackage, setEmergencyReleasePackage] = useState(null);
@@ -3747,6 +3824,11 @@ function App() {
   }, [locked, items]);
 
   useEffect(() => {
+    if (locked || !isOnline || !customerSession.authenticated || !masterPassword) return;
+    scheduleEmergencyPackageMaintenance(items, 'vault_open_or_online');
+  }, [locked, isOnline, customerSession.authenticated]);
+
+  useEffect(() => {
     const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || isCreateAccountPopupOpen || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || exitAppConfirmationOpen;
     document.body.classList.toggle('app-popup-open', popupOpen);
     if (popupOpen) {
@@ -3935,6 +4017,7 @@ function App() {
     saveSyncSafety({ state: 'up-to-date', pending: false, conflict: false, sessionRequired: false, message: 'Your vault is up to date.', itemCount: Number(latest.snapshot.item_count ?? getVisibleVaultItems(restoredItems).length), lastSuccessAt: latest.snapshot.created_at || latest.snapshot.client_updated_at || new Date().toISOString(), lastSnapshotId: latest.snapshot.id || '', acknowledgedAt: '' });
     setDeviceStatus({ state: 'cloud-restored', label: `This device is now using the latest secure vault copy. ${restoredItems.length} item(s) loaded.`, lastCloudCheckAt: new Date().toISOString(), lastRestoreAt: new Date().toISOString(), latestSnapshotId: latest.snapshot.id || '', latestCloudItemCount: Number(latest.snapshot.item_count ?? getVisibleVaultItems(restoredItems).length), source: reason === 'unlock' ? 'auto-pulled-on-unlock' : 'explicit-cloud-copy' });
     await recordSyncEvent('cloud_copy_loaded', 'success', { itemCount: restoredItems.length, source: reason, metadata: { snapshotId: latest.snapshot.id || '' } });
+    scheduleEmergencyPackageMaintenance(restoredItems, 'cloud_restore');
     if (showSuccess) showMessage(`Your vault is up to date. ${restoredItems.length} item(s) are available on this device.`, 'success');
     return { restored: true, items: restoredItems, latest };
   }
@@ -4657,6 +4740,9 @@ function App() {
     setItems(nextItems);
     const envelope = await encryptVault(nextItems, masterPassword, bootstrap);
     const itemCount = getVisibleVaultItems(nextItems).length;
+    if (options.refreshEmergencyPackage !== false) {
+      scheduleEmergencyPackageMaintenance(nextItems, options.emergencyRefreshReason || 'vault_change');
+    }
 
     if (options.autoSync && !featureIncluded('cloudBackupSync')) {
       const note = 'Your latest changes are encrypted and saved locally. Cloud backup and sync are not included in the current plan.';
@@ -6419,7 +6505,7 @@ function App() {
       const saved = getEmergencyAccessPlan(next);
       setEmergencyDraft(saved);
       if (saved.invitationId && saved.invitationUrl) {
-        try { await saveEmergencyReleasePackageForPlan(saved, next); }
+        try { await saveEmergencyReleasePackageForPlan(saved, next, { refreshReason: section === 'package' ? 'manual_package_save' : 'trusted_person_details_save' }); }
         catch (packageError) { showMessage(packageError.message || 'Plan saved, but the emergency release package could not be refreshed.', 'warning'); return; }
       }
       showMessage(successMessage, 'success');
@@ -6437,6 +6523,18 @@ function App() {
 
 
   async function prepareEmergencyReleasedDocuments(planToSave, currentItems, inviteToken) {
+    const inventory = await postJson('/.netlify/functions/emergency-access-document', {
+      action: 'inventory',
+      invitationId: planToSave.invitationId
+    });
+    if (!inventory.ok) throw new Error(inventory.message || 'Emergency Access document status could not be checked.');
+    if (inventory.frozen) {
+      const error = new Error('The Emergency Package has already been released and is now frozen as the release snapshot.');
+      error.code = 'EMERGENCY_PACKAGE_FROZEN';
+      throw error;
+    }
+
+    const existingBySource = new Map((Array.isArray(inventory.documents) ? inventory.documents : []).map((document) => [String(document.source_document_id || ''), document]));
     const fullAccess = String(planToSave?.accessScope || '') === 'Full vault access';
     const documentItems = fullAccess
       ? getVisibleVaultItems(currentItems).filter((item) => item.category === DOCUMENTS_CATEGORY && item?.payload?.file)
@@ -6444,21 +6542,32 @@ function App() {
     const prepared = [];
     for (const item of documentItems) {
       const file = item.payload.file;
-      const dataUrl = await loadStoredDocumentDataUrl(item);
-      const encrypted = await encryptEmergencyDocumentData(dataUrl, inviteToken);
-      const result = await postJson('/.netlify/functions/emergency-access-document', {
-        action: 'save',
-        invitationId: planToSave.invitationId,
-        sourceDocumentId: item.id,
-        fileName: file.name || `${item.title || 'document'}.${file.extension || 'txt'}`,
-        fileType: file.type || 'application/octet-stream',
-        fileExtension: file.extension || getFileExtension(file.name || ''),
-        fileSize: Number(file.size || 0),
-        encryptedBlob: encrypted.encryptedBlob,
-        localSalt: encrypted.localSalt,
-        localIv: encrypted.localIv
-      });
-      if (!result.ok) throw new Error(result.message || `The document ${file.name || item.title || ''} could not be prepared for Emergency Access.`);
+      const sourceFingerprint = await buildEmergencyDocumentSourceFingerprint(item);
+      const existing = existingBySource.get(String(item.id || ''));
+      const alreadyCurrent = existing?.metadata?.source_fingerprint === sourceFingerprint;
+      if (!alreadyCurrent) {
+        const dataUrl = await loadStoredDocumentDataUrl(item);
+        const encrypted = await encryptEmergencyDocumentData(dataUrl, inviteToken);
+        const result = await postJson('/.netlify/functions/emergency-access-document', {
+          action: 'save',
+          invitationId: planToSave.invitationId,
+          sourceDocumentId: item.id,
+          sourceFingerprint,
+          sourceUpdatedAt: item.updatedAt || '',
+          fileName: file.name || `${item.title || 'document'}.${file.extension || 'txt'}`,
+          fileType: file.type || 'application/octet-stream',
+          fileExtension: file.extension || getFileExtension(file.name || ''),
+          fileSize: Number(file.size || 0),
+          encryptedBlob: encrypted.encryptedBlob,
+          localSalt: encrypted.localSalt,
+          localIv: encrypted.localIv
+        });
+        if (!result.ok) {
+          const error = new Error(result.message || `The document ${file.name || item.title || ''} could not be prepared for Emergency Access.`);
+          error.code = result.code || '';
+          throw error;
+        }
+      }
       prepared.push({
         sourceDocumentId: item.id,
         title: item.title || file.name || 'Document',
@@ -6473,22 +6582,33 @@ function App() {
       invitationId: planToSave.invitationId,
       keepSourceDocumentIds: prepared.map((documentMeta) => documentMeta.sourceDocumentId)
     });
-    if (!pruneResult.ok) throw new Error(pruneResult.message || 'Old Emergency Access document copies could not be cleaned up.');
+    if (!pruneResult.ok) {
+      const error = new Error(pruneResult.message || 'Old Emergency Access document copies could not be cleaned up.');
+      error.code = pruneResult.code || '';
+      throw error;
+    }
     return prepared;
   }
 
-  async function saveEmergencyReleasePackageForPlan(planToSave = emergencyDraft, currentItems = items) {
+  async function saveEmergencyReleasePackageForPlan(planToSave = emergencyDraft, currentItems = items, options = {}) {
     if (!ensureEmergencyAccessEntitled()) return { ok: false, code: 'PLAN_FEATURE_REQUIRED' };
     const inviteUrl = planToSave.invitationUrl || '';
     const inviteToken = tokenFromInviteUrl(inviteUrl);
     if (!planToSave.invitationId || !inviteToken) return { ok: false, skipped: true, message: 'Invite link is not ready yet.' };
     if (!bootstrap.tenantId || !bootstrap.userId) return { ok: false, skipped: true, message: 'Account details are missing.' };
+    if (emergencyPackageFrozenInvitationRef.current === planToSave.invitationId) {
+      setEmergencyPackageFreshness({ state: 'frozen', lastRefreshedAt: emergencyPackageFreshness.lastRefreshedAt || '', message: 'Released package snapshot is frozen.' });
+      return { ok: false, skipped: true, code: 'EMERGENCY_PACKAGE_FROZEN' };
+    }
+    const sourceFingerprint = await buildEmergencyPackageSourceFingerprint(planToSave, currentItems);
     const releasedDocuments = await prepareEmergencyReleasedDocuments(planToSave, currentItems, inviteToken);
     const releasePackage = buildEmergencyReleasePackage(planToSave, currentItems, bootstrap, releasedDocuments);
     const envelope = await encryptEmergencyReleasePackage(releasePackage, inviteToken);
     const result = await postJson('/.netlify/functions/emergency-access-invite', {
       action: 'save_package',
       invitationId: planToSave.invitationId,
+      sourceFingerprint,
+      refreshReason: options.refreshReason || 'manual_package_save',
       packageEnvelope: envelope,
       packageSummary: {
         releaseScope: releasePackage.releaseScope,
@@ -6499,9 +6619,71 @@ function App() {
         title: releasePackage.title
       }
     });
-    if (!result.ok) throw new Error(result.message || 'Emergency release package could not be saved.');
+    if (!result.ok) {
+      if (result.code === 'EMERGENCY_PACKAGE_FROZEN') {
+        emergencyPackageFrozenInvitationRef.current = planToSave.invitationId;
+        setEmergencyPackageFreshness({ state: 'frozen', lastRefreshedAt: result.packageSummary?.preparedAt || emergencyPackageFreshness.lastRefreshedAt || '', message: result.message || 'Released package snapshot is frozen.' });
+        return result;
+      }
+      throw new Error(result.message || 'Emergency release package could not be saved.');
+    }
+    const refreshedAt = result.packageSavedAt || result.packageSummary?.preparedAt || releasePackage.preparedAt;
+    setEmergencyPackageFreshness({
+      state: 'current',
+      lastRefreshedAt: refreshedAt,
+      message: result.unchanged ? 'Prepared package is already current.' : 'Prepared package refreshed from the latest unlocked vault.'
+    });
     if (Array.isArray(result.events)) setEmergencyFlowEvents(result.events);
     return result;
+  }
+
+  async function flushEmergencyPackageMaintenance() {
+    if (emergencyPackageRefreshInFlightRef.current) return;
+    const queued = emergencyPackageRefreshQueuedRef.current;
+    emergencyPackageRefreshQueuedRef.current = null;
+    if (!queued?.items) return;
+    const plan = getEmergencyAccessPlan(queued.items);
+    const requestStatus = String(plan?.requestStatus || '').toLowerCase();
+    if (!plan?.invitationId || !plan?.invitationUrl || plan?.emergencyPackageEnabled === false) return;
+    if (['release_ready', 'released'].includes(requestStatus) || emergencyPackageFrozenInvitationRef.current === plan.invitationId) {
+      emergencyPackageFrozenInvitationRef.current = plan.invitationId;
+      setEmergencyPackageFreshness((current) => ({ ...current, state: 'frozen', message: 'Released package snapshot is frozen and will not change.' }));
+      return;
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setEmergencyPackageFreshness((current) => ({ ...current, state: 'pending', message: 'Latest vault changes will refresh the prepared package when this device is online and unlocked.' }));
+      return;
+    }
+    if (!customerSession.authenticated || !masterPassword) {
+      setEmergencyPackageFreshness((current) => ({ ...current, state: 'pending', message: 'Unlock and verify this device to refresh the prepared package.' }));
+      return;
+    }
+    emergencyPackageRefreshInFlightRef.current = true;
+    setEmergencyPackageFreshness((current) => ({ ...current, state: 'refreshing', message: 'Refreshing the prepared package from the latest unlocked vault...' }));
+    try {
+      await saveEmergencyReleasePackageForPlan(plan, queued.items, { refreshReason: queued.reason || 'automatic_vault_refresh' });
+    } catch (error) {
+      if (error?.code === 'EMERGENCY_PACKAGE_FROZEN') {
+        emergencyPackageFrozenInvitationRef.current = plan.invitationId;
+        setEmergencyPackageFreshness((current) => ({ ...current, state: 'frozen', message: 'Released package snapshot is frozen and will not change.' }));
+      } else {
+        setEmergencyPackageFreshness((current) => ({ ...current, state: 'pending', message: 'The vault is safe, but the prepared Emergency Package still needs to refresh. Password-Encrypt will retry while the vault is online and unlocked.' }));
+      }
+    } finally {
+      emergencyPackageRefreshInFlightRef.current = false;
+      if (emergencyPackageRefreshQueuedRef.current?.items) {
+        window.clearTimeout(emergencyPackageRefreshTimerRef.current);
+        emergencyPackageRefreshTimerRef.current = window.setTimeout(() => flushEmergencyPackageMaintenance(), 450);
+      }
+    }
+  }
+
+  function scheduleEmergencyPackageMaintenance(nextItems, reason = 'automatic_vault_refresh') {
+    const plan = getEmergencyAccessPlan(nextItems);
+    if (!plan?.invitationId || !plan?.invitationUrl || plan?.emergencyPackageEnabled === false) return;
+    emergencyPackageRefreshQueuedRef.current = { items: nextItems, reason };
+    window.clearTimeout(emergencyPackageRefreshTimerRef.current);
+    emergencyPackageRefreshTimerRef.current = window.setTimeout(() => flushEmergencyPackageMaintenance(), 700);
   }
 
 
@@ -6571,7 +6753,7 @@ function App() {
       const next = upsertEmergencyAccessMetaItem(items, savedPlan);
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       const nextPlan = getEmergencyAccessPlan(next);
-      try { await saveEmergencyReleasePackageForPlan(nextPlan, next); }
+      try { await saveEmergencyReleasePackageForPlan(nextPlan, next, { refreshReason: 'invitation_created' }); }
       catch (packageError) {
         const packageNote = result.emailSent
           ? `Invitation email sent. ${packageError.message || 'The emergency release package could not be prepared yet.'}`
@@ -6633,6 +6815,14 @@ function App() {
         setEmergencyDraft(getEmergencyAccessPlan(next));
       }
       setEmergencyFlowEvents(Array.isArray(result.events) ? result.events : []);
+      if (result.packageSummary?.preparedAt) {
+        setEmergencyPackageFreshness({
+          state: result.releaseReady ? 'frozen' : 'current',
+          lastRefreshedAt: result.packageSummary.preparedAt,
+          message: result.releaseReady ? 'Released package snapshot is frozen and will not change.' : 'Prepared package is current.'
+        });
+      }
+      if (result.releaseReady) emergencyPackageFrozenInvitationRef.current = savedPlan.invitationId;
       if (!silent) {
         setEmergencyInviteState({ status: 'checked', message: result.request?.message || result.message || 'Current stage checked.' });
         showMessage(result.request?.message || result.message || 'Current stage checked.', result.request ? 'success' : 'info');
@@ -7348,7 +7538,7 @@ function App() {
                           </div>
                         </details>
                       )}
-                      <small>{emergencyReleasePackage.notes}</small>
+                      <small className="emergency-release-owner-note">{emergencyReleasePackage.notes}</small>
                     </div>
                   </>
                 )}
@@ -9056,14 +9246,28 @@ function App() {
                             { value: 'Full vault access', label: 'Full vault access' }
                           ]} onChange={(accessScope) => setEmergencyDraft({ ...emergencyDraft, accessScope })} /></label>
                         </div>
-                        {emergencyDraft.accessScope === 'Full vault access' && <div className="emergency-document-release-note"><FileText size={17} /><span><strong>Stored documents are included</strong><small>When you save this package while your vault is unlocked, your stored document files are prepared as separate encrypted copies for this Trusted Person arrangement. They are released only if the waiting period completes without cancellation.</small></span></div>}
+                        {emergencyDraft.accessScope === 'Full vault access' && <div className="emergency-document-release-note"><FileText size={17} /><span><strong>Stored documents are included</strong><small>Stored document files are prepared as separate encrypted copies for this Trusted Person arrangement. While the arrangement is active, changed, added or removed documents are automatically reflected when your vault is online and unlocked. They are released only if the waiting period completes without cancellation.</small></span></div>}
                         <div className="emergency-package-notes-grid">
                           <label className="emergency-access-notes-label">Emergency message<textarea value={emergencyDraft.emergencyPackageMessage || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageMessage: e.target.value })} placeholder="Write the message your trusted person should see first if the waiting period ends." /></label>
                           <label className="emergency-access-notes-label">Important contacts<textarea value={emergencyDraft.emergencyPackageContacts || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageContacts: e.target.value })} placeholder="Solicitor, doctor, accountant, family contacts, executor, insurance contact..." /></label>
                           <label className="emergency-access-notes-label">Documents and locations<textarea value={emergencyDraft.emergencyPackageDocuments || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageDocuments: e.target.value })} placeholder="Where to find will, policy documents, house papers, key files, physical documents..." /></label>
                           <label className="emergency-access-notes-label">Checklist for trusted person<textarea value={emergencyDraft.emergencyPackageChecklist || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageChecklist: e.target.value })} placeholder="Step 1: Contact..., Step 2: Check..., Step 3: Do not..." /></label>
                         </div>
-                        <div className="emergency-section-save-row"><button type="button" className="primary-button" disabled={emergencySaveState === 'saving' || !featureIncluded('emergencyAccess') || !emergencyTrustedPersonComplete} onClick={(event) => saveEmergencyAccessPlan(event, 'Emergency package saved. Step 2 is complete.', 'package')}><Save size={17} /> {emergencySaveState === 'saving' ? 'Saving...' : 'Save Step 2'}</button></div>
+                        {emergencyDraft.invitationId && <div className={`emergency-package-freshness-card ${emergencyPackageFreshness.state || 'idle'}`}>
+                          <RefreshCw size={18} className={emergencyPackageFreshness.state === 'refreshing' ? 'sync-button-spinner' : ''} />
+                          <span>
+                            <strong>{emergencyPackageFreshness.state === 'frozen' ? 'Released package snapshot is fixed' : emergencyPackageFreshness.state === 'pending' ? 'Package refresh pending' : emergencyPackageFreshness.state === 'refreshing' ? 'Updating prepared package' : 'Prepared package stays up to date automatically'}</strong>
+                            <small>{emergencyPackageFreshness.state === 'frozen'
+                              ? 'The waiting period has completed. The package released to your trusted person is now frozen and later vault changes will not alter it.'
+                              : emergencyPackageFreshness.state === 'pending'
+                                ? emergencyPackageFreshness.message || 'Password-Encrypt will refresh the prepared package when this vault is online and unlocked.'
+                                : emergencyPackageFreshness.state === 'refreshing'
+                                  ? 'Password-Encrypt is rebuilding the prepared release snapshot from the latest unlocked vault.'
+                                  : `Changes you make to included vault items are automatically reflected before release.${emergencyPackageFreshness.lastRefreshedAt ? ` Last refreshed: ${formatAppDate(emergencyPackageFreshness.lastRefreshedAt, true)}.` : ''}`}</small>
+                            {emergencyPackageFreshness.state !== 'frozen' && <small>Because Password-Encrypt cannot decrypt your vault on the server, refresh happens when the vault is unlocked and online. The package is frozen when the waiting period completes.</small>}
+                          </span>
+                        </div>}
+                        <div className="emergency-section-save-row"><button type="button" className="primary-button" disabled={emergencySaveState === 'saving' || !featureIncluded('emergencyAccess') || !emergencyTrustedPersonComplete || isEmergencyReleaseReady} onClick={(event) => saveEmergencyAccessPlan(event, 'Emergency package saved. Step 2 is complete.', 'package')}><Save size={17} /> {isEmergencyReleaseReady ? 'Released package frozen' : emergencySaveState === 'saving' ? 'Saving...' : 'Save Step 2'}</button></div>
                       </div>
                     </div>
                   </details>
@@ -9470,6 +9674,7 @@ function App() {
                 <details><summary>What happens after my trusted person accepts?</summary><p>Nothing is released. They receive a separate secure Emergency Access link to keep for the future. Password-Encrypt also sends a routine reminder every three months while the flow is dormant so they can confirm they are still happy to remain your trusted person.</p></details>
                 <details><summary>What are Stages 5 and 6?</summary><p>Stages 5 and 6 are emergency-only. They are not part of setup and remain dormant unless your trusted person later uses their saved Emergency Access link in a genuine emergency.</p></details>
                 <details><summary>What happens when Emergency Access is requested?</summary><p>Your chosen waiting period starts and you are notified. No vault contents are released while the waiting period is active, and you can cancel the request before the waiting period ends.</p></details>
+                <details><summary>Will my trusted person receive the latest version of my vault?</summary><p>Yes, for the folders and documents you chose to release. While the Trusted Person arrangement is active, Password-Encrypt refreshes the prepared package whenever included vault information changes and again when the unlocked vault comes online. Because the server cannot decrypt your vault by itself, the app must be unlocked and online for a refresh to complete. When the waiting period finishes, that latest prepared package is frozen as the release snapshot so later vault changes are not silently shared.</p></details>
                 <details><summary>Does my trusted person need the Password-Encrypt app?</summary><p>No. Invitation, confirmation and Emergency Access links open in a normal browser. They do not need to install the PWA or create their own vault.</p></details>
                 <details><summary>How will they know when the waiting period has ended?</summary><p>Password-Encrypt checks the waiting period automatically. When it completes without cancellation, the trusted person is emailed a secure link to the emergency package you prepared. That released-package link remains available for 30 days.</p></details>
                 <details><summary>What is Full vault access?</summary><p>Full vault access is an explicit next-of-kin option that prepares the selected emergency package without saving or sending your master password.</p></details>

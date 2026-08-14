@@ -278,7 +278,34 @@ export async function handler(event) {
       const invitation = rows?.[0];
       if (!invitation?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Invitation was not found.' });
       if (invitation.status === 'cancelled') return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'This invitation has been cancelled. Reset it and send a fresh invitation first.' });
+      const requestRows = await selectRows('emergency_access_requests', `select=id,status,released_at,updated_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&invitation_id=${eq(invitationId)}&order=created_at.desc&limit=1`).catch(() => []);
+      const latestRequest = requestRows?.[0] || null;
+      const requestStatus = String(latestRequest?.status || '').toLowerCase();
+      if (latestRequest?.released_at || ['release_ready', 'released'].includes(requestStatus)) {
+        return jsonResponse(409, {
+          ok: false,
+          version: APP_VERSION,
+          code: 'EMERGENCY_PACKAGE_FROZEN',
+          packageSummary: invitation.metadata?.emergency_package_summary || null,
+          message: 'The Emergency Package has already been released and is frozen as the release snapshot. Later vault changes will not alter it.'
+        });
+      }
       const now = new Date().toISOString();
+      const sourceFingerprint = String(body.sourceFingerprint || '').trim().slice(0, 128);
+      const refreshReason = String(body.refreshReason || 'manual_package_save').trim().slice(0, 80);
+      const existingFingerprint = String(invitation.metadata?.emergency_package_source_fingerprint || '');
+      if (sourceFingerprint && existingFingerprint === sourceFingerprint && invitation.metadata?.emergency_package_envelope?.encrypted) {
+        return jsonResponse(200, {
+          ok: true,
+          unchanged: true,
+          version: APP_VERSION,
+          invitationId,
+          packageSavedAt: invitation.metadata?.emergency_package_saved_at || invitation.metadata?.emergency_package_summary?.preparedAt || now,
+          packageSummary: invitation.metadata?.emergency_package_summary || null,
+          events: buildEmergencyFlowEvents(invitation, requestRows || []),
+          message: 'The prepared Emergency Package is already current.'
+        });
+      }
       const cleanSummary = {
         releaseScope: packageSummary.releaseScope || invitation.access_scope || 'Emergency Info folder only',
         fullVaultAccess: Boolean(packageSummary.fullVaultAccess),
@@ -295,12 +322,17 @@ export async function handler(event) {
           version: APP_VERSION,
           emergency_package_envelope: packageEnvelope,
           emergency_package_summary: cleanSummary,
-          emergency_package_saved_at: now
+          emergency_package_saved_at: now,
+          emergency_package_source_fingerprint: sourceFingerprint,
+          emergency_package_refresh_reason: refreshReason
         },
         updated_at: now
       });
-      const events = await recordEmergencyFlowEvent(invitationId, { type: 'package_saved', title: 'Emergency package saved', message: 'The owner updated the encrypted emergency package.', occurredAt: now, metadata: { releaseScope: cleanSummary.releaseScope, itemCount: cleanSummary.itemCount, documentCount: cleanSummary.documentCount } });
-      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, packageSavedAt: now, packageSummary: cleanSummary, events, message: 'Emergency release package encrypted and saved for the secure invite link.' });
+      const automaticRefresh = ['vault_change', 'automatic_vault_refresh', 'vault_open_or_online', 'cloud_restore'].includes(refreshReason);
+      const events = automaticRefresh
+        ? buildEmergencyFlowEvents({ ...invitation, metadata: { ...(invitation.metadata || {}), emergency_package_summary: cleanSummary } }, requestRows || [])
+        : await recordEmergencyFlowEvent(invitationId, { type: 'package_saved', title: 'Emergency package saved', message: 'The owner updated the encrypted emergency package.', occurredAt: now, metadata: { releaseScope: cleanSummary.releaseScope, itemCount: cleanSummary.itemCount, documentCount: cleanSummary.documentCount } });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, invitationId, packageSavedAt: now, packageSummary: cleanSummary, events, message: automaticRefresh ? 'Emergency release package automatically refreshed from the latest unlocked vault.' : 'Emergency release package encrypted and saved for the secure invite link.' });
     }
 
     if (action === 'status') {
@@ -395,7 +427,7 @@ export async function handler(event) {
           message: requestMessage
         } : null,
         releaseReady: isReleaseReady,
-        packageSummary: isReleaseReady ? (invitation.metadata?.emergency_package_summary || null) : null,
+        packageSummary: invitation.metadata?.emergency_package_summary || null,
         events: flowEvents,
         message: isReleaseReady
           ? 'Waiting period ended. Emergency package is ready.'
