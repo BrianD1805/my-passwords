@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.005.04';
+const VERSION = 'Password-Encrypt Ver-1.005.05';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -371,7 +371,7 @@ const SETTINGS_FAQS = [
   {
     category: 'Emergency Access',
     question: 'Does my next of kin or trusted person need a Password-Encrypt account?',
-    answer: 'No. Emergency Access is intended for a next of kin or another trusted person you nominate. The standard flow works through secure browser links, so they can accept the invitation, request access and open the released package without installing the app or creating their own vault. If the trusted person already uses Password-Encrypt, the released page also shows a secure Import Code. They can enter that code from Settings → Emergency Access → Receive an Emergency Package inside their own vault and add the released package as a separate Emergency Package folder.'
+    answer: 'No. Emergency Access is intended for a next of kin or another trusted person you nominate. The standard flow works through secure browser links, so they can accept the invitation, request access and open the released package without installing the app or creating their own vault. If the trusted person already uses Password-Encrypt, the released page also shows a secure Import Code. They can enter that code from Settings → Protection and recovery → Emergency Access — Receive an Emergency Package inside their own vault and add the released package as a separate Emergency Package folder.'
   },
   {
     category: 'Emergency Access',
@@ -3955,7 +3955,7 @@ function App() {
     if (!['emergency', 'notifications', 'settings'].includes(openTarget || '')) return;
     if (locked || !customerSession.authenticated) return;
     setActivePage('settings');
-    setActiveSettingsSection(openTarget === 'settings' ? 'overview' : openTarget);
+    setActiveSettingsSection(openTarget === 'settings' ? 'overview' : openTarget === 'emergency' ? 'emergency-nominate' : openTarget);
     params.delete('open');
     const query = params.toString();
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash || ''}`);
@@ -4086,7 +4086,7 @@ function App() {
   }, [locked]);
 
   useEffect(() => {
-    if (locked || activeSettingsSection !== 'emergency' || !customerSession.authenticated || !emergencyDraft.invitationId) return;
+    if (locked || activeSettingsSection !== 'emergency-nominate' || !customerSession.authenticated || !emergencyDraft.invitationId) return;
 
     let stopped = false;
     let checking = false;
@@ -7892,7 +7892,7 @@ function App() {
                         <strong>Use Password-Encrypt?</strong>
                         {emergencyRequestState.importCode ? (
                           <>
-                            <span>Open your own Password-Encrypt vault, then go to <b>Settings → Emergency Access → Receive an Emergency Package</b> and enter this code.</span>
+                            <span>Open your own Password-Encrypt vault, then go to <b>Settings → Protection and recovery → Emergency Access — Receive an Emergency Package</b> and enter this code.</span>
                             <div className="emergency-import-code-display">
                               <code>{emergencyRequestState.importCode}</code>
                               <button type="button" className="icon-button" onClick={() => copyText('Import code', emergencyRequestState.importCode)} aria-label="Copy Emergency Package import code" title="Copy import code"><Copy size={17} /></button>
@@ -9193,9 +9193,14 @@ function App() {
 
                 <section className="settings-directory-group" aria-labelledby="settings-protection-group">
                   <p className="settings-directory-label" id="settings-protection-group">Protection and recovery</p>
-                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('emergency')}>
+                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('emergency-nominate')}>
                     <span className="settings-directory-icon"><UsersRound size={22} /></span>
-                    <span className="settings-directory-copy"><strong>Emergency Access</strong><small>Nominate a Trusted Person or receive an Emergency Package.</small></span>
+                    <span className="settings-directory-copy"><strong>Emergency Access</strong><small>Nominate a trusted person to receive your prepared Emergency Package.</small></span>
+                    <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
+                  </button>
+                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('emergency-receive')}>
+                    <span className="settings-directory-icon"><KeyRound size={22} /></span>
+                    <span className="settings-directory-copy"><strong>Emergency Access</strong><small>Receive an Emergency Package released to you.</small></span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
                 </section>
@@ -9603,14 +9608,17 @@ function App() {
             </section>
           )}
 
-          {activeSettingsSection === 'emergency' && (
-            <section className="settings-section-panel settings-emergency-panel" aria-label="Emergency Access">
+          {['emergency-nominate', 'emergency-receive'].includes(activeSettingsSection) && (
+            <section className="settings-section-panel settings-emergency-panel" aria-label={activeSettingsSection === 'emergency-receive' ? 'Receive an Emergency Package' : 'Nominate a Trusted Person'}>
               <div className="settings-section-heading emergency-access-settings-heading">
                 <p className="eyebrow">Emergency Access</p>
-                <h3><UsersRound size={20} /> Emergency Access</h3>
-                <p>Choose whether you want to nominate a Trusted Person for your own vault or receive an Emergency Package released to you.</p>
+                <h3>{activeSettingsSection === 'emergency-receive' ? <><KeyRound size={20} /> Receive an Emergency Package</> : <><UsersRound size={20} /> Nominate a Trusted Person</>}</h3>
+                <p>{activeSettingsSection === 'emergency-receive'
+                  ? 'Enter an Import Code from an Emergency Package released to you and add it securely to your own Password-Encrypt vault.'
+                  : 'Choose and manage the trusted person who should receive your prepared Emergency Package if it is ever genuinely needed.'}</p>
               </div>
 
+              {activeSettingsSection === 'emergency-nominate' && (
               <section className="emergency-access-purpose-section emergency-access-nominate-section" aria-labelledby="emergency-nominate-title">
                 <div className="emergency-access-purpose-heading">
                   <span className="emergency-access-purpose-icon"><UsersRound size={22} /></span>
@@ -9797,7 +9805,9 @@ function App() {
                 {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last saved: {formatAppDate(emergencyDraft.updatedAt, true)}</p>}
               </form>
               </section>
+              )}
 
+              {activeSettingsSection === 'emergency-receive' && (
               <section className="emergency-access-purpose-section emergency-access-receive-section" aria-labelledby="emergency-receive-title">
                 <div className="emergency-access-purpose-heading">
                   <span className="emergency-access-purpose-icon"><KeyRound size={22} /></span>
@@ -9825,6 +9835,7 @@ function App() {
                   </div>
                 </section>
               </section>
+              )}
             </section>
           )}
 
@@ -10011,7 +10022,7 @@ function App() {
                       <div className="emergency-access-hub-card">
                         <UsersRound size={22} />
                         <div><strong>Your Trusted Person Access</strong><span>Choose who should receive your prepared Emergency Package if they ever need to request access.</span></div>
-                        <button type="button" className="secondary-button" onClick={() => { closeViewItem(); setActivePage('settings'); setActiveSettingsSection('emergency'); scrollSettingsToTop(); }}>Manage</button>
+                        <button type="button" className="secondary-button" onClick={() => { closeViewItem(); setActivePage('settings'); setActiveSettingsSection('emergency-nominate'); scrollSettingsToTop(); }}>Manage</button>
                       </div>
                       <div className="emergency-access-hub-card emergency-access-import-card">
                         <KeyRound size={22} />
@@ -10242,7 +10253,7 @@ function App() {
                 <details><summary>What are Stages 5 and 6?</summary><p>Stages 5 and 6 are emergency-only. They are not part of setup and remain dormant unless your trusted person later uses their saved Emergency Access link in a genuine emergency.</p></details>
                 <details><summary>What happens when Emergency Access is requested?</summary><p>Your chosen waiting period starts and you are notified. No vault contents are released while the waiting period is active, and you can cancel the request before the waiting period ends.</p></details>
                 <details><summary>Will my trusted person receive the latest version of my vault?</summary><p>Yes, for the folders and documents you chose to release. While the Trusted Person arrangement is active, Password-Encrypt refreshes the prepared package whenever included vault information changes and again when the unlocked vault comes online. Because the server cannot decrypt your vault by itself, the app must be unlocked and online for a refresh to complete. When the waiting period finishes, that latest prepared package is frozen as the release snapshot so later vault changes are not silently shared.</p></details>
-                <details><summary>Does my trusted person need the Password-Encrypt app?</summary><p>No. Invitation, confirmation and Emergency Access links open in a normal browser. They do not need to install the PWA or create their own vault. If they already use Password-Encrypt, the released package page gives them an Import Code. They enter it under Settings → Emergency Access → Receive an Emergency Package to add the package to their own encrypted vault as a separate Emergency Package folder.</p></details>
+                <details><summary>Does my trusted person need the Password-Encrypt app?</summary><p>No. Invitation, confirmation and Emergency Access links open in a normal browser. They do not need to install the PWA or create their own vault. If they already use Password-Encrypt, the released package page gives them an Import Code. They enter it under Settings → Protection and recovery → Emergency Access — Receive an Emergency Package to add the package to their own encrypted vault as a separate Emergency Package folder.</p></details>
                 <details><summary>How will they know when the waiting period has ended?</summary><p>Password-Encrypt checks the waiting period automatically. When it completes without cancellation, the trusted person is emailed a secure link to the emergency package you prepared. That released-package link remains available for 30 days.</p></details>
                 <details><summary>What is Full vault access?</summary><p>Full vault access is an explicit next-of-kin option that prepares the selected emergency package without saving or sending your master password.</p></details>
                 <details><summary>What does Reset to zero do?</summary><p>Reset to zero removes the trusted person, invitation and request records, secure links, emergency-package setup and the flow audit history so you can start again from Stage 1.</p></details>

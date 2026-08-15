@@ -17810,7 +17810,7 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
 }
 
 
-/* Password-Encrypt Ver-1.005.04 — Emergency Access split into Nominate and Receive sections */
+/* Password-Encrypt Ver-1.005.05 — Emergency Access split into separate Settings panels */
 .emergency-access-purpose-section {
   display: grid;
   gap: 16px;
@@ -17856,8 +17856,8 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   color: #336699;
 }
 .emergency-access-receive-section {
-  padding-top: 6px;
-  border-top: 1px solid #dfe6eb;
+  padding-top: 0;
+  border-top: 0;
 }
 .emergency-access-receive-section .emergency-access-purpose-heading {
   background: #fbfaf8;
