@@ -20,7 +20,7 @@ function check(label, condition) {
   else { console.error(`FAIL  ${label}`); failures += 1; }
 }
 
-check('Ver-1.006 app/package/service-worker versions align', pkg.version === '1.6.0' && /Password-Encrypt Ver-1\.006/.test(main) && /my-passwords-v1\.006/.test(sw));
+check('Ver-1.007 app/package/service-worker versions align', pkg.version === '1.7.0' && /Password-Encrypt Ver-1\.007/.test(main) && /my-passwords-v1\.007/.test(sw));
 check('Landing Open My Vault opens an existing/new customer choice', /function openVaultApp\(\)[\s\S]*isPublicLandingRoute[\s\S]*setIsOpenVaultChoicePopupOpen\(true\)/.test(main));
 check('Choice clearly separates existing customer from new customer', /Yes — I’m an existing customer/.test(main) && /No — I’m new to Password-Encrypt/.test(main));
 check('Existing customer route carries explicit existing-entry intent', /window\.location\.assign\('\/vault\?entry=existing'\)/.test(main) && /vaultEntryMode === 'existing'/.test(main));
@@ -63,7 +63,7 @@ check('Welcome trial wording says the trial will end on the date', /trial has st
 check('Welcome email contains account email, mobile, vault name and plan details', /Your Password-Encrypt account details/.test(customerEmail) && /Login email:/.test(customerEmail) && /Mobile number:/.test(customerEmail) && /Vault name:/.test(customerEmail) && /Plan:/.test(customerEmail));
 check('Welcome email explicitly excludes the master password', /Your master password is never included in email/.test(customerEmail));
 check('Welcome email receives the stored account phone and email', /phone_e164/.test(verifyOtp) && /accountEmail: user\.email/.test(verifyOtp) && /accountPhone: user\.phone_e164/.test(verifyOtp));
-check('SMS verification UI is disabled while implementation remains available', /const SMS_VERIFICATION_UI_ENABLED = false/.test(main) && /requestSmsOtp/.test(main) && !/> SMS<\//.test(main));
+check('SMS authentication UI remains staged off while mobile contact verification is enabled', /const SMS_AUTH_VERIFICATION_UI_ENABLED = false/.test(main) && /const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true/.test(main) && /requestSmsOtp/.test(main));
 check('Admin verification presentation no longer depends on mobile SMS verification', /customer\.verification\?\.emailVerified/.test(admin) && /Mobile number on file/.test(customerDetail) && !/Mobile not verified/.test(customerDetail));
 check('Three-step onboarding has desktop and mobile styling', /\.vault-onboarding-screen/.test(css) && /\.three-step-onboarding-guide/.test(css) && /\.onboarding-three-part-roadmap/.test(css) && /install-onboarding-content/.test(css) && /@media \(max-width: 680px\)[\s\S]*\.vault-onboarding-screen/.test(css));
 

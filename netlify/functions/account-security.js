@@ -143,8 +143,13 @@ export async function handler(event) {
       const change = changes?.[0];
       if (!change?.id) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The pending mobile change was not found.' });
       const now = new Date().toISOString();
+      const verificationOnly = change.change_type === 'phone_verification' || change.requested_value === change.previous_value;
       await updateRow('users', `id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}`, { phone_e164: change.requested_value, phone_country_code: change.phone_country_code, phone_number: change.phone_number, phone_verified: true, updated_at: now });
       await updateRow('account_contact_changes', `id=${eq(change.id)}`, { status: 'verified', verified_at: now, updated_at: now });
+      if (verificationOnly) {
+        await audit(session, 'account_phone_verified', { phone_masked: maskPhone(change.requested_value) });
+        return jsonResponse(200, { ok: true, version: APP_VERSION, phoneE164: change.requested_value, phoneMasked: maskPhone(change.requested_value), phoneCountryCode: change.phone_country_code, phoneNumber: change.phone_number, phoneVerified: true, verificationOnly: true, message: 'Your mobile number is now verified.' });
+      }
       await updateRow('account_sessions', `user_id=${eq(session.userId)}&status=${eq('active')}&id=neq.${encodeURIComponent(session.sessionId || '')}`, { status: 'revoked', revoked_at: now, revoked_reason: 'phone_changed', updated_at: now }).catch(() => null);
       if (session.deviceId) await updateRow('push_subscriptions', `tenant_id=${eq(session.tenantId)}&user_id=${eq(session.userId)}&device_id=neq.${encodeURIComponent(session.deviceId)}&status=${eq('active')}`, { status: 'disabled', disabled_at: now, disabled_reason: 'Other account sessions ended after mobile change.', updated_at: now }).catch(() => null);
       await audit(session, 'account_phone_changed', { previous_masked: maskPhone(change.previous_value), new_masked: maskPhone(change.requested_value) });
@@ -156,7 +161,7 @@ export async function handler(event) {
           metadata: { source: 'account_security' }
         }).catch(() => null);
       }
-      return jsonResponse(200, { ok: true, version: APP_VERSION, phoneE164: change.requested_value, phoneMasked: maskPhone(change.requested_value), phoneCountryCode: change.phone_country_code, phoneNumber: change.phone_number, message: 'Your mobile number has been verified and updated. Other account sessions were ended for safety.' });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, phoneE164: change.requested_value, phoneMasked: maskPhone(change.requested_value), phoneCountryCode: change.phone_country_code, phoneNumber: change.phone_number, phoneVerified: true, verificationOnly: false, message: 'Your mobile number has been verified and updated. Other account sessions were ended for safety.' });
     }
 
     if (action === 'revoke_device') {

@@ -107,7 +107,7 @@ export async function createVerifiedCustomerSession(event, { tenantId, userId, r
     expires_at: expiresAt,
     last_seen_at: now,
     user_agent: details.userAgent,
-    metadata: { ip_hash: requestFingerprint(event) || null, app_version: '1.006' }
+    metadata: { ip_hash: requestFingerprint(event) || null, app_version: '1.007' }
   });
 
   if (shouldNotifyNewDevice) {
@@ -262,7 +262,7 @@ export async function upgradeOrRenewCustomerSession(event, validation, { role = 
       expires_at: expiresAt,
       last_seen_at: now,
       user_agent: validation.stored.user_agent || cleanText(userAgent, 500),
-      metadata: { ...(validation.stored.metadata || {}), app_version: '1.006', rotated_from: validation.stored.id },
+      metadata: { ...(validation.stored.metadata || {}), app_version: '1.007', rotated_from: validation.stored.id },
       updated_at: now
     });
     await updateRow('account_sessions', `id=${eq(validation.stored.id)}`, {

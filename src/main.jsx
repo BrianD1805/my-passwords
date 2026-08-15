@@ -8,8 +8,9 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.006';
-const SMS_VERIFICATION_UI_ENABLED = false;
+const VERSION = 'Password-Encrypt Ver-1.007';
+const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
+const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
 const SALT_KEY = 'my-passwords-v0.002-salt';
@@ -2446,7 +2447,7 @@ function DeviceVerificationModal({ state, email, phone, channel = 'email', otp, 
   const isSending = otp?.status === 'requesting';
   const isVerifying = otp?.status === 'verifying';
   const isBusy = isSending || isVerifying;
-  const isSms = SMS_VERIFICATION_UI_ENABLED && channel === 'sms';
+  const isSms = SMS_AUTH_VERIFICATION_UI_ENABLED && channel === 'sms';
   const destinationAvailable = isSms ? Boolean(phone) : Boolean(email);
   const destinationMasked = isSms ? maskPhone(phone) : maskEmail(email);
   return (
@@ -2642,7 +2643,7 @@ function AccountSecurityModal({ state, setState, onClose, onRequestCode, onConfi
         <header className="item-popup-header"><h2 id="account-security-modal-title"><ShieldCheck size={21} /> {state.title}</h2><button type="button" className="icon-button" onClick={onClose} disabled={state.busy} aria-label="Close"><X size={19} /></button></header>
         <div className="item-popup-body account-security-modal-body">
           {state.mode === 'change-email' && !state.challengeId && <><p>{state.verifyExisting ? 'Send a one-time code to verify the email address already saved on this account.' : 'Enter the new email address. A one-time code will be sent there before the account is changed.'}</p><label>New email address<input type="email" value={state.newEmail || ''} onChange={(event) => setState((current) => ({ ...current, newEmail: event.target.value, message: '' }))} placeholder="new@example.com" /></label></>}
-          {state.mode === 'change-phone' && !state.challengeId && <><p>{state.verifyExisting ? 'Send an SMS one-time code to verify the mobile number already saved on this account.' : 'Enter the new mobile number. It is changed only after a code sent by SMS is verified.'}</p><label className="combined-phone-label">New mobile number<div className="phone-combo-field"><CountryPicker countryCode={state.phoneCountryCode || '+254'} countryIso={state.phoneCountryIso || 'ke'} onChange={(country) => setState((current) => ({ ...current, phoneCountryCode: country.code, phoneCountryIso: country.iso, message: '' }))} /><input inputMode="tel" value={state.phoneNumber || ''} onChange={(event) => setState((current) => ({ ...current, phoneNumber: event.target.value, message: '' }))} placeholder="712345678" /></div></label><p className="sms-carrier-note">Standard message and carrier rates may apply.</p></>}
+          {state.mode === 'change-phone' && !state.challengeId && <><p>{state.verifyExisting ? 'We will send an SMS one-time code to the mobile number already saved on this account. Enter that code to confirm the number belongs to you.' : 'Enter the new mobile number. Password-Encrypt will update it only after a code sent by SMS is verified.'}</p><label className="combined-phone-label">{state.verifyExisting ? 'Mobile number' : 'New mobile number'}<div className="phone-combo-field"><CountryPicker countryCode={state.phoneCountryCode || '+254'} countryIso={state.phoneCountryIso || 'ke'} onChange={(country) => setState((current) => ({ ...current, phoneCountryCode: country.code, phoneCountryIso: country.iso, message: '' }))} /><input inputMode="tel" value={state.phoneNumber || ''} onChange={(event) => setState((current) => ({ ...current, phoneNumber: event.target.value, message: '' }))} placeholder="712345678" /></div></label><p className="sms-carrier-note">Standard message and carrier rates may apply.</p></>}
           {state.mode === 'delete-account' && !state.challengeId && <><div className="account-deletion-warning"><AlertTriangle size={22} /><span><strong>This is a permanent account action</strong><small>After email verification, deletion waits 14 days. When the waiting period ends, the account, encrypted cloud vault backups and stored documents are permanently removed.</small></span></div><label>Reason (optional)<textarea rows="3" value={state.reason || ''} onChange={(event) => setState((current) => ({ ...current, reason: event.target.value }))} placeholder="Optional feedback" /></label></>}
           {needsOtp && state.challengeId && <><div className="account-otp-destination">{state.mode === 'change-phone' ? <Phone size={20} /> : <Mail size={20} />}<span><strong>Enter the verification code</strong><small>{state.message || 'The code expires in 10 minutes.'}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
           {state.mode === 'remove-device' && <div className="account-deletion-warning"><MonitorSmartphone size={22} /><span><strong>Remove {state.deviceName || 'this verified device'}?</strong><small>Every account session on that device will end. This cannot remotely erase an encrypted local vault already stored there.</small></span></div>}
@@ -3054,7 +3055,7 @@ function App() {
   function openAccountSecurityAction(mode, details = {}) {
     const titles = {
       'change-email': 'Change email address',
-      'change-phone': 'Change mobile number',
+      'change-phone': details.verifyExisting ? 'Verify mobile number' : 'Change mobile number',
       'remove-device': 'Remove verified device?',
       'end-all-sessions': 'End all account sessions?',
       'delete-account': 'Request account deletion'
@@ -3613,7 +3614,7 @@ function App() {
   }
 
   function chooseOtpChannel(nextChannel) {
-    const channel = SMS_VERIFICATION_UI_ENABLED && nextChannel === 'sms' ? 'sms' : 'email';
+    const channel = SMS_AUTH_VERIFICATION_UI_ENABLED && nextChannel === 'sms' ? 'sms' : 'email';
     setOtpChannel(channel);
     setOtpTest({
       status: 'not-requested',
@@ -4395,7 +4396,7 @@ function App() {
 
 
   async function requestSelectedOtp(options = {}) {
-    if (SMS_VERIFICATION_UI_ENABLED && otpChannel === 'sms') {
+    if (SMS_AUTH_VERIFICATION_UI_ENABLED && otpChannel === 'sms') {
       await requestSmsOtp(options);
       return;
     }
@@ -6355,12 +6356,12 @@ function App() {
   }
 
   function chooseLandingOtpChannel(nextChannel) {
-    const channel = SMS_VERIFICATION_UI_ENABLED && nextChannel === 'sms' ? 'sms' : 'email';
+    const channel = SMS_AUTH_VERIFICATION_UI_ENABLED && nextChannel === 'sms' ? 'sms' : 'email';
     setLandingOtp({ status: 'idle', channel, challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
   }
 
   async function sendLandingOnboardingOtp() {
-    const channel = SMS_VERIFICATION_UI_ENABLED && landingOtp.channel === 'sms' ? 'sms' : 'email';
+    const channel = SMS_AUTH_VERIFICATION_UI_ENABLED && landingOtp.channel === 'sms' ? 'sms' : 'email';
     const email = String(landingAccountDraft.email || '').trim().toLowerCase();
     const phoneE164 = landingAccountDraft.phoneE164 || buildPhoneE164(landingAccountDraft.phoneCountryCode, landingAccountDraft.phoneNumber);
     if (channel === 'email' && !email) return;
@@ -9379,10 +9380,10 @@ function App() {
                   <div className="settings-drilldown-content">
               <section className="account-contact-card settings-inner-card">
                 <div className="account-management-heading"><div><p className="eyebrow">Verified contact details</p><h3>Account recovery contacts</h3></div>{customerSession.authenticated && <button type="button" className="icon-button" onClick={() => loadAccountSecurity()} disabled={accountSecurity.loading} aria-label="Refresh account security"><RefreshCw size={18} className={accountSecurity.loading ? 'is-rotating' : ''} /></button>}</div>
-                <p>Email changes are completed only after a one-time code verifies the new address. Your mobile number remains on file as a contact detail.</p>
+                <p>Email and mobile changes are completed only after a one-time code verifies the new contact detail. A verified mobile number can be used for Password-Encrypt account security features as SMS rollout is enabled.</p>
                 <div className="account-contact-list">
                   <article><span className="account-contact-icon"><Mail size={20} /></span><div><strong>{accountSecurity.user?.email || bootstrap.email || 'Email not set'}</strong><small>{accountSecurity.user?.emailVerified === false ? 'Verification required' : 'Verified recovery email'}</small></div><button type="button" className="secondary-button" onClick={() => openAccountSecurityAction('change-email', { newEmail: accountSecurity.user?.email || bootstrap.email || '', verifyExisting: accountSecurity.user?.emailVerified === false })} disabled={!customerSession.authenticated}>{accountSecurity.user?.emailVerified === false ? 'Verify' : 'Change'}</button></article>
-                  <article><span className="account-contact-icon"><Phone size={20} /></span><div><strong>{accountSecurity.user?.phoneMasked || maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'Mobile not set'}</strong><small>Mobile number on file</small></div>{SMS_VERIFICATION_UI_ENABLED && <button type="button" className="secondary-button" onClick={() => openAccountSecurityAction('change-phone', { phoneCountryCode: accountSecurity.user?.phoneCountryCode || bootstrap.phoneCountryCode || '+254', phoneNumber: accountSecurity.user?.phoneNumber || bootstrap.phoneNumber || '', verifyExisting: accountSecurity.user?.phoneVerified === false })} disabled={!customerSession.authenticated}>{accountSecurity.user?.phoneVerified === false ? 'Verify' : 'Change'}</button>}</article>
+                  <article><span className="account-contact-icon"><Phone size={20} /></span><div><strong>{accountSecurity.user?.phoneMasked || maskPhone(bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)) || 'Mobile not set'}</strong><small>{accountSecurity.user?.phoneVerified ? 'Verified mobile number' : 'Verification required'}</small></div>{SMS_MOBILE_CONTACT_VERIFICATION_ENABLED && <button type="button" className="secondary-button" onClick={() => openAccountSecurityAction('change-phone', { phoneCountryCode: accountSecurity.user?.phoneCountryCode || bootstrap.phoneCountryCode || '+254', phoneNumber: accountSecurity.user?.phoneNumber || bootstrap.phoneNumber || '', verifyExisting: accountSecurity.user?.phoneVerified === false })} disabled={!customerSession.authenticated}>{accountSecurity.user?.phoneVerified === false ? 'Verify' : accountSecurity.user?.phoneE164 ? 'Change' : 'Add'}</button>}</article>
                 </div>
               </section>
 
