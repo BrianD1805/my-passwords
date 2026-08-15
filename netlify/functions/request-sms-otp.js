@@ -3,6 +3,7 @@ import { createAccountOtp } from './_account-otp.js';
 import { assertBrowserAction, consumeRateLimit, requestIpHash, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
+function gte(value) { return `gte.${encodeURIComponent(value)}`; }
 function cleanDigits(value) { return String(value || '').replace(/\D/g, ''); }
 function normaliseCountryCode(value) { const digits = cleanDigits(value); return digits ? `+${digits}` : ''; }
 function normaliseLocalPhone(value) { return cleanDigits(value).replace(/^0+/, ''); }
@@ -27,18 +28,42 @@ export async function handler(event) {
   try {
     await consumeRateLimit(event, { scope: 'otp_request_ip', identifier: requestIpHash(event), limit: 8, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
     await consumeRateLimit(event, { scope: 'otp_request_destination', identifier: phoneE164, limit: 4, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
-    const rows = await selectRows('users', `select=id,tenant_id,phone_e164,status&phone_e164=${eq(phoneE164)}&limit=1`);
+    const rows = await selectRows('users', `select=id,tenant_id,email,phone_e164,email_verified,phone_verified,status&phone_e164=${eq(phoneE164)}&limit=1`);
     const user = rows?.[0];
     if (!user?.id || !user?.tenant_id || String(user.status || '').toLowerCase() === 'deleted') {
       return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'No available account was found for that mobile number.' });
     }
+
+    if (purpose === 'production_onboarding') {
+      const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const emailAttempts = await selectRows(
+        'otp_challenges',
+        `select=id,created_at&user_id=${eq(user.id)}&purpose=${eq('production_onboarding')}&delivery_channel=${eq('email')}&created_at=${gte(since)}&order=created_at.desc&limit=10`
+      );
+      if ((emailAttempts || []).length < 2) {
+        return jsonResponse(409, {
+          ok: false,
+          version: APP_VERSION,
+          code: 'SMS_FALLBACK_NOT_AVAILABLE',
+          message: 'SMS backup verification becomes available after two email code requests within 10 minutes.'
+        });
+      }
+      await consumeRateLimit(event, {
+        scope: 'onboarding_sms_fallback',
+        identifier: user.id,
+        limit: 2,
+        windowSeconds: 10 * 60,
+        blockSeconds: 20 * 60
+      });
+    }
+
     const otp = await createAccountOtp({
       tenantId: user.tenant_id,
       userId: user.id,
       purpose,
       channel: 'sms',
       destination: phoneE164,
-      metadata: { verification_flow: purpose }
+      metadata: { verification_flow: purpose, sms_fallback: purpose === 'production_onboarding' }
     });
     return jsonResponse(200, {
       ok: true,
@@ -46,8 +71,11 @@ export async function handler(event) {
       ...otp,
       deliveryChannel: 'sms',
       smsSent: Boolean(otp.delivery?.sent),
+      smsFallback: purpose === 'production_onboarding',
       message: otp.delivery?.sent
-        ? `SMS code sent to ${otp.destinationMasked}. Enter the code to continue.`
+        ? (purpose === 'production_onboarding'
+            ? `SMS backup code sent to ${otp.destinationMasked}. Enter the code to verify your mobile number and continue.`
+            : `SMS code sent to ${otp.destinationMasked}. Enter the code to continue.`)
         : 'Local SMS test code created because production SMS delivery is unavailable in development mode.'
     });
   } catch (error) {

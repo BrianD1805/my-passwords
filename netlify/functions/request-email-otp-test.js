@@ -31,6 +31,15 @@ async function checkRateLimit(userId) {
   return (rows || []).length >= 3;
 }
 
+async function onboardingEmailSendCount(userId) {
+  const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const rows = await selectRows(
+    'otp_challenges',
+    `select=id,created_at,status&user_id=${eq(userId)}&purpose=${eq('production_onboarding')}&delivery_channel=${eq('email')}&created_at=${gte(since)}&order=created_at.desc&limit=10`
+  );
+  return (rows || []).length;
+}
+
 function otpEmailCopy(purpose) {
   const onboarding = String(purpose || '').includes('production_onboarding');
   return onboarding
@@ -111,7 +120,18 @@ export async function handler(event) {
       metadata: { version: APP_VERSION, email_sent: delivery.sent, provider: delivery.provider, provider_id: delivery.providerId || null, delivery_reason: delivery.reason || null }
     });
 
-    if (!delivery.sent && !testMode) return jsonResponse(503, { ok: false, version: APP_VERSION, message: 'The verification email could not be sent. Please try again later.' });
+    const recentOnboardingEmailSends = String(purpose || '') === 'production_onboarding'
+      ? await onboardingEmailSendCount(user.id)
+      : 0;
+    const smsFallbackEligible = recentOnboardingEmailSends >= 2;
+
+    if (!delivery.sent && !testMode) return jsonResponse(503, {
+      ok: false,
+      version: APP_VERSION,
+      message: 'The verification email could not be sent. Please try again later.',
+      onboardingEmailSendCount: recentOnboardingEmailSends,
+      smsFallbackEligible
+    });
 
     return jsonResponse(200, {
       ok: true,
@@ -125,7 +145,13 @@ export async function handler(event) {
       provider: delivery.provider,
       providerId: delivery.providerId || '',
       testOtpCode: !delivery.sent && testMode ? code : '',
-      message: delivery.sent ? `Email code sent to ${destinationMasked}. Enter the code to continue.` : 'Local test code created because email delivery is unavailable in development mode.'
+      onboardingEmailSendCount: recentOnboardingEmailSends,
+      smsFallbackEligible,
+      message: delivery.sent
+        ? (smsFallbackEligible
+            ? `Email code sent to ${destinationMasked}. If it still does not arrive, SMS verification is now available as a backup.`
+            : `Email code sent to ${destinationMasked}. Enter the code to continue.`)
+        : 'Local test code created because email delivery is unavailable in development mode.'
     });
   } catch (error) {
     return jsonResponse(error.status || 500, { ok: false, version: APP_VERSION, code: error.code || 'OTP_REQUEST_FAILED', message: error.status ? error.message : 'Could not create the email OTP challenge.', error: error.status ? undefined : error.message, details: error.details || null }, securityErrorResponseHeaders(error));

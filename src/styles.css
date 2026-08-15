@@ -18015,3 +18015,63 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     grid-template-columns: 1fr;
   }
 }
+
+/* Password-Encrypt Ver-1.007.01 — onboarding SMS backup verification */
+.onboarding-resend-code {
+  justify-self: start;
+}
+
+.onboarding-sms-fallback {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #cbddea;
+  border-radius: 16px;
+  background: #f4f9fc;
+  color: #28465f;
+}
+
+.onboarding-sms-fallback > span {
+  display: grid;
+  gap: 4px;
+}
+
+.onboarding-sms-fallback small,
+.onboarding-sms-backup-note span {
+  color: #667b8f;
+  line-height: 1.45;
+}
+
+.onboarding-sms-backup-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.onboarding-sms-backup-note .link-button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 820px) {
+  .onboarding-resend-code {
+    width: 100%;
+  }
+
+  .onboarding-sms-fallback {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .onboarding-sms-fallback .secondary-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .onboarding-sms-backup-note {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.007';
+const VERSION = 'Password-Encrypt Ver-1.007.01';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -2853,7 +2853,7 @@ function App() {
   const [landingSignup, setLandingSignup] = useState({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
   const [onboardingVaultDraft, setOnboardingVaultDraft] = useState(() => { const saved = readSavedAccount(); return { email: saved.email || '', phoneCountryCode: saved.phoneCountryCode || '+254', phoneCountryIso: saved.phoneCountryIso || 'ke', phoneNumber: saved.phoneNumber || '' }; });
   const [onboardingSecretFieldsArmed, setOnboardingSecretFieldsArmed] = useState({ master: false, confirm: false });
-  const [landingOtp, setLandingOtp] = useState({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
+  const [landingOtp, setLandingOtp] = useState({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '', emailSendCount: 0, smsFallbackEligible: false });
   const installPromptRef = useRef(null);
   const [installPromptReady, setInstallPromptReady] = useState(false);
   const [installStatus, setInstallStatus] = useState(() => isPasswordEncryptInstalled() ? 'installed' : 'waiting');
@@ -6208,7 +6208,7 @@ function App() {
       || null;
     setLandingOnboardingStep(1);
     setLandingSignup({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
-    setLandingOtp({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
+    setLandingOtp({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '', emailSendCount: 0, smsFallbackEligible: false });
     setLandingAccountDraft({
       displayName: '',
       email: '',
@@ -6229,7 +6229,7 @@ function App() {
     setSignupLegalModal({ visible: false, page: 'terms' });
     setIsCreateAccountPopupOpen(false);
     setLandingOnboardingStep(1);
-    setLandingOtp({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
+    setLandingOtp({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '', emailSendCount: 0, smsFallbackEligible: false });
   }
 
   function openSignupLegalDocument(page) {
@@ -6347,7 +6347,7 @@ function App() {
         trialEndsAt: result.trialEndsAt || '',
         welcomeEmailSent: false
       });
-      setLandingOtp({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
+      setLandingOtp({ status: 'idle', channel: 'email', challengeId: '', input: '', message: '', testCode: '', expiresAt: '', emailSendCount: 0, smsFallbackEligible: false });
       setLandingOnboardingStep(3);
     } catch (error) {
       setLandingSignup((current) => ({ ...current, status: 'error', message: error.message || 'Account setup could not continue.' }));
@@ -6356,12 +6356,24 @@ function App() {
   }
 
   function chooseLandingOtpChannel(nextChannel) {
-    const channel = SMS_AUTH_VERIFICATION_UI_ENABLED && nextChannel === 'sms' ? 'sms' : 'email';
-    setLandingOtp({ status: 'idle', channel, challengeId: '', input: '', message: '', testCode: '', expiresAt: '' });
+    setLandingOtp((current) => {
+      const channel = nextChannel === 'sms' && current.smsFallbackEligible ? 'sms' : 'email';
+      return {
+        status: 'idle',
+        channel,
+        challengeId: '',
+        input: '',
+        message: '',
+        testCode: '',
+        expiresAt: '',
+        emailSendCount: Number(current.emailSendCount || 0),
+        smsFallbackEligible: Boolean(current.smsFallbackEligible)
+      };
+    });
   }
 
   async function sendLandingOnboardingOtp() {
-    const channel = SMS_AUTH_VERIFICATION_UI_ENABLED && landingOtp.channel === 'sms' ? 'sms' : 'email';
+    const channel = landingOtp.channel === 'sms' && landingOtp.smsFallbackEligible ? 'sms' : 'email';
     const email = String(landingAccountDraft.email || '').trim().toLowerCase();
     const phoneE164 = landingAccountDraft.phoneE164 || buildPhoneE164(landingAccountDraft.phoneCountryCode, landingAccountDraft.phoneNumber);
     if (channel === 'email' && !email) return;
@@ -6376,7 +6388,30 @@ function App() {
             purpose: 'production_onboarding'
           })
         : await postJson('/.netlify/functions/request-email-otp-test', { email, purpose: 'production_onboarding' });
-      if (!result.ok) throw new Error(result.message || `The ${channel === 'sms' ? 'SMS' : 'email'} code could not be sent.`);
+      const nextEmailSendCount = channel === 'email'
+        ? Number(result.onboardingEmailSendCount ?? landingOtp.emailSendCount ?? 0)
+        : Number(landingOtp.emailSendCount || 0);
+      const nextSmsFallbackEligible = channel === 'email'
+        ? Boolean(result.smsFallbackEligible)
+        : Boolean(landingOtp.smsFallbackEligible);
+
+      if (!result.ok) {
+        setLandingOtp((current) => {
+          const smsWindowExpired = channel === 'sms' && result.code === 'SMS_FALLBACK_NOT_AVAILABLE';
+          return {
+            ...current,
+            status: 'error',
+            channel: smsWindowExpired ? 'email' : channel,
+            challengeId: smsWindowExpired ? '' : current.challengeId,
+            message: result.message || `The ${channel === 'sms' ? 'SMS' : 'email'} code could not be sent.`,
+            emailSendCount: channel === 'email' ? Number(result.onboardingEmailSendCount ?? current.emailSendCount ?? 0) : Number(current.emailSendCount || 0),
+            smsFallbackEligible: smsWindowExpired
+              ? false
+              : (channel === 'email' ? Boolean(result.smsFallbackEligible || current.smsFallbackEligible) : Boolean(current.smsFallbackEligible))
+          };
+        });
+        return;
+      }
       setLandingOtp({
         status: 'sent',
         channel,
@@ -6384,7 +6419,9 @@ function App() {
         input: '',
         message: result.message || `Enter the code sent to your ${channel === 'sms' ? 'mobile number' : 'email'}.`,
         testCode: result.testOtpCode || '',
-        expiresAt: result.expiresAt || ''
+        expiresAt: result.expiresAt || '',
+        emailSendCount: nextEmailSendCount,
+        smsFallbackEligible: nextSmsFallbackEligible
       });
     } catch (error) {
       setLandingOtp((current) => ({ ...current, status: 'error', message: error.message || `The ${channel === 'sms' ? 'SMS' : 'email'} code could not be sent.` }));
@@ -8375,7 +8412,7 @@ function App() {
                 {landingOnboardingStep === 2 && (
                   <div className="create-account-step">
                     <h3>Confirm your plan</h3>
-                    <p>Your free trial starts after successful email verification. You can manage your subscription from inside the vault before the trial ends.</p>
+                    <p>Your free trial starts after successful account verification. Email is the normal verification method, with SMS available only as a backup when needed. You can manage your subscription from inside the vault before the trial ends.</p>
                     <div className="plan-choice-grid">
                       {publicPlans.map((plan) => <button type="button" key={plan.code} className={landingAccountDraft.planCode === plan.code ? 'active' : ''} onClick={() => updateLandingDraft({ planCode: plan.code })}><strong>{plan.displayName}</strong><span>{plan.description}</span><small>{publicPlanPriceLabel(plan)}</small></button>)}
                       {!publicPlans.length && <div className="no-public-plans"><AlertTriangle size={18} /><span><strong>Plans are temporarily unavailable.</strong><small>Please try again shortly or contact support.</small></span></div>}
@@ -8389,7 +8426,7 @@ function App() {
                 {landingOnboardingStep === 3 && (
                   <div className="create-account-step onboarding-verification-step">
                     <h3>Verify your account</h3>
-                    <p>{landingSignup.existingAccount ? 'An existing account was found. Verification will open that account on this device without starting a second trial.' : 'Request the code when you are ready. Your account remains pending and the trial does not start until the code is verified.'}</p>
+                    <p>{landingSignup.existingAccount ? 'An existing account was found. Verification will open that account on this device without starting a second trial.' : 'Request the email code when you are ready. If two email codes do not arrive within 10 minutes, SMS backup verification will become available. Your account remains pending until verification succeeds.'}</p>
                     <div className="account-summary-card onboarding-account-summary">
                       <span><strong>Account</strong>{landingAccountDraft.accountName || 'My Private Vault'}</span>
                       <span><strong>Email</strong>{landingAccountDraft.email || 'not set'}</span>
@@ -8398,16 +8435,51 @@ function App() {
                     </div>
                     {landingSignup.message && <div className={`onboarding-status-message ${landingSignup.status}`}>{landingSignup.message}</div>}
                     <div className={`landing-otp-card ${landingOtp.status}`}>
-                      <div className="landing-otp-heading"><Mail size={19} /><span><strong>Email verification code</strong><small>The code expires after 10 minutes.</small></span></div>
-                      {landingOtp.status === 'idle' || landingOtp.status === 'error' ? (
-                        <button type="button" className="primary-button" onClick={() => { chooseLandingOtpChannel('email'); sendLandingOnboardingOtp(); }} disabled={landingOtp.status === 'sending'}><Mail size={17} /> Send email code</button>
-                      ) : null}
+                      <div className="landing-otp-heading">
+                        {landingOtp.channel === 'sms' ? <Phone size={19} /> : <Mail size={19} />}
+                        <span>
+                          <strong>{landingOtp.channel === 'sms' ? 'SMS backup verification' : 'Email verification code'}</strong>
+                          <small>{landingOtp.channel === 'sms' ? 'Use this only if the email codes have not arrived.' : 'The code expires after 10 minutes.'}</small>
+                        </span>
+                      </div>
+
+                      {(landingOtp.status === 'idle' || (landingOtp.status === 'error' && !landingOtp.challengeId)) && (
+                        <button type="button" className="primary-button" onClick={sendLandingOnboardingOtp} disabled={landingOtp.status === 'sending'}>
+                          {landingOtp.channel === 'sms' ? <Phone size={17} /> : <Mail size={17} />}
+                          {landingOtp.channel === 'sms' ? 'Send SMS code' : 'Send email code'}
+                        </button>
+                      )}
+
                       {landingOtp.status !== 'idle' && <p className={`landing-otp-message ${landingOtp.status}`}>{landingOtp.message}</p>}
                       {landingOtp.testCode && <div className="test-code-box"><span>Local test code</span><code>{landingOtp.testCode}</code></div>}
+
                       {['sent', 'verifying', 'error'].includes(landingOtp.status) && landingOtp.challengeId && (
-                        <div className="landing-otp-entry">
-                          <input inputMode="numeric" maxLength="6" value={landingOtp.input} onChange={(event) => setLandingOtp((current) => ({ ...current, input: event.target.value.replace(/\D/g, '').slice(0, 6) }))} placeholder="Enter 6-digit code" />
-                          <button type="button" className="primary-button" onClick={verifyLandingOnboardingOtp} disabled={landingOtp.status === 'verifying'}><ShieldCheck size={17} /> {landingOtp.status === 'verifying' ? 'Verifying...' : 'Verify account'}</button>
+                        <>
+                          <div className="landing-otp-entry">
+                            <input inputMode="numeric" maxLength="6" value={landingOtp.input} onChange={(event) => setLandingOtp((current) => ({ ...current, input: event.target.value.replace(/\D/g, '').slice(0, 6) }))} placeholder="Enter 6-digit code" />
+                            <button type="button" className="primary-button" onClick={verifyLandingOnboardingOtp} disabled={landingOtp.status === 'verifying'}><ShieldCheck size={17} /> {landingOtp.status === 'verifying' ? 'Verifying...' : landingOtp.channel === 'sms' ? 'Verify mobile & continue' : 'Verify account'}</button>
+                          </div>
+                          <button type="button" className="secondary-button onboarding-resend-code" onClick={sendLandingOnboardingOtp} disabled={landingOtp.status === 'verifying' || landingOtp.status === 'sending'}>
+                            <RefreshCw size={16} /> {landingOtp.channel === 'sms' ? 'Resend SMS code' : 'Resend email code'}
+                          </button>
+                        </>
+                      )}
+
+                      {landingOtp.smsFallbackEligible && landingOtp.channel === 'email' && (
+                        <div className="onboarding-sms-fallback">
+                          <Phone size={19} />
+                          <span>
+                            <strong>Still not receiving the email?</strong>
+                            <small>You have tried email twice within 10 minutes. You can now verify your mobile number by SMS instead.</small>
+                          </span>
+                          <button type="button" className="secondary-button" onClick={() => chooseLandingOtpChannel('sms')}>Use SMS backup</button>
+                        </div>
+                      )}
+
+                      {landingOtp.channel === 'sms' && (
+                        <div className="onboarding-sms-backup-note">
+                          <span>SMS verifies the mobile number saved during signup. It does not mark the email address as verified.</span>
+                          <button type="button" className="link-button" onClick={() => chooseLandingOtpChannel('email')}>Back to email verification</button>
                         </div>
                       )}
                     </div>

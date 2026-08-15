@@ -93,10 +93,12 @@ export async function handler(event) {
       });
     }
 
+    const emailVerifiedAfter = isEmail ? true : Boolean(user.email_verified);
+    const phoneVerifiedAfter = isEmail ? Boolean(user.phone_verified) : true;
     const verifiedUserPatch = {
       status: 'active',
-      email_verified: isEmail ? true : Boolean(user.email_verified),
-      phone_verified: isEmail ? Boolean(user.phone_verified) : true,
+      email_verified: emailVerifiedAfter,
+      phone_verified: phoneVerifiedAfter,
       otp_test_last_verified_at: now,
       otp_test_status: isEmail ? 'verified_email' : 'verified_sms',
       last_login_at: now,
@@ -173,7 +175,7 @@ export async function handler(event) {
     const accessCode = lifecycle.allowed && !backupIncluded
       ? 'PLAN_FEATURE_REQUIRED'
       : (cloudAccess ? '' : lifecycle.code || 'ACCOUNT_ACCESS_PAUSED');
-    const message = lifecycle.allowed && !backupIncluded
+    let message = lifecycle.allowed && !backupIncluded
       ? (firstActivation
           ? `Account verified. Your ${planName} vault is active on this device. Cloud backup and syncing are not included in the current plan.`
           : 'Device verified. Your encrypted local vault is available, but cloud backup and syncing are not included in the current plan.')
@@ -182,6 +184,22 @@ export async function handler(event) {
         : firstActivation
           ? (trialDays ? `Account verified. Your ${trialDays}-day ${planName} trial is now active.` : `Account verified. Your ${planName} account is now active.`)
           : 'Device verified. Cloud backup and secure syncing are active.';
+
+    if (!isEmail) {
+      if (firstActivation && !emailVerifiedAfter) {
+        message = trialDays
+          ? `Mobile number verified. Your ${trialDays}-day ${planName} trial is now active. Your email address is still awaiting verification.`
+          : `Mobile number verified. Your ${planName} account is now active. Your email address is still awaiting verification.`;
+      } else if (!firstActivation && !emailVerifiedAfter) {
+        message = cloudAccess
+          ? 'Mobile number verified. This device is verified for secure backup and syncing. Your email address is still awaiting verification.'
+          : 'Mobile number verified. This device is verified. Your email address is still awaiting verification.';
+      } else {
+        message = firstActivation
+          ? (trialDays ? `Mobile number verified. Your ${trialDays}-day ${planName} trial is now active.` : `Mobile number verified. Your ${planName} account is now active.`)
+          : (cloudAccess ? 'Mobile number verified. This device is verified for secure backup and syncing.' : 'Mobile number verified. This device is verified.');
+      }
+    }
 
     return jsonResponse(200, {
       ok: true,
@@ -197,6 +215,9 @@ export async function handler(event) {
       accessCode,
       onboardingCompleted: firstActivation,
       welcomeEmailSent: Boolean(welcomeEmail.sent),
+      verifiedChannel: isEmail ? 'email' : 'sms',
+      emailVerified: emailVerifiedAfter,
+      phoneVerified: phoneVerifiedAfter,
       entitlements: entitlementContext.serialized,
       account: {
         accountName: tenant.account_name || tenant.name || '',
