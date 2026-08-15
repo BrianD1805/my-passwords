@@ -28,8 +28,8 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-1.005.03 version is aligned', pkg.version === '1.5.3' && /Password-Encrypt Ver-1\.005\.03/.test(main) && /my-passwords-v1\.005\.03/.test(read('public/sw.js')));
-check('Trusted Person heading has a same-line Help and FAQ control', /Your Trusted Person Planning<\/strong>/.test(main) && /trusted-person-help-button/.test(main) && /Open Trusted Person help and FAQs/.test(main));
+check('Ver-1.005.04 version is aligned', pkg.version === '1.5.4' && /Password-Encrypt Ver-1\.005\.04/.test(main) && /my-passwords-v1\.005\.04/.test(read('public/sw.js')));
+check('Nominate a Trusted Person heading has a same-line Help and FAQ control', /Nominate a Trusted Person<\/h4>/.test(main) && /trusted-person-help-button/.test(main) && /Open Trusted Person help and FAQs/.test(main));
 check('Current progress is setup-only and explicitly shows Stage X of 4', /emergencySetupStageNumber/.test(main) && /Stage \{emergencySetupStageNumber\} of 4 setup/.test(main) && /emergencySetupCompleteCount/.test(main));
 check('Current progress panel jumps directly to its setup stage', /goToEmergencySetupStage/.test(main) && /onClick=\{\(\) => goToEmergencySetupStage\(emergencySetupStageNumber\)\}/.test(main) && /scrollIntoView/.test(main));
 check('Trusted Person help and all FAQs are consolidated in one popup', /trustedPersonHelpOpen/.test(main) && /Help &amp; FAQs/.test(main) && /Designed for serious emergencies/.test(main) && /What do Stages 1–4 mean\?/.test(main) && !/<strong>How Emergency Access works<\/strong>/.test(main));

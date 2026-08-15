@@ -17808,3 +17808,79 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     justify-content: center;
   }
 }
+
+
+/* Password-Encrypt Ver-1.005.04 — Emergency Access split into Nominate and Receive sections */
+.emergency-access-purpose-section {
+  display: grid;
+  gap: 16px;
+  margin: 0 0 24px;
+}
+.emergency-access-purpose-section:last-child {
+  margin-bottom: 0;
+}
+.emergency-access-purpose-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 16px 17px;
+  border: 1px solid #d5e1e9;
+  border-radius: 18px;
+  background: #f8fbfd;
+}
+.emergency-access-purpose-heading > div {
+  min-width: 0;
+}
+.emergency-access-purpose-heading .eyebrow {
+  margin: 0 0 3px;
+  color: #336699;
+}
+.emergency-access-purpose-heading h4 {
+  margin: 0;
+  color: #20364d;
+  font-size: 1.08rem;
+}
+.emergency-access-purpose-heading p:not(.eyebrow) {
+  margin: 5px 0 0;
+  color: #687b8c;
+  line-height: 1.45;
+}
+.emergency-access-purpose-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #eaf4fa;
+  color: #336699;
+}
+.emergency-access-receive-section {
+  padding-top: 6px;
+  border-top: 1px solid #dfe6eb;
+}
+.emergency-access-receive-section .emergency-access-purpose-heading {
+  background: #fbfaf8;
+}
+.emergency-access-receive-section .emergency-received-settings-card {
+  margin-bottom: 0;
+}
+
+@media (max-width: 700px) {
+  .emergency-access-purpose-section {
+    gap: 13px;
+    margin-bottom: 20px;
+  }
+  .emergency-access-purpose-heading {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 14px 13px;
+  }
+  .emergency-access-purpose-icon {
+    width: 42px;
+    height: 42px;
+  }
+  .emergency-access-purpose-heading h4 {
+    font-size: 1rem;
+  }
+}

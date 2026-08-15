@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.005.03';
+const VERSION = 'Password-Encrypt Ver-1.005.04';
 const SMS_VERIFICATION_UI_ENABLED = false;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
 const LEGACY_STORAGE_KEY = 'my-passwords-v0.001-local-vault';
@@ -371,7 +371,7 @@ const SETTINGS_FAQS = [
   {
     category: 'Emergency Access',
     question: 'Does my next of kin or trusted person need a Password-Encrypt account?',
-    answer: 'No. Emergency Access is intended for a next of kin or another trusted person you nominate. The standard flow works through secure browser links, so they can accept the invitation, request access and open the released package without installing the app or creating their own vault. If the trusted person already uses Password-Encrypt, the released page also shows a secure Import Code. They can enter that code from Settings → Emergency Access → Import Emergency Package inside their own vault and add the released package as a separate Emergency Package folder.'
+    answer: 'No. Emergency Access is intended for a next of kin or another trusted person you nominate. The standard flow works through secure browser links, so they can accept the invitation, request access and open the released package without installing the app or creating their own vault. If the trusted person already uses Password-Encrypt, the released page also shows a secure Import Code. They can enter that code from Settings → Emergency Access → Receive an Emergency Package inside their own vault and add the released package as a separate Emergency Package folder.'
   },
   {
     category: 'Emergency Access',
@@ -7892,7 +7892,7 @@ function App() {
                         <strong>Use Password-Encrypt?</strong>
                         {emergencyRequestState.importCode ? (
                           <>
-                            <span>Open your own Password-Encrypt vault, then go to <b>Settings → Emergency Access → Import Emergency Package</b> and enter this code.</span>
+                            <span>Open your own Password-Encrypt vault, then go to <b>Settings → Emergency Access → Receive an Emergency Package</b> and enter this code.</span>
                             <div className="emergency-import-code-display">
                               <code>{emergencyRequestState.importCode}</code>
                               <button type="button" className="icon-button" onClick={() => copyText('Import code', emergencyRequestState.importCode)} aria-label="Copy Emergency Package import code" title="Copy import code"><Copy size={17} /></button>
@@ -9195,7 +9195,7 @@ function App() {
                   <p className="settings-directory-label" id="settings-protection-group">Protection and recovery</p>
                   <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('emergency')}>
                     <span className="settings-directory-icon"><UsersRound size={22} /></span>
-                    <span className="settings-directory-copy"><strong>Emergency Access</strong><small>Manage your trusted person and import Emergency Packages released to you.</small></span>
+                    <span className="settings-directory-copy"><strong>Emergency Access</strong><small>Nominate a Trusted Person or receive an Emergency Package.</small></span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
                 </section>
@@ -9608,33 +9608,19 @@ function App() {
               <div className="settings-section-heading emergency-access-settings-heading">
                 <p className="eyebrow">Emergency Access</p>
                 <h3><UsersRound size={20} /> Emergency Access</h3>
-                <p>Manage your own trusted person and receive Emergency Packages released to you by another Password-Encrypt user.</p>
+                <p>Choose whether you want to nominate a Trusted Person for your own vault or receive an Emergency Package released to you.</p>
               </div>
 
-              <section className="settings-inner-card emergency-received-settings-card" aria-label="Import Emergency Package">
-                <div className="emergency-received-settings-header">
-                  <span className="emergency-received-settings-icon"><KeyRound size={21} /></span>
-                  <div><strong>Import Emergency Package</strong><small>Enter the Import Code from a released Emergency Package to add it securely to this vault.</small></div>
-                  <button type="button" className="primary-button" onClick={openEmergencyImportCodeModal}><KeyRound size={17} /> Enter Import Code</button>
-                </div>
-                <div className="emergency-received-settings-list">
-                  <strong>Emergency Packages received</strong>
-                  {receivedEmergencyPackages.length ? receivedEmergencyPackages.map((received) => (
-                    <button type="button" className="emergency-access-package-link" key={received.fingerprint} onClick={() => { setQuery(''); openVaultSection(received.folderName); }}>
-                      <span><b>{received.ownerName || 'Account owner'}</b><small>{received.importedAt ? `Imported ${formatAppDate(received.importedAt, true)}` : 'Imported package'} · {received.itemCount || 0} item(s){received.documentCount ? ` · ${received.documentCount} document(s)` : ''}</small></span>
-                      <ChevronRight size={18} />
-                    </button>
-                  )) : <p>No Emergency Packages have been imported into this vault yet.</p>}
-                </div>
-                <p className="emergency-received-settings-note">This import area belongs to Settings and does not depend on the Emergency Info folder. You can use it even if that default folder or its old starter item was previously deleted.</p>
-              </section>
-
-              <div className="trusted-person-settings-subheading">
-                <div className="trusted-person-heading-row">
-                  <div><strong>Your Trusted Person Planning</strong><small>Choose who should receive your prepared package if Emergency Access is ever genuinely needed.</small></div>
+              <section className="emergency-access-purpose-section emergency-access-nominate-section" aria-labelledby="emergency-nominate-title">
+                <div className="emergency-access-purpose-heading">
+                  <span className="emergency-access-purpose-icon"><UsersRound size={22} /></span>
+                  <div>
+                    <p className="eyebrow">Nominate</p>
+                    <h4 id="emergency-nominate-title">Nominate a Trusted Person</h4>
+                    <p>Choose and manage the person who should receive your prepared Emergency Package if it is ever genuinely needed.</p>
+                  </div>
                   <button type="button" className="trusted-person-help-button" onClick={() => setTrustedPersonHelpOpen(true)} aria-label="Open Trusted Person help and FAQs" title="Trusted Person help"><CircleHelp size={20} /></button>
                 </div>
-              </div>
 
               {!featureIncluded('emergencyAccess') && <div className="plan-feature-unavailable"><UsersRound size={21} /><span><strong>Trusted Person planning is not included</strong><small>You can still import an Emergency Package released to your Password-Encrypt account. Upgrade or ask Admin for an entitlement override to configure your own trusted person.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('emergencyAccess')}>Review plan</button></div>}
 
@@ -9810,6 +9796,35 @@ function App() {
                 </div>
                 {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last saved: {formatAppDate(emergencyDraft.updatedAt, true)}</p>}
               </form>
+              </section>
+
+              <section className="emergency-access-purpose-section emergency-access-receive-section" aria-labelledby="emergency-receive-title">
+                <div className="emergency-access-purpose-heading">
+                  <span className="emergency-access-purpose-icon"><KeyRound size={22} /></span>
+                  <div>
+                    <p className="eyebrow">Receive</p>
+                    <h4 id="emergency-receive-title">Receive an Emergency Package</h4>
+                    <p>Enter an Import Code from a package released to you and keep received packages together in your own encrypted vault.</p>
+                  </div>
+                </div>
+
+                <section className="settings-inner-card emergency-received-settings-card" aria-label="Import Emergency Package">
+                  <div className="emergency-received-settings-header">
+                    <span className="emergency-received-settings-icon"><KeyRound size={21} /></span>
+                    <div><strong>Import Emergency Package</strong><small>Enter the Import Code from a released Emergency Package to add it securely to this vault.</small></div>
+                    <button type="button" className="primary-button" onClick={openEmergencyImportCodeModal}><KeyRound size={17} /> Enter Import Code</button>
+                  </div>
+                  <div className="emergency-received-settings-list">
+                    <strong>Emergency Packages received</strong>
+                    {receivedEmergencyPackages.length ? receivedEmergencyPackages.map((received) => (
+                      <button type="button" className="emergency-access-package-link" key={received.fingerprint} onClick={() => { setQuery(''); openVaultSection(received.folderName); }}>
+                        <span><b>{received.ownerName || 'Account owner'}</b><small>{received.importedAt ? `Imported ${formatAppDate(received.importedAt, true)}` : 'Imported package'} · {received.itemCount || 0} item(s){received.documentCount ? ` · ${received.documentCount} document(s)` : ''}</small></span>
+                        <ChevronRight size={18} />
+                      </button>
+                    )) : <p>No Emergency Packages have been imported into this vault yet.</p>}
+                  </div>
+                </section>
+              </section>
             </section>
           )}
 
@@ -10227,7 +10242,7 @@ function App() {
                 <details><summary>What are Stages 5 and 6?</summary><p>Stages 5 and 6 are emergency-only. They are not part of setup and remain dormant unless your trusted person later uses their saved Emergency Access link in a genuine emergency.</p></details>
                 <details><summary>What happens when Emergency Access is requested?</summary><p>Your chosen waiting period starts and you are notified. No vault contents are released while the waiting period is active, and you can cancel the request before the waiting period ends.</p></details>
                 <details><summary>Will my trusted person receive the latest version of my vault?</summary><p>Yes, for the folders and documents you chose to release. While the Trusted Person arrangement is active, Password-Encrypt refreshes the prepared package whenever included vault information changes and again when the unlocked vault comes online. Because the server cannot decrypt your vault by itself, the app must be unlocked and online for a refresh to complete. When the waiting period finishes, that latest prepared package is frozen as the release snapshot so later vault changes are not silently shared.</p></details>
-                <details><summary>Does my trusted person need the Password-Encrypt app?</summary><p>No. Invitation, confirmation and Emergency Access links open in a normal browser. They do not need to install the PWA or create their own vault. If they already use Password-Encrypt, the released package page gives them an Import Code. They enter it under Settings → Emergency Access → Import Emergency Package to add the package to their own encrypted vault as a separate Emergency Package folder.</p></details>
+                <details><summary>Does my trusted person need the Password-Encrypt app?</summary><p>No. Invitation, confirmation and Emergency Access links open in a normal browser. They do not need to install the PWA or create their own vault. If they already use Password-Encrypt, the released package page gives them an Import Code. They enter it under Settings → Emergency Access → Receive an Emergency Package to add the package to their own encrypted vault as a separate Emergency Package folder.</p></details>
                 <details><summary>How will they know when the waiting period has ended?</summary><p>Password-Encrypt checks the waiting period automatically. When it completes without cancellation, the trusted person is emailed a secure link to the emergency package you prepared. That released-package link remains available for 30 days.</p></details>
                 <details><summary>What is Full vault access?</summary><p>Full vault access is an explicit next-of-kin option that prepares the selected emergency package without saving or sending your master password.</p></details>
                 <details><summary>What does Reset to zero do?</summary><p>Reset to zero removes the trusted person, invitation and request records, secure links, emergency-package setup and the flow audit history so you can start again from Stage 1.</p></details>
