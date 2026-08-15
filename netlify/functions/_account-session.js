@@ -7,6 +7,7 @@ const SESSION_DAYS = 30;
 const RENEW_WITHIN_DAYS = 7;
 const ROTATE_AFTER_HOURS = 24;
 const TOUCH_AFTER_MINUTES = 5;
+const ROTATION_RECOVERY_MINUTES = 5;
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -106,7 +107,7 @@ export async function createVerifiedCustomerSession(event, { tenantId, userId, r
     expires_at: expiresAt,
     last_seen_at: now,
     user_agent: details.userAgent,
-    metadata: { ip_hash: requestFingerprint(event) || null, app_version: '0.050' }
+    metadata: { ip_hash: requestFingerprint(event) || null, app_version: '1.006' }
   });
 
   if (shouldNotifyNewDevice) {
@@ -148,8 +149,29 @@ export async function validateCustomerSession(event, { touch = false } = {}) {
   if (!token.sessionId || !token.deviceId) return { ok: true, session: token, legacy: true, renewRequired: true };
 
   const rows = await selectRows('account_sessions', `select=*&id=${eq(token.sessionId)}&tenant_id=${eq(token.tenantId)}&user_id=${eq(token.userId)}&limit=1`).catch(() => []);
-  const stored = rows?.[0];
-  if (!stored?.id || stored.status !== 'active' || stored.revoked_at) return { ok: false, code: 'SESSION_REVOKED', message: 'This account session has ended.' };
+  let stored = rows?.[0];
+  let recoveredRotation = false;
+  if (!stored?.id) return { ok: false, code: 'SESSION_REVOKED', message: 'This account session has ended.' };
+
+  // App-open can raise focus + visibility checks almost simultaneously. If one
+  // request rotates a 24-hour-old session while another request still carries
+  // the previous cookie, recover the freshly rotated successor rather than
+  // clearing the new cookie and forcing an unnecessary device verification.
+  if (stored.status !== 'active' || stored.revoked_at) {
+    const revokedAt = new Date(stored.revoked_at || stored.updated_at || 0).getTime();
+    const recentRotation = stored.revoked_reason === 'rotated'
+      && Number.isFinite(revokedAt)
+      && Date.now() - revokedAt <= ROTATION_RECOVERY_MINUTES * 60 * 1000;
+    if (recentRotation && stored.device_id) {
+      const successors = await selectRows('account_sessions', `select=*&tenant_id=${eq(token.tenantId)}&user_id=${eq(token.userId)}&device_id=${eq(stored.device_id)}&status=${eq('active')}&order=issued_at.desc&limit=5`).catch(() => []);
+      const successor = (successors || []).find((row) => String(row?.metadata?.rotated_from || '') === String(stored.id));
+      if (successor?.id && new Date(successor.expires_at).getTime() > Date.now()) {
+        stored = successor;
+        recoveredRotation = true;
+      }
+    }
+    if (!recoveredRotation) return { ok: false, code: 'SESSION_REVOKED', message: 'This account session has ended.' };
+  }
   if (new Date(stored.expires_at).getTime() <= Date.now()) {
     await updateRow('account_sessions', `id=${eq(stored.id)}`, { status: 'expired', updated_at: new Date().toISOString() }).catch(() => null);
     return { ok: false, code: 'SESSION_EXPIRED', message: 'This account session has expired. Verify this device again.' };
@@ -185,6 +207,7 @@ export async function validateCustomerSession(event, { touch = false } = {}) {
     stored,
     device,
     legacy: false,
+    recoveredRotation,
     renewRequired,
     rotateRequired
   };
@@ -192,6 +215,24 @@ export async function validateCustomerSession(event, { touch = false } = {}) {
 
 export async function upgradeOrRenewCustomerSession(event, validation, { role = 'member', clientDeviceId = '', deviceName = '', deviceType = '', platform = '', browser = '', userAgent = '' } = {}) {
   if (!validation?.ok) return null;
+  if (validation.recoveredRotation) {
+    const expiresAt = validation.stored?.expires_at || sessionExpiry();
+    return {
+      session: validation.stored,
+      device: validation.device,
+      expiresAt,
+      recovered: true,
+      cookie: issueCustomerSession(event, {
+        tenantId: validation.session.tenantId,
+        userId: validation.session.userId,
+        role: role || validation.session.role || 'member',
+        sessionId: validation.stored.id,
+        deviceId: validation.device.id,
+        sessionGeneration: validation.session.sessionGeneration,
+        expiresAt
+      })
+    };
+  }
   if (validation.legacy) {
     return createVerifiedCustomerSession(event, {
       tenantId: validation.session.tenantId,
@@ -221,7 +262,7 @@ export async function upgradeOrRenewCustomerSession(event, validation, { role = 
       expires_at: expiresAt,
       last_seen_at: now,
       user_agent: validation.stored.user_agent || cleanText(userAgent, 500),
-      metadata: { ...(validation.stored.metadata || {}), app_version: '0.050', rotated_from: validation.stored.id },
+      metadata: { ...(validation.stored.metadata || {}), app_version: '1.006', rotated_from: validation.stored.id },
       updated_at: now
     });
     await updateRow('account_sessions', `id=${eq(validation.stored.id)}`, {
