@@ -18075,3 +18075,9 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     flex-direction: column;
   }
 }
+
+/* Password-Encrypt Ver-1.007.02 — restore email/mobile verification status in Admin customer information */
+.admin-customer-directory-status .admin-status.neutral {
+  background: #eef3f7;
+  color: #5f7285;
+}

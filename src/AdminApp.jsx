@@ -518,7 +518,11 @@ export default function AdminApp({ version }) {
                     </span>
                     <span className="admin-customer-directory-plan"><small>Plan</small><strong>{customer.planName || planDisplayName(customer.planCode)}</strong><em>{paymentStatus}</em></span>
                     <span className="admin-customer-directory-health"><small>Last sign-in</small><strong>{dateLabel(customer.lastSignInAt, true)}</strong><em>Backup {dateLabel(customer.lastSuccessfulBackupAt, true)}</em></span>
-                    <span className="admin-customer-directory-status"><span className={`admin-status ${customer.accountStatus}`}>{planStatusDisplayName(customer.accountStatus)}</span><span className={`admin-status ${customer.verification?.emailVerified ? 'success' : 'warning'}`}>{customer.verification?.emailVerified ? 'Email verified' : 'Verify email'}</span></span>
+                    <span className="admin-customer-directory-status">
+                      <span className={`admin-status ${customer.accountStatus}`}>{planStatusDisplayName(customer.accountStatus)}</span>
+                      <span className={`admin-status ${customer.verification?.emailVerified ? 'success' : 'warning'}`}>{customer.verification?.emailVerified ? 'Email verified' : 'Email not verified'}</span>
+                      <span className={`admin-status ${!owner.phone ? 'neutral' : customer.verification?.phoneVerified ? 'success' : 'warning'}`}>{!owner.phone ? 'No mobile' : customer.verification?.phoneVerified ? 'Mobile verified' : 'Mobile not verified'}</span>
+                    </span>
                     <ChevronRight size={22} />
                   </button>
                 );

@@ -20,7 +20,7 @@ function check(label, condition) {
   else { console.error(`FAIL  ${label}`); failures += 1; }
 }
 
-check('Ver-1.007.01 app/package/service-worker versions align', pkg.version === '1.7.1' && /Password-Encrypt Ver-1\.007\.01/.test(main) && /my-passwords-v1\.007\.01/.test(sw));
+check('Ver-1.007.02 app/package/service-worker versions align', pkg.version === '1.7.2' && /Password-Encrypt Ver-1\.007\.02/.test(main) && /my-passwords-v1\.007\.02/.test(sw));
 check('Landing Open My Vault opens an existing/new customer choice', /function openVaultApp\(\)[\s\S]*isPublicLandingRoute[\s\S]*setIsOpenVaultChoicePopupOpen\(true\)/.test(main));
 check('Choice clearly separates existing customer from new customer', /Yes — I’m an existing customer/.test(main) && /No — I’m new to Password-Encrypt/.test(main));
 check('Existing customer route carries explicit existing-entry intent', /window\.location\.assign\('\/vault\?entry=existing'\)/.test(main) && /vaultEntryMode === 'existing'/.test(main));
@@ -64,7 +64,7 @@ check('Welcome email contains account email, mobile, vault name and plan details
 check('Welcome email explicitly excludes the master password', /Your master password is never included in email/.test(customerEmail));
 check('Welcome email receives the stored account phone and email', /phone_e164/.test(verifyOtp) && /accountEmail: user\.email/.test(verifyOtp) && /accountPhone: user\.phone_e164/.test(verifyOtp));
 check('SMS authentication UI remains staged off while mobile contact verification is enabled', /const SMS_AUTH_VERIFICATION_UI_ENABLED = false/.test(main) && /const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true/.test(main) && /requestSmsOtp/.test(main));
-check('Admin verification presentation no longer depends on mobile SMS verification', /customer\.verification\?\.emailVerified/.test(admin) && /Mobile number on file/.test(customerDetail) && !/Mobile not verified/.test(customerDetail));
+check('Admin verification presentation shows both email and mobile verification state', /customer\.verification\?\.emailVerified/.test(admin) && /customer\.verification\?\.phoneVerified/.test(admin) && /Mobile verified/.test(customerDetail) && /Mobile not verified/.test(customerDetail));
 check('Three-step onboarding has desktop and mobile styling', /\.vault-onboarding-screen/.test(css) && /\.three-step-onboarding-guide/.test(css) && /\.onboarding-three-part-roadmap/.test(css) && /install-onboarding-content/.test(css) && /@media \(max-width: 680px\)[\s\S]*\.vault-onboarding-screen/.test(css));
 
 check('Vault-login key icon is shown only after Secure device unlock has been configured', /biometricUnlock && biometricStatus\.supported && featureIncluded\('secureDeviceUnlock'\)/.test(main) && /aria-label="Open device unlock"/.test(main));

@@ -241,7 +241,7 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
       <div className="admin-detail-metrics">
         <article><UserRoundCheck /><small>Last successful sign-in</small><strong>{dateLabel(summary.lastSignInAt)}</strong><span>{summary.activeSessionCount || 0} active session(s)</span></article>
         <article><Cloud /><small>Last successful backup</small><strong>{dateLabel(summary.lastSuccessfulBackupAt)}</strong><span>{summary.lastSuccessfulBackupItems || 0} encrypted item(s)</span></article>
-        <article><Check /><small>Verification</small><strong>{summary.emailVerified ? 'Email verified' : 'Email not verified'}</strong><span>{owner.phone_e164 ? 'Mobile number on file' : 'No mobile added'}</span></article>
+        <article><Check /><small>Verification</small><strong>{summary.emailVerified ? 'Email verified' : 'Email not verified'}</strong><span>{owner.phone_e164 ? (summary.phoneVerified ? 'Mobile verified' : 'Mobile not verified') : 'No mobile added'}</span></article>
         <article><Trash2 /><small>Deletion status</small><strong>{label(summary.deletionStatus || 'none')}</strong><span>{detail.deletion?.scheduled_for ? `Scheduled ${dateLabel(detail.deletion.scheduled_for, false)}` : 'No scheduled deletion date'}</span></article>
       </div>
 
@@ -252,7 +252,7 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
             <span><small>Plan</small><strong>{detail.plan?.display_name || label(tenant.plan_code)}</strong></span>
             <span><small>Account created</small><strong>{dateLabel(tenant.created_at)}</strong></span>
             <span><small>Email</small><strong>{owner.email || '—'}</strong><em>{owner.email_verified ? 'Verified' : 'Not verified'}</em></span>
-            <span><small>Mobile</small><strong>{owner.phone_e164 || '—'}</strong><em>{owner.phone_e164 ? 'On file' : 'Not added'}</em></span>
+            <span><small>Mobile</small><strong>{owner.phone_e164 || '—'}</strong><em>{owner.phone_e164 ? (owner.phone_verified ? 'Verified' : 'Not verified') : 'Not added'}</em></span>
             <span><small>Last verification</small><strong>{dateLabel(summary.lastVerificationAt)}</strong></span>
             <span><small>Verified devices</small><strong>{summary.verifiedDeviceCount || 0}</strong></span>
             <span><small>Onboarding</small><strong>{label(owner.onboarding_status || (tenant.onboarding_completed_at ? 'complete' : 'pending'))}</strong></span>
