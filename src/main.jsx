@@ -1,14 +1,14 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, ArrowLeft, ArrowUp, Bell, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Save, Settings, Share2, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowUp, Bell, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, Image as ImageIcon, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Save, Settings, Share2, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.007.02';
+const VERSION = 'Password-Encrypt Ver-1.008';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -188,13 +188,13 @@ function passwordEncryptInstallInstructions() {
   return 'Use the install icon in your browser address bar, or open the browser menu and choose Install Password-Encrypt.';
 }
 const DEFAULT_ENTITLEMENTS = Object.freeze({
-  version: 1,
+  version: 3,
   planCode: 'personal',
   planName: 'Personal',
-  limits: { maxUsers: 1, itemLimit: 0, documentLimit: 0, storageLimitMb: 0 },
-  features: { documents: true, emergencyAccess: true, secureDeviceUnlock: true, cloudBackupSync: true, multiUser: false, sharing: false },
-  usage: { users: 1, vaultItems: 0, documents: 0, documentStorageBytes: 0, vaultStorageBytes: 0, storageBytes: 0, storageMb: 0 },
-  remaining: { users: 0, vaultItems: null, documents: null, storageBytes: null }
+  limits: { maxUsers: 1, itemLimit: 0, documentLimit: 0, photoLimit: 0, storageLimitMb: 0 },
+  features: { documents: true, pictures: true, emergencyAccess: true, secureDeviceUnlock: true, cloudBackupSync: true, multiUser: false, sharing: false },
+  usage: { users: 1, vaultItems: 0, documents: 0, pictures: 0, documentStorageBytes: 0, pictureStorageBytes: 0, vaultStorageBytes: 0, storageBytes: 0, storageMb: 0 },
+  remaining: { users: 0, vaultItems: null, documents: null, pictures: null, storageBytes: null }
 });
 
 function randomIndex(max) {
@@ -368,6 +368,11 @@ const SETTINGS_FAQS = [
     category: 'Documents',
     question: 'Can I store documents in the vault?',
     answer: 'Yes. Supported documents are encrypted before upload. The current upload limit is 10 MB per document.'
+  },
+  {
+    category: 'Pictures',
+    question: 'Can I store passport and photo ID pictures in the vault?',
+    answer: 'Yes. Pictures such as passport photos, photo IDs and driving licences can be stored as encrypted Pictures. Each picture can be up to 10 MB, subject to the Picture allowance and total storage included in your plan.'
   },
   {
     category: 'Emergency Access',
@@ -609,16 +614,19 @@ function tenantRoleDisplayName(tenantRole) {
   return role ? role.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Primary Owner';
 }
 
-const BUILT_IN_CATEGORIES = ['Passwords', 'Cards', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Documents', 'Emergency Info'];
+const BUILT_IN_CATEGORIES = ['Passwords', 'Cards', 'Bank Details', 'Secret Keys', 'Work Stuff', 'Links', 'Notes', 'Checklists', 'Documents', 'Pictures', 'Emergency Info'];
 const categories = ['All', ...BUILT_IN_CATEGORIES];
 const FOLDER_META_CATEGORY = '__my_passwords_folder_meta';
 const FOLDER_META_ID = '__my_passwords_custom_folders';
 const EMERGENCY_ACCESS_META_CATEGORY = '__my_passwords_emergency_access_meta';
 const EMERGENCY_ACCESS_META_ID = '__my_passwords_emergency_access_plan';
 const DOCUMENTS_CATEGORY = 'Documents';
+const PICTURES_CATEGORY = 'Pictures';
 const CARDS_CATEGORY = 'Cards';
 const FAVOURITES_VIEW = '__favourites__';
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+const MAX_PICTURE_BYTES = 10 * 1024 * 1024;
+const ENCRYPTED_FILE_CHUNK_CHARACTERS = 2_000_000;
 const ALLOWED_DOCUMENT_EXTENSIONS = ['txt', 'md', 'csv', 'xls', 'xlsx', 'doc', 'docx', 'pdf'];
 const ALLOWED_DOCUMENT_MIME_TYPES = [
   'text/plain',
@@ -630,6 +638,8 @@ const ALLOWED_DOCUMENT_MIME_TYPES = [
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ];
+const ALLOWED_PICTURE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];
+const ALLOWED_PICTURE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 
 const categoryHints = {
   Passwords: {
@@ -690,11 +700,18 @@ const categoryHints = {
     notes: 'Use one line per checklist item. Example:\n[ ] Renew card\n[ ] Rotate API key\n[x] Backup codes saved'
   },
   Documents: {
-    title: 'e.g. Passport scan, insurance PDF, policy document',
+    title: 'e.g. Insurance PDF, policy or certificate',
     url: '',
     username: '',
     secret: '',
     notes: 'Optional notes about this stored document...'
+  },
+  Pictures: {
+    title: 'e.g. Passport photo, photo ID, driving licence',
+    url: '',
+    username: '',
+    secret: '',
+    notes: 'Optional notes about this encrypted picture...'
   },
   'Emergency Info': {
     title: 'e.g. Emergency access instruction',
@@ -1111,14 +1128,16 @@ function emergencyPackageRelevantItems(plan, vaultItems) {
 
 function emergencyPackageFingerprintItem(item) {
   const file = item?.payload?.file || null;
-  const documentMetadata = item?.category === DOCUMENTS_CATEGORY && file
+  const isStoredFile = [DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(item?.category) && file;
+  const fileMetadata = isStoredFile
     ? {
         name: file.name || '',
         type: file.type || '',
         extension: file.extension || '',
         size: Number(file.size || 0),
+        blobKind: item?.category === PICTURES_CATEGORY ? 'picture' : 'document',
         storedExternally: Boolean(file.storedExternally),
-        blobId: file.blobId || file.storageId || file.objectKey || file.path || ''
+        blobId: file.blobId || file.storageId || file.objectKey || file.path || file.externalDocumentId || ''
       }
     : null;
   return {
@@ -1127,7 +1146,7 @@ function emergencyPackageFingerprintItem(item) {
     category: item?.category || '',
     favourite: Boolean(item?.favourite),
     updatedAt: item?.updatedAt || '',
-    payload: documentMetadata ? { document: documentMetadata } : (item?.payload || {})
+    payload: fileMetadata ? { file: fileMetadata } : (item?.payload || {})
   };
 }
 
@@ -1193,7 +1212,8 @@ function buildEmergencyReleasePackage(plan, vaultItems, account, releasedDocumen
       updatedAt: item.updatedAt || ''
     })),
     releasedDocuments: Array.isArray(releasedDocuments) ? releasedDocuments : [],
-    documentCount: Array.isArray(releasedDocuments) ? releasedDocuments.length : 0,
+    documentCount: Array.isArray(releasedDocuments) ? releasedDocuments.filter((entry) => String(entry?.sourceCategory || DOCUMENTS_CATEGORY) !== PICTURES_CATEGORY).length : 0,
+    pictureCount: Array.isArray(releasedDocuments) ? releasedDocuments.filter((entry) => String(entry?.sourceCategory || '') === PICTURES_CATEGORY).length : 0,
     notes: fullAccess
       ? 'The owner selected Full vault access. Password-Encrypt kept this prepared package updated from the owner’s unlocked vault while the Trusted Person arrangement remained active, then froze this release snapshot when the waiting period completed.'
       : 'The owner selected Emergency Info only. This package includes Emergency Info records and the owner-written emergency package fields.'
@@ -1242,19 +1262,20 @@ function buildEmergencyReleaseFolders(items = [], releasedDocuments = []) {
   }
 
   grouped.delete(DOCUMENTS_CATEGORY);
-  const documents = [...(Array.isArray(releasedDocuments) ? releasedDocuments : [])].sort((a, b) => {
-    const nameA = String(a?.fileName || a?.title || 'Document').trim();
-    const nameB = String(b?.fileName || b?.title || 'Document').trim();
+  grouped.delete(PICTURES_CATEGORY);
+  const sortFiles = (list = [], fallback = 'File') => [...list].sort((a, b) => {
+    const nameA = String(a?.fileName || a?.title || fallback).trim();
+    const nameB = String(b?.fileName || b?.title || fallback).trim();
     const firstRank = (value) => /^[A-Za-z]$/.test(value.charAt(0)) ? 0 : /^[0-9]$/.test(value.charAt(0)) ? 1 : 2;
     const rankDiff = firstRank(nameA) - firstRank(nameB);
     if (rankDiff) return rankDiff;
     return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
   });
-  const folders = [{
-    name: DOCUMENTS_CATEGORY,
-    items: [],
-    documents
-  }];
+  const files = Array.isArray(releasedDocuments) ? releasedDocuments : [];
+  const documents = sortFiles(files.filter((entry) => String(entry?.sourceCategory || DOCUMENTS_CATEGORY) !== PICTURES_CATEGORY), 'Document');
+  const pictures = sortFiles(files.filter((entry) => String(entry?.sourceCategory || '') === PICTURES_CATEGORY), 'Picture');
+  const folders = [{ name: DOCUMENTS_CATEGORY, items: [], documents }];
+  if (pictures.length || grouped.has(PICTURES_CATEGORY)) folders.push({ name: PICTURES_CATEGORY, items: [], documents: pictures });
 
   for (const folderName of sortEmergencyFolderNames([...grouped.keys()])) {
     folders.push({ name: folderName, items: sortEmergencyReleasedItems(grouped.get(folderName) || []), documents: [] });
@@ -1294,9 +1315,10 @@ function emergencyPackagePlainText(packageData, releaseExpiresAt = '') {
   }
   const releasedDocuments = Array.isArray(packageData?.releasedDocuments) ? packageData.releasedDocuments : [];
   if (releasedDocuments.length) {
-    lines.push('', 'RELEASED DOCUMENTS');
+    lines.push('', 'RELEASED DOCUMENTS AND PICTURES');
     for (const documentMeta of releasedDocuments) {
-      lines.push(`${documentMeta.fileName || documentMeta.title || 'Document'}${documentMeta.fileSize ? ` (${formatFileSize(documentMeta.fileSize)})` : ''}`);
+      const sourceCategory = String(documentMeta?.sourceCategory || DOCUMENTS_CATEGORY);
+      lines.push(`${documentMeta.fileName || documentMeta.title || (sourceCategory === PICTURES_CATEGORY ? 'Picture' : 'Document')} [${sourceCategory}]${documentMeta.fileSize ? ` (${formatFileSize(documentMeta.fileSize)})` : ''}`);
     }
   }
   if (packageData?.notes) pushSection('Package note', packageData.notes);
@@ -1978,7 +2000,8 @@ function receivedEmergencyPackagesFromItems(vaultItems) {
       preparedAt: String(info.preparedAt || ''),
       importedAt: String(info.importedAt || ''),
       itemCount: 0,
-      documentCount: 0
+      documentCount: 0,
+      pictureCount: 0
     };
     existing.folderName = String(info.folderName || existing.folderName || item?.category || '');
     existing.ownerName = String(info.ownerName || existing.ownerName || 'Account owner');
@@ -1986,6 +2009,7 @@ function receivedEmergencyPackagesFromItems(vaultItems) {
     existing.importedAt = String(info.importedAt || existing.importedAt || '');
     existing.itemCount += 1;
     if (String(info.sourceCategory || '') === DOCUMENTS_CATEGORY) existing.documentCount += 1;
+    if (String(info.sourceCategory || '') === PICTURES_CATEGORY) existing.pictureCount += 1;
     packages.set(fingerprint, existing);
   }
   return [...packages.values()].sort((a, b) => String(b.importedAt || '').localeCompare(String(a.importedAt || '')));
@@ -2272,6 +2296,12 @@ function isAllowedDocumentFile(file) {
   if (!file) return false;
   const extension = getFileExtension(file.name);
   return ALLOWED_DOCUMENT_EXTENSIONS.includes(extension) || ALLOWED_DOCUMENT_MIME_TYPES.includes(file.type);
+}
+
+function isAllowedPictureFile(file) {
+  if (!file) return false;
+  const extension = getFileExtension(file.name);
+  return ALLOWED_PICTURE_EXTENSIONS.includes(extension) || ALLOWED_PICTURE_MIME_TYPES.includes(file.type);
 }
 
 function formatFileSize(bytes) {
@@ -2644,7 +2674,7 @@ function AccountSecurityModal({ state, setState, onClose, onRequestCode, onConfi
         <div className="item-popup-body account-security-modal-body">
           {state.mode === 'change-email' && !state.challengeId && <><p>{state.verifyExisting ? 'Send a one-time code to verify the email address already saved on this account.' : 'Enter the new email address. A one-time code will be sent there before the account is changed.'}</p><label>New email address<input type="email" value={state.newEmail || ''} onChange={(event) => setState((current) => ({ ...current, newEmail: event.target.value, message: '' }))} placeholder="new@example.com" /></label></>}
           {state.mode === 'change-phone' && !state.challengeId && <><p>{state.verifyExisting ? 'We will send an SMS one-time code to the mobile number already saved on this account. Enter that code to confirm the number belongs to you.' : 'Enter the new mobile number. Password-Encrypt will update it only after a code sent by SMS is verified.'}</p><label className="combined-phone-label">{state.verifyExisting ? 'Mobile number' : 'New mobile number'}<div className="phone-combo-field"><CountryPicker countryCode={state.phoneCountryCode || '+254'} countryIso={state.phoneCountryIso || 'ke'} onChange={(country) => setState((current) => ({ ...current, phoneCountryCode: country.code, phoneCountryIso: country.iso, message: '' }))} /><input inputMode="tel" value={state.phoneNumber || ''} onChange={(event) => setState((current) => ({ ...current, phoneNumber: event.target.value, message: '' }))} placeholder="712345678" /></div></label><p className="sms-carrier-note">Standard message and carrier rates may apply.</p></>}
-          {state.mode === 'delete-account' && !state.challengeId && <><div className="account-deletion-warning"><AlertTriangle size={22} /><span><strong>This is a permanent account action</strong><small>After email verification, deletion waits 14 days. When the waiting period ends, the account, encrypted cloud vault backups and stored documents are permanently removed.</small></span></div><label>Reason (optional)<textarea rows="3" value={state.reason || ''} onChange={(event) => setState((current) => ({ ...current, reason: event.target.value }))} placeholder="Optional feedback" /></label></>}
+          {state.mode === 'delete-account' && !state.challengeId && <><div className="account-deletion-warning"><AlertTriangle size={22} /><span><strong>This is a permanent account action</strong><small>After email verification, deletion waits 14 days. When the waiting period ends, the account, encrypted cloud vault backups, stored documents and stored pictures are permanently removed.</small></span></div><label>Reason (optional)<textarea rows="3" value={state.reason || ''} onChange={(event) => setState((current) => ({ ...current, reason: event.target.value }))} placeholder="Optional feedback" /></label></>}
           {needsOtp && state.challengeId && <><div className="account-otp-destination">{state.mode === 'change-phone' ? <Phone size={20} /> : <Mail size={20} />}<span><strong>Enter the verification code</strong><small>{state.message || 'The code expires in 10 minutes.'}</small></span></div><label>Six-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={state.code || ''} onChange={(event) => setState((current) => ({ ...current, code: event.target.value.replace(/\D/g, '').slice(0, 6), message: '' }))} placeholder="000000" /></label>{state.testOtpCode && <div className="test-code-box"><span>Local test code</span><code>{state.testOtpCode}</code></div>}</>}
           {state.mode === 'remove-device' && <div className="account-deletion-warning"><MonitorSmartphone size={22} /><span><strong>Remove {state.deviceName || 'this verified device'}?</strong><small>Every account session on that device will end. This cannot remotely erase an encrypted local vault already stored there.</small></span></div>}
           {state.mode === 'end-all-sessions' && <div className="account-deletion-warning"><ShieldCheck size={22} /><span><strong>End every account session?</strong><small>All browsers and verified devices, including this one, will need a new one-time verification code before account services can be used again.</small></span></div>}
@@ -2822,6 +2852,7 @@ function App() {
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [downloadingDocId, setDownloadingDocId] = useState('');
   const [sharingDocId, setSharingDocId] = useState('');
+  const [picturePreview, setPicturePreview] = useState({ itemId: '', dataUrl: '', busy: false });
   const [emergencyDocumentBusyId, setEmergencyDocumentBusyId] = useState('');
   const [emergencyPackageDownloadBusy, setEmergencyPackageDownloadBusy] = useState(false);
   const [isFolderPopupOpen, setIsFolderPopupOpen] = useState(false);
@@ -3366,7 +3397,7 @@ function App() {
   }
 
   function showEntitlementUpgrade(feature, message = '') {
-    const labels = { items: 'Vault items', documents: 'Encrypted documents', storage: 'Account storage', emergencyAccess: 'Emergency Access', secureDeviceUnlock: 'Secure device unlock', cloudBackupSync: 'Cloud backup and sync', users: 'Additional users' };
+    const labels = { items: 'Vault items', documents: 'Encrypted documents', pictures: 'Encrypted pictures', storage: 'Account storage', emergencyAccess: 'Emergency Access', secureDeviceUnlock: 'Secure device unlock', cloudBackupSync: 'Cloud backup and sync', users: 'Additional users' };
     setEntitlementModal({ visible: true, feature, title: `${labels[feature] || 'This feature'} needs a plan upgrade`, message: message || `${labels[feature] || 'This feature'} is not included in the current plan or its plan limit has been reached.` });
   }
 
@@ -3380,9 +3411,9 @@ function App() {
   }
 
   function handleEntitlementError(result, fallbackFeature = '') {
-    if (!result?.upgradeRequired && !['PLAN_FEATURE_REQUIRED', 'ITEM_LIMIT_REACHED', 'DOCUMENT_LIMIT_REACHED', 'STORAGE_LIMIT_REACHED', 'USER_LIMIT_REACHED'].includes(String(result?.code || ''))) return false;
+    if (!result?.upgradeRequired && !['PLAN_FEATURE_REQUIRED', 'ITEM_LIMIT_REACHED', 'DOCUMENT_LIMIT_REACHED', 'PHOTO_LIMIT_REACHED', 'STORAGE_LIMIT_REACHED', 'USER_LIMIT_REACHED'].includes(String(result?.code || ''))) return false;
     if (result.entitlements) updateEntitlements(result.entitlements);
-    const feature = result.feature || (String(result.code || '').includes('ITEM') ? 'items' : (String(result.code || '').includes('STORAGE') ? 'storage' : (String(result.code || '').includes('DOCUMENT') ? 'documents' : fallbackFeature)));
+    const feature = result.feature || (String(result.code || '').includes('ITEM') ? 'items' : (String(result.code || '').includes('STORAGE') ? 'storage' : (String(result.code || '').includes('DOCUMENT') ? 'documents' : (String(result.code || '').includes('PHOTO') ? 'pictures' : fallbackFeature))));
     showEntitlementUpgrade(feature, result.message);
     return true;
   }
@@ -3868,6 +3899,7 @@ function App() {
             itemLimit: Number(plan.item_limit || 0),
             storageLimitMb: Number(plan.storage_limit_mb || 0),
             documentLimit: Number(plan.document_limit || 0),
+            photoLimit: Number(plan.photo_limit || 0),
             features: Array.isArray(plan.features) ? plan.features.filter(Boolean) : [],
             featureFlags: { ...DEFAULT_ENTITLEMENTS.features, ...(plan.feature_flags || {}), multiUser: false, sharing: false },
             isFeatured: Boolean(plan.is_featured),
@@ -5144,7 +5176,7 @@ function App() {
       if (!response.ok || !result.ok) return { ...result, ok: false, httpStatus: response.status };
       removePendingDocumentDeletion(entry);
       if (result.entitlements) updateEntitlements(result.entitlements);
-      if (!silent) showMessage('Encrypted document storage removed.', 'success');
+      if (!silent) showMessage('Encrypted file storage removed.', 'success');
       return result;
     } catch (error) {
       return { ok: false, offline: typeof navigator !== 'undefined' && navigator.onLine === false, message: error.message || 'Document cleanup could not complete.' };
@@ -5180,26 +5212,59 @@ function App() {
     }
   }
 
-  async function uploadEncryptedDocumentBlob(fileInfo, documentId) {
+  async function uploadEncryptedDocumentBlob(fileInfo, documentId, blobKind = 'document') {
     if (!fileInfo?.dataUrl) return fileInfo;
+    const isPicture = blobKind === 'picture';
+    const featureKey = isPicture ? 'pictures' : 'documents';
+    const label = isPicture ? 'picture' : 'document';
     if (!bootstrap.tenantId || !bootstrap.userId) {
-      throw new Error('Save your account details before storing documents.');
+      throw new Error(`Save your account details before storing ${isPicture ? 'pictures' : 'documents'}.`);
     }
     const encryptedFile = await encryptDocumentData(fileInfo.dataUrl, masterPassword);
-    const result = await postJson('/.netlify/functions/document-blob', {
+    const chunks = [];
+    for (let index = 0; index < encryptedFile.encryptedBlob.length; index += ENCRYPTED_FILE_CHUNK_CHARACTERS) {
+      chunks.push(encryptedFile.encryptedBlob.slice(index, index + ENCRYPTED_FILE_CHUNK_CHARACTERS));
+    }
+    const init = await postJson('/.netlify/functions/document-blob', {
+      action: 'init_chunked',
       documentId,
+      blobKind,
       fileName: fileInfo.name,
       fileType: fileInfo.type || 'application/octet-stream',
       fileExtension: fileInfo.extension || getFileExtension(fileInfo.name),
       fileSize: fileInfo.size || 0,
-      encryptedBlob: encryptedFile.encryptedBlob,
+      encryptedStorageBytes: Math.max(Number(fileInfo.size || 0), Math.ceil((encryptedFile.encryptedBlob.length * 3) / 4)),
+      chunkCount: chunks.length,
       localSalt: encryptedFile.localSalt,
       localIv: encryptedFile.localIv,
       clientUpdatedAt: new Date().toISOString()
     });
-    if (!result.ok) {
-      if (handleEntitlementError(result, 'documents')) { const error = new Error(result.message || 'Your document plan limit has been reached.'); error.entitlementHandled = true; throw error; }
-      throw new Error(result.message || 'Document file could not be stored separately.');
+    if (!init.ok) {
+      if (handleEntitlementError(init, featureKey)) { const error = new Error(init.message || `Your ${label} plan limit has been reached.`); error.entitlementHandled = true; throw error; }
+      throw new Error(init.message || `${isPicture ? 'Picture' : 'Document'} file could not be stored separately.`);
+    }
+    let result;
+    try {
+      for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
+        const chunkResult = await postJson('/.netlify/functions/document-blob', {
+          action: 'upload_chunk',
+          documentId,
+          chunkIndex,
+          chunkCount: chunks.length,
+          chunkData: chunks[chunkIndex]
+        });
+        if (!chunkResult.ok) throw new Error(chunkResult.message || `Encrypted ${label} upload stopped before it was complete.`);
+      }
+      result = await postJson('/.netlify/functions/document-blob', { action: 'finalize_chunked', documentId });
+      if (!result.ok) {
+        if (handleEntitlementError(result, featureKey)) { const error = new Error(result.message || `Your ${label} plan limit has been reached.`); error.entitlementHandled = true; throw error; }
+        throw new Error(result.message || `${isPicture ? 'Picture' : 'Document'} file could not be finalised.`);
+      }
+    } catch (error) {
+      // A newly selected file is uploaded under its own blob id. If chunking fails,
+      // remove that incomplete blob so it cannot consume the customer's plan allowance.
+      await removeStoredDocumentBlob({ documentId, tenantId: bootstrap.tenantId, userId: bootstrap.userId }, { silent: true }).catch(() => null);
+      throw error;
     }
     if (result.entitlements) updateEntitlements(result.entitlements);
     return {
@@ -5207,59 +5272,90 @@ function App() {
       type: fileInfo.type || 'application/octet-stream',
       size: fileInfo.size || 0,
       extension: fileInfo.extension || getFileExtension(fileInfo.name),
-      storageMode: 'external_encrypted_blob',
+      storageMode: 'chunked_external_encrypted_blob',
       externalDocumentId: documentId,
       storedExternally: true,
+      blobKind,
       storedAt: new Date().toISOString()
     };
   }
 
   async function loadStoredDocumentDataUrl(item) {
     const file = item?.payload?.file;
-    if (!file) throw new Error('No document file is attached to this item.');
+    const itemType = effectiveVaultItemType(item);
+    const isPicture = itemType === PICTURES_CATEGORY || file?.blobKind === 'picture';
+    const label = isPicture ? 'picture' : 'document';
+    if (!file) throw new Error(`No ${label} file is attached to this item.`);
     if (file.dataUrl) return file.dataUrl;
     const documentId = file.externalDocumentId || item.id;
-    if (!file.storedExternally || !documentId) throw new Error('This document file is not available.');
-    if (!bootstrap.tenantId || !bootstrap.userId) throw new Error('Save your account details before opening stored documents.');
+    if (!file.storedExternally || !documentId) throw new Error(`This ${label} file is not available.`);
+    if (!bootstrap.tenantId || !bootstrap.userId) throw new Error(`Save your account details before opening stored ${isPicture ? 'pictures' : 'documents'}.`);
     const response = await fetch(`/.netlify/functions/document-blob?documentId=${encodeURIComponent(documentId)}`, { credentials: 'same-origin' });
     const result = await response.json();
-    if (!response.ok || !result.ok || !result.document) throw new Error(result.message || 'Document could not be loaded.');
-    return decryptDocumentData(result.document, masterPassword);
+    if (!response.ok || !result.ok || !result.document) throw new Error(result.message || `${isPicture ? 'Picture' : 'Document'} could not be loaded.`);
+    const record = { ...result.document };
+    if (String(record?.metadata?.storageMode || '') === 'chunked_encrypted_file_v1') {
+      const chunkCount = Number(record?.metadata?.chunkCount || 0);
+      if (!chunkCount) throw new Error(`This encrypted ${label} upload is incomplete.`);
+      const chunks = [];
+      for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+        const chunkResponse = await fetch(`/.netlify/functions/document-blob?action=chunk&documentId=${encodeURIComponent(documentId)}&chunkIndex=${chunkIndex}`, { credentials: 'same-origin' });
+        const chunkResult = await chunkResponse.json();
+        if (!chunkResponse.ok || !chunkResult.ok) throw new Error(chunkResult.message || `Encrypted ${label} data could not be loaded.`);
+        chunks.push(String(chunkResult.chunkData || ''));
+      }
+      record.encrypted_blob = chunks.join('');
+    }
+    return decryptDocumentData(record, masterPassword);
   }
 
   async function downloadStoredDocument(item) {
-    setDownloadingDocId(item?.id || 'document');
+    const isPicture = effectiveVaultItemType(item) === PICTURES_CATEGORY || item?.payload?.file?.blobKind === 'picture';
+    setDownloadingDocId(item?.id || 'file');
     try {
       const dataUrl = await loadStoredDocumentDataUrl(item);
       triggerDocumentDownload(item, dataUrl);
-      showMessage('Document downloaded securely.', 'success');
+      showMessage(`${isPicture ? 'Picture' : 'Document'} downloaded securely.`, 'success');
     } catch (error) {
-      showMessage(error.message || 'Document could not be downloaded. Please try again.', 'error');
+      showMessage(error.message || `${isPicture ? 'Picture' : 'Document'} could not be downloaded. Please try again.`, 'error');
     } finally {
       setDownloadingDocId('');
     }
   }
 
   async function shareStoredDocument(item) {
+    const isPicture = effectiveVaultItemType(item) === PICTURES_CATEGORY || item?.payload?.file?.blobKind === 'picture';
+    const label = isPicture ? 'picture' : 'document';
     if (!navigator?.share) {
-      showMessage('Document sharing is not available in this browser. Use Download instead.', 'warning');
+      showMessage(`${isPicture ? 'Picture' : 'Document'} sharing is not available in this browser. Use Download instead.`, 'warning');
       return;
     }
-    setSharingDocId(item?.id || 'document');
+    setSharingDocId(item?.id || 'file');
     try {
       const dataUrl = await loadStoredDocumentDataUrl(item);
       const { bytes, mimeType } = dataUrlToBytes(dataUrl);
       const storedFile = item?.payload?.file || {};
-      const fileName = safeDownloadFileName(storedFile.name || `${item?.title || 'document'}.${storedFile.extension || 'txt'}`);
+      const fileName = safeDownloadFileName(storedFile.name || `${item?.title || label}.${storedFile.extension || (isPicture ? 'jpg' : 'txt')}`);
       const shareFile = new File([bytes], fileName, { type: storedFile.type || mimeType || 'application/octet-stream' });
       if (navigator.canShare && !navigator.canShare({ files: [shareFile] })) {
-        throw new Error('This device cannot share this document type directly. Use Download instead.');
+        throw new Error(`This device cannot share this ${label} type directly. Use Download instead.`);
       }
       await navigator.share({ files: [shareFile], title: fileName });
     } catch (error) {
-      if (error?.name !== 'AbortError') showMessage(error.message || 'The document could not be shared.', 'error');
+      if (error?.name !== 'AbortError') showMessage(error.message || `The ${label} could not be shared.`, 'error');
     } finally {
       setSharingDocId('');
+    }
+  }
+
+  async function previewStoredPicture(item) {
+    setPicturePreview({ itemId: item?.id || '', dataUrl: '', busy: true });
+    try {
+      const dataUrl = await loadStoredDocumentDataUrl(item);
+      setPicturePreview({ itemId: item?.id || '', dataUrl, busy: false });
+    } catch (error) {
+      setPicturePreview({ itemId: '', dataUrl: '', busy: false });
+      showMessage(error.message || 'The picture could not be opened.', 'error');
     }
   }
 
@@ -5271,6 +5367,10 @@ function App() {
     setIsSavingItem(true);
     try {
       const isDocument = form.category === DOCUMENTS_CATEGORY;
+      const isPicture = form.category === PICTURES_CATEGORY;
+      const isFileUpload = isDocument || isPicture;
+      const fileFeatureKey = isPicture ? 'pictures' : 'documents';
+      const fileLabel = isPicture ? 'picture' : 'document';
       const isCard = form.category === CARDS_CATEGORY;
       const itemLimit = Number(entitlements?.limits?.itemLimit || 0);
       const currentItemCount = getVisibleVaultItems(items).length;
@@ -5278,15 +5378,17 @@ function App() {
         showEntitlementUpgrade('items', `This plan includes up to ${itemLimit} vault item${itemLimit === 1 ? '' : 's'}. Delete an item or review your plan before adding another.`);
         return;
       }
-      if (isDocument && !featureIncluded('documents')) {
-        showEntitlementUpgrade('documents', 'Encrypted document storage is not included in the current plan. Passwords and other local vault items remain available.');
+      if (isFileUpload && !featureIncluded(fileFeatureKey)) {
+        showEntitlementUpgrade(fileFeatureKey, `Encrypted ${fileLabel} storage is not included in the current plan. Passwords and other local vault items remain available.`);
         return;
       }
-      if (isDocument && !editingItemId && Number(entitlements?.limits?.documentLimit || 0) > 0 && Number(entitlements?.usage?.documents || 0) >= Number(entitlements.limits.documentLimit)) {
-        showEntitlementUpgrade('documents', `This plan includes ${entitlements.limits.documentLimit} encrypted document${Number(entitlements.limits.documentLimit) === 1 ? '' : 's'}. Upgrade or ask Admin for an override to store another document.`);
+      const fileLimit = Number(isPicture ? entitlements?.limits?.photoLimit || 0 : entitlements?.limits?.documentLimit || 0);
+      const currentFileUsage = Number(isPicture ? entitlements?.usage?.pictures || 0 : entitlements?.usage?.documents || 0);
+      if (isFileUpload && !editingItemId && fileLimit > 0 && currentFileUsage >= fileLimit) {
+        showEntitlementUpgrade(fileFeatureKey, `This plan includes ${fileLimit} encrypted ${fileLabel}${fileLimit === 1 ? '' : 's'}. Upgrade or ask Admin for an override to store another ${fileLabel}.`);
         return;
       }
-      if (isDocument && !editingItemId && form.file?.dataUrl && Number(entitlements?.limits?.storageLimitMb || 0) > 0) {
+      if (isFileUpload && !editingItemId && form.file?.dataUrl && Number(entitlements?.limits?.storageLimitMb || 0) > 0) {
         const estimatedEncryptedBytes = new TextEncoder().encode(String(form.file.dataUrl || '')).length + 16;
         const projectedStorage = Number(entitlements?.usage?.storageBytes || 0) + estimatedEncryptedBytes;
         if (projectedStorage > Number(entitlements.limits.storageLimitMb) * 1024 * 1024) {
@@ -5317,16 +5419,21 @@ function App() {
           return;
         }
       }
-      if (isDocument && !editingItemId && !form.file?.dataUrl) {
-        showMessage('Choose a document to store first.', 'warning');
+      if (isFileUpload && !editingItemId && !form.file?.dataUrl) {
+        showMessage(`Choose a ${fileLabel} to store first.`, 'warning');
         return;
       }
-      if (isDocument && !form.file) {
-        showMessage('Choose a document to store first.', 'warning');
+      if (isFileUpload && !form.file) {
+        showMessage(`Choose a ${fileLabel} to store first.`, 'warning');
         return;
       }
       const itemIdForSave = editingItemId || crypto.randomUUID();
-      const storedDocumentFile = isDocument ? await uploadEncryptedDocumentBlob(form.file, itemIdForSave) : null;
+      // A new/replacement file gets its own storage id. This keeps an existing stored
+      // file intact until the replacement has been encrypted and uploaded successfully.
+      const fileBlobIdForSave = isFileUpload && form.file?.dataUrl
+        ? crypto.randomUUID()
+        : (form.file?.externalDocumentId || itemIdForSave);
+      const storedDocumentFile = isFileUpload ? await uploadEncryptedDocumentBlob(form.file, fileBlobIdForSave, isPicture ? 'picture' : 'document') : null;
       const notesValue = form.category === 'Checklists' ? normaliseChecklistNotes(form.notes) : form.notes.trim();
       const itemPayload = {
         title: isCard ? form.cardNickname.trim() : form.title.trim(),
@@ -5345,8 +5452,8 @@ function App() {
           cardCcv: onlyDigits(form.cardCcv)
         } : {
           url: form.category === 'Checklists' ? '' : form.url.trim(),
-          username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY].includes(form.category) ? '' : form.username.trim(),
-          password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY].includes(form.category) ? '' : form.password,
+          username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(form.category) ? '' : form.username.trim(),
+          password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(form.category) ? '' : form.password,
           notes: notesValue,
           file: storedDocumentFile
         },
@@ -5363,8 +5470,16 @@ function App() {
         }
         const next = items.map((item) => item.id === itemIdBeingEdited ? { ...item, ...itemPayload } : item);
         const syncResult = await saveItems(next, { autoSync: true, silentAutoSync: true, suppressSyncWarning: true });
-        const removedExternalDocument = previousItem.category === DOCUMENTS_CATEGORY && form.category !== DOCUMENTS_CATEGORY && previousItem.payload?.file?.storedExternally;
-        const cleanupResult = removedExternalDocument ? await cleanupStoredDocumentAfterVaultSave(previousItem, syncResult, { silent: true }) : null;
+        const previousExternalDocumentId = previousItem.payload?.file?.externalDocumentId || (previousItem.payload?.file?.storedExternally ? previousItem.id : '');
+        const nextExternalDocumentId = storedDocumentFile?.externalDocumentId || '';
+        const removedExternalDocument = [DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(previousItem.category) && ![DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(form.category) && previousItem.payload?.file?.storedExternally;
+        const replacedExternalDocument = [DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(previousItem.category)
+          && [DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(form.category)
+          && previousItem.payload?.file?.storedExternally
+          && nextExternalDocumentId
+          && previousExternalDocumentId
+          && nextExternalDocumentId !== previousExternalDocumentId;
+        const cleanupResult = (removedExternalDocument || replacedExternalDocument) ? await cleanupStoredDocumentAfterVaultSave(previousItem, syncResult, { silent: true }) : null;
         const editedCategory = form.category;
         setEditingItemId('');
         setForm(emptyForm(editedCategory));
@@ -5375,7 +5490,7 @@ function App() {
         if (syncResult?.offline) {
           // The one-time offline popup or compact offline toast already confirms the local save.
         } else if (cleanupResult?.queued) {
-          showMessage('Item updated. Encrypted document cleanup will finish automatically when the latest vault copy is protected.', 'warning');
+          showMessage('Item updated. Encrypted file cleanup will finish automatically when the latest vault copy is protected.', 'warning');
         } else if (syncResult?.ok) {
           showMessage('Item updated.', 'success');
         } else {
@@ -5469,9 +5584,9 @@ function App() {
     } else if (syncResult?.offline) {
       // The offline save confirmation already covers this local change; document cleanup is queued when needed.
     } else if (cleanupResult?.queued) {
-      showMessage('Item deleted. Encrypted document storage cleanup will finish automatically after the latest vault copy is protected.', 'warning');
+      showMessage('Item deleted. Encrypted file storage cleanup will finish automatically after the latest vault copy is protected.', 'warning');
     } else if (syncResult?.ok) {
-      showMessage(itemToDelete?.payload?.file?.storedExternally ? 'Item and encrypted document storage deleted.' : 'Item deleted.', 'success');
+      showMessage(itemToDelete?.payload?.file?.storedExternally ? 'Item and encrypted file storage deleted.' : 'Item deleted.', 'success');
     }
   }
 
@@ -6823,7 +6938,7 @@ function App() {
       action: 'inventory',
       invitationId: planToSave.invitationId
     });
-    if (!inventory.ok) throw new Error(inventory.message || 'Emergency Access document status could not be checked.');
+    if (!inventory.ok) throw new Error(inventory.message || 'Emergency Access file status could not be checked.');
     if (inventory.frozen) {
       const error = new Error('The Emergency Package has already been released and is now frozen as the release snapshot.');
       error.code = 'EMERGENCY_PACKAGE_FROZEN';
@@ -6832,44 +6947,70 @@ function App() {
 
     const existingBySource = new Map((Array.isArray(inventory.documents) ? inventory.documents : []).map((document) => [String(document.source_document_id || ''), document]));
     const fullAccess = String(planToSave?.accessScope || '') === 'Full vault access';
-    const documentItems = fullAccess
-      ? getVisibleVaultItems(currentItems).filter((item) => item.category === DOCUMENTS_CATEGORY && item?.payload?.file)
+    const fileItems = fullAccess
+      ? getVisibleVaultItems(currentItems).filter((item) => [DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(item.category) && item?.payload?.file)
       : [];
     const prepared = [];
-    for (const item of documentItems) {
+    for (const item of fileItems) {
       const file = item.payload.file;
+      const sourceCategory = item.category === PICTURES_CATEGORY ? PICTURES_CATEGORY : DOCUMENTS_CATEGORY;
       const sourceFingerprint = await buildEmergencyDocumentSourceFingerprint(item);
       const existing = existingBySource.get(String(item.id || ''));
       const alreadyCurrent = existing?.metadata?.source_fingerprint === sourceFingerprint
-        && existing?.metadata?.encryption_scope === 'emergency_import_code_v1';
+        && existing?.metadata?.encryption_scope === 'emergency_import_code_v1'
+        && String(existing?.metadata?.source_category || DOCUMENTS_CATEGORY) === sourceCategory
+        && existing?.metadata?.upload_complete === true;
       if (!alreadyCurrent) {
         const dataUrl = await loadStoredDocumentDataUrl(item);
         const encrypted = await encryptEmergencyDocumentData(dataUrl, inviteToken);
-        const result = await postJson('/.netlify/functions/emergency-access-document', {
-          action: 'save',
+        const chunks = [];
+        for (let index = 0; index < encrypted.encryptedBlob.length; index += ENCRYPTED_FILE_CHUNK_CHARACTERS) {
+          chunks.push(encrypted.encryptedBlob.slice(index, index + ENCRYPTED_FILE_CHUNK_CHARACTERS));
+        }
+        const init = await postJson('/.netlify/functions/emergency-access-document', {
+          action: 'init_chunked',
           invitationId: planToSave.invitationId,
           sourceDocumentId: item.id,
+          sourceCategory,
           sourceFingerprint,
           sourceUpdatedAt: item.updatedAt || '',
-          fileName: file.name || `${item.title || 'document'}.${file.extension || 'txt'}`,
+          fileName: file.name || `${item.title || (sourceCategory === PICTURES_CATEGORY ? 'picture' : 'document')}.${file.extension || (sourceCategory === PICTURES_CATEGORY ? 'jpg' : 'txt')}`,
           fileType: file.type || 'application/octet-stream',
           fileExtension: file.extension || getFileExtension(file.name || ''),
           fileSize: Number(file.size || 0),
-          encryptedBlob: encrypted.encryptedBlob,
+          chunkCount: chunks.length,
           localSalt: encrypted.localSalt,
           localIv: encrypted.localIv,
           encryptionScope: encrypted.encryptionScope || 'emergency_import_code_v1'
         });
-        if (!result.ok) {
-          const error = new Error(result.message || `The document ${file.name || item.title || ''} could not be prepared for Emergency Access.`);
-          error.code = result.code || '';
+        if (!init.ok) {
+          const error = new Error(init.message || `The ${sourceCategory === PICTURES_CATEGORY ? 'picture' : 'document'} ${file.name || item.title || ''} could not be prepared for Emergency Access.`);
+          error.code = init.code || '';
           throw error;
         }
+        for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
+          const chunkResult = await postJson('/.netlify/functions/emergency-access-document', {
+            action: 'upload_chunk',
+            invitationId: planToSave.invitationId,
+            sourceDocumentId: item.id,
+            chunkIndex,
+            chunkCount: chunks.length,
+            chunkData: chunks[chunkIndex]
+          });
+          if (!chunkResult.ok) throw new Error(chunkResult.message || 'An Emergency Package file upload stopped before it completed.');
+        }
+        const finalized = await postJson('/.netlify/functions/emergency-access-document', {
+          action: 'finalize_chunked',
+          invitationId: planToSave.invitationId,
+          sourceDocumentId: item.id
+        });
+        if (!finalized.ok) throw new Error(finalized.message || 'An Emergency Package file could not be finalised.');
       }
       prepared.push({
         sourceDocumentId: item.id,
-        title: item.title || file.name || 'Document',
-        fileName: file.name || item.title || 'Document',
+        sourceCategory,
+        title: item.title || file.name || (sourceCategory === PICTURES_CATEGORY ? 'Picture' : 'Document'),
+        fileName: file.name || item.title || (sourceCategory === PICTURES_CATEGORY ? 'Picture' : 'Document'),
         fileType: file.type || 'application/octet-stream',
         fileExtension: file.extension || getFileExtension(file.name || ''),
         fileSize: Number(file.size || 0)
@@ -6881,7 +7022,7 @@ function App() {
       keepSourceDocumentIds: prepared.map((documentMeta) => documentMeta.sourceDocumentId)
     });
     if (!pruneResult.ok) {
-      const error = new Error(pruneResult.message || 'Old Emergency Access document copies could not be cleaned up.');
+      const error = new Error(pruneResult.message || 'Old Emergency Access file copies could not be cleaned up.');
       error.code = pruneResult.code || '';
       throw error;
     }
@@ -7363,6 +7504,33 @@ function App() {
     return params.get('token') || '';
   }
 
+  async function reconstructReleasedEmergencyDocument(result, { token = '', importCode = '', importMode = false } = {}) {
+    const record = { ...(result?.document || {}) };
+    if (!record?.encrypted_blob) throw new Error('The released file could not be opened.');
+    if (String(record?.metadata?.storage_mode || '') === 'chunked_emergency_file_v1') {
+      const chunkCount = Number(record?.metadata?.chunk_count || 0);
+      if (!chunkCount) throw new Error('This released file is incomplete.');
+      const chunks = [];
+      for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+        const chunkResult = await postJson('/.netlify/functions/emergency-access-document', importMode ? {
+          action: 'open_import_chunk',
+          importCode,
+          sourceDocumentId: record.source_document_id || '',
+          chunkIndex
+        } : {
+          action: 'open_chunk',
+          token,
+          sourceDocumentId: record.source_document_id || '',
+          chunkIndex
+        });
+        if (!chunkResult.ok) throw new Error(chunkResult.message || 'Released encrypted file data could not be loaded.');
+        chunks.push(String(chunkResult.chunkData || ''));
+      }
+      record.encrypted_blob = chunks.join('');
+    }
+    return record;
+  }
+
   async function loadReleasedEmergencyDocument(documentMeta, token = currentEmergencyInviteToken()) {
     if (!token) throw new Error('This Emergency Access link is missing its secure token.');
     const result = await postJson('/.netlify/functions/emergency-access-document', {
@@ -7370,11 +7538,12 @@ function App() {
       token,
       sourceDocumentId: documentMeta?.sourceDocumentId || ''
     });
-    if (!result.ok || !result.document) throw new Error(result.message || 'The released document could not be opened.');
-    const encryptionScope = String(result.document?.metadata?.encryption_scope || 'trusted_person_invite_token');
+    if (!result.ok || !result.document) throw new Error(result.message || 'The released file could not be opened.');
+    const record = await reconstructReleasedEmergencyDocument(result, { token });
+    const encryptionScope = String(record?.metadata?.encryption_scope || 'trusted_person_invite_token');
     const documentCredential = encryptionScope === 'emergency_import_code_v1' ? await deriveEmergencyImportCode(token) : token;
-    const dataUrl = await decryptDocumentData(result.document, documentCredential);
-    return { dataUrl, record: result.document };
+    const dataUrl = await decryptDocumentData(record, documentCredential);
+    return { dataUrl, record };
   }
 
   async function loadReleasedEmergencyDocumentForImport(documentMeta, importCode) {
@@ -7385,9 +7554,10 @@ function App() {
       importCode: cleanCode,
       sourceDocumentId: documentMeta?.sourceDocumentId || ''
     });
-    if (!result.ok || !result.document) throw new Error(result.message || 'The released document could not be opened for import.');
-    const dataUrl = await decryptDocumentData(result.document, cleanCode);
-    return { dataUrl, record: result.document };
+    if (!result.ok || !result.document) throw new Error(result.message || 'The released file could not be opened for import.');
+    const record = await reconstructReleasedEmergencyDocument(result, { importCode: cleanCode, importMode: true });
+    const dataUrl = await decryptDocumentData(record, cleanCode);
+    return { dataUrl, record };
   }
 
   async function downloadReleasedEmergencyDocument(documentMeta) {
@@ -7420,8 +7590,10 @@ function App() {
         const documentMeta = releasedDocuments[index];
         const { dataUrl } = await loadReleasedEmergencyDocument(documentMeta, token);
         const { bytes } = dataUrlToBytes(dataUrl);
-        const fileName = safeDownloadFileName(documentMeta?.fileName || documentMeta?.title || `Document-${index + 1}`);
-        entries.push({ name: `Documents/${String(index + 1).padStart(2, '0')}-${fileName}`, data: bytes });
+        const sourceCategory = String(documentMeta?.sourceCategory || DOCUMENTS_CATEGORY);
+        const fallbackName = sourceCategory === PICTURES_CATEGORY ? `Picture-${index + 1}` : `Document-${index + 1}`;
+        const fileName = safeDownloadFileName(documentMeta?.fileName || documentMeta?.title || fallbackName);
+        entries.push({ name: `${sourceCategory === PICTURES_CATEGORY ? 'Pictures' : 'Documents'}/${String(index + 1).padStart(2, '0')}-${fileName}`, data: bytes });
       }
       const zipBytes = makeStoreZip(entries);
       const blob = new Blob([zipBytes], { type: 'application/zip' });
@@ -7516,10 +7688,16 @@ function App() {
       return;
     }
 
-    const sourceItems = (Array.isArray(packageData.items) ? packageData.items : []).filter((item) => String(item?.category || '') !== DOCUMENTS_CATEGORY);
+    const sourceItems = (Array.isArray(packageData.items) ? packageData.items : []).filter((item) => ![DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(String(item?.category || '')));
     const releasedDocuments = Array.isArray(packageData.releasedDocuments) ? packageData.releasedDocuments : [];
-    if (releasedDocuments.length && !featureIncluded('documents')) {
+    const releasedPictures = releasedDocuments.filter((entry) => String(entry?.sourceCategory || '') === PICTURES_CATEGORY);
+    const releasedDocumentFiles = releasedDocuments.filter((entry) => String(entry?.sourceCategory || DOCUMENTS_CATEGORY) !== PICTURES_CATEGORY);
+    if (releasedDocumentFiles.length && !featureIncluded('documents')) {
       showEntitlementUpgrade('documents', 'This Emergency Package includes documents. Your current plan must include encrypted document storage to import the complete package into your vault.');
+      return;
+    }
+    if (releasedPictures.length && !featureIncluded('pictures')) {
+      showEntitlementUpgrade('pictures', 'This Emergency Package includes pictures. Your current plan must include encrypted picture storage to import the complete package into your vault.');
       return;
     }
 
@@ -7532,8 +7710,14 @@ function App() {
     }
     const documentLimit = Number(entitlements?.limits?.documentLimit || 0);
     const currentDocumentUsage = Number(entitlements?.usage?.documents || 0);
-    if (documentLimit > 0 && currentDocumentUsage + releasedDocuments.length > documentLimit) {
-      showEntitlementUpgrade('documents', `This Emergency Package contains ${releasedDocuments.length} document${releasedDocuments.length === 1 ? '' : 's'}, which would exceed your current encrypted document limit.`);
+    if (documentLimit > 0 && currentDocumentUsage + releasedDocumentFiles.length > documentLimit) {
+      showEntitlementUpgrade('documents', `This Emergency Package contains ${releasedDocumentFiles.length} document${releasedDocumentFiles.length === 1 ? '' : 's'}, which would exceed your current encrypted document limit.`);
+      return;
+    }
+    const photoLimit = Number(entitlements?.limits?.photoLimit || 0);
+    const currentPictureUsage = Number(entitlements?.usage?.pictures || 0);
+    if (photoLimit > 0 && currentPictureUsage + releasedPictures.length > photoLimit) {
+      showEntitlementUpgrade('pictures', `This Emergency Package contains ${releasedPictures.length} picture${releasedPictures.length === 1 ? '' : 's'}, which would exceed your current encrypted picture limit.`);
       return;
     }
 
@@ -7550,7 +7734,7 @@ function App() {
     };
     const importedItems = [];
     const uploadedDocumentEntries = [];
-    setEmergencyImportState((current) => ({ ...current, status: 'importing', busy: true, message: releasedDocuments.length ? 'Importing the package and securely copying its documents...' : 'Importing the package into your encrypted vault...' }));
+    setEmergencyImportState((current) => ({ ...current, status: 'importing', busy: true, message: releasedDocuments.length ? 'Importing the package and securely copying its files...' : 'Importing the package into your encrypted vault...' }));
 
     try {
       importedItems.push({
@@ -7587,26 +7771,28 @@ function App() {
       }
 
       for (const documentMeta of releasedDocuments) {
+        const sourceCategory = String(documentMeta?.sourceCategory || DOCUMENTS_CATEGORY) === PICTURES_CATEGORY ? PICTURES_CATEGORY : DOCUMENTS_CATEGORY;
+        const isPicture = sourceCategory === PICTURES_CATEGORY;
         const { dataUrl } = await loadReleasedEmergencyDocumentForImport(documentMeta, importCode);
         const itemId = crypto.randomUUID();
         const storedFile = await uploadEncryptedDocumentBlob({
-          name: documentMeta?.fileName || documentMeta?.title || 'Emergency document',
+          name: documentMeta?.fileName || documentMeta?.title || (isPicture ? 'Emergency picture' : 'Emergency document'),
           type: documentMeta?.fileType || 'application/octet-stream',
           size: Number(documentMeta?.fileSize || 0),
           extension: documentMeta?.fileExtension || getFileExtension(documentMeta?.fileName || ''),
           dataUrl
-        }, itemId);
+        }, itemId, isPicture ? 'picture' : 'document');
         uploadedDocumentEntries.push({ documentId: storedFile.externalDocumentId || itemId, tenantId: bootstrap.tenantId, userId: bootstrap.userId });
         importedItems.push({
           id: itemId,
-          title: documentMeta?.title || String(documentMeta?.fileName || 'Emergency document').replace(/\.[^/.]+$/, ''),
+          title: documentMeta?.title || String(documentMeta?.fileName || (isPicture ? 'Emergency picture' : 'Emergency document')).replace(/\.[^/.]+$/, ''),
           category: folderName,
           favourite: false,
           payload: {
             url: '', username: '', password: '',
-            notes: `Imported document from ${packageData.ownerName || 'the account owner'}'s released Emergency Package.`,
+            notes: `Imported ${isPicture ? 'picture' : 'document'} from ${packageData.ownerName || 'the account owner'}'s released Emergency Package.`,
             file: storedFile,
-            emergencyImport: { ...commonImport, sourceCategory: DOCUMENTS_CATEGORY, sourceItemId: documentMeta?.sourceDocumentId || '' }
+            emergencyImport: { ...commonImport, sourceCategory, sourceItemId: documentMeta?.sourceDocumentId || '' }
           },
           updatedAt: importedAt
         });
@@ -7783,6 +7969,45 @@ function App() {
     }
   }
 
+  async function handlePictureFileChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!isAllowedPictureFile(file)) {
+      showMessage('Supported pictures: JPG, JPEG, PNG, WEBP, HEIC and HEIF.', 'warning');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > MAX_PICTURE_BYTES) {
+      showMessage(`This picture is ${formatFileSize(file.size)}. Pictures must be no larger than ${formatFileSize(MAX_PICTURE_BYTES)} each.`, 'warning');
+      event.target.value = '';
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const extension = getFileExtension(file.name);
+      setForm((current) => ({
+        ...current,
+        title: current.title || file.name.replace(/\.[^/.]+$/, ''),
+        category: PICTURES_CATEGORY,
+        file: {
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          size: file.size,
+          extension,
+          dataUrl,
+          blobKind: 'picture',
+          storageMode: 'pending_external_encrypted_blob',
+          storedAt: new Date().toISOString()
+        }
+      }));
+      showMessage('Picture ready to encrypt and store.', 'success');
+    } catch (error) {
+      showMessage('Picture could not be read. Please try again.', 'error');
+    } finally {
+      event.target.value = '';
+    }
+  }
+
   function closeItemPopup() {
     if (editingItemId) cancelEdit();
     else {
@@ -7800,6 +8025,7 @@ function App() {
 
   function closeViewItem() {
     setViewItemId('');
+    setPicturePreview({ itemId: '', dataUrl: '', busy: false });
   }
 
   function editViewedItem(item) {
@@ -8000,7 +8226,7 @@ function App() {
                     </div>
                     <div className="emergency-zip-instructions">
                       <strong>How to open the full ZIP download</strong>
-                      <p>After downloading, open your device's Files or File Explorer app and find <b>Password-Encrypt-Emergency-Package.zip</b>. On Windows, right-click it and choose <b>Extract All</b>. On Android or iPhone/iPad, tap the ZIP file and choose <b>Extract</b> or <b>Uncompress</b>. Open the extracted folder to view the package files and any released documents.</p>
+                      <p>After downloading, open your device's Files or File Explorer app and find <b>Password-Encrypt-Emergency-Package.zip</b>. On Windows, right-click it and choose <b>Extract All</b>. On Android or iPhone/iPad, tap the ZIP file and choose <b>Extract</b> or <b>Uncompress</b>. Open the extracted folder to view the package files and any released documents or pictures.</p>
                     </div>
                     <div className="emergency-package-viewer">
                       <div className="emergency-package-viewer-head">
@@ -8017,15 +8243,15 @@ function App() {
                                 <span className="emergency-release-folder-count">{folderCount}</span>
                               </summary>
                               <div className="emergency-release-folder-body">
-                                {folder.name === DOCUMENTS_CATEGORY && !folder.documents.length && <p className="emergency-release-folder-empty">No documents were included in this emergency package.</p>}
+                                {[DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(folder.name) && !folder.documents.length && <p className="emergency-release-folder-empty">No {folder.name === PICTURES_CATEGORY ? 'pictures' : 'documents'} were included in this emergency package.</p>}
                                 {folder.documents.map((documentMeta) => (
                                   <article className="emergency-released-document" key={documentMeta.sourceDocumentId}>
-                                    <FileText size={20} />
-                                    <div><strong>{documentMeta.fileName || documentMeta.title || 'Document'}</strong><small>{documentMeta.fileSize ? formatFileSize(documentMeta.fileSize) : 'Stored document'}{documentMeta.fileExtension ? ` · ${String(documentMeta.fileExtension).toUpperCase()}` : ''}</small></div>
+                                    {String(documentMeta?.sourceCategory || DOCUMENTS_CATEGORY) === PICTURES_CATEGORY ? <ImageIcon size={20} /> : <FileText size={20} />}
+                                    <div><strong>{documentMeta.fileName || documentMeta.title || (String(documentMeta?.sourceCategory || '') === PICTURES_CATEGORY ? 'Picture' : 'Document')}</strong><small>{documentMeta.fileSize ? formatFileSize(documentMeta.fileSize) : (String(documentMeta?.sourceCategory || '') === PICTURES_CATEGORY ? 'Stored picture' : 'Stored document')}{documentMeta.fileExtension ? ` · ${String(documentMeta.fileExtension).toUpperCase()}` : ''}</small></div>
                                     <button type="button" className="secondary-button" onClick={() => downloadReleasedEmergencyDocument(documentMeta)} disabled={emergencyDocumentBusyId === documentMeta.sourceDocumentId}><Download size={15} /> {emergencyDocumentBusyId === documentMeta.sourceDocumentId ? 'Preparing...' : 'Download'}</button>
                                   </article>
                                 ))}
-                                {folder.name !== DOCUMENTS_CATEGORY && folder.items.map((item) => (
+                                {![DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(folder.name) && folder.items.map((item) => (
                                   <article className="emergency-released-item" key={item.id}>
                                     <div><strong>{item.title}</strong><span>{item.category}</span></div>
                                     {item.payload?.url && <p><b>URL:</b> {item.payload.url}</p>}
@@ -8043,7 +8269,7 @@ function App() {
                                     )}
                                   </article>
                                 ))}
-                                {folder.name !== DOCUMENTS_CATEGORY && !folder.items.length && <p className="emergency-release-folder-empty">No items were included in this folder.</p>}
+                                {![DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(folder.name) && !folder.items.length && <p className="emergency-release-folder-empty">No items were included in this folder.</p>}
                               </div>
                             </details>
                           );
@@ -8092,7 +8318,7 @@ function App() {
                 <ShieldCheck size={20} />
                 <div>
                   <strong>About Password-Encrypt</strong>
-                  <p>Password-Encrypt is a private encrypted vault for passwords, documents and other important personal information. Trusted Person Access lets an account owner prepare protected information for someone they trust without giving that person immediate access to the vault.</p>
+                  <p>Password-Encrypt is a private encrypted vault for passwords, documents, important pictures and other personal information. Trusted Person Access lets an account owner prepare protected information for someone they trust without giving that person immediate access to the vault.</p>
                   <a href="/">Learn more about Password-Encrypt</a>
                 </div>
               </div>
@@ -8118,7 +8344,7 @@ function App() {
           <div className="landing-hero-copy">
             <div className="landing-pill"><Sparkles size={16} /> Encrypted password vault for everyday life</div>
             <h1>One secure place for the passwords and private details you rely on.</h1>
-            <p className="landing-intro">Save passwords, secure notes, cards, checklists and encrypted documents in a vault designed to stay simple across your phone, laptop and desktop.</p>
+            <p className="landing-intro">Save passwords, secure notes, cards, checklists, encrypted documents and important pictures in a vault designed to stay simple across your phone, laptop and desktop.</p>
             <div className="landing-cta-row">
               <button type="button" className="primary-button landing-primary-cta" onClick={() => openCreateAccountPopup()}><UserRoundCheck size={18} /> Start free trial</button>
               <button type="button" className="secondary-button landing-secondary-cta" onClick={openVaultApp}><Unlock size={18} /> Open My Vault</button>
@@ -8138,13 +8364,14 @@ function App() {
             <div className="preview-lock-card">
               <div className="preview-lock-icon"><Lock size={26} /></div>
               <p>Encrypted vault</p>
-              <h2>Passwords, cards, documents and private notes</h2>
+              <h2>Passwords, cards, documents, pictures and private notes</h2>
               <div className="preview-search-row"><Search size={16} /> Search your vault</div>
             </div>
             <div className="preview-card-grid">
               <article><KeyRound size={18} /><strong>Passwords</strong><span>Logins and access details</span></article>
               <article><CreditCard size={18} /><strong>Cards</strong><span>Keep card details organised</span></article>
               <article><FileText size={18} /><strong>Documents</strong><span>Encrypted files and records</span></article>
+              <article><ImageIcon size={18} /><strong>Pictures</strong><span>Photo IDs, passports and important images</span></article>
               <article><RefreshCw size={18} /><strong>Sync</strong><span>Protected across verified devices</span></article>
             </div>
           </div>
@@ -8158,7 +8385,7 @@ function App() {
           </div>
           <div className="landing-feature-grid">
             <article><ShieldCheck size={24} /><h3>Encrypted on your device</h3><p>Your readable vault contents and master password are not sent to the server.</p></article>
-            <article><KeyRound size={24} /><h3>More than passwords</h3><p>Organise logins, cards, secure notes and checklists inside one encrypted vault.</p></article>
+            <article><KeyRound size={24} /><h3>More than passwords</h3><p>Organise logins, cards, secure notes, checklists, documents and important pictures inside one encrypted vault.</p></article>
             <article><Search size={24} /><h3>Find things quickly</h3><p>Search folders, favourites and saved records without scrolling through everything.</p></article>
             <article><Database size={24} /><h3>Local encrypted access</h3><p>Your encrypted local vault remains available on the device where it was created.</p></article>
           </div>
@@ -8191,7 +8418,7 @@ function App() {
             <article><span>1</span><strong>Choose a plan</strong><p>Select the vault size and trial that works for you.</p></article>
             <article><span>2</span><strong>Verify your email</strong><p>Confirm the email address linked to your account.</p></article>
             <article><span>3</span><strong>Create your master password</strong><p>Choose the private password that unlocks your encrypted vault.</p></article>
-            <article><span>4</span><strong>Start saving securely</strong><p>Add passwords, notes, cards, checklists and encrypted documents.</p></article>
+            <article><span>4</span><strong>Start saving securely</strong><p>Add passwords, notes, cards, checklists, encrypted documents and important pictures.</p></article>
           </div>
         </section>
 
@@ -8208,6 +8435,7 @@ function App() {
               const enforcedFeatures = [
                 plan.itemLimit > 0 ? `${plan.itemLimit} vault items` : 'Encrypted password vault',
                 flags.documents !== false ? (plan.documentLimit > 0 ? `${plan.documentLimit} encrypted document${plan.documentLimit === 1 ? '' : 's'}` : 'Encrypted documents included') : '',
+                flags.pictures !== false ? (plan.photoLimit > 0 ? `${plan.photoLimit} encrypted picture${plan.photoLimit === 1 ? '' : 's'}` : 'Encrypted pictures included') : '',
                 plan.storageLimitMb > 0 ? `${plan.storageLimitMb} MB total account storage` : '',
                 flags.cloudBackupSync !== false ? 'Secure cloud backup and syncing' : '',
                 flags.emergencyAccess !== false ? 'Next of Kin / Emergency Access' : '',
@@ -8217,11 +8445,12 @@ function App() {
                 const text = String(feature || '');
                 if (!text) return false;
                 if (flags.documents === false && /document|file|storage/i.test(text)) return false;
+                if (flags.pictures === false && /picture|photo|image/i.test(text)) return false;
                 if (flags.cloudBackupSync === false && /backup|sync|cloud/i.test(text)) return false;
                 if (flags.emergencyAccess === false && /emergency/i.test(text)) return false;
                 if (flags.secureDeviceUnlock === false && /secure device|biometric|passkey/i.test(text)) return false;
                 if (/household|family sharing|team user|multi.?user|sharing controls/i.test(text)) return false;
-                if (/document\s*limit|encrypted\s+documents?|storage\s*limit|encrypted\s+document\s+storage|total\s+account\s+storage|account\s+storage|vault\s*item\s*limit|password\s*limit/i.test(text)) return false;
+                if (/document\s*limit|encrypted\s+documents?|picture\s*limit|photo\s*limit|encrypted\s+pictures?|storage\s*limit|encrypted\s+document\s+storage|total\s+account\s+storage|account\s+storage|vault\s*item\s*limit|password\s*limit/i.test(text)) return false;
                 return true;
               });
               const featureList = [...new Set([...enforcedFeatures, ...marketingFeatures])].slice(0, 8);
@@ -8288,7 +8517,7 @@ function App() {
             </details>
             <details>
               <summary><span>Can I store encrypted documents too?</span><ChevronRight size={19} /></summary>
-              <p>Yes, where included in your plan. Documents count toward the document allowance and their encrypted storage also counts toward the plan's total account storage allowance.</p>
+              <p>Yes, where included in your plan. Documents and pictures have separate plan allowances, and their encrypted storage also counts toward the plan's total account storage allowance. Each uploaded document or picture can be up to 10 MB.</p>
             </details>
             <details>
               <summary><span>What happens if a backup cannot complete?</span><ChevronRight size={19} /></summary>
@@ -9239,7 +9468,7 @@ function App() {
                 <div className="item-popup-body">
                   <p className="form-helper">{editingItemId ? 'Update the saved details, then save your changes.' : 'Save a new secure item in your vault.'}</p>
                   {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
-                <label>Folder<CustomSelect value={form.category} ariaLabel="Choose a vault folder" options={selectableFolders.map((cat) => ({ value: cat, label: cat }))} onChange={(nextCategory) => setForm({ ...form, category: nextCategory, username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, CARDS_CATEGORY].includes(nextCategory) ? '' : form.username, password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, CARDS_CATEGORY].includes(nextCategory) ? '' : form.password })} /></label>
+                <label>Folder<CustomSelect value={form.category} ariaLabel="Choose a vault folder" options={selectableFolders.map((cat) => ({ value: cat, label: cat }))} onChange={(nextCategory) => setForm({ ...form, category: nextCategory, username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY, CARDS_CATEGORY].includes(nextCategory) ? '' : form.username, password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY, CARDS_CATEGORY].includes(nextCategory) ? '' : form.password })} /></label>
                 {form.category === CARDS_CATEGORY ? (
                   <div className="card-entry-grid">
                     <label>Name on card<input value={form.cardName} onChange={(e) => setForm({ ...form, cardName: e.target.value })} placeholder="e.g. B Hallam" /></label>
@@ -9253,8 +9482,8 @@ function App() {
                 ) : (
                   <>
                     <label>Title<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={activeHint.title} /></label>
-                    {!['Checklists', DOCUMENTS_CATEGORY].includes(form.category) && <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>}
-                    {!['Notes', 'Checklists', DOCUMENTS_CATEGORY].includes(form.category) && (
+                    {!['Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(form.category) && <label>URL / Link<input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={activeHint.url} /></label>}
+                    {!['Notes', 'Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(form.category) && (
                       <>
                         <label>Username / Reference<input name="vault-item-reference" autoComplete="off" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" readOnly={!editingItemId && !itemCredentialFieldsArmed.username} onPointerDown={() => setItemCredentialFieldsArmed((current) => ({ ...current, username: true }))} onFocus={() => setItemCredentialFieldsArmed((current) => ({ ...current, username: true }))} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder={activeHint.username} /></label>
                         <label>Password / Secret
@@ -9280,7 +9509,17 @@ function App() {
                     {form.file && <div className="document-selected"><FileText size={18} /><span>{form.file.name}</span><small>{formatFileSize(form.file.size)}</small></div>}
                   </div>
                 )}
-                <label>{form.category === 'Checklists' ? 'Checklist items' : form.category === DOCUMENTS_CATEGORY ? 'Document notes' : form.category === CARDS_CATEGORY ? 'Card notes' : 'Notes'}<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
+                {form.category === PICTURES_CATEGORY && (
+                  <div className="document-upload-box picture-upload-box">
+                    <label className="document-upload-button"><ImageIcon size={18} /> Choose picture
+                      <input type="file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif" onChange={handlePictureFileChange} />
+                    </label>
+                    <p>Designed for photo IDs, passports, licences and other important pictures. The picture is encrypted before it leaves this device.</p>
+                    <p className="document-upload-note">JPG, JPEG, PNG, WEBP, HEIC and HEIF are supported. Maximum {formatFileSize(MAX_PICTURE_BYTES)} per picture.</p>
+                    {form.file && <div className="document-selected picture-selected"><ImageIcon size={18} /><span>{form.file.name}</span><small>{formatFileSize(form.file.size)}</small>{form.file.dataUrl && <img src={form.file.dataUrl} alt="Selected encrypted picture preview" />}</div>}
+                  </div>
+                )}
+                <label>{form.category === 'Checklists' ? 'Checklist items' : form.category === DOCUMENTS_CATEGORY ? 'Document notes' : form.category === PICTURES_CATEGORY ? 'Picture notes' : form.category === CARDS_CATEGORY ? 'Card notes' : 'Notes'}<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
                 <label className="favourite-toggle"><input type="checkbox" checked={form.favourite} onChange={(e) => setForm({ ...form, favourite: e.target.checked })} /> Mark as favourite</label>
                 </div>
                 <div className="item-popup-footer form-buttons">
@@ -9435,7 +9674,7 @@ function App() {
                   {!isFounderPlan(bootstrap) && <span><strong>Time remaining</strong>{bootstrap.trialEndsAt ? `${accountTrialDaysRemaining(bootstrap.trialEndsAt)} day${accountTrialDaysRemaining(bootstrap.trialEndsAt) === 1 ? '' : 's'}` : 'No active trial'}</span>}
                   {isFounderPlan(bootstrap) && <span><strong>Access</strong>Permanent Founder access</span>}
                 </div>
-                {!isFounderPlan(bootstrap) && bootstrap.accountStatus === 'trial_expired' && <div className="trial-expired-card"><AlertTriangle size={18} /><span><strong>Your free trial has ended</strong><small>Your local encrypted vault remains available. Cloud backup, syncing and encrypted document storage are paused until the account is activated.</small></span></div>}
+                {!isFounderPlan(bootstrap) && bootstrap.accountStatus === 'trial_expired' && <div className="trial-expired-card"><AlertTriangle size={18} /><span><strong>Your free trial has ended</strong><small>Your local encrypted vault remains available. Cloud backup, syncing, encrypted document storage and encrypted picture storage are paused until the account is activated.</small></span></div>}
               </section>
 
               <div className={`account-status-card ${accountStatus.state}`}>
@@ -9516,7 +9755,7 @@ function App() {
                   <p>Deletion is scheduled for <strong>{formatAccountDate(accountSecurity.deletion.scheduled_for, true)}</strong>. Until then, you can cancel this request and keep the account.</p>
                   <button type="button" className="secondary-button" onClick={cancelAccountDeletion}>Cancel account deletion</button>
                 </> : <>
-                  <p>A verified email code is required. Deletion then waits 14 days before the active Password-Encrypt cloud account, encrypted vault backups and stored documents are removed. Limited payment, legal or provider records may remain where retention is required for accounting, fraud prevention, disputes or law.</p>
+                  <p>A verified email code is required. Deletion then waits 14 days before the active Password-Encrypt cloud account, encrypted vault backups, stored documents and stored pictures are removed. Limited payment, legal or provider records may remain where retention is required for accounting, fraud prevention, disputes or law.</p>
                   <button type="button" className="secondary-button danger-soft" onClick={() => openAccountSecurityAction('delete-account')} disabled={!customerSession.authenticated}><Trash2 size={17} /> Request account deletion</button>
                 </>}
               </section>
@@ -9610,6 +9849,7 @@ function App() {
                 const localVaultItems = getVisibleVaultItems(items).length;
                 const usedItems = Math.max(localVaultItems, Number(entitlements?.usage?.vaultItems || 0));
                 const usedDocuments = Number(entitlements?.usage?.documents || 0);
+                const usedPictures = Number(entitlements?.usage?.pictures || 0);
                 const usedStorageMb = Number(entitlements?.usage?.storageMb || 0);
                 return <div className="settings-drilldown-stack">
                   <details className="settings-drilldown" open>
@@ -9621,6 +9861,7 @@ function App() {
                         <div className="founder-usage-grid" aria-label="Founder plan usage">
                           <span><strong>Total vault items</strong>{usedItems}</span>
                           <span><strong>Encrypted documents</strong>{usedDocuments}</span>
+                          <span><strong>Encrypted pictures</strong>{usedPictures}</span>
                           <span><strong>Account storage used</strong>{usedStorageMb.toFixed(2)} MB</span>
                         </div>
                       </section>
@@ -9686,7 +9927,7 @@ function App() {
                   </details>
 
                   <details className="settings-drilldown">
-                    <summary><span className="settings-directory-icon"><Database size={21} /></span><span className="settings-directory-copy"><strong>Plan usage</strong><small>Vault items, encrypted documents and total account storage.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
+                    <summary><span className="settings-directory-icon"><Database size={21} /></span><span className="settings-directory-copy"><strong>Plan usage</strong><small>Vault items, encrypted documents, pictures and total account storage.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                   <section className="plan-usage-card settings-inner-card" aria-label="Plan usage">
                     <div className="plan-usage-heading"><div><p className="eyebrow">Plan usage</p><h3>How much of your plan you are using</h3></div><span>{entitlements?.planName || planDisplayName(currentPlanCode)}</span></div>
@@ -9696,12 +9937,15 @@ function App() {
                       const itemLimit = Number(entitlements?.limits?.itemLimit || 0);
                       const usedDocuments = Number(entitlements?.usage?.documents || 0);
                       const documentLimit = Number(entitlements?.limits?.documentLimit || 0);
+                      const usedPictures = Number(entitlements?.usage?.pictures || 0);
+                      const photoLimit = Number(entitlements?.limits?.photoLimit || 0);
                       const usedStorageMb = Number(entitlements?.usage?.storageMb || 0);
                       const storageLimitMb = Number(entitlements?.limits?.storageLimitMb || 0);
                       const rows = [
                         { key: 'items', label: 'Vault items', used: usedItems, limit: itemLimit, detail: itemLimit > 0 ? `${Math.max(0, itemLimit - usedItems)} item${Math.max(0, itemLimit - usedItems) === 1 ? '' : 's'} left` : 'Unlimited on this plan' },
                         { key: 'documents', label: 'Encrypted documents', used: usedDocuments, limit: documentLimit, detail: documentLimit > 0 ? `${Math.max(0, documentLimit - usedDocuments)} document${Math.max(0, documentLimit - usedDocuments) === 1 ? '' : 's'} left` : 'Unlimited on this plan' },
-                        { key: 'storage', label: 'Total account storage', used: usedStorageMb, limit: storageLimitMb, detail: storageLimitMb > 0 ? `${usedStorageMb.toFixed(2)} MB of ${storageLimitMb} MB used · includes your encrypted cloud vault and encrypted documents` : `${usedStorageMb.toFixed(2)} MB used · unlimited allocation` }
+                        { key: 'pictures', label: 'Encrypted pictures', used: usedPictures, limit: photoLimit, detail: photoLimit > 0 ? `${Math.max(0, photoLimit - usedPictures)} picture${Math.max(0, photoLimit - usedPictures) === 1 ? '' : 's'} left` : 'Unlimited on this plan' },
+                        { key: 'storage', label: 'Total account storage', used: usedStorageMb, limit: storageLimitMb, detail: storageLimitMb > 0 ? `${usedStorageMb.toFixed(2)} MB of ${storageLimitMb} MB used · includes your encrypted cloud vault, documents and pictures` : `${usedStorageMb.toFixed(2)} MB used · unlimited allocation` }
                       ];
                       return <div className="plan-usage-list">{rows.map((row) => {
                         const percent = row.limit > 0 ? Math.min(100, Math.max(0, (Number(row.used || 0) / row.limit) * 100)) : 0;
@@ -9890,7 +10134,7 @@ function App() {
                             { value: 'Full vault access', label: 'Full vault access' }
                           ]} onChange={(accessScope) => setEmergencyDraft({ ...emergencyDraft, accessScope })} /></label>
                         </div>
-                        {emergencyDraft.accessScope === 'Full vault access' && <div className="emergency-document-release-note"><FileText size={17} /><span><strong>Stored documents are included</strong><small>Stored document files are prepared as separate encrypted copies for this Trusted Person arrangement. While the arrangement is active, changed, added or removed documents are automatically reflected when your vault is online and unlocked. They are released only if the waiting period completes without cancellation.</small></span></div>}
+                        {emergencyDraft.accessScope === 'Full vault access' && <div className="emergency-document-release-note"><FileText size={17} /><span><strong>Stored documents and pictures are included</strong><small>Stored document and picture files are prepared as separate encrypted copies for this Trusted Person arrangement. While the arrangement is active, changed, added or removed files are automatically reflected when your vault is online and unlocked. They are released only if the waiting period completes without cancellation.</small></span></div>}
                         <div className="emergency-package-notes-grid">
                           <label className="emergency-access-notes-label">Emergency message<textarea value={emergencyDraft.emergencyPackageMessage || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageMessage: e.target.value })} placeholder="Write the message your trusted person should see first if the waiting period ends." /></label>
                           <label className="emergency-access-notes-label">Important contacts<textarea value={emergencyDraft.emergencyPackageContacts || ''} onChange={(e) => setEmergencyDraft({ ...emergencyDraft, emergencyPackageContacts: e.target.value })} placeholder="Solicitor, doctor, accountant, family contacts, executor, insurance contact..." /></label>
@@ -10152,14 +10396,14 @@ function App() {
                 <>
                   <div className="emergency-import-hero">
                     <ShieldCheck size={24} />
-                    <div><strong>{emergencyImportState.packageData?.ownerName || 'Emergency Package'}</strong><span>{emergencyImportState.packageData?.itemCount || 0} released item(s) · {emergencyImportState.packageData?.documentCount || 0} document(s)</span></div>
+                    <div><strong>{emergencyImportState.packageData?.ownerName || 'Emergency Package'}</strong><span>{emergencyImportState.packageData?.itemCount || 0} released item(s) · {emergencyImportState.packageData?.documentCount || 0} document(s) · {emergencyImportState.packageData?.pictureCount || 0} picture(s)</span></div>
                   </div>
                   {emergencyImportState.status === 'duplicate' ? (
                     <div className="emergency-import-notice"><strong>Already imported</strong><span>This exact released package is already stored in <b>{emergencyImportState.duplicateFolder}</b>. Password-Encrypt will not create a duplicate copy.</span></div>
                   ) : (
                     <>
                       <p>This will create a new vault folder for the package and copy the released items into your own encrypted Password-Encrypt vault.</p>
-                      <div className="emergency-import-notice"><strong>Kept separate from your own records</strong><span>Imported items keep their original type, but stay together in one Emergency Package folder. Documents are re-encrypted into your own vault before they are stored.</span></div>
+                      <div className="emergency-import-notice"><strong>Kept separate from your own records</strong><span>Imported items keep their original type, but stay together in one Emergency Package folder. Documents and pictures are re-encrypted into your own vault before they are stored.</span></div>
                     </>
                   )}
                 </>
@@ -10191,7 +10435,7 @@ function App() {
               <div className="view-item-meta">
                 <span className="category-pill">{viewedItem.category}</span>
                 {isEmergencyImportedItem(viewedItem) && <span className="category-pill emergency-import-source-pill">From {effectiveVaultItemType(viewedItem)}</span>}
-                {effectiveVaultItemType(viewedItem) === DOCUMENTS_CATEGORY && <button type="button" className="category-pill document-share-pill" onClick={() => shareStoredDocument(viewedItem)} disabled={sharingDocId === viewedItem.id} aria-label={`Share ${viewedItem.title || 'document'}`} title="Share document"><Share2 size={14} /> {sharingDocId === viewedItem.id ? 'Preparing...' : 'Share'}</button>}
+                {[DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(effectiveVaultItemType(viewedItem)) && <button type="button" className="category-pill document-share-pill" onClick={() => shareStoredDocument(viewedItem)} disabled={sharingDocId === viewedItem.id} aria-label={`Share ${viewedItem.title || 'file'}`} title="Share file"><Share2 size={14} /> {sharingDocId === viewedItem.id ? 'Preparing...' : 'Share'}</button>}
                 {viewedItem.favourite && <span className="category-pill favourite-mini"><Star size={14} fill="currentColor" /> Favourite</span>}
               </div>
               {(() => {
@@ -10229,12 +10473,14 @@ function App() {
                 const isNote = itemType === 'Notes';
                 const isChecklist = itemType === 'Checklists';
                 const isDocument = itemType === DOCUMENTS_CATEGORY;
+                const isPicture = itemType === PICTURES_CATEGORY;
+                const isStoredFile = isDocument || isPicture;
                 const isCard = itemType === CARDS_CATEGORY;
                 const storedDocument = viewedItem.payload?.file;
                 const checklistRows = isChecklist ? parseChecklistNotes(viewedItem.payload?.notes) : [];
                 return (
                   <>
-                    {viewedItem.payload?.url && !isChecklist && !isDocument && !isCard && (
+                    {viewedItem.payload?.url && !isChecklist && !isStoredFile && !isCard && (
                       <div className="app-field-block">
                         <span className="app-field-label">Website / Link</span>
                         <div className="app-value-field link-field">
@@ -10243,7 +10489,7 @@ function App() {
                         </div>
                       </div>
                     )}
-                    {!isNote && !isChecklist && !isDocument && !isCard && (
+                    {!isNote && !isChecklist && !isStoredFile && !isCard && (
                       <>
                         <div className="app-field-block">
                           <span className="app-field-label">Username</span>
@@ -10314,17 +10560,19 @@ function App() {
                       </div>
                     )}
 
-                    {isDocument && (
+                    {isStoredFile && (
                       <div className="app-field-block">
-                        <span className="app-field-label">Stored document</span>
+                        <span className="app-field-label">Stored {isPicture ? 'picture' : 'document'}</span>
                         <div className="document-download-card">
-                          <FileText size={24} />
+                          {isPicture ? <ImageIcon size={24} /> : <FileText size={24} />}
                           <div>
                             <strong>{storedDocument?.name || viewedItem.title}</strong>
                             <small>{storedDocument?.extension?.toUpperCase() || 'FILE'} · {formatFileSize(storedDocument?.size)} · {storedDocument?.storedExternally ? 'Encrypted file storage' : 'Vault storage'}</small>
                           </div>
+                          {isPicture && <button type="button" className="secondary-button document-download-button" onClick={() => previewStoredPicture(viewedItem)} disabled={picturePreview.busy && picturePreview.itemId === viewedItem.id}><Eye size={16} /> {picturePreview.busy && picturePreview.itemId === viewedItem.id ? 'Opening...' : 'View'}</button>}
                           <button type="button" className="secondary-button document-download-button" onClick={() => downloadStoredDocument(viewedItem)} disabled={downloadingDocId === viewedItem.id || (!storedDocument?.dataUrl && !storedDocument?.externalDocumentId)}><Download size={16} /> {downloadingDocId === viewedItem.id ? 'Preparing...' : 'Download'}</button>
                         </div>
+                        {isPicture && picturePreview.itemId === viewedItem.id && picturePreview.dataUrl && <div className="stored-picture-preview"><img src={picturePreview.dataUrl} alt={viewedItem.title || 'Stored picture'} /></div>}
                       </div>
                     )}
                     {isChecklist ? (

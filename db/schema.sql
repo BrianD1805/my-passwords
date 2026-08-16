@@ -507,3 +507,8 @@ grant select, insert, update, delete on public.email_processor_runs to service_r
 -- to add metadata-only operational events, scheduled check history and safe
 -- Stripe reconciliation preview/apply records. No vault content is stored in
 -- these operational tables.
+
+-- Password-Encrypt Ver-1.008
+-- Apply db/migrations/2026-08-16_picture_uploads_ver_1_008.sql to add
+-- encrypted Pictures, per-plan Picture limits, document/picture blob typing,
+-- and chunked encrypted file transport tables for files up to 10 MB each.

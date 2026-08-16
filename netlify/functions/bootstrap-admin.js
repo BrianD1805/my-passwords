@@ -45,7 +45,7 @@ async function findByPhone(phoneE164) {
 }
 
 async function loadPlan(planCode) {
-  const rows = await selectRows('subscription_plans', `select=code,display_name,trial_days,is_public,is_active,currency,max_users,storage_limit_mb,document_limit,feature_flags&code=${eq(planCode)}&limit=1`).catch(() => []);
+  const rows = await selectRows('subscription_plans', `select=code,display_name,trial_days,is_public,is_active,currency,max_users,storage_limit_mb,document_limit,photo_limit,feature_flags&code=${eq(planCode)}&limit=1`).catch(() => []);
   return rows?.[0] || null;
 }
 

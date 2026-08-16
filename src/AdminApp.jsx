@@ -35,6 +35,7 @@ async function requestJson(url, options = {}) {
 
 const DEFAULT_PLAN_FEATURE_FLAGS = Object.freeze({
   documents: true,
+  pictures: true,
   emergencyAccess: true,
   secureDeviceUnlock: true,
   cloudBackupSync: true,
@@ -54,7 +55,7 @@ function isReservedFuturePlan(code) {
 function emptyPlan() {
   return {
     code: '', displayName: '', description: '', currency: 'GBP', monthlyPrice: '0.00', quarterlyPrice: '0.00', annualPrice: '0.00',
-    trialDays: 14, maxUsers: 1, itemLimit: 0, storageLimitMb: 0, documentLimit: 0, features: '', featureFlags: { ...DEFAULT_PLAN_FEATURE_FLAGS }, isFeatured: false, isPublic: false, isActive: true, displayOrder: 10, stripeSyncStatus: 'not_synced', stripeSyncMessage: '', stripeSyncedAt: ''
+    trialDays: 14, maxUsers: 1, itemLimit: 0, storageLimitMb: 0, documentLimit: 0, photoLimit: 0, features: '', featureFlags: { ...DEFAULT_PLAN_FEATURE_FLAGS }, isFeatured: false, isPublic: false, isActive: true, displayOrder: 10, stripeSyncStatus: 'not_synced', stripeSyncMessage: '', stripeSyncedAt: ''
   };
 }
 
@@ -72,6 +73,7 @@ function toEditorPlan(plan) {
     itemLimit: Number(plan.item_limit || 0),
     storageLimitMb: Number(plan.storage_limit_mb || 0),
     documentLimit: Number(plan.document_limit || 0),
+    photoLimit: Number(plan.photo_limit || 0),
     features: Array.isArray(plan.features) ? plan.features.join('\n') : '',
     featureFlags: normaliseFeatureFlags(plan.feature_flags || {}),
     isFeatured: Boolean(plan.is_featured),
@@ -329,6 +331,7 @@ export default function AdminApp({ version }) {
           itemLimit: Number(editor.itemLimit || 0),
           storageLimitMb: Number(editor.storageLimitMb || 0),
           documentLimit: Number(editor.documentLimit || 0),
+          photoLimit: Number(editor.photoLimit || 0),
           features: editor.features,
           featureFlags: normaliseFeatureFlags(editor.featureFlags),
           isFeatured: editor.isFeatured,
@@ -641,12 +644,14 @@ export default function AdminApp({ version }) {
                   <label>Maximum users<input type="number" min="1" value={editor.maxUsers} onChange={(e) => setEditor({ ...editor, maxUsers: e.target.value })} /></label>
                   <label>Vault item limit<input type="number" min="0" value={editor.itemLimit} onChange={(e) => setEditor({ ...editor, itemLimit: e.target.value })} /><small>0 = unlimited. Counts passwords, cards, notes, checklists and other normal vault items.</small></label>
                   <label>Total account storage limit (MB)<input type="number" min="0" value={editor.storageLimitMb} onChange={(e) => setEditor({ ...editor, storageLimitMb: e.target.value })} /></label>
-                  <label>Document limit<input type="number" min="0" value={editor.documentLimit} onChange={(e) => setEditor({ ...editor, documentLimit: e.target.value })} /></label>
+                  <label>Document limit<input type="number" min="0" value={editor.documentLimit} onChange={(e) => setEditor({ ...editor, documentLimit: e.target.value })} /><small>0 = unlimited encrypted documents.</small></label>
+                  <label>Picture limit<input type="number" min="0" value={editor.photoLimit} onChange={(e) => setEditor({ ...editor, photoLimit: e.target.value })} /><small>0 = unlimited encrypted pictures. Each picture is still limited to 10 MB.</small></label>
                   <label>Display order<input type="number" min="0" value={editor.displayOrder} onChange={(e) => setEditor({ ...editor, displayOrder: e.target.value })} /></label>
                   <label className="admin-full">Customer-facing features, one per line<textarea rows="6" value={editor.features} onChange={(e) => setEditor({ ...editor, features: e.target.value })} /></label>
                 </div>
                 <fieldset className="admin-feature-flags"><legend>Enforced plan features</legend>
                   <label><input type="checkbox" checked={editor.featureFlags.documents} onChange={(e) => setEditor({ ...editor, featureFlags: { ...editor.featureFlags, documents: e.target.checked } })} /> Encrypted documents</label>
+                  <label><input type="checkbox" checked={editor.featureFlags.pictures} onChange={(e) => setEditor({ ...editor, featureFlags: { ...editor.featureFlags, pictures: e.target.checked } })} /> Encrypted pictures</label>
                   <label><input type="checkbox" checked={editor.featureFlags.emergencyAccess} onChange={(e) => setEditor({ ...editor, featureFlags: { ...editor.featureFlags, emergencyAccess: e.target.checked } })} /> Emergency Access</label>
                   <label><input type="checkbox" checked={editor.featureFlags.secureDeviceUnlock} onChange={(e) => setEditor({ ...editor, featureFlags: { ...editor.featureFlags, secureDeviceUnlock: e.target.checked } })} /> Secure device unlock</label>
                   <label><input type="checkbox" checked={editor.featureFlags.cloudBackupSync} onChange={(e) => setEditor({ ...editor, featureFlags: { ...editor.featureFlags, cloudBackupSync: e.target.checked } })} /> Cloud backup and sync</label>

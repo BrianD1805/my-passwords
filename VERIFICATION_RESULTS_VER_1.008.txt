@@ -1,0 +1,30 @@
+Password-Encrypt Ver-1.008 — Verification Results
+Generated: 2026-08-16
+
+PASS  Netlify function JavaScript syntax checks
+PASS  src/main.jsx JSX syntax parse
+PASS  src/AdminApp.jsx JSX syntax parse
+PASS  Security static checks — 13/13
+PASS  Reliability static checks — 20/20
+PASS  Legal/commercial readiness — 35/35
+PASS  Landing/plan UX — 36/36
+PASS  Mobile regression — 6/6
+PASS  Trusted Person / Emergency Flow — 75/75
+PASS  Onboarding Flow — 52/52
+PASS  Push Notifications — 32/32
+PASS  Ver-1.008 Picture Upload feature checks — 30/30
+
+Ver-1.008 feature verification covers:
+- Pictures as a first-class encrypted vault category.
+- Supported image types and the 10 MB per-picture cap in browser and server controls.
+- Server-side Picture plan feature and count enforcement.
+- Total account storage enforcement across vault, Documents and Pictures.
+- Admin Subscription Picture limits and Picture feature toggle.
+- Customer-facing Picture plan allowance and usage.
+- Founder unlimited Picture plan allowance with the 10 MB per-file cap retained.
+- Chunked encrypted upload/download transport for supported 10 MB files.
+- Aggregate encrypted chunk-size checks and interrupted-upload cleanup.
+- Emergency Package Pictures support and recipient import enforcement.
+- Ver-1.008 database health/migration checks.
+
+Production Vite build was not run in the packaging environment because the supplied full source ZIP does not include node_modules. No npm install was run. Run the normal local `npm run build` after overwriting the project files.

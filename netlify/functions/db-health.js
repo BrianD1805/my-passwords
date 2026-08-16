@@ -18,9 +18,11 @@ export async function handler() {
 
   try {
     const rows = await selectRows('tenants', 'select=id&limit=1');
-    const plans = await selectRows('subscription_plans', 'select=id,feature_flags,entitlement_version&limit=1');
+    const plans = await selectRows('subscription_plans', 'select=id,feature_flags,entitlement_version,photo_limit&limit=1');
     await selectRows('tenant_subscriptions', 'select=id,entitlements_snapshot,entitlement_overrides&limit=1');
-    await selectRows('document_blobs', 'select=id,storage_bytes&limit=1');
+    await selectRows('document_blobs', 'select=id,storage_bytes,blob_kind&limit=1');
+    await selectRows('document_blob_chunks', 'select=id,blob_id,chunk_index&limit=1');
+    await selectRows('emergency_access_document_chunks', 'select=id,document_id,chunk_index&limit=1');
     await selectRows('sms_delivery_log', 'select=id,status&limit=1');
     await selectRows('customer_email_log', 'select=id,status,email_type&limit=1');
     await selectRows('email_processor_runs', 'select=id,processor_type,status&limit=1');
@@ -55,6 +57,7 @@ export async function handler() {
     const customerEmailMigrationMissing = /customer_email_log/i.test(String(error.message || ''));
     const emailProcessorMigrationMissing = /email_processor_runs/i.test(String(error.message || ''));
     const securityMigrationMissing = /security_rate_limits|security_idempotency_keys|admin_sessions|stripe_webhook_events/i.test(String(error.message || ''));
+    const pictureMigrationMissing = /photo_limit|blob_kind|document_blob_chunks|emergency_access_document_chunks/i.test(String(error.message || ''));
     const entitlementMigrationMissing = error.details?.code === '42703'
       || /feature_flags|entitlement_version|entitlements_snapshot|entitlement_overrides|storage_bytes/i.test(String(error.message || ''));
     return jsonResponse(200, {
@@ -68,7 +71,9 @@ export async function handler() {
       supabase,
       error: error.message,
       details: error.details || null,
-      message: securityMigrationMissing
+      message: pictureMigrationMissing
+        ? 'Supabase is reachable, but the Ver-1.008 Picture Upload migration is missing. Run the Ver-1.008 migration in Supabase SQL Editor.'
+        : securityMigrationMissing
         ? 'Supabase is reachable, but the Ver-0.050 security tables are missing. Run the Ver-0.050 security migration in Supabase SQL Editor.'
         : emailProcessorMigrationMissing
         ? 'Supabase is reachable, but the automated email processor history table is missing. Run all required Supabase migrations through Ver-0.050 in Supabase SQL Editor.'

@@ -22,7 +22,7 @@ export async function handler(event) {
       selectRows('emergency_access_requests', `select=id,invitation_id,contact_email,contact_name,waiting_period,access_scope,status,requested_at,waiting_ends_at,owner_notified_at,cancelled_at,released_at,created_at,updated_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&order=created_at.desc`).catch(() => []),
       selectRows('audit_log', `select=id,action,metadata,created_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&order=created_at.desc&limit=250`).catch(() => []),
       selectRows('vault_sync_snapshots', `select=id,item_count,client_updated_at,base_snapshot_id,device_id,device_type,created_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&order=created_at.desc&limit=100`).catch(() => []),
-      selectRows('document_blobs', `select=id,file_name,file_type,file_extension,file_size,storage_bytes,created_at,updated_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&order=updated_at.desc`).catch(() => []),
+      selectRows('document_blobs', `select=id,file_name,file_type,file_extension,file_size,storage_bytes,blob_kind,created_at,updated_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&order=updated_at.desc`).catch(() => []),
       selectRows('sms_delivery_log', `select=id,provider,purpose,destination_masked,status,error_code,sent_at,delivered_at,failed_at,created_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&order=created_at.desc&limit=100`).catch(() => []),
       loadTenantSubscription(tenantId).catch(() => null)
     ]);

@@ -18081,3 +18081,26 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   background: #eef3f7;
   color: #5f7285;
 }
+
+/* Ver-1.008 encrypted picture uploads */
+.picture-selected img,
+.stored-picture-preview img {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #fff;
+}
+.picture-selected img {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  max-height: 220px;
+}
+.stored-picture-preview {
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid rgba(31, 48, 71, 0.10);
+  border-radius: 16px;
+  background: #fff;
+}

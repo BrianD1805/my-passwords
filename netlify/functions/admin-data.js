@@ -89,7 +89,7 @@ async function loadDashboard() {
     selectRows('vault_sync_snapshots', 'select=id,tenant_id,user_id,item_count,client_updated_at,created_at&order=created_at.desc&limit=1000'),
     selectRows('vault_sync_events', 'select=id,tenant_id,user_id,event_type,status,item_count,message,device_id,metadata,created_at&order=created_at.desc&limit=1000'),
     selectRows('billing_events', 'select=id,tenant_id,subscription_id,provider,provider_event_id,event_type,status,amount_minor,currency,metadata,occurred_at,created_at&order=created_at.desc&limit=500'),
-    selectRows('document_blobs', 'select=id,tenant_id,file_size,storage_bytes&limit=5000').catch(() => []),
+    selectRows('document_blobs', 'select=id,tenant_id,file_size,storage_bytes,blob_kind&limit=5000').catch(() => []),
     selectRows('audit_log', 'select=id,tenant_id,user_id,action,metadata,created_at&order=created_at.desc&limit=1000').catch(() => []),
     selectRows('account_sessions', 'select=id,tenant_id,user_id,status,issued_at,last_seen_at,expires_at&order=issued_at.desc&limit=2000').catch(() => [])
   ]);
@@ -133,9 +133,11 @@ async function loadDashboard() {
   const plansByCode = new Map((plans || []).map((plan) => [String(plan.code || '').toLowerCase(), plan]));
   const documentUsageByTenant = new Map();
   for (const document of documentBlobs || []) {
-    const current = documentUsageByTenant.get(document.tenant_id) || { documents: 0, storageBytes: 0 };
-    current.documents += 1;
-    current.storageBytes += Math.max(0, Number(document.storage_bytes || document.file_size || 0));
+    const current = documentUsageByTenant.get(document.tenant_id) || { documents: 0, pictures: 0, documentStorageBytes: 0, pictureStorageBytes: 0, storageBytes: 0 };
+    const bytes = Math.max(0, Number(document.storage_bytes || document.file_size || 0));
+    if (String(document.blob_kind || 'document') === 'picture') { current.pictures += 1; current.pictureStorageBytes += bytes; }
+    else { current.documents += 1; current.documentStorageBytes += bytes; }
+    current.storageBytes += bytes;
     documentUsageByTenant.set(document.tenant_id, current);
   }
   const customerRows = (tenants || []).map((tenant) => {
@@ -148,11 +150,11 @@ async function loadDashboard() {
     const snapshot = subscription?.entitlements_snapshot?.version
       ? subscription.entitlements_snapshot
       : entitlementSnapshotFromPlan(founder ? {
-          code: 'founder_private', display_name: 'Founder Plan', max_users: 1, item_limit: 0, document_limit: 0, storage_limit_mb: 0,
-          feature_flags: { documents: true, emergencyAccess: true, secureDeviceUnlock: true, cloudBackupSync: true, multiUser: false, sharing: false }
+          code: 'founder_private', display_name: 'Founder Plan', max_users: 1, item_limit: 0, document_limit: 0, photo_limit: 0, storage_limit_mb: 0,
+          feature_flags: { documents: true, pictures: true, emergencyAccess: true, secureDeviceUnlock: true, cloudBackupSync: true, multiUser: false, sharing: false }
         } : (plan || { code: effectivePlanCode, display_name: effectivePlanCode.replace(/_/g, ' '), max_users: 1 }));
     const effectiveEntitlements = applyEntitlementOverrides(snapshot, subscription?.entitlement_overrides || {});
-    const documentUsage = documentUsageByTenant.get(tenant.id) || { documents: 0, storageBytes: 0 };
+    const documentUsage = documentUsageByTenant.get(tenant.id) || { documents: 0, pictures: 0, documentStorageBytes: 0, pictureStorageBytes: 0, storageBytes: 0 };
     const usage = { users: customerUsers.filter((user) => !['cancelled', 'deleted'].includes(String(user.status || '').toLowerCase())).length, vaultItems: Number(latestSnapshotByTenant.get(tenant.id)?.item_count || 0), ...documentUsage };
     return {
       id: tenant.id,
@@ -260,13 +262,14 @@ export async function handler(event) {
         item_limit: toNonNegativeInt(plan.itemLimit),
         storage_limit_mb: toNonNegativeInt(plan.storageLimitMb),
         document_limit: toNonNegativeInt(plan.documentLimit),
+        photo_limit: toNonNegativeInt(plan.photoLimit),
         features: reservedPlanCannotPublish(code) ? [] : cleanFeatures(plan.features),
         feature_flags: {
           ...normalisePlanFeatureFlags(plan.featureFlags || {}),
           multiUser: false,
           sharing: false
         },
-        entitlement_version: 2,
+        entitlement_version: 3,
         is_featured: reservedPlanCannotPublish(code) ? false : Boolean(plan.isFeatured),
         is_public: reservedPlanCannotPublish(code) ? false : Boolean(plan.isPublic),
         is_active: plan.isActive !== false,
