@@ -1,0 +1,24 @@
+Password-Encrypt Ver-1.010.03 — SMS Verification Guard
+
+PASS  Security static checks: 13/13
+PASS  Reliability static checks: 20/20
+PASS  Legal readiness static checks: 35/35
+PASS  Landing/plan UX static checks: 36/36
+PASS  Mobile restoration checks: 6/6
+PASS  Trusted Person / Emergency Flow static checks: 75/75
+PASS  Onboarding static checks: 61/61
+PASS  Push notification static checks: 32/32
+PASS  Ver-1.010.03 SMS verification guard checks: 13/13
+PASS  request-sms-otp.js syntax
+PASS  request-email-otp-test.js syntax
+PASS  verify-otp-test.js syntax
+
+Key Ver-1.010.03 regression protections:
+- SMS/WebOTP may fill the OTP but cannot auto-submit it.
+- Verify mobile number is an explicit action on the SMS code card.
+- New-account email OTP cannot be requested until phone_verified is true.
+- New-account email OTP cannot complete account activation unless phone_verified is true.
+- Restored onboarding state cannot skip from unverified SMS to email verification.
+- Onboarding SMS is bound to the matching signup email + mobile account.
+
+Production bundle was not generated in the packaging environment because node_modules is intentionally absent from the full source package.

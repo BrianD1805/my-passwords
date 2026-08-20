@@ -22,7 +22,7 @@ function check(label, condition) {
   else { console.error(`FAIL  ${label}`); failures += 1; }
 }
 
-check('Ver-1.010.02 app/package/service-worker versions align', pkg.version === '1.10.2' && /Password-Encrypt Ver-1\.010\.02/.test(main) && /my-passwords-v1\.010\.02/.test(sw));
+check('Ver-1.010.03 app/package/service-worker versions align', pkg.version === '1.10.3' && /Password-Encrypt Ver-1\.010\.03/.test(main) && /my-passwords-v1\.010\.03/.test(sw));
 check('Onboarding has thirteen explicit progress steps', /ONBOARDING_TOTAL_STEPS = 13/.test(main) && /Step 13 of \{ONBOARDING_TOTAL_STEPS\}/.test(main));
 check('Public signup uses a dedicated card screen rather than rendering the landing page behind it', /isPublicLandingRoute && isCreateAccountPopupOpen/.test(main) && /onboarding-card-screen/.test(main));
 check('Dedicated onboarding card is not marked as a dialog', !/onboarding-card-screen[^\n]{0,300}role="dialog"/.test(main));
@@ -65,7 +65,7 @@ check('Email OTP field also exposes one-time-code autofill', /name="email-one-ti
 check('WebOTP is requested for SMS where the browser supports it', /OTPCredential/.test(main) && /navigator\.credentials\.get\(\{ otp: \{ transport: \['sms'\] \}/.test(main));
 check('WebOTP capture is armed before the SMS send request to avoid fast-message races', /if \(channel === 'sms'\) beginOnboardingSmsWebOtpCapture\(\);/.test(main) && main.indexOf("beginOnboardingSmsWebOtpCapture();", main.indexOf("async function sendLandingOnboardingOtp")) < main.indexOf("postJson('/.netlify/functions/request-sms-otp'", main.indexOf("async function sendLandingOnboardingOtp")));
 check('Netlify explicitly permits same-origin otp-credentials for WebOTP', /otp-credentials=\(self\)/.test(netlifyToml));
-check('Six-digit autofilled OTPs are automatically verified', /onboardingOtpAutoVerifyRef/.test(main) && /code\.length !== 6/.test(main) && /window\.setTimeout\(\(\) => verifyLandingOnboardingOtp\(\), 180\)/.test(main));
+check('Six-digit OTPs can be autofilled but require explicit verification', /autoComplete="one-time-code"/.test(main) && /Verify mobile number/.test(main) && !/window\.setTimeout\(\(\) => verifyLandingOnboardingOtp\(\), 180\)/.test(main));
 check('OTP errors require a changed/re-entered code instead of entering an automatic retry loop', /status: current\.challengeId \? 'sent' : current\.status/.test(main));
 check('Twilio Verify supports an optional custom template SID for domain-bound WebOTP SMS', /TWILIO_VERIFY_TEMPLATE_SID/.test(sms) && /params\.TemplateSid = config\.verifyTemplateSid/.test(sms));
 check('Messaging fallback SMS includes the Password-Encrypt origin-bound WebOTP line', /@password-encrypt\.com #\$\{code\}/.test(sms));
@@ -88,4 +88,4 @@ if (failures) {
   console.error(`\n${failures} onboarding static check(s) failed.`);
   process.exit(1);
 }
-console.log(`\nAll Ver-1.010.02 onboarding static checks passed.`);
+console.log(`\nAll Ver-1.010.03 onboarding static checks passed.`);

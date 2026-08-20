@@ -21,7 +21,7 @@ function hashOtp(challengeId, code) {
 
 async function findUser(email) {
   if (!email) return null;
-  const rows = await selectRows('users', `select=id,tenant_id,email,phone_e164,status&email=${eq(email)}&limit=1`);
+  const rows = await selectRows('users', `select=id,tenant_id,email,phone_e164,status,phone_verified&email=${eq(email)}&limit=1`);
   return rows?.[0] || null;
 }
 
@@ -97,6 +97,9 @@ export async function handler(event) {
     await consumeRateLimit(event, { scope: 'otp_request_destination', identifier: email, limit: 4, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
     const user = await findUser(email);
     if (!user?.id || !user?.tenant_id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'No account was found for that email. Create the account first or check the address.' });
+    if (purpose === 'production_onboarding' && String(user.status || '').toLowerCase() === 'pending_verification' && !user.phone_verified) {
+      return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'MOBILE_VERIFICATION_REQUIRED', message: 'Verify the mobile number before requesting the onboarding email code.' });
+    }
     if (await checkRateLimit(user.id)) return jsonResponse(429, { ok: false, version: APP_VERSION, message: 'Too many codes were requested. Wait 15 minutes before trying again.' });
 
     const challengeId = publicId('otpemail');

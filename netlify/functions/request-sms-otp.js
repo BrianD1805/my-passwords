@@ -21,6 +21,7 @@ export async function handler(event) {
   const phoneCountryCode = normaliseCountryCode(body.phoneCountryCode || body.countryCode || '+254');
   const phoneNumber = normaliseLocalPhone(body.phoneNumber || body.mobile || '');
   const phoneE164 = String(body.phoneE164 || buildPhoneE164(phoneCountryCode, phoneNumber)).trim();
+  const email = String(body.email || '').trim().toLowerCase();
   const purpose = safePurpose(body.purpose);
   if (!/^\+[1-9]\d{7,14}$/.test(phoneE164)) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Enter a valid mobile number with country code.' });
 
@@ -34,6 +35,9 @@ export async function handler(event) {
     }
 
     if (purpose === 'production_onboarding') {
+      if (!email || String(user.email || '').trim().toLowerCase() !== email) {
+        return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'ONBOARDING_ACCOUNT_MISMATCH', message: 'The mobile number and email address do not match the pending signup.' });
+      }
       // Ver-1.010 makes mobile verification the first onboarding verification step.
       // Keep the paid SMS channel tightly rate-limited, but do not require failed
       // email attempts before a new customer can verify the mobile number.

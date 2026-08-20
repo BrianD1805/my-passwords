@@ -58,6 +58,17 @@ export async function handler(event) {
     const onboardingMobileFirst = firstActivation
       && !isEmail
       && String(challenge.purpose || '') === 'production_onboarding';
+    const onboardingEmailFinal = firstActivation
+      && isEmail
+      && String(challenge.purpose || '') === 'production_onboarding';
+    if (onboardingEmailFinal && !user.phone_verified) {
+      return jsonResponse(409, {
+        ok: false,
+        version: APP_VERSION,
+        code: 'MOBILE_VERIFICATION_REQUIRED',
+        message: 'Verify the mobile number before completing email verification.'
+      });
+    }
     if (onboardingMobileFirst) {
       await updateRow('users', `id=${eq(user.id)}&tenant_id=${eq(tenant.id)}`, {
         phone_verified: true,

@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.010.02';
+const VERSION = 'Password-Encrypt Ver-1.010.03';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3979,16 +3979,15 @@ function App() {
   }, [isCreateAccountPopupOpen, landingOnboardingStep, landingOtp.channel, landingOtp.challengeId]);
 
   useEffect(() => {
-    if (!isCreateAccountPopupOpen || ![8, 10].includes(landingOnboardingStep)) return undefined;
-    if (!landingOtp.challengeId || !['sent', 'error'].includes(landingOtp.status)) return undefined;
-    const code = String(landingOtp.input || '').replace(/\D/g, '');
-    if (code.length !== 6) return undefined;
-    const fingerprint = `${landingOtp.challengeId}:${code}`;
-    if (onboardingOtpAutoVerifyRef.current === fingerprint) return undefined;
-    onboardingOtpAutoVerifyRef.current = fingerprint;
-    const timer = window.setTimeout(() => verifyLandingOnboardingOtp(), 180);
-    return () => window.clearTimeout(timer);
-  }, [isCreateAccountPopupOpen, landingOnboardingStep, landingOtp.challengeId, landingOtp.input, landingOtp.status]);
+    if (!isCreateAccountPopupOpen || landingSignup.existingAccount) return;
+    if (![9, 10].includes(Number(landingOnboardingStep))) return;
+    if (landingOtp.smsVerified || bootstrap.phoneVerified) return;
+    // Never restore or navigate a new signup into email verification until the
+    // server has confirmed the mobile OTP. A stale onboarding checkpoint must
+    // return to the SMS verification step instead of silently skipping it.
+    setLandingOnboardingStep(landingOtp.channel === 'sms' && landingOtp.challengeId ? 8 : 7);
+  }, [isCreateAccountPopupOpen, landingSignup.existingAccount, landingOnboardingStep, landingOtp.smsVerified, landingOtp.channel, landingOtp.challengeId, bootstrap.phoneVerified]);
+
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return undefined;
@@ -6647,7 +6646,12 @@ function App() {
         const code = String(credential?.code || '').replace(/\D/g, '').slice(0, 6);
         if (code.length !== 6) return;
         onboardingWebOtpCodeRef.current = code;
-        setLandingOtp((current) => ({ ...current, input: code }));
+        setLandingOtp((current) => ({
+          ...current,
+          input: code,
+          status: current.challengeId ? 'sent' : current.status,
+          message: 'SMS code received. Tap Verify mobile number to continue.'
+        }));
       })
       .catch(() => {
         if (onboardingWebOtpAbortRef.current === controller) onboardingWebOtpAbortRef.current = null;
@@ -6661,6 +6665,11 @@ function App() {
     const phoneE164 = landingAccountDraft.phoneE164 || buildPhoneE164(landingAccountDraft.phoneCountryCode, landingAccountDraft.phoneNumber);
     if (channel === 'email' && !email) return;
     if (channel === 'sms' && !phoneE164) return;
+    if (channel === 'email' && !landingSignup.existingAccount && !landingOtp.smsVerified && !bootstrap.phoneVerified) {
+      setLandingOtp((current) => ({ ...current, channel: 'sms', status: current.challengeId ? 'sent' : 'idle', message: 'Verify your mobile number before continuing to email verification.' }));
+      setLandingOnboardingStep(landingOtp.challengeId && landingOtp.channel === 'sms' ? 8 : 7);
+      return;
+    }
     if (channel === 'sms') beginOnboardingSmsWebOtpCapture();
     else stopOnboardingSmsWebOtpCapture();
     onboardingWebOtpCodeRef.current = '';
@@ -6671,6 +6680,7 @@ function App() {
             phoneCountryCode: landingAccountDraft.phoneCountryCode,
             phoneNumber: landingAccountDraft.phoneNumber,
             phoneE164,
+            email,
             purpose: 'production_onboarding',
             onboardingMode: 'primary_sms'
           })
@@ -8717,6 +8727,10 @@ function App() {
                 {landingOtp.status === 'verifying' && <p className="onboarding-inline-status"><RefreshCw size={16} className="spin-icon" /> Checking code...</p>}
                 {landingOtp.status === 'error' && <p className="onboarding-inline-status error">{landingOtp.message}</p>}
                 {landingOtp.testCode && <div className="test-code-box"><span>Local test code</span><code>{landingOtp.testCode}</code></div>}
+                <button type="button" className="primary-button onboarding-next-button" onClick={verifyLandingOnboardingOtp} disabled={landingOtp.status === 'verifying' || String(landingOtp.input || '').replace(/\D/g, '').length !== 6}>
+                  {landingOtp.status === 'verifying' ? <RefreshCw size={18} className="spin-icon" /> : <ShieldCheck size={18} />}
+                  {landingOtp.status === 'verifying' ? 'Verifying...' : 'Verify mobile number'}
+                </button>
                 <button type="button" className="onboarding-text-action" onClick={() => sendLandingOnboardingOtp('sms')} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><RefreshCw size={15} /> Resend SMS code</button>
               </div>
             )}
@@ -8748,6 +8762,10 @@ function App() {
                 {landingOtp.status === 'verifying' && <p className="onboarding-inline-status"><RefreshCw size={16} className="spin-icon" /> Checking code...</p>}
                 {landingOtp.status === 'error' && <p className="onboarding-inline-status error">{landingOtp.message}</p>}
                 {landingOtp.testCode && <div className="test-code-box"><span>Local test code</span><code>{landingOtp.testCode}</code></div>}
+                <button type="button" className="primary-button onboarding-next-button" onClick={verifyLandingOnboardingOtp} disabled={landingOtp.status === 'verifying' || String(landingOtp.input || '').replace(/\D/g, '').length !== 6}>
+                  {landingOtp.status === 'verifying' ? <RefreshCw size={18} className="spin-icon" /> : <Mail size={18} />}
+                  {landingOtp.status === 'verifying' ? 'Verifying...' : 'Verify email address'}
+                </button>
                 <button type="button" className="onboarding-text-action" onClick={() => sendLandingOnboardingOtp('email')} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><RefreshCw size={15} /> Resend email code</button>
               </div>
             )}
