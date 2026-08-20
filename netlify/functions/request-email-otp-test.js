@@ -148,9 +148,7 @@ export async function handler(event) {
       onboardingEmailSendCount: recentOnboardingEmailSends,
       smsFallbackEligible,
       message: delivery.sent
-        ? (smsFallbackEligible
-            ? `Email code sent to ${destinationMasked}. If it still does not arrive, SMS verification is now available as a backup.`
-            : `Email code sent to ${destinationMasked}. Enter the code to continue.`)
+        ? `Email code sent to ${destinationMasked}. Enter the code to continue.`
         : 'Local test code created because email delivery is unavailable in development mode.'
     });
   } catch (error) {

@@ -3,7 +3,6 @@ import { createAccountOtp } from './_account-otp.js';
 import { assertBrowserAction, consumeRateLimit, requestIpHash, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
-function gte(value) { return `gte.${encodeURIComponent(value)}`; }
 function cleanDigits(value) { return String(value || '').replace(/\D/g, ''); }
 function normaliseCountryCode(value) { const digits = cleanDigits(value); return digits ? `+${digits}` : ''; }
 function normaliseLocalPhone(value) { return cleanDigits(value).replace(/^0+/, ''); }
@@ -35,21 +34,11 @@ export async function handler(event) {
     }
 
     if (purpose === 'production_onboarding') {
-      const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-      const emailAttempts = await selectRows(
-        'otp_challenges',
-        `select=id,created_at&user_id=${eq(user.id)}&purpose=${eq('production_onboarding')}&delivery_channel=${eq('email')}&created_at=${gte(since)}&order=created_at.desc&limit=10`
-      );
-      if ((emailAttempts || []).length < 2) {
-        return jsonResponse(409, {
-          ok: false,
-          version: APP_VERSION,
-          code: 'SMS_FALLBACK_NOT_AVAILABLE',
-          message: 'SMS backup verification becomes available after two email code requests within 10 minutes.'
-        });
-      }
+      // Ver-1.010 makes mobile verification the first onboarding verification step.
+      // Keep the paid SMS channel tightly rate-limited, but do not require failed
+      // email attempts before a new customer can verify the mobile number.
       await consumeRateLimit(event, {
-        scope: 'onboarding_sms_fallback',
+        scope: 'onboarding_sms_primary',
         identifier: user.id,
         limit: 2,
         windowSeconds: 10 * 60,
@@ -63,7 +52,7 @@ export async function handler(event) {
       purpose,
       channel: 'sms',
       destination: phoneE164,
-      metadata: { verification_flow: purpose, sms_fallback: purpose === 'production_onboarding' }
+      metadata: { verification_flow: purpose, onboarding_primary_sms: purpose === 'production_onboarding', sms_fallback: false }
     });
     return jsonResponse(200, {
       ok: true,
@@ -71,10 +60,11 @@ export async function handler(event) {
       ...otp,
       deliveryChannel: 'sms',
       smsSent: Boolean(otp.delivery?.sent),
-      smsFallback: purpose === 'production_onboarding',
+      smsFallback: false,
+      onboardingPrimarySms: purpose === 'production_onboarding',
       message: otp.delivery?.sent
         ? (purpose === 'production_onboarding'
-            ? `SMS backup code sent to ${otp.destinationMasked}. Enter the code to verify your mobile number and continue.`
+            ? `SMS code sent to ${otp.destinationMasked}. Enter the code to verify your mobile number and continue.`
             : `SMS code sent to ${otp.destinationMasked}. Enter the code to continue.`)
         : 'Local SMS test code created because production SMS delivery is unavailable in development mode.'
     });

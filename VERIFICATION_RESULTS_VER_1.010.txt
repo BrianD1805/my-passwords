@@ -1,0 +1,24 @@
+Password-Encrypt Ver-1.010 — Verification Results
+==================================================
+
+Security static checks:                  13/13 PASS
+Reliability static checks:               20/20 PASS
+Legal/commercial readiness checks:       35/35 PASS
+Landing/plan UX static checks:           36/36 PASS
+Mobile regression checks:                 6/6 PASS
+Trusted Person / Emergency Flow checks:  75/75 PASS
+Onboarding flow checks:                  61/61 PASS
+Push notification checks:                32/32 PASS
+Ver-1.010 feature checks:                37/37 PASS
+Netlify function JavaScript syntax:      PASS
+src/main.jsx JSX/JavaScript parse:        PASS
+
+Notes
+-----
+- No Supabase SQL migration is required for Ver-1.010.
+- No mandatory new Netlify environment variables are required.
+- Optional TWILIO_VERIFY_TEMPLATE_SID support is included for an approved
+  domain-bound Twilio Verify SMS template.
+- The source package intentionally excludes node_modules. A Vite production
+  build was therefore not run inside the packaging source tree; run the normal
+  local npm run build using the project's existing installed dependencies.

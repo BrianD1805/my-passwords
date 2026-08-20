@@ -50,6 +50,65 @@ export async function handler(event) {
       trialDays = Math.max(0, Number(selectedPlan.trial_days || 0));
     }
 
+    // Ver-1.010 onboarding verifies the mobile number first, then the email.
+    // Mobile verification proves ownership of the entered number but deliberately
+    // does NOT activate the account, start the trial, issue a customer session or
+    // send welcome/admin onboarding emails. Final activation happens only after
+    // the subsequent email OTP succeeds.
+    const onboardingMobileFirst = firstActivation
+      && !isEmail
+      && String(challenge.purpose || '') === 'production_onboarding';
+    if (onboardingMobileFirst) {
+      await updateRow('users', `id=${eq(user.id)}&tenant_id=${eq(tenant.id)}`, {
+        phone_verified: true,
+        otp_test_last_verified_at: now,
+        otp_test_status: 'verified_sms',
+        onboarding_status: 'email_verification_required',
+        last_onboarding_step: 'mobile_verified_email_pending',
+        updated_at: now
+      });
+      await insertRow('audit_log', {
+        id: publicId('audit'),
+        tenant_id: tenant.id,
+        user_id: user.id,
+        action: 'production_onboarding_mobile_verified',
+        metadata: {
+          version: APP_VERSION,
+          delivery_channel: challenge.delivery_channel,
+          plan_code: tenant.plan_code || 'personal',
+          account_activation_deferred: true,
+          next_required_channel: 'email'
+        }
+      }).catch(() => null);
+      await resetRateLimit(event, { scope: 'otp_verify_challenge', identifier: challengeId });
+      return jsonResponse(200, {
+        ok: true,
+        version: APP_VERSION,
+        challengeId,
+        tenantId: tenant.id,
+        userId: user.id,
+        authenticated: false,
+        onboardingCompleted: false,
+        partialOnboarding: true,
+        nextRequiredChannel: 'email',
+        verifiedChannel: 'sms',
+        emailVerified: Boolean(user.email_verified),
+        phoneVerified: true,
+        account: {
+          accountName: tenant.account_name || tenant.name || '',
+          planCode: tenant.plan_code || 'personal',
+          planName,
+          planStatus: tenant.plan_status || 'signup_pending',
+          accountStatus: tenant.account_status || 'pending_verification',
+          tenantRole: tenant.tenant_role || 'primary_owner',
+          trialDays,
+          trialStartedAt: tenant.trial_started_at || null,
+          trialEndsAt: tenant.trial_ends_at || null
+        },
+        message: 'Mobile number verified. Next, verify your email address.'
+      });
+    }
+
     if (firstActivation && !founder) {
       const plan = selectedPlan;
       if (!plan?.code || plan.is_active === false) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The selected plan is no longer available. Please contact support.' });
@@ -164,7 +223,7 @@ export async function handler(event) {
           planName,
           emailVerified: emailVerifiedAfter,
           phoneVerified: phoneVerifiedAfter,
-          verificationMethod: isEmail ? 'Email OTP' : 'SMS OTP fallback'
+          verificationMethod: isEmail && user.phone_verified ? 'SMS OTP + Email OTP' : (isEmail ? 'Email OTP' : 'SMS OTP')
         }
       }).catch(() => null);
     }

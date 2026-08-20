@@ -1,4 +1,4 @@
-import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows } from './_db.js';
+import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, requirePost, selectRows, updateRow } from './_db.js';
 import { assertUserCapacity, entitlementSnapshotFromPlan, launchReadyPlan } from './_entitlements.js';
 import { assertBrowserAction, consumeRateLimit, requestIpHash, securityErrorResponseHeaders } from './_security.js';
 
@@ -34,13 +34,13 @@ function requestedPlan(value) {
 
 async function findByEmail(email) {
   if (!email) return null;
-  const rows = await selectRows('users', `select=id,tenant_id,email,display_name,role,status,phone_e164,phone_country_code,phone_number&email=${eq(email)}&limit=1`);
+  const rows = await selectRows('users', `select=id,tenant_id,email,display_name,role,status,phone_e164,phone_country_code,phone_number,email_verified,phone_verified&email=${eq(email)}&limit=1`);
   return rows?.[0] || null;
 }
 
 async function findByPhone(phoneE164) {
   if (!phoneE164) return null;
-  const rows = await selectRows('users', `select=id,tenant_id,email,display_name,role,status,phone_e164,phone_country_code,phone_number&phone_e164=${eq(phoneE164)}&limit=1`);
+  const rows = await selectRows('users', `select=id,tenant_id,email,display_name,role,status,phone_e164,phone_country_code,phone_number,email_verified,phone_verified&phone_e164=${eq(phoneE164)}&limit=1`);
   return rows?.[0] || null;
 }
 
@@ -85,6 +85,72 @@ export async function handler(event) {
       const tenants = await selectRows('tenants', `select=id,name,account_name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at&id=${eq(existingUser.tenant_id)}&limit=1`);
       const tenant = tenants?.[0];
       if (!tenant?.id) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The existing account is incomplete. Please contact support.' });
+
+      const pendingSignup = tenant.account_status === 'pending_verification' || tenant.plan_status === 'signup_pending' || existingUser.status === 'pending_verification';
+      if (pendingSignup) {
+        if (!legalAccepted || legalVersion !== LEGAL_VERSION) {
+          return jsonResponse(409, {
+            ok: false,
+            version: APP_VERSION,
+            code: 'LEGAL_ACCEPTANCE_REQUIRED',
+            legalVersion: LEGAL_VERSION,
+            message: 'Read and agree to the current Terms of Service and Privacy Policy before continuing the pending signup.'
+          });
+        }
+        const plan = await loadPlan(selectedPlanCode);
+        if (!plan?.code || plan.is_active === false || plan.is_public === false || !launchReadyPlan(plan.code)) {
+          return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'PLAN_NOT_AVAILABLE', message: 'That plan is not currently available for new accounts.' });
+        }
+        const now = new Date().toISOString();
+        const phoneChanged = Boolean(existingUser.phone_e164 && existingUser.phone_e164 !== phoneE164);
+        await updateRow('users', `id=${eq(existingUser.id)}&tenant_id=${eq(tenant.id)}`, {
+          display_name: displayName,
+          phone_country_code: phoneCountryCode,
+          phone_number: phoneNumber,
+          phone_e164: phoneE164,
+          phone_verified: phoneChanged ? false : Boolean(existingUser.phone_verified),
+          onboarding_status: phoneChanged || !existingUser.phone_verified ? 'mobile_verification_required' : 'email_verification_required',
+          last_onboarding_step: phoneChanged || !existingUser.phone_verified ? 'account_and_plan_saved' : 'mobile_verified_email_pending',
+          updated_at: now
+        });
+        await updateRow('tenants', `id=${eq(tenant.id)}`, {
+          account_name: accountName,
+          plan: selectedPlanCode,
+          plan_code: selectedPlanCode,
+          updated_at: now
+        });
+        return jsonResponse(200, {
+          ok: true,
+          connected: true,
+          provider: 'supabase',
+          version: APP_VERSION,
+          tenantId: tenant.id,
+          userId: existingUser.id,
+          phoneCountryCode,
+          phoneNumber,
+          phoneE164,
+          email: existingUser.email || email,
+          displayName,
+          accountName,
+          planCode: selectedPlanCode,
+          planName: plan.display_name || selectedPlanCode,
+          trialDays: Number(plan.trial_days || 0),
+          planStatus: 'signup_pending',
+          accountStatus: 'pending_verification',
+          tenantRole: tenant.tenant_role || 'primary_owner',
+          reusedExistingTenant: true,
+          reusedExistingUser: true,
+          resumedPendingSignup: true,
+          existingAccount: false,
+          requiresOtpVerification: true,
+          phoneVerified: phoneChanged ? false : Boolean(existingUser.phone_verified),
+          emailVerified: Boolean(existingUser.email_verified),
+          message: phoneChanged || !existingUser.phone_verified
+            ? 'Your pending signup is ready. Verify your mobile number first, then your email address.'
+            : 'Your mobile number is already verified. Continue with email verification.'
+        });
+      }
+
       return jsonResponse(200, {
         ok: true,
         connected: true,
@@ -169,7 +235,7 @@ export async function handler(event) {
       phone_verified: false,
       email_verified: false,
       account_login_method: 'email_otp_session',
-      onboarding_status: 'email_verification_required',
+      onboarding_status: 'mobile_verification_required',
       last_onboarding_step: 'account_and_plan_saved',
       updated_at: now
     });
@@ -230,7 +296,7 @@ export async function handler(event) {
       existingAccount: false,
       requiresOtpVerification: true,
       legalVersion: LEGAL_VERSION,
-      message: 'Your account and selected plan are ready. Request the email code to verify the account and start the trial.'
+      message: 'Your account and selected plan are ready. Verify your mobile number first, then your email address.'
     });
   } catch (error) {
     if (error?.code === 'USER_LIMIT_REACHED') {

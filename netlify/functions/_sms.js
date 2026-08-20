@@ -13,6 +13,7 @@ function twilioCredentials() {
     accountSid: safeText(process.env.TWILIO_ACCOUNT_SID, 80),
     authToken: safeText(process.env.TWILIO_AUTH_TOKEN, 180),
     verifyServiceSid: safeText(process.env.TWILIO_VERIFY_SERVICE_SID, 80),
+    verifyTemplateSid: safeText(process.env.TWILIO_VERIFY_TEMPLATE_SID, 80),
     messagingServiceSid: safeText(process.env.TWILIO_MESSAGING_SERVICE_SID, 80),
     fromNumber: safeText(process.env.TWILIO_FROM_NUMBER, 40),
     locale: safeText(process.env.TWILIO_VERIFY_LOCALE || 'en', 12) || 'en'
@@ -28,7 +29,10 @@ export function smsProviderMode() {
 
 function smsCopy(purpose, code) {
   const label = purpose === 'account_recovery' ? 'recovery code' : 'verification code';
-  return `Password-Encrypt ${label}: ${code}. Expires in 10 minutes. Never share this code.`;
+  const base = `Password-Encrypt ${label}: ${code}. Expires in 10 minutes. Never share this code.`;
+  return purpose === 'production_onboarding'
+    ? `${base}\n@password-encrypt.com #${code}`
+    : base;
 }
 
 async function twilioRequest(url, params) {
@@ -60,9 +64,14 @@ export async function startSmsVerification({ to, purpose, code }) {
   }
 
   if (mode === 'twilio_verify') {
+    const params = { To: to, Channel: 'sms', Locale: config.locale };
+    // Optional custom Verify template. A domain-bound template can improve WebOTP
+    // pickup on supporting browsers while the normal Twilio Verify flow remains
+    // fully functional when this variable is not configured.
+    if (config.verifyTemplateSid) params.TemplateSid = config.verifyTemplateSid;
     const data = await twilioRequest(
       `https://verify.twilio.com/v2/Services/${encodeURIComponent(config.verifyServiceSid)}/Verifications`,
-      { To: to, Channel: 'sms', Locale: config.locale }
+      params
     );
     return {
       sent: true,

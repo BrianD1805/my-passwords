@@ -26,16 +26,16 @@ function check(label, ok) {
   else { console.error(`FAIL  ${label}`); failed += 1; }
 }
 
-check('Ver-1.009.01 app/server/package/service-worker versions align', pkg.version === '1.9.1' && /Password-Encrypt Ver-1\.009\.01/.test(main) && /Password-Encrypt Ver-1\.009\.01/.test(server) && /my-passwords-v1\.009\.01/.test(sw));
+check('Ver-1.010.01 app/server/package/service-worker versions align', pkg.version === '1.10.1' && /Password-Encrypt Ver-1\.010\.01/.test(main) && /Password-Encrypt Ver-1\.010\.01/.test(server) && /my-passwords-v1\.010\.01/.test(sw));
 check('Public Terms, Privacy and Billing routes are implemented and included in the PWA shell', /'\/terms': 'terms'/.test(legal) && /'\/privacy': 'privacy'/.test(legal) && /'\/billing-terms': 'billing'/.test(legal) && /'\/terms'/.test(sw) && /'\/privacy'/.test(sw) && /'\/billing-terms'/.test(sw));
 check('Public landing page links all legal policies', /href="\/terms"/.test(main) && /href="\/privacy"/.test(main) && /href="\/billing-terms"/.test(main));
 check('New signup requires explicit current Terms and Privacy acceptance in browser', /legalAccepted/.test(main) && /LEGAL_VERSION/.test(main) && /Please read and agree to the Terms of Service and Privacy Policy/.test(main));
-const signupStepOneStart = main.indexOf('landingOnboardingStep === 1');
-const signupStepTwoStart = main.indexOf('landingOnboardingStep === 2', signupStepOneStart);
-const signupStepOne = signupStepOneStart >= 0 && signupStepTwoStart > signupStepOneStart ? main.slice(signupStepOneStart, signupStepTwoStart) : '';
-check('Trial signup Screen 1 requires Terms and Privacy only', /id="signup-legal-consent"/.test(signupStepOne) && /legalAccepted/.test(signupStepOne) && /Terms of Service/.test(signupStepOne) && /Privacy Policy/.test(signupStepOne) && !/Subscription, Cancellation/.test(signupStepOne));
-check('Signup Terms and Privacy open in an in-app popup instead of a new browser tab', /openSignupLegalDocument\('terms'\)/.test(signupStepOne) && /openSignupLegalDocument\('privacy'\)/.test(signupStepOne) && !/openSignupLegalDocument\('billing'\)/.test(signupStepOne) && /signup-legal-popup-layer/.test(main) && !/target="_blank"/.test(signupStepOne));
-check('Closing a signup legal policy returns to the preserved signup state', /Back to signup/.test(main) && /<LegalPage page=\{signupLegalModal\.page\} embedded \/>/.test(main) && /if \(embedded\) return <article/.test(legal));
+const signupLegalStepStart = main.indexOf('step === 5');
+const signupMobileStepStart = main.indexOf('step === 6', signupLegalStepStart);
+const signupLegalStep = signupLegalStepStart >= 0 && signupMobileStepStart > signupLegalStepStart ? main.slice(signupLegalStepStart, signupMobileStepStart) : '';
+check('Trial signup legal card requires Terms and Privacy only', /legalAccepted/.test(signupLegalStep) && /Terms of Service/.test(signupLegalStep) && /Privacy Policy/.test(signupLegalStep) && !/Subscription, Cancellation/.test(signupLegalStep));
+check('Signup Terms and Privacy open in a dedicated in-app card instead of a new browser tab', /openSignupLegalDocument\('terms'\)/.test(signupLegalStep) && /openSignupLegalDocument\('privacy'\)/.test(signupLegalStep) && !/openSignupLegalDocument\('billing'\)/.test(signupLegalStep) && /onboarding-legal-card/.test(main) && !/target="_blank"/.test(signupLegalStep));
+check('Closing a signup legal policy returns to the preserved signup card', /Back to setup/.test(main) && /<LegalPage page=\{signupLegalModal\.page\} embedded \/>/.test(main) && /if \(embedded\) return <article/.test(legal));
 check('Server independently enforces current legal acceptance for new accounts', /LEGAL_ACCEPTANCE_REQUIRED/.test(bootstrap) && /legalVersion !== LEGAL_VERSION/.test(bootstrap));
 check('Trial signup audit records Terms and Privacy acceptance only', /legal_acceptance/.test(bootstrap) && /accepted_at: now/.test(bootstrap) && /terms_of_service/.test(bootstrap) && /privacy_policy/.test(bootstrap) && !/documents: \['terms_of_service', 'privacy_policy', 'subscription_cancellation_refund_policy'\]/.test(bootstrap));
 check('Terms describe client-side encryption without absolute security promise', /Client-side encrypted vault/.test(legal) && /AES-GCM/.test(legal) && /PBKDF2-SHA-256/.test(legal) && /No online service can promise absolute security/.test(legal));
@@ -64,7 +64,7 @@ check('Landing plan area prominently states that trial takes no credit card deta
 check('Paid checkout requires explicit billing-policy acknowledgement in the browser', /billing-purchase-consent/.test(main) && /billingTermsAccepted/.test(main) && /Subscription, Cancellation &amp; Refund Policy/.test(main));
 check('Stripe checkout independently enforces current billing-policy acknowledgement', /BILLING_TERMS_ACCEPTANCE_REQUIRED/.test(checkout) && /billingTermsVersion !== BILLING_TERMS_VERSION/.test(checkout));
 check('Paid billing-policy acceptance is recorded in audit metadata', /paid_subscription_terms_accepted/.test(checkout) && /billing_terms_acceptance/.test(checkout));
-check('Create-account progress indicators render in the sticky popup header', /item-popup-header create-account-popup-header/.test(main) && /create-account-header-content/.test(main) && /create-account-popup-header \.onboarding-progress/.test(read('src/styles.css')));
+check('Create-account progress indicator stays visible at the top of the onboarding card', /onboarding-card-topbar/.test(main) && /onboarding-progress-track/.test(main) && /onboarding-progress-track/.test(read('src/styles.css')));
 
 if (failed) {
   console.error(`\n${failed} legal/commercial readiness check${failed === 1 ? '' : 's'} failed.`);

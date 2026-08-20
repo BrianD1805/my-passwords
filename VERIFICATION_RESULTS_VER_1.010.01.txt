@@ -1,0 +1,27 @@
+Password-Encrypt Ver-1.010.01 Verification Results
+Generated: 2026-08-20
+
+== security-static-check.mjs ==
+All 13 security static checks passed.
+== reliability-static-check.mjs ==
+All 20 reliability static checks passed.
+== legal-readiness-check.mjs ==
+All 35 legal/commercial readiness checks passed.
+== landing-ux-static-check.mjs ==
+All 36 landing/plan UX static checks passed.
+== mobile-regression-static-check.mjs ==
+All 6 mobile restoration checks passed.
+== emergency-flow-static-check.mjs ==
+All 75 Trusted Person / emergency-flow static checks passed.
+== onboarding-flow-static-check.mjs ==
+All Ver-1.010.01 onboarding static checks passed.
+== push-notification-static-check.mjs ==
+All 32 push notification static checks passed.
+== ver-1.010.01-static-check.mjs ==
+8/8 Ver-1.010.01 Onboarding Build Warning Fix checks passed.
+
+All Netlify function JavaScript syntax checks: PASS
+landingOtp input key count: 1
+landingOtp testCode key count: 1
+
+Production build note: node_modules is intentionally excluded from the supplied full-source package, so the Vite production build must be run in the user's existing local project environment. The duplicate-key source warning has been removed at source and is covered by the Ver-1.010.01 static check.
