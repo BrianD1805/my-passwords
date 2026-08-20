@@ -36,7 +36,7 @@ function rowDate(row) {
 }
 
 export default function AdminAutomatedEmails({ onSessionExpired, setGlobalNotice, onOpenCustomer }) {
-  const [data, setData] = useState({ emailRows: [], processorRuns: [], summary: {}, customerOptions: [], emailTypes: [], schedules: {}, resendConfigured: false, lastLifecycleSuccess: null, lastEmergencySuccess: null });
+  const [data, setData] = useState({ emailRows: [], processorRuns: [], summary: {}, customerOptions: [], emailTypes: [], schedules: {}, resendConfigured: false, lastLifecycleSuccess: null, lastEmergencySuccess: null, adminNotifications: { recipientEmail: 'bdh1805@gmail.com', enabled: true, eventFlags: {}, eventOptions: [], recentLogs: [], pendingTrialRequests: 0 } });
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState('');
   const [notice, setNotice] = useState('');
@@ -47,6 +47,7 @@ export default function AdminAutomatedEmails({ onSessionExpired, setGlobalNotice
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [testEmail, setTestEmail] = useState('');
+  const [adminNotificationDraft, setAdminNotificationDraft] = useState(null);
 
   async function loadData({ quiet = false } = {}) {
     if (!quiet) setLoading(true);
@@ -58,6 +59,11 @@ export default function AdminAutomatedEmails({ onSessionExpired, setGlobalNotice
       return;
     }
     setData(result);
+    setAdminNotificationDraft({
+      recipientEmail: result.adminNotifications?.recipientEmail || 'bdh1805@gmail.com',
+      enabled: result.adminNotifications?.enabled !== false,
+      eventFlags: { ...(result.adminNotifications?.eventFlags || {}) }
+    });
     setNotice('');
   }
 
@@ -93,6 +99,14 @@ export default function AdminAutomatedEmails({ onSessionExpired, setGlobalNotice
 
   const failedRows = useMemo(() => (data.emailRows || []).filter((row) => row.rawStatus === 'failed'), [data.emailRows]);
 
+  const adminNotificationsDirty = useMemo(() => {
+    if (!adminNotificationDraft) return false;
+    const current = data.adminNotifications || {};
+    return String(adminNotificationDraft.recipientEmail || '').trim().toLowerCase() !== String(current.recipientEmail || '').trim().toLowerCase()
+      || Boolean(adminNotificationDraft.enabled) !== Boolean(current.enabled)
+      || JSON.stringify(adminNotificationDraft.eventFlags || {}) !== JSON.stringify(current.eventFlags || {});
+  }, [adminNotificationDraft, data.adminNotifications]);
+
   async function runAction(action, payload = {}, busyKey = action) {
     setBusyAction(busyKey);
     setNotice('');
@@ -111,6 +125,22 @@ export default function AdminAutomatedEmails({ onSessionExpired, setGlobalNotice
     setGlobalNotice?.(result.message || 'Automated email action completed.');
     await loadData({ quiet: true });
     return result;
+  }
+
+  async function saveAdminNotifications() {
+    if (!adminNotificationDraft || !adminNotificationsDirty) return;
+    await runAction('save_admin_notifications', adminNotificationDraft, 'save_admin_notifications');
+  }
+
+  async function sendAdminNotificationTest() {
+    await runAction('send_admin_notification_test', {}, 'admin_notification_test');
+  }
+
+  function toggleAdminNotification(key) {
+    setAdminNotificationDraft((current) => ({
+      ...(current || { recipientEmail: data.adminNotifications?.recipientEmail || 'bdh1805@gmail.com', enabled: true, eventFlags: {} }),
+      eventFlags: { ...(current?.eventFlags || {}), [key]: current?.eventFlags?.[key] === false }
+    }));
   }
 
   async function retryEmail(row) {
@@ -144,6 +174,27 @@ export default function AdminAutomatedEmails({ onSessionExpired, setGlobalNotice
           <article className="failed"><XCircle /><strong>{data.summary?.failed || 0}</strong><span>Failed</span></article>
           <article className="pending"><Clock3 /><strong>{data.summary?.pending || 0}</strong><span>Pending</span></article>
           <article className="retrying"><RotateCcw /><strong>{data.summary?.retrying || 0}</strong><span>Retrying</span></article>
+        </div>
+      </section>
+
+      <section className="admin-panel admin-owner-notifications">
+        <div className="admin-panel-heading">
+          <div><p className="eyebrow">Owner notifications</p><h2>Admin email notifications</h2></div>
+          <span className={`admin-status ${data.resendConfigured && data.adminNotifications?.configured ? 'success' : 'warning'}`}>{data.resendConfigured && data.adminNotifications?.configured ? 'Active' : 'Setup required'}</span>
+        </div>
+        <p className="admin-panel-intro">Send low-volume operational and customer-account alerts to the Password-Encrypt owner. These messages contain account metadata only and never include vault contents.</p>
+        <div className="admin-owner-notification-settings">
+          <label className="admin-owner-recipient"><span>Send Admin notifications to</span><input type="email" value={adminNotificationDraft?.recipientEmail || ''} onChange={(event) => setAdminNotificationDraft((current) => ({ ...(current || {}), recipientEmail: event.target.value }))} /></label>
+          <label className="admin-owner-master-toggle"><input type="checkbox" checked={adminNotificationDraft?.enabled !== false} onChange={(event) => setAdminNotificationDraft((current) => ({ ...(current || {}), enabled: event.target.checked }))} /><span><strong>Automatic Admin email notifications</strong><small>Turn all of the notification types below on or off in one place.</small></span></label>
+          <div className="admin-owner-event-grid">
+            {(data.adminNotifications?.eventOptions || []).map((option) => <label key={option.key} className="admin-owner-event-row"><input type="checkbox" checked={adminNotificationDraft?.eventFlags?.[option.key] !== false} onChange={() => toggleAdminNotification(option.key)} disabled={adminNotificationDraft?.enabled === false} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}
+          </div>
+          <div className="admin-owner-notification-actions"><button type="button" className="secondary-button" onClick={sendAdminNotificationTest} disabled={Boolean(busyAction) || !data.resendConfigured}><Send size={17} /> {busyAction === 'admin_notification_test' ? 'Sending...' : 'Send test to Admin'}</button><button type="button" className="primary-button" onClick={saveAdminNotifications} disabled={Boolean(busyAction) || !adminNotificationsDirty}>{busyAction === 'save_admin_notifications' ? 'Saving...' : 'Save Admin notifications'}</button></div>
+        </div>
+        <div className="admin-owner-notification-summary"><strong>{data.adminNotifications?.pendingTrialRequests || 0}</strong><span>Pending trial extension request{Number(data.adminNotifications?.pendingTrialRequests || 0) === 1 ? '' : 's'}</span></div>
+        <div className="admin-owner-notification-history">
+          {(data.adminNotifications?.recentLogs || []).slice(0, 12).map((row) => <article key={row.id}><Mail size={17} /><div><strong>{titleCase(row.eventType)}</strong><span>{row.customerName} · {row.recipientMasked || 'Admin recipient'}</span><small>{row.subject || 'Admin notification'} · {dateLabel(row.sentAt || row.createdAt)}</small>{row.errorMessage && <small className="admin-email-error-detail">{row.errorMessage}</small>}</div><span className={`admin-status ${row.status === 'sent' ? 'success' : row.status === 'failed' ? 'error' : 'warning'}`}>{titleCase(row.status)}</span></article>)}
+          {!data.adminNotifications?.recentLogs?.length && <div className="admin-empty">No Admin notification emails have been sent yet.</div>}
         </div>
       </section>
 

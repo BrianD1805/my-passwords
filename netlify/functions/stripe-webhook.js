@@ -3,6 +3,7 @@ import { stripeObjectId, stripeRequest, stripeTimestampToIso, stripeWebhookConfi
 import { processStripeInvoiceObject, syncStripeSubscriptionObject } from './_subscription-lifecycle.js';
 import { sendCustomerLifecycleEmailForTenant } from './_customer-email.js';
 import { recordFunctionFailure, recordOperationalEvent } from './_operations.js';
+import { sendAdminNotification } from './_admin-notification.js';
 
 function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
@@ -180,6 +181,46 @@ async function sendStripeLifecycleEmails({ stripeEvent, object, before, after })
   return sent;
 }
 
+async function sendStripeAdminNotifications({ stripeEvent, object, before, after }) {
+  const tenantId = after?.tenant_id || before?.tenant_id || metadataValue(object, 'my_passwords_tenant_id') || '';
+  if (!tenantId) return [];
+  const notifications = [];
+  const type = stripeEvent.type;
+  const previous = stripeEvent.data?.previous_attributes || {};
+  const currentStatus = String(after?.status || object?.status || '').toLowerCase();
+  const previousStatus = String(previous?.status || before?.status || '').toLowerCase();
+  const subscriptionId = after?.provider_subscription_id || stripeObjectId(object?.subscription || object) || before?.provider_subscription_id || '';
+  const billingInterval = after?.billing_interval || metadataValue(object, 'my_passwords_billing_interval') || '';
+
+  const send = async (eventType, key, context = {}) => {
+    const result = await sendAdminNotification({
+      type: eventType,
+      tenantId,
+      idempotencyKey: key,
+      context: { source: 'stripe_webhook', billingInterval, currentPeriodEnd: after?.current_period_end || '', ...context }
+    }).catch((error) => ({ sent: false, skipped: false, reason: error.message || 'Admin notification failed.' }));
+    notifications.push({ eventType, sent: Boolean(result?.sent), skipped: Boolean(result?.skipped), reason: result?.reason || '' });
+  };
+
+  const checkoutPurchased = type === 'checkout.session.completed' && Boolean(subscriptionId);
+  const subscriptionCreatedForPurchase = type === 'customer.subscription.created' && ['trialing', 'active'].includes(currentStatus);
+  if ((checkoutPurchased || subscriptionCreatedForPurchase) && subscriptionId) {
+    await send('new_subscription_purchased', `new_subscription_purchased:${subscriptionId}`);
+  }
+
+  if (type === 'invoice.payment_failed') {
+    await send('payment_failed', `payment_failed_admin:${stripeEvent.id}`);
+  }
+
+  const cancelled = type === 'customer.subscription.deleted'
+    || (['cancelled', 'canceled', 'incomplete_expired'].includes(currentStatus) && !['cancelled', 'canceled', 'incomplete_expired'].includes(previousStatus));
+  if (cancelled && (subscriptionId || after?.id)) {
+    await send('subscription_cancelled', `subscription_cancelled_admin:${subscriptionId || after.id}:${after?.cancelled_at || stripeEvent.id}`);
+  }
+
+  return notifications;
+}
+
 async function processScheduleEvent(schedule) {
   const subscriptionId = stripeObjectId(schedule.subscription || schedule.released_subscription);
   const customerId = stripeObjectId(schedule.customer);
@@ -261,8 +302,9 @@ export async function handler(event) {
       created_at: now
     }, 'id');
     const lifecycleEmails = await sendStripeLifecycleEmails({ stripeEvent, object, before, after: subscriptionRow });
+    const adminNotifications = await sendStripeAdminNotifications({ stripeEvent, object, before, after: subscriptionRow });
     await finishWebhookEvent(webhookClaim, 'succeeded');
-    return jsonResponse(200, { ok: true, version: APP_VERSION, received: true, lifecycleEmails });
+    return jsonResponse(200, { ok: true, version: APP_VERSION, received: true, lifecycleEmails, adminNotifications });
   } catch (error) {
     await finishWebhookEvent(webhookClaim, 'failed', error.message || 'Stripe event processing failed.');
     const object = stripeEvent?.data?.object || {};

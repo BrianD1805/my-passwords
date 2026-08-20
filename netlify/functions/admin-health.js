@@ -64,12 +64,13 @@ export function reconciliationChanges(local, provider) {
 }
 
 async function loadHealthData() {
-  const [events, checks, webhooks, customerEmailFailures, adminEmailFailures, syncIssues, tenants, subscriptions, plans, reconciliations] = await Promise.all([
+  const [events, checks, webhooks, customerEmailFailures, adminEmailFailures, adminNotificationFailures, syncIssues, tenants, subscriptions, plans, reconciliations] = await Promise.all([
     selectRows('operational_events', 'select=*&order=last_seen_at.desc&limit=250'),
     selectRows('scheduled_check_runs', 'select=*&order=started_at.desc&limit=250'),
     selectRows('stripe_webhook_events', 'select=id,event_id,event_type,status,attempts,error_message,first_received_at,last_attempt_at,processed_at,updated_at&order=updated_at.desc&limit=100'),
     selectRows('customer_email_log', 'select=id,tenant_id,email_type,status,attempts,error_message,last_attempt_at,created_at&status=eq.failed&order=last_attempt_at.desc&limit=100'),
     selectRows('admin_email_log', 'select=id,tenant_id,email_type,status,error_message,created_at&status=eq.failed&order=created_at.desc&limit=100'),
+    selectRows('admin_notification_log', 'select=id,tenant_id,event_type,status,error_message,created_at&status=eq.failed&order=created_at.desc&limit=100').catch(() => []),
     selectRows('vault_sync_events', 'select=id,tenant_id,user_id,event_type,status,item_count,message,device_id,created_at&or=(status.eq.error,status.eq.warning,event_type.eq.backup_conflict_blocked)&order=created_at.desc&limit=150'),
     selectRows('tenants', 'select=id,name,account_name,plan_code,plan_status,account_status&order=account_name.asc&limit=1000'),
     selectRows('tenant_subscriptions', 'select=*&provider=eq.stripe&order=updated_at.desc&limit=1000'),
@@ -105,7 +106,7 @@ async function loadHealthData() {
     summary: {
       openOperationalEvents: openEvents.length, criticalOpen, errorOpen, warningOpen,
       failedStripeWebhooks: failedWebhooks.length,
-      resendFailures: customerEmailFailures.length + adminEmailFailures.length,
+      resendFailures: customerEmailFailures.length + adminEmailFailures.length + adminNotificationFailures.length,
       backupFailures: backupFailures.length,
       syncConflicts: conflicts.length,
       functionFailures: openEvents.filter((row) => row.event_type === 'function_failure').length

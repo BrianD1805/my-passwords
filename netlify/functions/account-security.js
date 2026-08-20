@@ -3,6 +3,7 @@ import { clearCustomerSession } from './_auth.js';
 import { createAccountOtp, maskEmail, maskPhone, verifyAccountOtp } from './_account-otp.js';
 import { revokeAllCustomerSessions, revokeDeviceSessions, validateCustomerSession } from './_account-session.js';
 import { sendCustomerLifecycleEmail } from './_customer-email.js';
+import { sendAdminNotification } from './_admin-notification.js';
 import { assertBrowserAction, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
@@ -210,6 +211,11 @@ export async function handler(event) {
         idempotencyKey: `account_deletion_requested:${deletion.id}`,
         context: { displayName: user.display_name || '', deletionScheduledFor: scheduledFor },
         metadata: { source: 'account_security', deletion_request_id: deletion.id }
+      }).catch(() => null);
+      await sendAdminNotification({
+        type: 'account_deletion_requested', tenantId: session.tenantId, userId: session.userId,
+        idempotencyKey: `account_deletion_requested_admin:${deletion.id}`,
+        context: { source: 'account_security', scheduledFor }
       }).catch(() => null);
       return jsonResponse(200, { ok: true, version: APP_VERSION, deletion, message: 'Account deletion is scheduled after the 14-day safety period. You can cancel it before that date.' });
     }

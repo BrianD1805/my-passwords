@@ -4,6 +4,7 @@ import { assertBrowserAction } from './_security.js';
 import { sendCustomerLifecycleEmail } from './_customer-email.js';
 import { runCustomerLifecycleEmailProcessor } from './customer-lifecycle-email-process.js';
 import { runEmergencyAccessReleaseProcessor } from './emergency-access-release-process.js';
+import { ADMIN_NOTIFICATION_DEFAULTS, loadAdminNotificationSettings, sendAdminNotification } from './_admin-notification.js';
 
 function eq(value) { return `eq.${encodeURIComponent(value)}`; }
 function safeText(value, max = 500) { return String(value || '').trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, max); }
@@ -36,11 +37,14 @@ async function audit(session, action, metadata = {}) {
 }
 
 async function loadEmailAdminData() {
-  const [logs, tenants, processorRuns] = await Promise.all([
+  const [logs, tenants, processorRuns, adminNotificationLogs, trialExtensionRequests] = await Promise.all([
     selectRows('customer_email_log', 'select=id,tenant_id,user_id,email_type,recipient_masked,subject,provider,status,attempts,error_message,last_attempt_at,sent_at,metadata,created_at,updated_at&order=created_at.desc&limit=2000'),
     selectRows('tenants', 'select=id,name,account_name&order=account_name.asc&limit=2000'),
-    selectRows('email_processor_runs', 'select=id,processor_type,trigger_source,status,started_at,finished_at,items_checked,email_actions,result_summary,error_message,created_at&order=started_at.desc&limit=200')
+    selectRows('email_processor_runs', 'select=id,processor_type,trigger_source,status,started_at,finished_at,items_checked,email_actions,result_summary,error_message,created_at&order=started_at.desc&limit=200'),
+    selectRows('admin_notification_log', 'select=id,tenant_id,user_id,event_type,recipient_masked,subject,status,error_message,sent_at,created_at,updated_at&order=created_at.desc&limit=200').catch(() => []),
+    selectRows('trial_extension_requests', 'select=id,tenant_id,user_id,status,reason,trial_ends_at,requested_at,reviewed_at,created_at&order=created_at.desc&limit=200').catch(() => [])
   ]);
+  const adminNotificationSettings = await loadAdminNotificationSettings();
   const tenantMap = new Map((tenants || []).map((tenant) => [tenant.id, tenant.account_name || tenant.name || tenant.id]));
   const emailRows = (logs || []).map((row) => {
     const metadata = parseJson(row.metadata);
@@ -86,6 +90,19 @@ async function loadEmailAdminData() {
   const lastEmergencySuccess = runs.find((row) => row.processorType === 'emergency_access_release' && row.status === 'success') || null;
   const emailTypes = [...new Set(emailRows.map((row) => row.emailType).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const customerOptions = (tenants || []).map((tenant) => ({ value: tenant.id, label: tenant.account_name || tenant.name || tenant.id }));
+  const adminNotificationRows = (adminNotificationLogs || []).map((row) => ({
+    id: row.id,
+    tenantId: row.tenant_id || '',
+    customerName: row.tenant_id ? (tenantMap.get(row.tenant_id) || 'Customer account') : 'Platform',
+    eventType: row.event_type || '',
+    recipientMasked: row.recipient_masked || '',
+    subject: row.subject || '',
+    status: row.status || '',
+    errorMessage: row.error_message || '',
+    sentAt: row.sent_at || '',
+    createdAt: row.created_at || ''
+  }));
+  const pendingTrialRequests = (trialExtensionRequests || []).filter((row) => row.status === 'pending').length;
   return {
     emailRows,
     processorRuns: runs,
@@ -94,6 +111,22 @@ async function loadEmailAdminData() {
     lastEmergencySuccess,
     emailTypes,
     customerOptions,
+    adminNotifications: {
+      configured: !adminNotificationSettings.missing,
+      recipientEmail: adminNotificationSettings.recipient_email || ADMIN_NOTIFICATION_DEFAULTS.recipient_email,
+      enabled: adminNotificationSettings.enabled !== false,
+      eventFlags: adminNotificationSettings.event_flags || ADMIN_NOTIFICATION_DEFAULTS.event_flags,
+      recentLogs: adminNotificationRows,
+      pendingTrialRequests,
+      eventOptions: [
+        { key: 'new_client_onboarded', label: 'New client onboarded', description: 'Name, email, mobile number, plan and verification status.' },
+        { key: 'new_subscription_purchased', label: 'New subscription purchased', description: 'Customer details, plan and billing frequency.' },
+        { key: 'trial_extension_requested', label: 'Trial extension requested', description: 'Customer details, plan and current trial end date.' },
+        { key: 'payment_failed', label: 'Payment failed', description: 'Important billing issue requiring attention.' },
+        { key: 'subscription_cancelled', label: 'Subscription cancelled', description: 'Commercial/account retention notification.' },
+        { key: 'account_deletion_requested', label: 'Account deletion requested', description: 'Customer deletion request and scheduled deletion date.' }
+      ]
+    },
     resendConfigured: Boolean(process.env.RESEND_API_KEY && process.env.OTP_EMAIL_FROM),
     schedules: {
       lifecycle: { label: 'Customer lifecycle', schedule: 'Hourly', cron: '0 * * * *' },
@@ -157,7 +190,7 @@ export async function handler(event) {
     try {
       return jsonResponse(200, { ok: true, version: APP_VERSION, ...(await loadEmailAdminData()) });
     } catch (error) {
-      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load automated email operations. Run all required Supabase migrations through Ver-0.050 first.', error: error.message, details: error.details || null });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Could not load automated email operations. Run all required Supabase migrations through Ver-1.009 first.', error: error.message, details: error.details || null });
     }
   }
   if (event.httpMethod !== 'POST') return jsonResponse(405, { ok: false, version: APP_VERSION, message: 'GET or POST required.' });
@@ -178,6 +211,30 @@ export async function handler(event) {
       const result = await runEmergencyAccessReleaseProcessor({ triggerSource: 'admin' });
       await audit(session, 'admin_email_emergency_processor_completed', { email_actions: result.processed, sent: result.sent, failed: result.failed, message: 'Manual Emergency Access release check completed.' });
       return jsonResponse(200, { ok: true, version: APP_VERSION, result, message: `Emergency Access release check completed. ${result.processed || 0} due request(s) processed.` });
+    }
+
+    if (action === 'save_admin_notifications') {
+      const recipientEmail = safeText(body.recipientEmail, 320).toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Enter a valid Admin notification email address.' });
+      const allowedKeys = Object.keys(ADMIN_NOTIFICATION_DEFAULTS.event_flags);
+      const incomingFlags = body.eventFlags && typeof body.eventFlags === 'object' ? body.eventFlags : {};
+      const eventFlags = Object.fromEntries(allowedKeys.map((key) => [key, incomingFlags[key] !== false]));
+      const now = new Date().toISOString();
+      const existing = await selectRows('admin_notification_settings', `select=id&id=${eq('owner_admin')}&limit=1`).catch(() => []);
+      if (existing?.[0]?.id) {
+        await updateRow('admin_notification_settings', `id=${eq('owner_admin')}`, { recipient_email: recipientEmail, enabled: body.enabled !== false, event_flags: eventFlags, updated_at: now });
+      } else {
+        await insertRow('admin_notification_settings', { id: 'owner_admin', recipient_email: recipientEmail, enabled: body.enabled !== false, event_flags: eventFlags, created_at: now, updated_at: now });
+      }
+      await audit(session, 'admin_notification_settings_updated', { recipient_masked: maskEmail(recipientEmail), enabled: body.enabled !== false, event_flags: eventFlags });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, message: 'Admin notification settings saved.' });
+    }
+
+    if (action === 'send_admin_notification_test') {
+      const settings = await loadAdminNotificationSettings();
+      const delivery = await sendAdminNotification({ type: 'admin_test', idempotencyKey: `admin_notification_test:${Date.now()}:${crypto.randomUUID()}`, bypassSettings: true, context: { source: 'admin_test', recipient: settings.recipient_email } });
+      await audit(session, delivery.sent ? 'admin_notification_test_sent' : 'admin_notification_test_failed', { recipient_masked: maskEmail(settings.recipient_email), message: delivery.sent ? 'Admin notification test sent.' : (delivery.reason || 'Admin notification test failed.') });
+      return jsonResponse(delivery.sent ? 200 : 502, { ok: Boolean(delivery.sent), version: APP_VERSION, delivery, message: delivery.sent ? `Admin notification test sent to ${maskEmail(settings.recipient_email)}.` : (delivery.reason || 'Admin notification test failed.') });
     }
 
     if (action === 'retry_email') {

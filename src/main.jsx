@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.008';
+const VERSION = 'Password-Encrypt Ver-1.009';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -2782,6 +2782,7 @@ function App() {
   const [billing, setBilling] = useState({ status: 'idle', message: '', planCode: '', interval: 'monthly', subscription: null, stripeConfigured: false, returnState: '', loaded: false, paymentHistory: [], nextInvoice: null, duplicateSubscriptionIds: [] });
   const [billingTermsAccepted, setBillingTermsAccepted] = useState(false);
   const [billingLegalModalOpen, setBillingLegalModalOpen] = useState(false);
+  const [trialExtensionRequest, setTrialExtensionRequest] = useState({ status: 'idle', message: '' });
   const [subscriptionActionModal, setSubscriptionActionModal] = useState({ visible: false, action: '', title: '', message: '', planCode: '', interval: '', mode: '' });
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', message: 'Your vault safety status will update after the first secure backup check.', lastSyncAt: '', lastSnapshotId: '', itemCount: 0, snapshotCount: 0 });
@@ -3416,6 +3417,21 @@ function App() {
     const feature = result.feature || (String(result.code || '').includes('ITEM') ? 'items' : (String(result.code || '').includes('STORAGE') ? 'storage' : (String(result.code || '').includes('DOCUMENT') ? 'documents' : (String(result.code || '').includes('PHOTO') ? 'pictures' : fallbackFeature))));
     showEntitlementUpgrade(feature, result.message);
     return true;
+  }
+
+  async function requestTrialExtension() {
+    if (!customerSession.authenticated) {
+      setDeviceVerificationModal({ visible: true, purpose: 'billing' });
+      return;
+    }
+    setTrialExtensionRequest({ status: 'sending', message: 'Sending your request...' });
+    const result = await postJson('/.netlify/functions/trial-extension-request', { reason: '' });
+    if (!result.ok) {
+      setTrialExtensionRequest({ status: 'error', message: result.message || 'Your trial extension request could not be sent.' });
+      return;
+    }
+    setTrialExtensionRequest({ status: 'sent', message: result.message || 'Your trial extension request has been sent to Password-Encrypt Admin.' });
+    showMessage(result.message || 'Trial extension request sent.', 'success');
   }
 
   async function performSubscriptionAction(action, payload = {}) {
@@ -9891,6 +9907,8 @@ function App() {
                 const chooserEnabled = (!stripeSubscriptionExists || ended) ? true : canChange;
                 const visibleBillingMessage = billing.message && billing.status !== 'refreshing' && billing.message !== 'Subscription status refreshed directly from Stripe.' ? billing.message : '';
                 const currentActionLabel = changeMode === 'immediate' ? 'Upgrade now' : changeMode === 'scheduled' ? 'Schedule for next renewal' : 'Current plan and billing';
+                const hasTrialHistory = Boolean(bootstrap.trialStartedAt || bootstrap.trialEndsAt || currentSubscription?.trialStartedAt || currentSubscription?.trialEndsAt || String(currentSubscription?.status || bootstrap.planStatus || '').toLowerCase().includes('trial'));
+                const canRequestTrialExtension = hasTrialHistory && !['subscription_active', 'cancellation_scheduled'].includes(lifecycleState);
                 return <div className="settings-drilldown-stack">
                   <details className="settings-drilldown">
                     <summary><span className="settings-directory-icon"><ShieldCheck size={21} /></span><span className="settings-directory-copy"><strong>Subscription overview</strong><small>Current plan, renewal date and payment status.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
@@ -9922,6 +9940,7 @@ function App() {
                     {suspended && <div className="subscription-payment-warning"><AlertTriangle size={19} /><span><strong>Account suspended</strong><small>Subscription changes are unavailable while the account is suspended. Contact support if you believe this is incorrect.</small></span></div>}
                     {duplicateCount > 1 && <div className="subscription-payment-warning"><AlertTriangle size={19} /><span><strong>Overlapping Stripe subscriptions detected</strong><small>No automatic plan change will be made until Admin keeps one live subscription and refreshes this account from Stripe.</small></span></div>}
                   </section>
+                  {canRequestTrialExtension && <section className="trial-extension-request-card settings-inner-card"><CalendarClock size={20} /><div><strong>Need a little more time?</strong><small>You can request a trial extension from Password-Encrypt Admin. Sending a request does not automatically extend the trial.</small>{trialExtensionRequest.message && <span className={`trial-extension-request-message ${trialExtensionRequest.status}`}>{trialExtensionRequest.message}</span>}</div><button type="button" className="secondary-button" onClick={requestTrialExtension} disabled={trialExtensionRequest.status === 'sending' || trialExtensionRequest.status === 'sent'}>{trialExtensionRequest.status === 'sending' ? 'Sending...' : trialExtensionRequest.status === 'sent' ? 'Request sent' : 'Request trial extension'}</button></section>}
 
                     </div>
                   </details>

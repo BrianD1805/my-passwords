@@ -4,6 +4,7 @@ import { evaluateTenantAccess, isFounderTenant, recordLifecycleEvent, upsertTria
 import { resolveTenantEntitlements } from './_entitlements.js';
 import { verifyAccountOtp } from './_account-otp.js';
 import { sendCustomerLifecycleEmail } from './_customer-email.js';
+import { sendAdminNotification } from './_admin-notification.js';
 import { assertBrowserAction, consumeRateLimit, csrfTokenForSession, resetRateLimit, requestIpHash, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) {
@@ -148,6 +149,25 @@ export async function handler(event) {
         welcome_email_sent: Boolean(welcomeEmail.sent)
       }
     }).catch(() => null);
+
+    if (firstActivation) {
+      await sendAdminNotification({
+        type: 'new_client_onboarded',
+        tenantId: tenant.id,
+        userId: user.id,
+        idempotencyKey: `new_client_onboarded:${tenant.id}`,
+        context: {
+          source: 'onboarding',
+          displayName: user.display_name || '',
+          email: user.email || '',
+          phone: user.phone_e164 || '',
+          planName,
+          emailVerified: emailVerifiedAfter,
+          phoneVerified: phoneVerifiedAfter,
+          verificationMethod: isEmail ? 'Email OTP' : 'SMS OTP fallback'
+        }
+      }).catch(() => null);
+    }
 
     const verifiedSession = await createVerifiedCustomerSession(event, {
       tenantId: tenant.id,

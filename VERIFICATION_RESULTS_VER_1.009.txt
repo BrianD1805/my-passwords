@@ -1,0 +1,29 @@
+Password-Encrypt Ver-1.009 — Verification Results
+
+PASS  Security static checks — 13/13
+PASS  Reliability static checks — 20/20
+PASS  Legal/commercial readiness — 35/35
+PASS  Landing/plan UX checks — 36/36
+PASS  Mobile restoration checks — 6/6
+PASS  Trusted Person / Emergency Flow checks — 75/75
+PASS  Onboarding flow checks — 52/52
+PASS  Push Notification checks — 32/32
+PASS  Ver-1.009 Admin Email feature checks — 27/27
+PASS  Updated Netlify function JavaScript syntax checks
+
+Ver-1.009 feature verification covers:
+- Owner/Admin recipient defaults to bdh1805@gmail.com.
+- Admin notification settings and individual event toggles.
+- Greyed Save state until Admin settings change.
+- Safe Admin notification test delivery path.
+- New-client onboarding notification with registered contact details.
+- First paid-subscription purchase notification, including Stripe trialing purchases.
+- Trial extension request notification and rate limiting.
+- Existing Admin trial-extension action resolves the request.
+- Payment-failure, subscription-cancellation and account-deletion alerts.
+- Idempotent Admin notification delivery records.
+- RLS/service-role protection for new metadata tables.
+- No vault content or encryption secrets in Admin notifications.
+- Ver-1.009 database-health and retention coverage.
+
+Note: a Vite production build was not executed in the packaging environment because the supplied full source package intentionally excludes node_modules and dependency installation is unavailable there. Run the normal local `npm run build` after overwriting the project.

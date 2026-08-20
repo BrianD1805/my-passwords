@@ -445,6 +445,7 @@ export async function handler(event) {
         await updateRow('tenant_subscriptions', `id=${eq(currentSubscription.id)}`, { status: 'trialing', trial_ends_at: trialEndsAt, last_stripe_sync_status: 'admin_trial_extended', last_stripe_sync_message: `Stripe trial extended by ${days} day(s).`, updated_at: now.toISOString() });
         await recordLifecycleEvent({ tenantId, subscriptionId: currentSubscription.id, eventType: 'stripe_trial_extended_by_admin', metadata: { days, trial_ends_at: trialEndsAt } });
         const customerEmail = await notifyCustomer(tenantId, { type: 'trial_extended', idempotencyKey: `trial_extended:${tenantId}:${trialEndsAt}`, context: { trialEndsAt }, metadata: { source: 'admin_stripe_trial_extension', days } });
+        await updateRow('trial_extension_requests', `tenant_id=${eq(tenantId)}&status=${eq('pending')}`, { status: 'approved', reviewed_at: now.toISOString(), updated_at: now.toISOString() }).catch(() => null);
         await audit('stripe_trial_extended_by_admin', { tenant_id: tenantId, days, trial_ends_at: trialEndsAt, stripe_subscription_id: currentSubscription.provider_subscription_id, customer_email_sent: Boolean(customerEmail?.sent) });
         return jsonResponse(200, { ok: true, version: APP_VERSION, customerEmail, message: `Stripe trial extended by ${days} day${days === 1 ? '' : 's'}.` });
       }
@@ -478,6 +479,7 @@ export async function handler(event) {
         const subscription = await upsertTrialSubscription({ tenant, trialStartedAt, trialEndsAt, status: 'trialing', metadata: { version: APP_VERSION, last_admin_extension_days: days, last_admin_extension_at: nowIso } });
         await recordLifecycleEvent({ tenantId, subscriptionId: subscription?.id || null, eventType: 'trial_extended_by_admin', metadata: { days, trial_ends_at: trialEndsAt } });
         const customerEmail = await notifyCustomer(tenantId, { type: 'trial_extended', idempotencyKey: `trial_extended:${tenantId}:${trialEndsAt}`, context: { trialEndsAt }, metadata: { source: 'admin_trial_extension', days } });
+        await updateRow('trial_extension_requests', `tenant_id=${eq(tenantId)}&status=${eq('pending')}`, { status: 'approved', reviewed_at: nowIso, updated_at: nowIso }).catch(() => null);
         await audit('trial_extended_by_admin', { tenant_id: tenantId, days, trial_ends_at: trialEndsAt, customer_email_sent: Boolean(customerEmail?.sent) });
         return jsonResponse(200, { ok: true, version: APP_VERSION, tenant: updated, customerEmail, message: `Trial extended by ${days} day${days === 1 ? '' : 's'}.` });
       }
