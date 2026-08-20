@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.010.01';
+const VERSION = 'Password-Encrypt Ver-1.010.02';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -2935,6 +2935,20 @@ function App() {
   const onboardingSessionIsolationRef = useRef(Boolean(readPendingOnboardingAccount() || initialOnboardingFlowRef.current?.active));
   const [showLandingBackToTop, setShowLandingBackToTop] = useState(false);
   const touchReorderRef = useRef({ timer: null, source: '', active: false });
+
+  // Route state is needed by startup effects below. Keep these declarations
+  // before any effect/dependency array that reads onboardingInstallEntry.
+  const routePath = typeof window !== 'undefined' ? window.location.pathname : '/vault';
+  const normalisedRoutePath = routePath.length > 1 ? routePath.replace(/\/+$/, '') : routePath;
+  const isVaultRoute = ['/vault', '/app', '/login'].includes(normalisedRoutePath);
+  const vaultSearchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search || '') : new URLSearchParams();
+  const vaultEntryMode = vaultSearchParams.get('entry') || '';
+  const existingCustomerEntry = isVaultRoute && vaultEntryMode === 'existing';
+  const newCustomerOnboardingEntry = isVaultRoute && vaultEntryMode === 'onboarding';
+  const onboardingInstallEntry = isVaultRoute && vaultEntryMode === 'install';
+  const isEmergencyInviteRoute = normalisedRoutePath === '/emergency-invite';
+  const isTrustedPersonReminderRoute = normalisedRoutePath === '/trusted-person-confirm';
+  const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute && !isTrustedPersonReminderRoute;
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
 
@@ -6112,18 +6126,6 @@ function App() {
 
   const hasActiveVaultFilter = Boolean(query.trim() || category);
   const viewedItem = viewItemId ? visibleItems.find((item) => item.id === viewItemId) : null;
-  const routePath = typeof window !== 'undefined' ? window.location.pathname : '/vault';
-  const normalisedRoutePath = routePath.length > 1 ? routePath.replace(/\/+$/, '') : routePath;
-  const isVaultRoute = ['/vault', '/app', '/login'].includes(normalisedRoutePath);
-  const vaultSearchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search || '') : new URLSearchParams();
-  const vaultEntryMode = vaultSearchParams.get('entry') || '';
-  const existingCustomerEntry = isVaultRoute && vaultEntryMode === 'existing';
-  const newCustomerOnboardingEntry = isVaultRoute && vaultEntryMode === 'onboarding';
-  const onboardingInstallEntry = isVaultRoute && vaultEntryMode === 'install';
-  const isEmergencyInviteRoute = normalisedRoutePath === '/emergency-invite';
-  const isTrustedPersonReminderRoute = normalisedRoutePath === '/trusted-person-confirm';
-  const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute && !isTrustedPersonReminderRoute;
-
   useLayoutEffect(() => {
     if (!newCustomerOnboardingEntry && !onboardingInstallEntry) return;
     document.documentElement.scrollTop = 0;

@@ -1,0 +1,20 @@
+Password-Encrypt Ver-1.010.02 Verification Results
+
+PASS  Security static checks: 13/13
+PASS  Reliability static checks: 20/20
+PASS  Legal/commercial readiness checks: 35/35
+PASS  Landing/plan UX static checks: 36/36
+PASS  Mobile restoration checks: 6/6
+PASS  Trusted Person / Emergency Flow checks: 75/75
+PASS  Onboarding static checks: 61/61
+PASS  Push notification static checks: 32/32
+PASS  Ver-1.010.02 Startup Runtime Fix checks: 8/8
+
+Root cause fixed:
+- onboardingInstallEntry was read by an early React effect/dependency array before its const declaration had executed.
+- Route-state declarations are now initialised before all startup effects that use them.
+- Ver-1.010.01 duplicate OTP object-key cleanup remains intact.
+
+Production build note:
+- node_modules is intentionally excluded from the supplied full-source package.
+- Run npm run build in the existing local project environment before deployment.
