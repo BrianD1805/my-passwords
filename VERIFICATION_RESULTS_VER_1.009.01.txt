@@ -1,0 +1,24 @@
+Password-Encrypt Ver-1.009.01 — Verification Results
+Date: 2026-08-20
+
+PASS  Security static checks — 13/13
+PASS  Reliability static checks — 20/20
+PASS  Legal/commercial readiness checks — 35/35
+PASS  Landing/plan UX static checks — 36/36
+PASS  Mobile restoration checks — 6/6
+PASS  Trusted Person / Emergency Flow checks — 75/75
+PASS  Onboarding flow checks — 52/52
+PASS  Push Notification checks — 32/32
+PASS  Ver-1.009.01 Admin Email UX checks — 31/31
+
+Ver-1.009.01 changes verified:
+- Admin recipient and master notification switch grouped into a balanced control row.
+- Native awkward checkboxes replaced with clear on/off switch controls.
+- Six Admin notification event types use a responsive three/two/one-column card grid.
+- Enabled/paused state is shown clearly above event controls.
+- Trial-extension request count and Send test / Save changes actions share one compact footer bar.
+- Save changes remains disabled and grey until settings actually change.
+- Recent Admin notification history is visually separated from configuration controls.
+- No Admin email event logic, database schema, Resend configuration or delivery behaviour changed.
+
+Note: The supplied full source package intentionally excludes node_modules. Static suites were run directly; production build should be run locally with the existing installed dependencies.

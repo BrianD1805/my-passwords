@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatAppDate } from './dateFormat.js';
-import { AlertTriangle, CalendarClock, CheckCircle2, Clock3, Mail, Play, RefreshCw, RotateCcw, Search, Send, XCircle } from 'lucide-react';
+import { AlertTriangle, BellRing, CalendarClock, CheckCircle2, Clock3, CreditCard, Mail, Play, RefreshCw, RotateCcw, Search, Send, Trash2, UserPlus, XCircle } from 'lucide-react';
 import CustomSelect from './CustomSelect.jsx';
 
 async function requestJson(url, options = {}) {
@@ -178,22 +178,54 @@ export default function AdminAutomatedEmails({ onSessionExpired, setGlobalNotice
       </section>
 
       <section className="admin-panel admin-owner-notifications">
-        <div className="admin-panel-heading">
-          <div><p className="eyebrow">Owner notifications</p><h2>Admin email notifications</h2></div>
+        <div className="admin-panel-heading admin-owner-notification-heading">
+          <div><p className="eyebrow">Owner notifications</p><h2>Admin email notifications</h2><p className="admin-owner-heading-copy">Choose which important account events should be emailed to the Password-Encrypt owner.</p></div>
           <span className={`admin-status ${data.resendConfigured && data.adminNotifications?.configured ? 'success' : 'warning'}`}>{data.resendConfigured && data.adminNotifications?.configured ? 'Active' : 'Setup required'}</span>
         </div>
-        <p className="admin-panel-intro">Send low-volume operational and customer-account alerts to the Password-Encrypt owner. These messages contain account metadata only and never include vault contents.</p>
-        <div className="admin-owner-notification-settings">
-          <label className="admin-owner-recipient"><span>Send Admin notifications to</span><input type="email" value={adminNotificationDraft?.recipientEmail || ''} onChange={(event) => setAdminNotificationDraft((current) => ({ ...(current || {}), recipientEmail: event.target.value }))} /></label>
-          <label className="admin-owner-master-toggle"><input type="checkbox" checked={adminNotificationDraft?.enabled !== false} onChange={(event) => setAdminNotificationDraft((current) => ({ ...(current || {}), enabled: event.target.checked }))} /><span><strong>Automatic Admin email notifications</strong><small>Turn all of the notification types below on or off in one place.</small></span></label>
-          <div className="admin-owner-event-grid">
-            {(data.adminNotifications?.eventOptions || []).map((option) => <label key={option.key} className="admin-owner-event-row"><input type="checkbox" checked={adminNotificationDraft?.eventFlags?.[option.key] !== false} onChange={() => toggleAdminNotification(option.key)} disabled={adminNotificationDraft?.enabled === false} /><span><strong>{option.label}</strong><small>{option.description}</small></span></label>)}
-          </div>
-          <div className="admin-owner-notification-actions"><button type="button" className="secondary-button" onClick={sendAdminNotificationTest} disabled={Boolean(busyAction) || !data.resendConfigured}><Send size={17} /> {busyAction === 'admin_notification_test' ? 'Sending...' : 'Send test to Admin'}</button><button type="button" className="primary-button" onClick={saveAdminNotifications} disabled={Boolean(busyAction) || !adminNotificationsDirty}>{busyAction === 'save_admin_notifications' ? 'Saving...' : 'Save Admin notifications'}</button></div>
+
+        <div className="admin-owner-control-grid">
+          <label className="admin-owner-recipient">
+            <span>Admin notification email</span>
+            <input type="email" value={adminNotificationDraft?.recipientEmail || ''} onChange={(event) => setAdminNotificationDraft((current) => ({ ...(current || {}), recipientEmail: event.target.value }))} />
+            <small>All enabled notifications are sent to this address.</small>
+          </label>
+          <label className={`admin-owner-master-toggle ${adminNotificationDraft?.enabled === false ? 'off' : ''}`}>
+            <span className="admin-owner-master-icon"><BellRing size={21} /></span>
+            <span className="admin-owner-master-copy"><strong>Automatic Admin emails</strong><small>{adminNotificationDraft?.enabled === false ? 'All automatic owner notifications are currently paused.' : 'Automatic owner notifications are switched on.'}</small></span>
+            <input className="admin-owner-switch" type="checkbox" checked={adminNotificationDraft?.enabled !== false} onChange={(event) => setAdminNotificationDraft((current) => ({ ...(current || {}), enabled: event.target.checked }))} aria-label="Enable automatic Admin email notifications" />
+          </label>
         </div>
-        <div className="admin-owner-notification-summary"><strong>{data.adminNotifications?.pendingTrialRequests || 0}</strong><span>Pending trial extension request{Number(data.adminNotifications?.pendingTrialRequests || 0) === 1 ? '' : 's'}</span></div>
+
+        <div className="admin-owner-events-heading">
+          <div><strong>Send an email when</strong><span>Switch individual notifications on or off.</span></div>
+          <span className="admin-owner-enabled-count">{adminNotificationDraft?.enabled === false ? 'Paused' : `${(data.adminNotifications?.eventOptions || []).filter((option) => adminNotificationDraft?.eventFlags?.[option.key] !== false).length} of ${(data.adminNotifications?.eventOptions || []).length} enabled`}</span>
+        </div>
+
+        <div className={`admin-owner-event-grid ${adminNotificationDraft?.enabled === false ? 'disabled' : ''}`}>
+          {(data.adminNotifications?.eventOptions || []).map((option) => {
+            const EventIcon = option.key === 'new_client_onboarded' ? UserPlus
+              : option.key === 'new_subscription_purchased' ? CreditCard
+                : option.key === 'trial_extension_requested' ? CalendarClock
+                  : option.key === 'payment_failed' ? AlertTriangle
+                    : option.key === 'account_deletion_requested' ? Trash2
+                      : XCircle;
+            const checked = adminNotificationDraft?.eventFlags?.[option.key] !== false;
+            return <label key={option.key} className={`admin-owner-event-row ${checked ? 'enabled' : ''}`}>
+              <span className="admin-owner-event-icon"><EventIcon size={19} /></span>
+              <span className="admin-owner-event-copy"><strong>{option.label}</strong><small>{option.description}</small></span>
+              <input className="admin-owner-switch admin-owner-event-switch" type="checkbox" checked={checked} onChange={() => toggleAdminNotification(option.key)} disabled={adminNotificationDraft?.enabled === false} aria-label={`${checked ? 'Disable' : 'Enable'} ${option.label}`} />
+            </label>;
+          })}
+        </div>
+
+        <div className="admin-owner-footer-bar">
+          <div className="admin-owner-trial-summary"><CalendarClock size={19} /><span><strong>{data.adminNotifications?.pendingTrialRequests || 0}</strong> pending trial extension request{Number(data.adminNotifications?.pendingTrialRequests || 0) === 1 ? '' : 's'}</span></div>
+          <div className="admin-owner-notification-actions"><button type="button" className="secondary-button" onClick={sendAdminNotificationTest} disabled={Boolean(busyAction) || !data.resendConfigured}><Send size={17} /> {busyAction === 'admin_notification_test' ? 'Sending...' : 'Send test'}</button><button type="button" className="primary-button" onClick={saveAdminNotifications} disabled={Boolean(busyAction) || !adminNotificationsDirty}>{busyAction === 'save_admin_notifications' ? 'Saving...' : 'Save changes'}</button></div>
+        </div>
+
+        <div className="admin-owner-history-heading"><div><strong>Recent Admin emails</strong><span>Latest automatic owner notifications and delivery status.</span></div></div>
         <div className="admin-owner-notification-history">
-          {(data.adminNotifications?.recentLogs || []).slice(0, 12).map((row) => <article key={row.id}><Mail size={17} /><div><strong>{titleCase(row.eventType)}</strong><span>{row.customerName} · {row.recipientMasked || 'Admin recipient'}</span><small>{row.subject || 'Admin notification'} · {dateLabel(row.sentAt || row.createdAt)}</small>{row.errorMessage && <small className="admin-email-error-detail">{row.errorMessage}</small>}</div><span className={`admin-status ${row.status === 'sent' ? 'success' : row.status === 'failed' ? 'error' : 'warning'}`}>{titleCase(row.status)}</span></article>)}
+          {(data.adminNotifications?.recentLogs || []).slice(0, 12).map((row) => <article key={row.id}><span className="admin-owner-history-icon"><Mail size={17} /></span><div><strong>{titleCase(row.eventType)}</strong><span>{row.customerName} · {row.recipientMasked || 'Admin recipient'}</span><small>{row.subject || 'Admin notification'} · {dateLabel(row.sentAt || row.createdAt)}</small>{row.errorMessage && <small className="admin-email-error-detail">{row.errorMessage}</small>}</div><span className={`admin-status ${row.status === 'sent' ? 'success' : row.status === 'failed' ? 'error' : 'warning'}`}>{titleCase(row.status)}</span></article>)}
           {!data.adminNotifications?.recentLogs?.length && <div className="admin-empty">No Admin notification emails have been sent yet.</div>}
         </div>
       </section>
