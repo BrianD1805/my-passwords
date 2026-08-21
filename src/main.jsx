@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.011';
+const VERSION = 'Password-Encrypt Ver-1.011.01';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -2996,6 +2996,7 @@ function App() {
   const [installStatus, setInstallStatus] = useState(() => isPasswordEncryptInstalled() ? 'installed' : 'waiting');
   const [installMessage, setInstallMessage] = useState(() => isPasswordEncryptInstalled() ? 'Password-Encrypt is already installed on this device.' : 'Install Password-Encrypt for quicker everyday access from your home screen or desktop.');
   const [showInstallOnboarding, setShowInstallOnboarding] = useState(false);
+  const [onboardingPushGate, setOnboardingPushGate] = useState(false);
   const [onboardingSecurityWarning, setOnboardingSecurityWarning] = useState('');
   const onboardingSessionIsolationRef = useRef(Boolean(readPendingOnboardingAccount() || initialOnboardingFlowRef.current?.active));
   const [showLandingBackToTop, setShowLandingBackToTop] = useState(false);
@@ -3137,11 +3138,11 @@ function App() {
   async function enablePushNotifications() {
     if (!pushNotificationsSupported()) {
       showMessage('Push notifications are not supported by this browser or device.', 'error');
-      return;
+      return false;
     }
     if (!customerSession.authenticated) {
       showMessage('Verify this device before enabling push notifications.', 'error');
-      return;
+      return false;
     }
     setPushNotifications((current) => ({ ...current, loading: true, message: 'Enabling push notifications...' }));
     try {
@@ -3152,7 +3153,7 @@ function App() {
       if (permission !== 'granted') permission = await Notification.requestPermission();
       if (permission !== 'granted') {
         setPushNotifications((current) => ({ ...current, loading: false, permission, enabledThisDevice: false, message: permission === 'denied' ? 'Notifications are blocked in this browser.' : 'Notification permission was not granted.' }));
-        return;
+        return false;
       }
       const registration = await navigator.serviceWorker.ready;
       let subscription = await registration.pushManager.getSubscription();
@@ -3164,10 +3165,12 @@ function App() {
       savePushBinding(customerSession.tenantId, customerSession.userId);
       setPushNotifications((current) => ({ ...current, loaded: true, loading: false, supported: true, configured: true, permission: 'granted', enabledThisDevice: true, activeCount: Number(result.activeCount || current.activeCount || 1), publicKey: result.publicKey || current.publicKey, message: 'Push notifications are active on this device.' }));
       showMessage('Push notifications are now active on this device.', 'success');
+      return true;
     } catch (error) {
       const message = error.message || 'Push notifications could not be enabled.';
       setPushNotifications((current) => ({ ...current, loading: false, permission: pushPermissionState(), message }));
       showMessage(message, 'error');
+      return false;
     }
   }
 
@@ -4256,7 +4259,7 @@ function App() {
   }, [customerSession.authenticated, customerSession.userId]);
 
   useEffect(() => {
-    if (locked || showInstallOnboarding || onboardingInstallEntry || !customerSession.authenticated || !pushNotifications.loaded || pushActivationPromptShownRef.current) return;
+    if (locked || showInstallOnboarding || onboardingInstallEntry || onboardingPushGate || !customerSession.authenticated || !pushNotifications.loaded || pushActivationPromptShownRef.current) return;
     if (!pushNotifications.supported || !pushNotifications.configured || pushNotifications.enabledThisDevice) return;
     if (isPushActivationPromptSuppressed(customerSession)) return;
     if (pushActivationPromptDeferredThisDocumentRef.current) return;
@@ -4265,7 +4268,7 @@ function App() {
     } catch {}
     pushActivationPromptShownRef.current = true;
     setPushActivationPromptOpen(true);
-  }, [locked, showInstallOnboarding, onboardingInstallEntry, customerSession.authenticated, customerSession.tenantId, customerSession.userId, pushNotifications.loaded, pushNotifications.supported, pushNotifications.configured, pushNotifications.enabledThisDevice]);
+  }, [locked, showInstallOnboarding, onboardingInstallEntry, onboardingPushGate, customerSession.authenticated, customerSession.tenantId, customerSession.userId, pushNotifications.loaded, pushNotifications.supported, pushNotifications.configured, pushNotifications.enabledThisDevice]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -4975,6 +4978,7 @@ function App() {
         ? { state: 'backup-pending', pending: true, conflict: false, sessionRequired: !customerSession.authenticated, message: 'Your new vault is saved on this device and is waiting to be backed up.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' }
         : { state: 'plan-local-only', pending: false, conflict: false, sessionRequired: false, message: 'Your new encrypted vault is saved locally. Cloud backup and sync are not included in the current plan.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' });
       if (!fromBiometric) confirmSecureDevicePasswordCheck();
+      if (options.afterCreateOnboardingInstall) pushActivationPromptDeferredThisDocumentRef.current = true;
       backNavigationStateRef.current.locked = false;
       backNavigationStateRef.current.activePage = 'home';
       setLocked(false);
@@ -4992,6 +4996,14 @@ function App() {
         window.history.replaceState({ onboardingInstall: true }, '', '/vault?entry=install');
         setShowInstallOnboarding(true);
         setActivePage('home');
+        const shouldOfferPushNow = pushNotifications.loaded
+          && pushNotifications.supported
+          && pushNotifications.configured
+          && pushNotifications.permission !== 'denied'
+          && !pushNotifications.enabledThisDevice
+          && !isPushActivationPromptSuppressed(customerSession);
+        setOnboardingPushGate(shouldOfferPushNow);
+        if (shouldOfferPushNow) setPushActivationPromptOpen(true);
         window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
       }
     } catch (error) {
@@ -7086,9 +7098,21 @@ function App() {
     }
   }
 
+  function completeOnboardingPushGate() {
+    setPushActivationPromptOpen(false);
+    setOnboardingPushGate(false);
+  }
+
+  async function activatePushDuringOnboarding() {
+    await enablePushNotifications();
+    completeOnboardingPushGate();
+  }
+
   function finishInstallOnboarding() {
     try { localStorage.setItem(PUSH_PROMPT_NEXT_OPEN_KEY, '1'); } catch {}
     pushActivationPromptDeferredThisDocumentRef.current = true;
+    setOnboardingPushGate(false);
+    setPushActivationPromptOpen(false);
     setShowInstallOnboarding(false);
     window.history.replaceState({}, '', '/vault');
     setActivePage('home');
@@ -9292,8 +9316,17 @@ function App() {
               {!installedNow && <button type="button" className="onboarding-text-action continue-browser-action" onClick={finishInstallOnboarding}>Continue in browser</button>}
             </div>
           </div>
-          <footer className="onboarding-card-footer"><span>Your vault is ready</span><small>Push notifications will be offered on your next vault opening, not during setup.</small></footer>
+          <footer className="onboarding-card-footer"><span>Your vault is ready</span><small>{onboardingPushGate ? 'Choose how to handle notifications, then continue to installation.' : 'You can retry app installation later from Settings → Install Password-Encrypt.'}</small></footer>
         </section>
+        <PushActivationPromptModal
+          visible={onboardingPushGate && pushActivationPromptOpen}
+          permission={pushNotifications.permission}
+          loading={pushNotifications.loading}
+          onClose={completeOnboardingPushGate}
+          onSuppress={() => { suppressPushActivationPrompt(customerSession); completeOnboardingPushGate(); }}
+          onEnable={activatePushDuringOnboarding}
+          onReview={completeOnboardingPushGate}
+        />
         <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
     );
@@ -10036,6 +10069,12 @@ function App() {
                     <span className={`settings-directory-state ${pushNotifications.enabledThisDevice ? 'safe' : pushNotifications.permission === 'denied' ? 'attention' : ''}`}>{pushNotifications.enabledThisDevice ? 'Active' : pushNotifications.permission === 'denied' ? 'Blocked' : 'Off'}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
+                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('install')}>
+                    <span className="settings-directory-icon"><MonitorSmartphone size={22} /></span>
+                    <span className="settings-directory-copy"><strong>Install Password-Encrypt</strong><small>Install or retry adding Password-Encrypt as an app on this device.</small></span>
+                    <span className={`settings-directory-state ${isPasswordEncryptInstalled() ? 'safe' : installPromptReady ? 'safe' : ''}`}>{isPasswordEncryptInstalled() ? 'Installed' : installPromptReady ? 'Ready' : 'Available'}</span>
+                    <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
+                  </button>
                 </section>
 
                 <section className="settings-directory-group" aria-labelledby="settings-protection-group">
@@ -10211,6 +10250,24 @@ function App() {
                   </div>
                 </details>
               </div>
+            </section>
+          )}
+
+          {activeSettingsSection === 'install' && (
+            <section className="settings-section-panel install-app-settings-panel" aria-label="Install Password-Encrypt">
+              <div className="settings-section-heading">
+                <p className="eyebrow">Install app</p>
+                <h3><MonitorSmartphone size={20} /> Install Password-Encrypt</h3>
+                <p>Install or retry adding Password-Encrypt to this device for quicker everyday access.</p>
+              </div>
+              <section className="settings-inner-card install-app-settings-card">
+                <div className={`onboarding-info-panel ${isPasswordEncryptInstalled() ? 'success' : ''}`}>
+                  {isPasswordEncryptInstalled() ? <Check size={19} /> : installStatus === 'prompting' ? <RefreshCw size={19} className="spin-icon" /> : <Download size={19} />}
+                  <span>{installMessage || passwordEncryptInstallInstructions()}</span>
+                </div>
+                {!isPasswordEncryptInstalled() && <button type="button" className="primary-button" onClick={installPasswordEncryptApp} disabled={installStatus === 'prompting'}><Download size={18} /> {installStatus === 'prompting' ? 'Opening install...' : installPromptReady ? 'Install Password-Encrypt' : 'Try to install app'}</button>}
+                <div className="master-password-boundary-note compact"><MonitorSmartphone size={18} /><span><strong>Manual install</strong><small>{passwordEncryptInstallInstructions()} If you opened Password-Encrypt inside an email or another in-app browser and no install option is available, open password-encrypt.com in Chrome, Edge, Safari or Samsung Internet first, then return here.</small></span></div>
+              </section>
             </section>
           )}
 

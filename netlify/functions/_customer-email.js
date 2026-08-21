@@ -98,8 +98,8 @@ function emailDefinition(type, context = {}) {
         accountPhone ? `Mobile number: <strong>${accountPhone}</strong>` : '',
         `Vault name: <strong>${accountName}</strong>`,
         `Plan: <strong>${planName}</strong>`,
-        'Next, create your encrypted vault and choose the master password only you know. Your master password is never included in email and Password-Encrypt cannot recover it for you.',
-        'Account verification currently uses your email address. Keep this welcome email as a record of the contact details linked to your account.',
+        'Your account verification is complete. Your master password remains private to you, is never included in email and cannot be recovered or reset by Password-Encrypt.',
+        'Your mobile number and email address were verified during onboarding. Keep this welcome email as a record of the contact details linked to your account.',
         'No credit card details were taken for your free trial. A paid subscription begins only if you deliberately purchase a subscription later.'
       ].filter(Boolean),
       button: { label: 'Password-Encrypt website', url: baseUrl() }
@@ -115,8 +115,8 @@ function emailDefinition(type, context = {}) {
         accountPhone ? `Mobile number: <strong>${accountPhone}</strong>` : '',
         `Vault name: <strong>${accountName}</strong>`,
         `Plan: <strong>${planName}</strong>`,
-        'Next, create your encrypted vault and choose the master password only you know. Your master password is never included in email and Password-Encrypt cannot recover it for you.',
-        'Account verification currently uses your email address. Keep this welcome email as a record of the contact details linked to your account.'
+        'Your account verification is complete. Your master password remains private to you, is never included in email and cannot be recovered or reset by Password-Encrypt.',
+        'Your verified contact details are linked to your account. Keep this welcome email as a record of the account information you registered.'
       ].filter(Boolean),
       button: { label: 'Password-Encrypt website', url: baseUrl() }
     },

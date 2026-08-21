@@ -22,12 +22,12 @@ function check(label, condition) {
   else { console.error(`FAIL  ${label}`); failures += 1; }
 }
 
-check('Ver-1.011 app/package/service-worker versions align', pkg.version === '1.11.0' && /Password-Encrypt Ver-1\.011/.test(main) && /my-passwords-v1\.011/.test(sw));
+check('Ver-1.011.01 app/package/service-worker versions align', pkg.version === '1.11.1' && /Password-Encrypt Ver-1\.011\.01/.test(main) && /my-passwords-v1\.011\.01/.test(sw));
 check('Onboarding has twelve explicit progress steps', /ONBOARDING_TOTAL_STEPS = 12/.test(main) && /Step 12 of \{ONBOARDING_TOTAL_STEPS\}/.test(main));
 check('Public signup uses a dedicated card screen rather than rendering the landing page behind it', /isPublicLandingRoute && isCreateAccountPopupOpen/.test(main) && /onboarding-card-screen/.test(main));
 check('Dedicated onboarding card is not marked as a dialog', !/onboarding-card-screen[^\n]{0,300}role="dialog"/.test(main));
 check('Onboarding has a visible progress track', /onboarding-progress-track/.test(main) && /progress = Math\.round\(\(step \/ ONBOARDING_TOTAL_STEPS\) \* 100\)/.test(main));
-check('Desktop onboarding card targets about half the viewport', /width: min\(52vw, 760px\)/.test(css));
+check('Desktop onboarding card uses the reduced half-screen footprint', /width: min\(46\.8vw, 684px\)/.test(css) && /max-height: calc\(100dvh - 32px\)/.test(css));
 check('Mobile onboarding card uses most of the viewport', /width: calc\(100vw - 20px\)/.test(css) && /height: calc\(100dvh - 24px\)/.test(css));
 check('Mobile onboarding supports left-swipe advancement on safe steps', /handleOnboardingTouchStart/.test(main) && /handleOnboardingTouchEnd/.test(main) && /dx > -70/.test(main));
 check('Name is isolated on step 1', /step === 1[\s\S]*What should we call you\?/.test(main));
@@ -88,4 +88,4 @@ if (failures) {
   console.error(`\n${failures} onboarding static check(s) failed.`);
   process.exit(1);
 }
-console.log(`\nAll Ver-1.011 onboarding static checks passed.`);
+console.log(`\nAll Ver-1.011.01 onboarding static checks passed.`);
