@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.013.01';
+const VERSION = 'Password-Encrypt Ver-1.014';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -35,6 +35,53 @@ const FRESH_ONBOARDING_QUERY_KEY = 'freshOnboarding';
 const DEFAULT_TRIAL_PLAN_CODE = 'personal';
 const ONBOARDING_FLOW_VERSION = 2;
 const ONBOARDING_TOTAL_STEPS = 12;
+const GUIDED_TOUR_VERSION = 1;
+const GUIDED_TOUR_LATER_DELAY_MS = 24 * 60 * 60 * 1000;
+const GUIDED_TOUR_FALLBACK_KEY = 'password-encrypt-guided-tour-v1';
+const DEFAULT_HOME_FOLDERS = ['Passwords', 'Cards', 'Bank Details', 'Notes', 'Documents'];
+const HOME_FOLDER_COLLAPSED_LIMIT = 6;
+const GUIDED_TOUR_STEPS = [
+  {
+    title: 'Search your vault',
+    body: 'Search finds saved items across your vault. Start typing a name, website, account or note.',
+    selectors: ['.hero-search']
+  },
+  {
+    title: 'Your Home folders',
+    body: 'These are the folders you have chosen to keep on the Home screen. New accounts start with a useful set and you can change them at any time.',
+    selectors: ['.vault-folder-row']
+  },
+  {
+    title: 'Create your own folders',
+    body: 'Use New folder whenever you want another place for your information. After creating it, Password-Encrypt will ask whether you want that folder on Home.',
+    selectors: ['.add-folder-chip']
+  },
+  {
+    title: 'The folder three-dot button',
+    body: 'On phones, the three-dot button beside New folder opens Manage folders. Use the house buttons there to add or remove Home folders, and use the pencil to rename or delete a custom folder.',
+    selectors: ['.premium-more-folder-button', '.folder-action-group']
+  },
+  {
+    title: 'Add your first item',
+    body: 'Tap the + button to add a password, card, bank detail, note, document, picture or another vault item.',
+    selectors: ['.floating-add-button']
+  },
+  {
+    title: 'Favourites',
+    body: 'Mark important items as favourites, then use this shortcut to see them together.',
+    selectors: ['.favourite-summary-pill']
+  },
+  {
+    title: 'Vault Status',
+    body: 'Vault Status tells you when everything is protected and opens the correct fix when something needs your attention.',
+    selectors: ['.topbar-sync-button']
+  },
+  {
+    title: 'Settings, Help and Lock',
+    body: 'Use Settings for your account, subscription, Vault Safety, devices, notifications and Emergency Access. On mobile, the top three-dot menu also contains Help and Lock vault.',
+    selectors: ['.settings-nav-pill', '.mobile-top-menu-button']
+  }
+];
 function sanitiseOnboardingSignupState(value = {}) {
   const state = value && typeof value === 'object' ? value : {};
   const message = String(state.message || '').trim();
@@ -822,6 +869,19 @@ const categoryHints = {
 };
 
 const starterItems = [
+  {
+    id: FOLDER_META_ID,
+    title: 'Vault folders',
+    category: FOLDER_META_CATEGORY,
+    favourite: false,
+    payload: {
+      folders: [],
+      folderOrder: BUILT_IN_CATEGORIES,
+      favouriteFolders: DEFAULT_HOME_FOLDERS,
+      homeDefaultsApplied: true
+    },
+    updatedAt: new Date().toISOString()
+  },
   {
     id: crypto.randomUUID(),
     title: 'Example Website Login',
@@ -1629,6 +1689,33 @@ function pushPermissionState() {
   return pushNotificationsSupported() ? Notification.permission : 'unsupported';
 }
 
+function guidedTourFallbackKey(account = {}) {
+  const tenantId = String(account?.tenantId || '').trim() || 'unknown-tenant';
+  const userId = String(account?.userId || '').trim() || 'unknown-user';
+  return `${GUIDED_TOUR_FALLBACK_KEY}:${tenantId}:${userId}`;
+}
+
+function readGuidedTourFallback(account = {}) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(guidedTourFallbackKey(account)) || 'null');
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeGuidedTourFallback(account = {}, value = {}) {
+  try {
+    localStorage.setItem(guidedTourFallbackKey(account), JSON.stringify({
+      status: String(value.status || ''),
+      tourVersion: Number(value.tourVersion || GUIDED_TOUR_VERSION),
+      updatedAt: value.updatedAt || new Date().toISOString()
+    }));
+  } catch {
+    // Firefox/private storage restrictions must never block the vault.
+  }
+}
+
 function urlBase64ToUint8Array(value) {
   const normal = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
   const padded = normal + '='.repeat((4 - (normal.length % 4)) % 4);
@@ -2197,22 +2284,27 @@ function getFavouriteFolders(vaultItems) {
   return uniqueFolderList(meta?.payload?.favouriteFolders || []);
 }
 
-function upsertFolderMetaItem(vaultItems, folders, folderOrder, favouriteFolders) {
+function getHomeFolderDefaultsApplied(vaultItems) {
+  return Boolean(getFolderMeta(vaultItems)?.payload?.homeDefaultsApplied);
+}
+
+function upsertFolderMetaItem(vaultItems, folders, folderOrder, favouriteFolders, options = {}) {
   const currentMeta = getFolderMeta(vaultItems);
   const cleanFolders = uniqueFolderList(folders);
   const cleanOrder = uniqueFolderList(folderOrder || currentMeta?.payload?.folderOrder || []);
   const cleanFavourites = uniqueFolderList(favouriteFolders ?? currentMeta?.payload?.favouriteFolders ?? [])
     .filter((name) => name !== 'All' && cleanFolders.concat(BUILT_IN_CATEGORIES).includes(name));
+  const homeDefaultsApplied = options.homeDefaultsApplied === true || Boolean(currentMeta?.payload?.homeDefaultsApplied);
   const metaItem = {
     id: FOLDER_META_ID,
     title: 'Vault folders',
     category: FOLDER_META_CATEGORY,
     favourite: false,
-    payload: { folders: cleanFolders, folderOrder: cleanOrder, favouriteFolders: cleanFavourites },
+    payload: { folders: cleanFolders, folderOrder: cleanOrder, favouriteFolders: cleanFavourites, homeDefaultsApplied },
     updatedAt: new Date().toISOString()
   };
   const withoutFolderMeta = Array.isArray(vaultItems) ? vaultItems.filter((item) => !isFolderMetaItem(item)) : [];
-  return (cleanFolders.length || cleanOrder.length || cleanFavourites.length) ? [metaItem, ...withoutFolderMeta] : withoutFolderMeta;
+  return (cleanFolders.length || cleanOrder.length || cleanFavourites.length || homeDefaultsApplied) ? [metaItem, ...withoutFolderMeta] : withoutFolderMeta;
 }
 
 function folderExists(folder, folders) {
@@ -2856,6 +2948,75 @@ function ExitAppConfirmationModal({ visible, onStay, onExit }) {
   );
 }
 
+function GuidedTourWelcomeModal({ visible, busy, onStart, onLater, onSkip }) {
+  if (!visible) return null;
+  return (
+    <div className="item-popup-layer guided-tour-welcome-layer" role="presentation">
+      <button type="button" className="item-popup-backdrop" onClick={busy ? undefined : onLater} aria-label="Decide about the guided tour later" />
+      <section className="item-popup-card guided-tour-welcome-card" role="dialog" aria-modal="true" aria-labelledby="guided-tour-welcome-title">
+        <header className="item-popup-header">
+          <h2 id="guided-tour-welcome-title"><Sparkles size={21} /> Welcome to Password-Encrypt</h2>
+        </header>
+        <div className="item-popup-body guided-tour-welcome-body">
+          <div className="guided-tour-welcome-icon"><ShieldCheck size={29} /></div>
+          <p>Would you like a quick guided tour? We’ll show you the main areas, including Home folders and the folder three-dot button.</p>
+          <div className="master-password-boundary-note compact"><CircleHelp size={18} /><span><strong>You stay in control</strong><small>You can skip the tour, choose Maybe later, or run it again at any time from Settings → Help and support.</small></span></div>
+        </div>
+        <footer className="item-popup-footer guided-tour-welcome-footer">
+          <button type="button" className="secondary-button" onClick={onLater} disabled={busy}>Maybe later</button>
+          <button type="button" className="secondary-button" onClick={onSkip} disabled={busy}>Skip tour</button>
+          <button type="button" className="primary-button" onClick={onStart} disabled={busy}>{busy ? 'Saving...' : 'Start tour'}</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function GuidedTourOverlay({ active, stepIndex, targetFound, targetRect, onBack, onNext, onSkip }) {
+  if (!active) return null;
+  const step = GUIDED_TOUR_STEPS[stepIndex] || GUIDED_TOUR_STEPS[0];
+  const last = stepIndex >= GUIDED_TOUR_STEPS.length - 1;
+  const targetLow = Boolean(targetRect && typeof window !== 'undefined' && targetRect.top > window.innerHeight * 0.55);
+  return createPortal(
+    <div className={`guided-tour-layer ${targetLow ? 'guided-tour-card-top' : ''}`} role="dialog" aria-modal="true" aria-labelledby="guided-tour-step-title">
+      {targetFound && targetRect
+        ? <div className="guided-tour-spotlight" aria-hidden="true" style={{ top: `${targetRect.top}px`, left: `${targetRect.left}px`, width: `${targetRect.width}px`, height: `${targetRect.height}px` }} />
+        : <div className="guided-tour-shade" aria-hidden="true" />}
+      <section className="guided-tour-card">
+        <div className="guided-tour-progress"><span>Step {stepIndex + 1} of {GUIDED_TOUR_STEPS.length}</span><button type="button" onClick={onSkip}>Skip tour</button></div>
+        <h2 id="guided-tour-step-title">{step.title}</h2>
+        <p>{step.body}</p>
+        {!targetFound && <small className="guided-tour-target-note">This control is not visible at this screen size, so the guide is explaining it here instead.</small>}
+        <div className="guided-tour-card-actions">
+          <button type="button" className="secondary-button" onClick={onBack} disabled={stepIndex === 0}><ArrowLeft size={16} /> Back</button>
+          <button type="button" className="primary-button" onClick={onNext}>{last ? 'Finish' : 'Next'} {!last && <ChevronRight size={16} />}</button>
+        </div>
+      </section>
+    </div>,
+    document.body
+  );
+}
+
+function HomeFolderPromptModal({ state, onAdd, onNotNow }) {
+  if (!state?.visible) return null;
+  return (
+    <div className="item-popup-layer home-folder-prompt-layer" role="presentation">
+      <button type="button" className="item-popup-backdrop" onClick={state.busy ? undefined : onNotNow} aria-label="Do not add folder to Home" />
+      <section className="item-popup-card home-folder-prompt-card" role="dialog" aria-modal="true" aria-labelledby="home-folder-prompt-title">
+        <header className="item-popup-header"><h2 id="home-folder-prompt-title"><Home size={21} /> Add to Home?</h2></header>
+        <div className="item-popup-body">
+          <p><strong>{state.folderName}</strong> has been created. Would you like this folder to appear with your Home folders?</p>
+          <small>You can change Home folders later from the folder three-dot button → Manage folders.</small>
+        </div>
+        <footer className="item-popup-footer">
+          <button type="button" className="secondary-button" onClick={onNotNow} disabled={state.busy}>Not now</button>
+          <button type="button" className="primary-button" onClick={onAdd} disabled={state.busy}>{state.busy ? 'Adding...' : 'Add to Home'}</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function PushActivationPromptModal({ visible, permission, loading, onClose, onSuppress, onEnable, onReview }) {
   if (!visible) return null;
   const blocked = permission === 'denied';
@@ -3001,6 +3162,13 @@ function App() {
   const [touchReorderFolder, setTouchReorderFolder] = useState('');
   const [touchDropTargetFolder, setTouchDropTargetFolder] = useState('');
   const [isFolderListPopupOpen, setIsFolderListPopupOpen] = useState(false);
+  const [showAllHomeFolders, setShowAllHomeFolders] = useState(false);
+  const [homeFolderPrompt, setHomeFolderPrompt] = useState({ visible: false, folderName: '', busy: false });
+  const [guidedTourState, setGuidedTourState] = useState({ loaded: false, status: '', tourVersion: GUIDED_TOUR_VERSION, updatedAt: '', busy: false });
+  const [guidedTourPromptOpen, setGuidedTourPromptOpen] = useState(false);
+  const [guidedTour, setGuidedTour] = useState({ active: false, stepIndex: 0, targetFound: false, targetRect: null });
+  const guidedTourStartupRef = useRef('');
+  const guidedTourTargetRef = useRef(null);
   const [showOnboardingDetails, setShowOnboardingDetails] = useState(() => !Boolean(readStoredVault()));
   const initialOnboardingFlowRef = useRef(readOnboardingFlowState());
   const [isCreateAccountPopupOpen, setIsCreateAccountPopupOpen] = useState(() => Boolean(initialOnboardingFlowRef.current?.active && Number(initialOnboardingFlowRef.current?.flowVersion || 0) === ONBOARDING_FLOW_VERSION));
@@ -4301,7 +4469,10 @@ function App() {
   }, [customerSession.authenticated, customerSession.userId]);
 
   useEffect(() => {
-    if (locked || showInstallOnboarding || onboardingInstallEntry || onboardingPushGate || !customerSession.authenticated || !pushNotifications.loaded || pushActivationPromptShownRef.current) return;
+    const guidedLaterAt = guidedTourState.updatedAt ? new Date(guidedTourState.updatedAt).getTime() : 0;
+    const guidedTourAutoOfferPending = guidedTourState.status === 'not_started'
+      || (guidedTourState.status === 'later' && (!guidedLaterAt || Date.now() - guidedLaterAt >= GUIDED_TOUR_LATER_DELAY_MS));
+    if (locked || showInstallOnboarding || onboardingInstallEntry || onboardingPushGate || !guidedTourState.loaded || guidedTourAutoOfferPending || guidedTourPromptOpen || guidedTour.active || !customerSession.authenticated || !pushNotifications.loaded || pushActivationPromptShownRef.current) return;
     if (!pushNotifications.supported || !pushNotifications.configured || pushNotifications.enabledThisDevice) return;
     if (isPushActivationPromptSuppressed(customerSession)) return;
     if (pushActivationPromptDeferredThisDocumentRef.current) return;
@@ -4310,7 +4481,7 @@ function App() {
     } catch {}
     pushActivationPromptShownRef.current = true;
     setPushActivationPromptOpen(true);
-  }, [locked, showInstallOnboarding, onboardingInstallEntry, onboardingPushGate, customerSession.authenticated, customerSession.tenantId, customerSession.userId, pushNotifications.loaded, pushNotifications.supported, pushNotifications.configured, pushNotifications.enabledThisDevice]);
+  }, [locked, showInstallOnboarding, onboardingInstallEntry, onboardingPushGate, guidedTourState.loaded, guidedTourState.status, guidedTourState.updatedAt, guidedTourPromptOpen, guidedTour.active, customerSession.authenticated, customerSession.tenantId, customerSession.userId, pushNotifications.loaded, pushNotifications.supported, pushNotifications.configured, pushNotifications.enabledThisDevice]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -4388,7 +4559,7 @@ function App() {
   }, [locked, isOnline, customerSession.authenticated]);
 
   useEffect(() => {
-    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || isCreateAccountPopupOpen || onboardingResetModal.visible || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
+    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || homeFolderPrompt.visible || guidedTourPromptOpen || isCreateAccountPopupOpen || onboardingResetModal.visible || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
     document.body.classList.toggle('app-popup-open', popupOpen);
     if (popupOpen) {
       window.requestAnimationFrame(() => {
@@ -4398,7 +4569,7 @@ function App() {
       });
     }
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateAccountPopupOpen, onboardingResetModal.visible, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, homeFolderPrompt.visible, guidedTourPromptOpen, isCreateAccountPopupOpen, onboardingResetModal.visible, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
 
   // Ver-1.006: Vault Status is the single repair entry point.
   // Routine sync problems no longer open an automatic delayed warning popup.
@@ -5024,6 +5195,7 @@ function App() {
       backNavigationStateRef.current.locked = false;
       backNavigationStateRef.current.activePage = 'home';
       setLocked(false);
+      if (customerSession.authenticated) saveGuidedTourStatus('not_started').catch(() => null);
       if (options.afterCreateOnboardingInstall) hideVerifyOverlay();
       else showVerifyOverlay('success', 'Vault created', 'Your encrypted vault has been created on this device.');
       if (cloudBackupAvailable) {
@@ -6254,6 +6426,112 @@ function App() {
     const homeFolders = folderChips.filter((folder) => folder.name !== 'All' && folder.folderFavourite);
     return [allFolder, ...homeFolders].filter(Boolean);
   }, [folderChips]);
+  const hiddenHomeFolderCount = Math.max(0, mobileFolderChips.length - HOME_FOLDER_COLLAPSED_LIMIT);
+  const displayedMobileFolderChips = showAllHomeFolders ? mobileFolderChips : mobileFolderChips.slice(0, HOME_FOLDER_COLLAPSED_LIMIT);
+
+  useEffect(() => {
+    if (hiddenHomeFolderCount === 0 && showAllHomeFolders) setShowAllHomeFolders(false);
+  }, [hiddenHomeFolderCount, showAllHomeFolders]);
+
+  useEffect(() => {
+    if (locked || !customerSession.authenticated || showInstallOnboarding || onboardingInstallEntry || onboardingPushGate) return;
+    const accountKey = `${customerSession.tenantId || ''}:${customerSession.userId || ''}`;
+    if (!customerSession.tenantId || !customerSession.userId || guidedTourStartupRef.current === accountKey) return;
+    guidedTourStartupRef.current = accountKey;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const fallback = readGuidedTourFallback(customerSession);
+      let statusRecord = fallback;
+      try {
+        const response = await fetch('/.netlify/functions/guided-tour', { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+        const result = await response.json().catch(() => null);
+        if (response.ok && result?.ok) {
+          statusRecord = { status: result.status || '', tourVersion: Number(result.tourVersion || GUIDED_TOUR_VERSION), updatedAt: result.updatedAt || '' };
+          writeGuidedTourFallback(customerSession, statusRecord);
+        }
+      } catch {
+        // Use the device fallback when Firefox/private browsing blocks a request or storage area.
+      }
+      if (cancelled) return;
+      const nextState = { loaded: true, status: String(statusRecord?.status || ''), tourVersion: Number(statusRecord?.tourVersion || GUIDED_TOUR_VERSION), updatedAt: statusRecord?.updatedAt || '', busy: false };
+      setGuidedTourState(nextState);
+
+      if (nextState.status === 'not_started' && !getHomeFolderDefaultsApplied(items)) {
+        const existingFavourites = getFavouriteFolders(items);
+        const defaults = existingFavourites.length ? existingFavourites : DEFAULT_HOME_FOLDERS;
+        const nextItems = upsertFolderMetaItem(items, getCustomFolders(items), getFolderOrder(items), defaults, { homeDefaultsApplied: true });
+        await saveItems(nextItems, { autoSync: true, silentAutoSync: true }).catch(() => null);
+      }
+
+      const laterAt = nextState.updatedAt ? new Date(nextState.updatedAt).getTime() : 0;
+      const laterReady = nextState.status === 'later' && (!laterAt || Date.now() - laterAt >= GUIDED_TOUR_LATER_DELAY_MS);
+      if (nextState.status === 'not_started' || laterReady) setGuidedTourPromptOpen(true);
+    }, 700);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // The first successful unlocked session per user owns this startup decision.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked, customerSession.authenticated, customerSession.tenantId, customerSession.userId, showInstallOnboarding, onboardingInstallEntry, onboardingPushGate]);
+
+  useEffect(() => {
+    if (!guidedTour.active) {
+      clearGuidedTourTarget();
+      return undefined;
+    }
+    const step = GUIDED_TOUR_STEPS[guidedTour.stepIndex] || GUIDED_TOUR_STEPS[0];
+    let cancelled = false;
+    let attempt = 0;
+    let timer = null;
+    const locate = () => {
+      if (cancelled) return;
+      clearGuidedTourTarget();
+      let target = null;
+      for (const selector of step.selectors || []) {
+        const nodes = [...document.querySelectorAll(selector)];
+        target = nodes.find((node) => {
+          const style = window.getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        }) || null;
+        if (target) break;
+      }
+      if (target) {
+        guidedTourTargetRef.current = target;
+        const rect = target.getBoundingClientRect();
+        if ((rect.top < 80 || rect.bottom > window.innerHeight - 250) && attempt < 3) {
+          attempt += 1;
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          timer = window.setTimeout(locate, 220);
+          return;
+        }
+        setGuidedTour((current) => current.active && current.stepIndex === guidedTour.stepIndex ? {
+          ...current,
+          targetFound: true,
+          targetRect: {
+            top: Math.max(8, rect.top - 7),
+            left: Math.max(8, rect.left - 7),
+            width: Math.min(window.innerWidth - Math.max(8, rect.left - 7) - 8, rect.width + 14),
+            height: rect.height + 14
+          }
+        } : current);
+        return;
+      }
+      if (attempt < 8) {
+        attempt += 1;
+        timer = window.setTimeout(locate, 90);
+      } else {
+        setGuidedTour((current) => current.active && current.stepIndex === guidedTour.stepIndex ? { ...current, targetFound: false, targetRect: null } : current);
+      }
+    };
+    timer = window.setTimeout(locate, 60);
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+      clearGuidedTourTarget();
+    };
+  }, [guidedTour.active, guidedTour.stepIndex]);
 
   const hasActiveVaultFilter = Boolean(query.trim() || category);
   const viewedItem = viewItemId ? visibleItems.find((item) => item.id === viewItemId) : null;
@@ -7243,6 +7521,72 @@ function App() {
   }
 
 
+  async function saveGuidedTourStatus(status) {
+    const cleanStatus = ['not_started', 'later', 'skipped', 'completed'].includes(String(status || '')) ? String(status) : 'completed';
+    const now = new Date().toISOString();
+    setGuidedTourState((current) => ({ ...current, busy: true }));
+    writeGuidedTourFallback(customerSession, { status: cleanStatus, tourVersion: GUIDED_TOUR_VERSION, updatedAt: now });
+    try {
+      const result = await postJson('/.netlify/functions/guided-tour', { status: cleanStatus, tourVersion: GUIDED_TOUR_VERSION });
+      const next = result?.ok
+        ? { loaded: true, status: result.status || cleanStatus, tourVersion: Number(result.tourVersion || GUIDED_TOUR_VERSION), updatedAt: result.updatedAt || now, busy: false }
+        : { loaded: true, status: cleanStatus, tourVersion: GUIDED_TOUR_VERSION, updatedAt: now, busy: false };
+      setGuidedTourState(next);
+      writeGuidedTourFallback(customerSession, next);
+      return next;
+    } catch {
+      const next = { loaded: true, status: cleanStatus, tourVersion: GUIDED_TOUR_VERSION, updatedAt: now, busy: false };
+      setGuidedTourState(next);
+      return next;
+    }
+  }
+
+  function clearGuidedTourTarget() {
+    const current = guidedTourTargetRef.current;
+    if (current?.classList) current.classList.remove('guided-tour-target');
+    guidedTourTargetRef.current = null;
+  }
+
+  function startGuidedTour({ manual = false } = {}) {
+    clearGuidedTourTarget();
+    setGuidedTourPromptOpen(false);
+    setPushActivationPromptOpen(false);
+    setMobileHeaderMenuOpen(false);
+    setIsFolderListPopupOpen(false);
+    setHomeFolderPrompt((current) => ({ ...current, visible: false }));
+    setActivePage('home');
+    setActiveSettingsSection('overview');
+    setQuery('');
+    setCategory('');
+    setShowAllHomeFolders(false);
+    setGuidedTour({ active: true, stepIndex: 0, targetFound: false, targetRect: null });
+    if (manual) writeGuidedTourFallback(customerSession, { status: guidedTourState.status || 'completed', tourVersion: GUIDED_TOUR_VERSION, updatedAt: guidedTourState.updatedAt || new Date().toISOString() });
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }));
+  }
+
+  async function finishGuidedTour(status = 'completed') {
+    clearGuidedTourTarget();
+    setGuidedTour({ active: false, stepIndex: 0, targetFound: false, targetRect: null });
+    setGuidedTourPromptOpen(false);
+    await saveGuidedTourStatus(status);
+    if (status === 'completed') showMessage('Guided tour complete. You can run it again from Settings at any time.', 'success');
+  }
+
+  function nextGuidedTourStep() {
+    if (guidedTour.stepIndex >= GUIDED_TOUR_STEPS.length - 1) {
+      finishGuidedTour('completed');
+      return;
+    }
+    clearGuidedTourTarget();
+    setGuidedTour((current) => ({ ...current, stepIndex: current.stepIndex + 1, targetFound: false, targetRect: null }));
+  }
+
+  function previousGuidedTourStep() {
+    if (guidedTour.stepIndex <= 0) return;
+    clearGuidedTourTarget();
+    setGuidedTour((current) => ({ ...current, stepIndex: current.stepIndex - 1, targetFound: false, targetRect: null }));
+  }
+
   function openAddItem() {
     const itemLimit = Number(entitlements?.limits?.itemLimit || 0);
     const currentItemCount = getVisibleVaultItems(items).length;
@@ -7282,11 +7626,32 @@ function App() {
       await saveItems(next, { autoSync: true, silentAutoSync: true });
       setCategory(folderName);
       closeFolderPopup();
+      setHomeFolderPrompt({ visible: true, folderName, busy: false });
       showMessage('Folder created successfully.', 'success');
     } catch (error) {
       showMessage('Folder could not be created. Please try again.', 'error');
     } finally {
       setIsSavingFolder(false);
+    }
+  }
+
+  async function addNewFolderToHome() {
+    const folderName = normaliseFolderName(homeFolderPrompt.folderName);
+    if (!folderName || homeFolderPrompt.busy) return;
+    setHomeFolderPrompt((current) => ({ ...current, busy: true }));
+    try {
+      const liveCustomFolders = getCustomFolders(items);
+      const liveOrder = getFolderOrder(items);
+      const liveFavourites = getFavouriteFolders(items);
+      const nextFavourites = uniqueFolderList([...liveFavourites, folderName]);
+      const next = upsertFolderMetaItem(items, liveCustomFolders, liveOrder, nextFavourites, { homeDefaultsApplied: true });
+      await saveItems(next, { autoSync: true, silentAutoSync: true });
+      if (nextFavourites.length + 1 > HOME_FOLDER_COLLAPSED_LIMIT) setShowAllHomeFolders(true);
+      setHomeFolderPrompt({ visible: false, folderName: '', busy: false });
+      showMessage(`${folderName} added to Home.`, 'success');
+    } catch {
+      setHomeFolderPrompt((current) => ({ ...current, busy: false }));
+      showMessage('The folder was created, but it could not be added to Home. Try again from Manage folders.', 'warning');
     }
   }
 
@@ -7312,8 +7677,9 @@ function App() {
       ? favouriteFolderNames.filter((name) => name !== folderName)
       : [...favouriteFolderNames, folderName];
     const currentOrder = folderChips.map((folder) => folder.name).filter((name) => name !== 'All');
-    const next = upsertFolderMetaItem(items, customFolders, currentOrder, nextFavourites);
+    const next = upsertFolderMetaItem(items, customFolders, currentOrder, nextFavourites, { homeDefaultsApplied: true });
     await saveItems(next, { autoSync: true, silentAutoSync: true });
+    if (nextFavourites.length + 1 <= HOME_FOLDER_COLLAPSED_LIMIT) setShowAllHomeFolders(false);
   }
 
   function openFolderManager(folder) {
@@ -9898,7 +10264,7 @@ function App() {
         <>
           <section className="home-search-panel">
             <div className="search-box hero-search"><Search size={19} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your vault" /></div>
-            <div className="chip-row vault-folder-row" id="vault-list-section">
+            <div className={`chip-row vault-folder-row ${showAllHomeFolders ? 'show-all-home-folders' : ''}`} id="vault-list-section">
               {folderChips.map((folder) => {
                 const isDragging = draggedFolderName === folder.name || touchReorderFolder === folder.name;
                 const isDropTarget = touchDropTargetFolder === folder.name && (touchReorderFolder || draggedFolderName) && (touchReorderFolder || draggedFolderName) !== folder.name;
@@ -9922,7 +10288,7 @@ function App() {
                   </button>
                 );
               })}
-              {mobileFolderChips.map((folder) => {
+              {displayedMobileFolderChips.map((folder) => {
                 const isDragging = touchReorderFolder === folder.name;
                 const isDropTarget = touchDropTargetFolder === folder.name && touchReorderFolder && touchReorderFolder !== folder.name;
                 return (
@@ -9944,6 +10310,12 @@ function App() {
                 );
               })}
             </div>
+            {hiddenHomeFolderCount > 0 && (
+              <button type="button" className="home-folders-expand-button" onClick={() => setShowAllHomeFolders((current) => !current)}>
+                {showAllHomeFolders ? <>Show fewer Home folders</> : <>Show {hiddenHomeFolderCount} more Home folder{hiddenHomeFolderCount === 1 ? '' : 's'}</>}
+                <ChevronRight size={16} className={showAllHomeFolders ? 'expanded' : ''} />
+              </button>
+            )}
             <div className="home-quick-summary">
               <span><strong>{visibleItems.length}</strong> Item{visibleItems.length === 1 ? '' : 's'}</span>
               <button type="button" className={`summary-action favourite-summary-pill ${category === FAVOURITES_VIEW ? 'active' : ''}`} onClick={() => { setQuery(''); openVaultSection(FAVOURITES_VIEW); }} aria-label="Show all favourite items"><Star size={14} fill="currentColor" /><strong>{visibleItems.filter((item) => item.favourite).length}</strong> {visibleItems.filter((item) => item.favourite).length === 1 ? 'Favourite' : 'Favourites'}</button>
@@ -9966,7 +10338,7 @@ function App() {
                   <button type="button" className="icon-button" onClick={() => setIsFolderListPopupOpen(false)} aria-label="Close"><X size={18} /></button>
                 </div>
                 <div className="item-popup-body folder-list-popup-body">
-                  <p className="folder-list-popup-note"><Home size={16} /> Highlight folders for the home page. Use the pencil to rename or delete a custom folder.</p>
+                  <p className="folder-list-popup-note"><Home size={16} /> Tap a house to add or remove a Home folder. You can choose as many as you need; if they do not all fit, Home will offer Show more. Use the pencil to rename or delete a custom folder.</p>
                   <div className="vault-result-list folder-list-popup-list">
                     {folderChips.map((folder) => {
                       const isDragging = touchReorderFolder === folder.name;
@@ -10210,6 +10582,11 @@ function App() {
 
                 <section className="settings-directory-group" aria-labelledby="settings-help-group">
                   <p className="settings-directory-label" id="settings-help-group">Help and support</p>
+                  <button type="button" className="settings-directory-row" onClick={() => startGuidedTour({ manual: true })}>
+                    <span className="settings-directory-icon"><Sparkles size={22} /></span>
+                    <span className="settings-directory-copy"><strong>Take the guided tour</strong><small>Walk through Home folders, the folder three-dot button, adding items, Vault Status and Settings.</small></span>
+                    <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
+                  </button>
                   <button type="button" className="settings-directory-row" onClick={openFaqSettings}>
                     <span className="settings-directory-icon"><CircleHelp size={22} /></span>
                     <span className="settings-directory-copy"><strong>Help & FAQs</strong><small>Guidance for vault access, backups, devices and support.</small></span>
@@ -11323,8 +11700,32 @@ function App() {
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} phone={bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)} channel={otpChannel} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onChannelChange={chooseOtpChannel} onSend={() => requestSelectedOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} onCheck={handleVaultStatusCheck} />
       <ExitAppConfirmationModal visible={exitAppConfirmationOpen} onStay={() => setExitAppConfirmationOpen(false)} onExit={confirmExitApp} />
+      <HomeFolderPromptModal
+        state={homeFolderPrompt}
+        onNotNow={() => setHomeFolderPrompt({ visible: false, folderName: '', busy: false })}
+        onAdd={addNewFolderToHome}
+      />
+
+      <GuidedTourWelcomeModal
+        visible={guidedTourPromptOpen}
+        busy={guidedTourState.busy}
+        onStart={() => startGuidedTour()}
+        onLater={async () => { setGuidedTourPromptOpen(false); await saveGuidedTourStatus('later'); }}
+        onSkip={async () => { setGuidedTourPromptOpen(false); await saveGuidedTourStatus('skipped'); }}
+      />
+
+      <GuidedTourOverlay
+        active={guidedTour.active}
+        stepIndex={guidedTour.stepIndex}
+        targetFound={guidedTour.targetFound}
+        targetRect={guidedTour.targetRect}
+        onBack={previousGuidedTourStep}
+        onNext={nextGuidedTourStep}
+        onSkip={() => finishGuidedTour('skipped')}
+      />
+
       <PushActivationPromptModal
-        visible={pushActivationPromptOpen}
+        visible={pushActivationPromptOpen && !guidedTourPromptOpen && !guidedTour.active}
         permission={pushNotifications.permission}
         loading={pushNotifications.loading}
         onClose={() => setPushActivationPromptOpen(false)}

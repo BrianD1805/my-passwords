@@ -295,6 +295,9 @@ export async function handler(event) {
       account_login_method: 'email_otp_session',
       onboarding_status: 'mobile_verification_required',
       last_onboarding_step: 'account_and_plan_saved',
+      guided_tour_status: 'not_started',
+      guided_tour_version: 1,
+      guided_tour_updated_at: now,
       updated_at: now
     });
 

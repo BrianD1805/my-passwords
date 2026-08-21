@@ -1,0 +1,18 @@
+Password-Encrypt Ver-1.014 verification
+
+PASS — JSX parse: src/main.jsx
+PASS — JSX parse: src/AdminApp.jsx
+PASS — Netlify function syntax: guided-tour.js
+PASS — Netlify function syntax: bootstrap-admin.js
+PASS — Security static checks: 13/13
+PASS — Reliability static checks: 20/20
+PASS — Legal/commercial readiness checks: 35/35
+PASS — Landing/plan UX checks: 36/36
+PASS — Mobile restoration checks: 6/6
+PASS — Emergency flow checks: 75/75
+PASS — Onboarding flow checks: all passed
+PASS — Push notification checks: 32/32
+PASS — Ver-1.014 feature checks: 12/12
+
+Build note:
+The sandbox could not complete npm install because registry.npmjs.org DNS returned EAI_AGAIN. The source passed JSX parsing and all project static checks. Run the normal local build after extracting/overwriting the project files.
