@@ -46,8 +46,8 @@ function otpEmailCopy(purpose) {
     ? {
         subject: 'Verify your new Password-Encrypt account',
         heading: 'Verify your Password-Encrypt account',
-        intro: 'Use this one-time code to confirm your email address and activate your selected free trial. You will create your separate master vault password after verification.',
-        text: 'Use this one-time code to verify your new Password-Encrypt account and start the selected free trial.'
+        intro: 'Use this one-time code to confirm your email address and activate your free trial. You will create your separate master vault password after verification.',
+        text: 'Use this one-time code to verify your new Password-Encrypt account and start your free trial.'
       }
     : {
         subject: 'Your Password-Encrypt verification code',

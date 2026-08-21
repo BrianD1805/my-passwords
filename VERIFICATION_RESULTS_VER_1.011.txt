@@ -1,0 +1,27 @@
+Password-Encrypt Ver-1.011 — Session Clear & Simplified Trial Onboarding
+
+Static verification completed against the packaged source:
+PASS  Security: 13/13
+PASS  Reliability: 20/20
+PASS  Legal/commercial readiness: 35/35
+PASS  Landing/plan UX: 36/36
+PASS  Mobile regression: 6/6
+PASS  Trusted Person / Emergency Flow: 75/75
+PASS  Onboarding: 61/61
+PASS  Push Notifications: 32/32
+PASS  Ver-1.011 Session Clear & Trial Onboarding: 24/24
+PASS  Modified Netlify function JavaScript syntax checks
+
+Key Ver-1.011 protections:
+- Previous/stale onboarding, account, local-vault and live-session state can be overridden through a first-party popup.
+- Existing local vaults get a Retry app installation path that preserves the vault.
+- Start fresh warns before clearing a local encrypted vault and leaves server/cloud account data untouched.
+- Local cleanup is selective and does not call localStorage.clear().
+- Password-Encrypt caches and local device/onboarding state are cleared on deliberate fresh start.
+- Saved onboarding state is version-gated so stale flow shapes are not auto-resumed.
+- Normal Start Free Trial silently defaults to Plan 1 / Personal.
+- Only explicit landing-plan-card choices are sent as deliberate plan selections.
+- Server independently forces generic trial onboarding to Personal.
+- Normal onboarding is 12 steps with no plan-choice card.
+
+Note: this full source package intentionally excludes node_modules, so the Vite production build is to be run locally with the existing project dependencies using `npm run build`.

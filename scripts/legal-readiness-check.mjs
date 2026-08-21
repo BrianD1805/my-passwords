@@ -26,12 +26,12 @@ function check(label, ok) {
   else { console.error(`FAIL  ${label}`); failed += 1; }
 }
 
-check('Ver-1.010.03 app/server/package/service-worker versions align', pkg.version === '1.10.3' && /Password-Encrypt Ver-1\.010\.03/.test(main) && /Password-Encrypt Ver-1\.010\.03/.test(server) && /my-passwords-v1\.010\.03/.test(sw));
+check('Ver-1.011 app/server/package/service-worker versions align', pkg.version === '1.11.0' && /Password-Encrypt Ver-1\.011/.test(main) && /Password-Encrypt Ver-1\.011/.test(server) && /my-passwords-v1\.011/.test(sw));
 check('Public Terms, Privacy and Billing routes are implemented and included in the PWA shell', /'\/terms': 'terms'/.test(legal) && /'\/privacy': 'privacy'/.test(legal) && /'\/billing-terms': 'billing'/.test(legal) && /'\/terms'/.test(sw) && /'\/privacy'/.test(sw) && /'\/billing-terms'/.test(sw));
 check('Public landing page links all legal policies', /href="\/terms"/.test(main) && /href="\/privacy"/.test(main) && /href="\/billing-terms"/.test(main));
 check('New signup requires explicit current Terms and Privacy acceptance in browser', /legalAccepted/.test(main) && /LEGAL_VERSION/.test(main) && /Please read and agree to the Terms of Service and Privacy Policy/.test(main));
-const signupLegalStepStart = main.indexOf('step === 5');
-const signupMobileStepStart = main.indexOf('step === 6', signupLegalStepStart);
+const signupLegalStepStart = main.indexOf('step === 4');
+const signupMobileStepStart = main.indexOf('step === 5', signupLegalStepStart);
 const signupLegalStep = signupLegalStepStart >= 0 && signupMobileStepStart > signupLegalStepStart ? main.slice(signupLegalStepStart, signupMobileStepStart) : '';
 check('Trial signup legal card requires Terms and Privacy only', /legalAccepted/.test(signupLegalStep) && /Terms of Service/.test(signupLegalStep) && /Privacy Policy/.test(signupLegalStep) && !/Subscription, Cancellation/.test(signupLegalStep));
 check('Signup Terms and Privacy open in a dedicated in-app card instead of a new browser tab', /openSignupLegalDocument\('terms'\)/.test(signupLegalStep) && /openSignupLegalDocument\('privacy'\)/.test(signupLegalStep) && !/openSignupLegalDocument\('billing'\)/.test(signupLegalStep) && /onboarding-legal-card/.test(main) && !/target="_blank"/.test(signupLegalStep));

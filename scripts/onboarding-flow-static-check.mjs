@@ -22,8 +22,8 @@ function check(label, condition) {
   else { console.error(`FAIL  ${label}`); failures += 1; }
 }
 
-check('Ver-1.010.03 app/package/service-worker versions align', pkg.version === '1.10.3' && /Password-Encrypt Ver-1\.010\.03/.test(main) && /my-passwords-v1\.010\.03/.test(sw));
-check('Onboarding has thirteen explicit progress steps', /ONBOARDING_TOTAL_STEPS = 13/.test(main) && /Step 13 of \{ONBOARDING_TOTAL_STEPS\}/.test(main));
+check('Ver-1.011 app/package/service-worker versions align', pkg.version === '1.11.0' && /Password-Encrypt Ver-1\.011/.test(main) && /my-passwords-v1\.011/.test(sw));
+check('Onboarding has twelve explicit progress steps', /ONBOARDING_TOTAL_STEPS = 12/.test(main) && /Step 12 of \{ONBOARDING_TOTAL_STEPS\}/.test(main));
 check('Public signup uses a dedicated card screen rather than rendering the landing page behind it', /isPublicLandingRoute && isCreateAccountPopupOpen/.test(main) && /onboarding-card-screen/.test(main));
 check('Dedicated onboarding card is not marked as a dialog', !/onboarding-card-screen[^\n]{0,300}role="dialog"/.test(main));
 check('Onboarding has a visible progress track', /onboarding-progress-track/.test(main) && /progress = Math\.round\(\(step \/ ONBOARDING_TOTAL_STEPS\) \* 100\)/.test(main));
@@ -33,18 +33,18 @@ check('Mobile onboarding supports left-swipe advancement on safe steps', /handle
 check('Name is isolated on step 1', /step === 1[\s\S]*What should we call you\?/.test(main));
 check('Email address is isolated on step 2', /step === 2[\s\S]*Enter your email address/.test(main));
 check('Vault name is isolated on step 3', /step === 3[\s\S]*Name your vault/.test(main));
-check('Plan choice is isolated on step 4', /step === 4[\s\S]*Choose your plan/.test(main));
-check('Legal acceptance is isolated on step 5', /step === 5[\s\S]*Review the account terms/.test(main));
-check('Mobile number is isolated on step 6', /step === 6[\s\S]*Enter your mobile number/.test(main));
-check('SMS request is isolated on step 7', /step === 7[\s\S]*Send SMS code/.test(main));
-check('SMS OTP entry is isolated on step 8', /step === 8[\s\S]*Enter the SMS code/.test(main));
-check('Email request is isolated on step 9', /step === 9[\s\S]*Send email code/.test(main));
-check('Email OTP entry is isolated on step 10', /step === 10[\s\S]*Enter the email code/.test(main));
-check('Master password creation is isolated on step 11', /step === 11[\s\S]*Create your master password/.test(main));
-check('Master password confirmation is isolated on step 12', /step === 12[\s\S]*Confirm your master password/.test(main));
-check('Install app is the final step 13', /Step 13 of \{ONBOARDING_TOTAL_STEPS\}/.test(main) && /Install Password-Encrypt/.test(main));
-check('Mobile step advances to a separate SMS request screen before spending an SMS', /landingOnboardingStep === 6[\s\S]*setLandingOnboardingStep\(7\)/.test(main) && /prepareLandingOnboarding\(\{ sendInitialSms: true \}\)/.test(main));
-check('New onboarding sends SMS before email', /channelOverride === 'email' \? 'email' : 'sms'/.test(main) && /setLandingOnboardingStep\(channel === 'sms' \? 8 : 10\)/.test(main));
+check('Normal onboarding has no plan-choice card', !/onboarding-plan-step/.test(main) && !/step === 4[\s\S]{0,900}Choose your plan/.test(main));
+check('Legal acceptance is isolated on step 4', /step === 4[\s\S]*Review the account terms/.test(main));
+check('Mobile number is isolated on step 5', /step === 5[\s\S]*Enter your mobile number/.test(main));
+check('SMS request is isolated on step 6', /step === 6[\s\S]*Send SMS code/.test(main));
+check('SMS OTP entry is isolated on step 7', /step === 7[\s\S]*Enter the SMS code/.test(main));
+check('Email request is isolated on step 8', /step === 8[\s\S]*Send email code/.test(main));
+check('Email OTP entry is isolated on step 9', /step === 9[\s\S]*Enter the email code/.test(main));
+check('Master password creation is isolated on step 10', /step === 10[\s\S]*Create your master password/.test(main));
+check('Master password confirmation is isolated on step 11', /step === 11[\s\S]*Confirm your master password/.test(main));
+check('Install app is the final step 12', /Step 12 of \{ONBOARDING_TOTAL_STEPS\}/.test(main) && /Install Password-Encrypt/.test(main));
+check('Mobile step advances to a separate SMS request screen before spending an SMS', /landingOnboardingStep === 5[\s\S]*setLandingOnboardingStep\(6\)/.test(main) && /prepareLandingOnboarding\(\{ sendInitialSms: true \}\)/.test(main));
+check('New onboarding sends SMS before email', /channelOverride === 'email' \? 'email' : 'sms'/.test(main) && /setLandingOnboardingStep\(channel === 'sms' \? 7 : 9\)/.test(main));
 check('Onboarding SMS is now a primary verification channel, not an email-failure fallback', /onboarding_sms_primary/.test(requestSms) && !/SMS_FALLBACK_NOT_AVAILABLE/.test(requestSms));
 check('Paid onboarding SMS has a strict two-per-ten-minute limiter', /scope: 'onboarding_sms_primary'/.test(requestSms) && /limit: 2/.test(requestSms) && /windowSeconds: 10 \* 60/.test(requestSms));
 check('First onboarding SMS verification is deliberately partial', /partialOnboarding: true/.test(verifyOtp) && /nextRequiredChannel: 'email'/.test(verifyOtp));
@@ -53,12 +53,12 @@ check('Partial SMS verification defers trial/account activation until email succ
 check('Final email verification still activates the pending account and starts the configured trial', /if \(firstActivation && !founder\)/.test(verifyOtp) && /trial_started_at: trialStartedAt/.test(verifyOtp) && /onboarding_completed_at: now/.test(verifyOtp));
 check('Final onboarding admin notification records SMS plus email verification', /SMS OTP \+ Email OTP/.test(verifyOtp));
 check('Existing account discovered during signup remains routed to existing vault access', /const target = isExistingAccount \? '\/vault\?entry=existing' : '\/vault\?entry=onboarding'/.test(main));
-check('Existing activated account uses email verification rather than creating a new vault', /existingAccount \|\| mobileAlreadyVerified/.test(main) && /setLandingOnboardingStep\(9\)/.test(main));
+check('Existing activated account uses email verification rather than creating a new vault', /existingAccount \|\| mobileAlreadyVerified/.test(main) && /setLandingOnboardingStep\(8\)/.test(main));
 check('Pending signup can be safely resumed rather than being misclassified as an activated existing account', /pendingSignup/.test(bootstrap) && /resumedPendingSignup: true/.test(bootstrap) && /existingAccount: false/.test(bootstrap));
 check('Changing a pending unverified mobile number resets mobile verification before another SMS', /phoneChanged \? false : Boolean\(existingUser\.phone_verified\)/.test(bootstrap));
 check('Onboarding state is kept in sessionStorage with an expiry', /ONBOARDING_FLOW_STATE_KEY/.test(main) && /window\.sessionStorage\.setItem\(ONBOARDING_FLOW_STATE_KEY/.test(main) && /2 \* 60 \* 60 \* 1000/.test(main));
 check('Onboarding recovery state deliberately excludes OTP input and master password', /OTP values,[\s\S]*master passwords are intentionally never persisted/.test(main) && /otp: \{[\s\S]*challengeId:[\s\S]*smsVerified:[\s\S]*emailVerified:/.test(main));
-check('Saved onboarding flow resumes automatically after browser refresh', /initialOnboardingFlowRef = useRef\(readOnboardingFlowState\(\)\)/.test(main) && /Boolean\(initialOnboardingFlowRef\.current\?\.active\)/.test(main));
+check('Saved onboarding flow resumes only when its flow version is current', /initialOnboardingFlowRef = useRef\(readOnboardingFlowState\(\)\)/.test(main) && /ONBOARDING_FLOW_VERSION/.test(main) && /flowVersion/.test(main) && /initialOnboardingFlowRef\.current\?\.active/.test(main));
 check('OTP code itself is cleared when restoring saved onboarding state', /input: '', testCode: ''/.test(main));
 check('SMS OTP field exposes the browser one-time-code autofill hint', /name="one-time-code"[\s\S]{0,250}autoComplete="one-time-code"|autoComplete="one-time-code"[\s\S]{0,250}name="one-time-code"/.test(main));
 check('Email OTP field also exposes one-time-code autofill', /name="email-one-time-code"/.test(main) && /autoComplete="one-time-code"/.test(main));
@@ -80,12 +80,12 @@ check('Manifest retains stable standalone vault identity', manifest.id === '/vau
 check('Install onboarding still provides a continue-in-browser fallback', /Continue in browser/.test(main) && /finishInstallOnboarding/.test(main));
 check('Push activation is suppressed during install onboarding', /showInstallOnboarding \|\| onboardingInstallEntry/.test(main));
 check('Completing install defers push activation until the next document/app opening', /PUSH_PROMPT_NEXT_OPEN_KEY/.test(main) && /pushActivationPromptDeferredThisDocumentRef\.current = true/.test(main));
-check('Push notification activation is not one of the thirteen onboarding cards', !/step === 13[\s\S]{0,1200}Activate push notifications/.test(main));
+check('Push notification activation is not one of the twelve onboarding cards', !/step === 12[\s\S]{0,1200}Activate push notifications/.test(main));
 check('Landing-page setup explanation reflects mobile, email, master password and install stages', /Verify your mobile/.test(main) && /Verify your email/.test(main) && /Create your master password/.test(main) && /Install the app/.test(main));
-check('Onboarding email copy remains transactional and explains trial activation after final verification', /activate your selected free trial/.test(requestEmail));
+check('Onboarding email copy remains transactional and explains trial activation after final verification', /activate your free trial/.test(requestEmail));
 
 if (failures) {
   console.error(`\n${failures} onboarding static check(s) failed.`);
   process.exit(1);
 }
-console.log(`\nAll Ver-1.010.03 onboarding static checks passed.`);
+console.log(`\nAll Ver-1.011 onboarding static checks passed.`);

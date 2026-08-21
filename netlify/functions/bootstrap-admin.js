@@ -60,7 +60,10 @@ export async function handler(event) {
   const phoneE164 = String(body.phoneE164 || buildPhoneE164(phoneCountryCode, phoneNumber)).trim();
   const displayName = String(body.displayName || '').trim() || 'Vault User';
   const accountName = String(body.accountName || body.tenantName || '').trim() || `${displayName}'s Private Vault`;
-  const selectedPlanCode = requestedPlan(body.planCode || 'personal') || 'personal';
+  const planSelectionSource = String(body.planSelectionSource || '').trim() === 'landing_plan_card' ? 'landing_plan_card' : 'default_trial';
+  const selectedPlanCode = planSelectionSource === 'landing_plan_card'
+    ? (requestedPlan(body.planCode || 'personal') || 'personal')
+    : 'personal';
   const legalAccepted = body.legalAccepted === true;
   const legalVersion = String(body.legalVersion || '').trim();
 
@@ -258,6 +261,7 @@ export async function handler(event) {
       metadata: {
         version: APP_VERSION,
         selected_plan_code: selectedPlanCode,
+        plan_selection_source: planSelectionSource,
         selected_plan_name: plan.display_name || selectedPlanCode,
         trial_days: Number(plan.trial_days || 0),
         entitlements: signupEntitlements,
@@ -296,7 +300,7 @@ export async function handler(event) {
       existingAccount: false,
       requiresOtpVerification: true,
       legalVersion: LEGAL_VERSION,
-      message: 'Your account and selected plan are ready. Verify your mobile number first, then your email address.'
+      message: 'Your account is ready for verification. Verify your mobile number first, then your email address.'
     });
   } catch (error) {
     if (error?.code === 'USER_LIMIT_REACHED') {

@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.010.03';
+const VERSION = 'Password-Encrypt Ver-1.011';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -31,7 +31,10 @@ const PUSH_BINDING_KEY = 'password-encrypt-push-binding-v1';
 const PUSH_PROMPT_SUPPRESSION_KEY = 'password-encrypt-push-prompt-suppressed-v1';
 const ONBOARDING_FLOW_STATE_KEY = 'password-encrypt-onboarding-card-flow-v1';
 const PUSH_PROMPT_NEXT_OPEN_KEY = 'password-encrypt-push-next-vault-open-v1';
-const ONBOARDING_TOTAL_STEPS = 13;
+const FRESH_ONBOARDING_QUERY_KEY = 'freshOnboarding';
+const DEFAULT_TRIAL_PLAN_CODE = 'personal';
+const ONBOARDING_FLOW_VERSION = 2;
+const ONBOARDING_TOTAL_STEPS = 12;
 
 
 const LEGACY_VAULT_BACK_MARKER_KEYS = [
@@ -103,9 +106,9 @@ function ensureUbuntuFontStylesheet() {
 
 ensureUbuntuFontStylesheet();
 
-// Capture the browser's install opportunity as early as possible so Step 3 can
-// still offer the native install prompt even if the event fires before the
-// onboarding screen is reached.
+// Capture the browser's install opportunity as early as possible so the final
+// onboarding install step can still offer the native prompt even if the event
+// fires before that card is reached.
 let capturedPasswordEncryptInstallPrompt = typeof window !== 'undefined' ? (window.__passwordEncryptInstallPrompt || null) : null;
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeinstallprompt', (event) => {
@@ -180,6 +183,28 @@ function saveOnboardingFlowState(state = {}) {
 function clearOnboardingFlowState() {
   if (typeof window === 'undefined') return;
   try { window.sessionStorage.removeItem(ONBOARDING_FLOW_STATE_KEY); } catch {}
+}
+
+function storedPasswordEncryptIdentity() {
+  if (typeof window === 'undefined') return null;
+  for (const key of [ACCOUNT_KEY, BOOTSTRAP_KEY]) {
+    try {
+      const value = JSON.parse(window.localStorage.getItem(key) || 'null');
+      if (!value || typeof value !== 'object') continue;
+      if (String(value.tenantId || '').trim() || String(value.userId || '').trim() || String(value.email || '').trim()) return value;
+    } catch {}
+  }
+  return null;
+}
+
+async function clearPasswordEncryptCaches() {
+  if (typeof window === 'undefined' || !('caches' in window)) return;
+  try {
+    const names = await window.caches.keys();
+    await Promise.all(names.filter((name) => /^(my-passwords|password-encrypt)/i.test(name)).map((name) => window.caches.delete(name)));
+  } catch {
+    // Cache cleanup is best effort. The versioned service worker still refreshes on reload.
+  }
 }
 
 function readAccountDeviceInstallId() {
@@ -2628,6 +2653,44 @@ function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKe
   );
 }
 
+function OnboardingResetModal({ state, onClose, onResume, onRetryInstall, onStartFresh }) {
+  if (!state?.visible) return null;
+  return (
+    <div className="item-popup-layer onboarding-reset-popup-layer" role="dialog" aria-modal="true" aria-labelledby="onboarding-reset-title">
+      <button type="button" className="item-popup-backdrop" onClick={state.busy ? undefined : onClose} aria-label="Close previous setup message" />
+      <section className="item-popup-card onboarding-reset-popup-card">
+        <header className="item-popup-header">
+          <h2 id="onboarding-reset-title"><RefreshCw size={21} /> Previous setup found</h2>
+          <button type="button" className="icon-button" onClick={onClose} disabled={state.busy} aria-label="Close"><X size={18} /></button>
+        </header>
+        <div className="item-popup-body onboarding-reset-popup-body">
+          <p>{state.message}</p>
+          {state.hasPendingOnboarding && state.canResume && (
+            <button type="button" className="onboarding-reset-option" onClick={onResume} disabled={state.busy}>
+              <span className="onboarding-reset-option-icon"><ChevronRight size={19} /></span>
+              <span><strong>Continue previous onboarding</strong><small>Return to the last saved setup card.</small></span>
+            </button>
+          )}
+          {state.hasLocalVault && (
+            <button type="button" className="onboarding-reset-option" onClick={onRetryInstall} disabled={state.busy}>
+              <span className="onboarding-reset-option-icon"><Download size={19} /></span>
+              <span><strong>Retry the app installation</strong><small>Keep the encrypted vault already on this device and return to the Install Password-Encrypt step.</small></span>
+            </button>
+          )}
+          {state.hasLocalVault && (
+            <div className="onboarding-reset-warning"><AlertTriangle size={18} /><span><strong>Starting fresh removes the encrypted vault copy stored in this browser.</strong> It does not delete an old account or secure cloud backup. If that vault was never backed up, its local-only contents cannot be recovered after you clear it.</span></div>
+          )}
+          {!state.hasLocalVault && <div className="onboarding-info-panel"><ShieldCheck size={18} /><span>Starting fresh clears old Password-Encrypt onboarding state, account cookies, device setup and app cache on this device before reopening account setup.</span></div>}
+        </div>
+        <footer className="item-popup-footer onboarding-reset-popup-footer">
+          <button type="button" className="secondary-button" onClick={onClose} disabled={state.busy}>Cancel</button>
+          <button type="button" className={state.hasLocalVault ? 'danger-button' : 'primary-button'} onClick={onStartFresh} disabled={state.busy}>{state.busy ? <RefreshCw size={17} className="spin-icon" /> : <RefreshCw size={17} />} {state.busy ? 'Clearing...' : 'Start fresh onboarding'}</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function NetworkStatusNotice({ context = 'vault', hasLocalVault = false }) {
   const message = context === 'admin'
     ? 'Admin needs an internet connection. Reconnect to manage plans, customers and billing.'
@@ -2898,7 +2961,8 @@ function App() {
   const [isFolderListPopupOpen, setIsFolderListPopupOpen] = useState(false);
   const [showOnboardingDetails, setShowOnboardingDetails] = useState(() => !Boolean(readStoredVault()));
   const initialOnboardingFlowRef = useRef(readOnboardingFlowState());
-  const [isCreateAccountPopupOpen, setIsCreateAccountPopupOpen] = useState(() => Boolean(initialOnboardingFlowRef.current?.active));
+  const [isCreateAccountPopupOpen, setIsCreateAccountPopupOpen] = useState(() => Boolean(initialOnboardingFlowRef.current?.active && Number(initialOnboardingFlowRef.current?.flowVersion || 0) === ONBOARDING_FLOW_VERSION));
+  const [onboardingResetModal, setOnboardingResetModal] = useState({ visible: false, preselectedPlanCode: '', canResume: false, hasLocalVault: false, hasStoredAccount: false, hasPendingOnboarding: false, busy: false, message: '' });
   const createAccountPopupBodyRef = useRef(null);
   const onboardingSwipeRef = useRef({ x: 0, y: 0 });
   const onboardingOtpAutoVerifyRef = useRef('');
@@ -2908,7 +2972,7 @@ function App() {
   const [isOpenVaultChoicePopupOpen, setIsOpenVaultChoicePopupOpen] = useState(false);
   const [signupLegalModal, setSignupLegalModal] = useState({ visible: false, page: 'terms' });
   const [isCreateVaultPopupOpen, setIsCreateVaultPopupOpen] = useState(false);
-  const [landingOnboardingStep, setLandingOnboardingStep] = useState(() => Math.min(10, Math.max(1, Number(initialOnboardingFlowRef.current?.step || 1))));
+  const [landingOnboardingStep, setLandingOnboardingStep] = useState(() => Math.min(9, Math.max(1, Number(initialOnboardingFlowRef.current?.step || 1))));
   const [landingAccountDraft, setLandingAccountDraft] = useState(() => ({
     displayName: '',
     email: '',
@@ -2917,14 +2981,15 @@ function App() {
     phoneNumber: '',
     phoneE164: '',
     accountName: '',
-    planCode: '',
+    planCode: DEFAULT_TRIAL_PLAN_CODE,
+    planSelectionSource: 'default_trial',
     legalAccepted: false,
     ...(initialOnboardingFlowRef.current?.draft || {})
   }));
   const [landingSignup, setLandingSignup] = useState(() => ({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false, ...(initialOnboardingFlowRef.current?.signup || {}) }));
   const [onboardingVaultDraft, setOnboardingVaultDraft] = useState(() => { const saved = readSavedAccount(); return { email: saved.email || '', phoneCountryCode: saved.phoneCountryCode || '+254', phoneCountryIso: saved.phoneCountryIso || 'ke', phoneNumber: saved.phoneNumber || '' }; });
   const [onboardingSecretFieldsArmed, setOnboardingSecretFieldsArmed] = useState({ master: false, confirm: false });
-  const [vaultOnboardingStep, setVaultOnboardingStep] = useState(11);
+  const [vaultOnboardingStep, setVaultOnboardingStep] = useState(10);
   const [landingOtp, setLandingOtp] = useState(() => ({ status: 'idle', channel: 'sms', challengeId: '', message: '', expiresAt: '', smsVerified: false, emailVerified: false, ...(initialOnboardingFlowRef.current?.otp || {}), input: '', testCode: '' }));
   const installPromptRef = useRef(null);
   const [installPromptReady, setInstallPromptReady] = useState(false);
@@ -2951,6 +3016,17 @@ function App() {
   const isPublicLandingRoute = !isVaultRoute && !isEmergencyInviteRoute && !isTrustedPersonReminderRoute;
 
   const activeHint = categoryHints[form.category] || categoryHints.Passwords;
+
+  useEffect(() => {
+    if (!isPublicLandingRoute || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get(FRESH_ONBOARDING_QUERY_KEY) !== '1') return;
+    const requestedPlanCode = String(params.get('plan') || '').trim().toLowerCase();
+    window.history.replaceState({}, document.title, '/');
+    startCreateAccountFlow(requestedPlanCode);
+    // This one-shot query is created only by the explicit Start fresh onboarding action.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPublicLandingRoute]);
 
   function scrollSettingsToTop() {
     window.requestAnimationFrame(() => {
@@ -3933,6 +4009,7 @@ function App() {
     // local test codes and master passwords are intentionally never persisted.
     saveOnboardingFlowState({
       active: true,
+      flowVersion: ONBOARDING_FLOW_VERSION,
       step: landingOnboardingStep,
       draft: {
         displayName: landingAccountDraft.displayName || '',
@@ -3942,7 +4019,8 @@ function App() {
         phoneNumber: landingAccountDraft.phoneNumber || '',
         phoneE164: landingAccountDraft.phoneE164 || '',
         accountName: landingAccountDraft.accountName || '',
-        planCode: landingAccountDraft.planCode || '',
+        planCode: landingAccountDraft.planCode || DEFAULT_TRIAL_PLAN_CODE,
+        planSelectionSource: landingAccountDraft.planSelectionSource || 'default_trial',
         legalAccepted: Boolean(landingAccountDraft.legalAccepted)
       },
       signup: {
@@ -3970,7 +4048,7 @@ function App() {
   }, [isCreateAccountPopupOpen, landingOnboardingStep, landingAccountDraft, landingSignup, landingOtp.status, landingOtp.channel, landingOtp.challengeId, landingOtp.message, landingOtp.expiresAt, landingOtp.smsVerified, landingOtp.emailVerified]);
 
   useEffect(() => {
-    if (!isCreateAccountPopupOpen || landingOnboardingStep !== 8 || landingOtp.channel !== 'sms' || !landingOtp.challengeId) return undefined;
+    if (!isCreateAccountPopupOpen || landingOnboardingStep !== 7 || landingOtp.channel !== 'sms' || !landingOtp.challengeId) return undefined;
     // If the SMS request was restored after a refresh, re-arm WebOTP while this
     // code-entry card is visible. Initial sends arm WebOTP before the SMS request
     // is made to avoid racing a very fast text message.
@@ -3980,12 +4058,12 @@ function App() {
 
   useEffect(() => {
     if (!isCreateAccountPopupOpen || landingSignup.existingAccount) return;
-    if (![9, 10].includes(Number(landingOnboardingStep))) return;
+    if (![8, 9].includes(Number(landingOnboardingStep))) return;
     if (landingOtp.smsVerified || bootstrap.phoneVerified) return;
     // Never restore or navigate a new signup into email verification until the
     // server has confirmed the mobile OTP. A stale onboarding checkpoint must
     // return to the SMS verification step instead of silently skipping it.
-    setLandingOnboardingStep(landingOtp.channel === 'sms' && landingOtp.challengeId ? 8 : 7);
+    setLandingOnboardingStep(landingOtp.channel === 'sms' && landingOtp.challengeId ? 7 : 6);
   }, [isCreateAccountPopupOpen, landingSignup.existingAccount, landingOnboardingStep, landingOtp.smsVerified, landingOtp.channel, landingOtp.challengeId, bootstrap.phoneVerified]);
 
 
@@ -4265,7 +4343,7 @@ function App() {
   }, [locked, isOnline, customerSession.authenticated]);
 
   useEffect(() => {
-    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || isCreateAccountPopupOpen || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
+    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || isCreateAccountPopupOpen || onboardingResetModal.visible || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
     document.body.classList.toggle('app-popup-open', popupOpen);
     if (popupOpen) {
       window.requestAnimationFrame(() => {
@@ -4275,7 +4353,7 @@ function App() {
       });
     }
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateAccountPopupOpen, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, isCreateAccountPopupOpen, onboardingResetModal.visible, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
 
   // Ver-1.006: Vault Status is the single repair entry point.
   // Routine sync problems no longer open an automatic delayed warning popup.
@@ -6153,6 +6231,7 @@ function App() {
     || trustedPersonHelpOpen
     || emergencyImportState.visible
     || isCreateAccountPopupOpen
+    || onboardingResetModal.visible
     || isOpenVaultChoicePopupOpen
     || isCreateVaultPopupOpen
   );
@@ -6182,6 +6261,7 @@ function App() {
     billingLegalModalOpen,
     trustedPersonHelpOpen,
     isCreateAccountPopupOpen,
+    onboardingResetModalVisible: onboardingResetModal.visible,
     isOpenVaultChoicePopupOpen,
     isCreateVaultPopupOpen,
     hasBackDismissibleLayer,
@@ -6214,6 +6294,7 @@ function App() {
     if (state.billingLegalModalOpen) { backNavigationStateRef.current.billingLegalModalOpen = false; setBillingLegalModalOpen(false); return true; }
     if (state.trustedPersonHelpOpen) { backNavigationStateRef.current.trustedPersonHelpOpen = false; setTrustedPersonHelpOpen(false); return true; }
     if (state.isCreateAccountPopupOpen) { backNavigationStateRef.current.isCreateAccountPopupOpen = false; setIsCreateAccountPopupOpen(false); return true; }
+    if (state.onboardingResetModalVisible) { backNavigationStateRef.current.onboardingResetModalVisible = false; setOnboardingResetModal((current) => ({ ...current, visible: false, busy: false })); return true; }
     if (state.isOpenVaultChoicePopupOpen) { backNavigationStateRef.current.isOpenVaultChoicePopupOpen = false; setIsOpenVaultChoicePopupOpen(false); return true; }
     if (state.isCreateVaultPopupOpen) { backNavigationStateRef.current.isCreateVaultPopupOpen = false; setIsCreateVaultPopupOpen(false); return true; }
     if (state.mobileHeaderMenuOpen) { backNavigationStateRef.current.mobileHeaderMenuOpen = false; setMobileHeaderMenuOpen(false); return true; }
@@ -6437,9 +6518,9 @@ function App() {
     openCreateAccountPopup();
   }
 
-  function openCreateAccountPopup(preselectedPlanCode = '') {
+  function startCreateAccountFlow(preselectedPlanCode = '', options = {}) {
     const savedFlow = readOnboardingFlowState();
-    if (savedFlow?.active && Number(savedFlow.step || 0) >= 1 && Number(savedFlow.step || 0) <= 10) {
+    if (options.resumeSavedFlow && savedFlow?.active && Number(savedFlow.flowVersion || 0) === ONBOARDING_FLOW_VERSION && Number(savedFlow.step || 0) >= 1 && Number(savedFlow.step || 0) <= 9) {
       onboardingSessionIsolationRef.current = true;
       setLandingOnboardingStep(Number(savedFlow.step));
       setLandingAccountDraft((current) => ({ ...current, ...(savedFlow.draft || {}) }));
@@ -6448,15 +6529,15 @@ function App() {
       setIsCreateAccountPopupOpen(true);
       return;
     }
+
     onboardingSessionIsolationRef.current = true;
     clearPendingOnboardingAccount();
     clearOnboardingFlowState();
     setOnboardingSecurityWarning('');
     setSignupLegalModal({ visible: false, page: 'terms' });
-    const preferredPlan = publicPlans.find((plan) => plan.code === preselectedPlanCode)
-      || publicPlans[Math.floor(publicPlans.length / 2)]
-      || publicPlans[0]
-      || null;
+    const requestedPlanCode = String(preselectedPlanCode || '').trim().toLowerCase();
+    const planCode = requestedPlanCode || DEFAULT_TRIAL_PLAN_CODE;
+    const planSelectionSource = requestedPlanCode ? 'landing_plan_card' : 'default_trial';
     setLandingOnboardingStep(1);
     setLandingSignup({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
     setLandingOtp({ status: 'idle', channel: 'sms', challengeId: '', input: '', message: '', testCode: '', expiresAt: '', smsVerified: false, emailVerified: false });
@@ -6468,10 +6549,94 @@ function App() {
       phoneNumber: '',
       phoneE164: '',
       accountName: '',
-      planCode: preferredPlan?.code || '',
+      planCode,
+      planSelectionSource,
       legalAccepted: false
     });
     setIsCreateAccountPopupOpen(true);
+  }
+
+  function openCreateAccountPopup(preselectedPlanCode = '') {
+    const savedFlow = readOnboardingFlowState();
+    const pendingOnboarding = readPendingOnboardingAccount();
+    const storedIdentity = storedPasswordEncryptIdentity();
+    const localVaultPresent = Boolean(readStoredVault());
+    const canResume = Boolean(savedFlow?.active && Number(savedFlow.flowVersion || 0) === ONBOARDING_FLOW_VERSION && Number(savedFlow.step || 0) >= 1 && Number(savedFlow.step || 0) <= 9);
+    const previousSetupFound = Boolean(savedFlow?.active || pendingOnboarding || storedIdentity || localVaultPresent || customerSession.authenticated);
+
+    if (previousSetupFound) {
+      setOnboardingResetModal({
+        visible: true,
+        preselectedPlanCode: String(preselectedPlanCode || '').trim().toLowerCase(),
+        canResume,
+        hasLocalVault: localVaultPresent,
+        hasStoredAccount: Boolean(storedIdentity),
+        hasPendingOnboarding: Boolean(pendingOnboarding || savedFlow?.active),
+        busy: false,
+        message: localVaultPresent
+          ? 'This device already contains Password-Encrypt setup data. You can continue the previous setup or deliberately clear this device and start a new onboarding flow.'
+          : 'Password-Encrypt found an earlier account or onboarding session on this device. Choose whether to continue it or start fresh.'
+      });
+      return;
+    }
+
+    startCreateAccountFlow(preselectedPlanCode);
+  }
+
+  function resumePreviousOnboarding() {
+    setOnboardingResetModal((current) => ({ ...current, visible: false }));
+    startCreateAccountFlow('', { resumeSavedFlow: true });
+  }
+
+  function retryPreviousInstall() {
+    setOnboardingResetModal((current) => ({ ...current, visible: false }));
+    window.location.assign('/vault?entry=install');
+  }
+
+  async function startFreshOnboarding() {
+    const requestedPlanCode = String(onboardingResetModal.preselectedPlanCode || '').trim().toLowerCase();
+    setOnboardingResetModal((current) => ({ ...current, busy: true, message: 'Clearing the previous device setup safely...' }));
+    stopOnboardingSmsWebOtpCapture();
+
+    try {
+      const statusResponse = await fetch('/.netlify/functions/session-status', { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+      const status = await statusResponse.json().catch(() => ({}));
+      if (status?.csrfToken) sessionStorage.setItem('mp_customer_csrf', status.csrfToken);
+      if (status?.authenticated) {
+        const ended = await postJson('/.netlify/functions/session-status', { action: 'logout' });
+        if (!ended.ok) throw new Error(ended.message || 'The previous account session could not be ended safely.');
+      }
+    } catch (error) {
+      setOnboardingResetModal((current) => ({ ...current, busy: false, message: error.message || 'The previous browser session could not be cleared. Check your connection and try again.' }));
+      return;
+    }
+
+    try {
+      [
+        STORAGE_KEY, LEGACY_STORAGE_KEY, SALT_KEY, LEGACY_SALT_KEY,
+        BOOTSTRAP_KEY, ACCOUNT_KEY, BIOMETRIC_UNLOCK_KEY, SYNC_SAFETY_KEY,
+        SYNC_DEVICE_ID_KEY, ENTITLEMENTS_CACHE_KEY, PENDING_DOCUMENT_DELETIONS_KEY,
+        ACCOUNT_DEVICE_INSTALL_KEY, PUSH_BINDING_KEY, PUSH_PROMPT_NEXT_OPEN_KEY
+      ].forEach((key) => localStorage.removeItem(key));
+      for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+        const key = localStorage.key(index) || '';
+        if (key.startsWith(`${PUSH_PROMPT_SUPPRESSION_KEY}:`)) localStorage.removeItem(key);
+      }
+      clearPendingOnboardingAccount();
+      clearOnboardingFlowState();
+      sessionStorage.removeItem('mp_customer_csrf');
+      await deleteBiometricDeviceKey().catch(() => null);
+      await clearPasswordEncryptCaches();
+      capturedPasswordEncryptInstallPrompt = null;
+      window.__passwordEncryptInstallPrompt = null;
+      installPromptRef.current = null;
+      const params = new URLSearchParams();
+      params.set(FRESH_ONBOARDING_QUERY_KEY, '1');
+      if (requestedPlanCode) params.set('plan', requestedPlanCode);
+      window.location.replace(`/?${params.toString()}`);
+    } catch (error) {
+      setOnboardingResetModal((current) => ({ ...current, busy: false, message: error.message || 'The previous local setup could not be cleared completely.' }));
+    }
   }
 
   function pauseCreateAccountFlow() {
@@ -6527,7 +6692,8 @@ function App() {
       displayName: String(landingAccountDraft.displayName || '').trim(),
       accountName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
       tenantName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
-      planCode: landingAccountDraft.planCode || 'personal',
+      planCode: landingAccountDraft.planCode || DEFAULT_TRIAL_PLAN_CODE,
+      planSelectionSource: landingAccountDraft.planSelectionSource || 'default_trial',
       legalAccepted: Boolean(landingAccountDraft.legalAccepted),
       legalVersion: LEGAL_VERSION
     };
@@ -6538,7 +6704,6 @@ function App() {
     if (!draft.email || !draft.email.includes('@')) return 'Please enter a valid email address for account verification.';
     if (!draft.phoneE164) return 'Please enter a mobile number with country code.';
     if (!draft.accountName) return 'Please enter an account or vault name.';
-    if (!draft.planCode) return 'Please choose a subscription plan.';
     if (!draft.legalAccepted) return 'Please read and agree to the Terms of Service and Privacy Policy before continuing.';
     return '';
   }
@@ -6570,9 +6735,8 @@ function App() {
       if (/name/i.test(validationMessage)) setLandingOnboardingStep(1);
       else if (/email/i.test(validationMessage)) setLandingOnboardingStep(2);
       else if (/vault|account/i.test(validationMessage)) setLandingOnboardingStep(3);
-      else if (/plan/i.test(validationMessage)) setLandingOnboardingStep(4);
-      else if (/Terms|Privacy|agree/i.test(validationMessage)) setLandingOnboardingStep(5);
-      else if (/mobile/i.test(validationMessage)) setLandingOnboardingStep(6);
+      else if (/Terms|Privacy|agree/i.test(validationMessage)) setLandingOnboardingStep(4);
+      else if (/mobile/i.test(validationMessage)) setLandingOnboardingStep(5);
       return;
     }
     setLandingSignup((current) => ({ ...current, status: 'preparing', message: 'Preparing your secure account...' }));
@@ -6617,11 +6781,11 @@ function App() {
       });
       setLandingOtp({ status: 'idle', channel: existingAccount || mobileAlreadyVerified ? 'email' : 'sms', challengeId: '', input: '', message: mobileAlreadyVerified ? 'Mobile verified. Next verify your email address.' : '', testCode: '', expiresAt: '', smsVerified: mobileAlreadyVerified, emailVerified: Boolean(result.emailVerified) });
       if (existingAccount || mobileAlreadyVerified) {
-        setLandingOnboardingStep(9);
+        setLandingOnboardingStep(8);
       } else if (sendInitialSms) {
         await sendLandingOnboardingOtp('sms');
       } else {
-        setLandingOnboardingStep(7);
+        setLandingOnboardingStep(6);
       }
     } catch (error) {
       setLandingSignup((current) => ({ ...current, status: 'error', message: error.message || 'Account setup could not continue.' }));
@@ -6667,7 +6831,7 @@ function App() {
     if (channel === 'sms' && !phoneE164) return;
     if (channel === 'email' && !landingSignup.existingAccount && !landingOtp.smsVerified && !bootstrap.phoneVerified) {
       setLandingOtp((current) => ({ ...current, channel: 'sms', status: current.challengeId ? 'sent' : 'idle', message: 'Verify your mobile number before continuing to email verification.' }));
-      setLandingOnboardingStep(landingOtp.challengeId && landingOtp.channel === 'sms' ? 8 : 7);
+      setLandingOnboardingStep(landingOtp.challengeId && landingOtp.channel === 'sms' ? 7 : 6);
       return;
     }
     if (channel === 'sms') beginOnboardingSmsWebOtpCapture();
@@ -6696,7 +6860,7 @@ function App() {
         testCode: result.testOtpCode || '',
         expiresAt: result.expiresAt || ''
       }));
-      setLandingOnboardingStep(channel === 'sms' ? 8 : 10);
+      setLandingOnboardingStep(channel === 'sms' ? 7 : 9);
     } catch (error) {
       setLandingOtp((current) => ({ ...current, channel, status: 'error', message: error.message || `The ${channel === 'sms' ? 'SMS' : 'email'} code could not be sent.` }));
     }
@@ -6723,7 +6887,7 @@ function App() {
         setBootstrap((current) => ({ ...current, phoneVerified: true, phone_verified: true, otpStatus: 'Mobile verified', onboardingStatus: 'email_verification_required' }));
         setLandingOtp({ status: 'idle', channel: 'email', challengeId: '', input: '', message: 'Mobile verified. Next verify your email address.', testCode: '', expiresAt: '', smsVerified: true, emailVerified: false });
         setLandingSignup((current) => ({ ...current, status: 'mobile-verified', message: result.message || 'Mobile verified. Next verify your email address.' }));
-        setLandingOnboardingStep(9);
+        setLandingOnboardingStep(8);
         return;
       }
 
@@ -6791,7 +6955,7 @@ function App() {
         phoneCountryIso: finalAccount.phoneCountryIso || landingAccountDraft.phoneCountryIso || 'ke',
         phoneNumber: finalAccount.phoneNumber || landingAccountDraft.phoneNumber || ''
       });
-      setVaultOnboardingStep(11);
+      setVaultOnboardingStep(10);
     }
     setOnboardingSecretFieldsArmed({ master: false, confirm: false });
     setMessage('');
@@ -6804,7 +6968,7 @@ function App() {
 
 
   function onboardingStepCanSwipe(step = landingOnboardingStep) {
-    return [1, 2, 3, 5, 6].includes(Number(step));
+    return [1, 2, 3, 4, 5].includes(Number(step));
   }
 
   function advanceLandingOnboardingStep() {
@@ -6828,19 +6992,14 @@ function App() {
       return;
     }
     if (landingOnboardingStep === 4) {
-      if (!draft.planCode) return showMessage('Choose your plan to continue.', 'warning');
+      if (!draft.legalAccepted) return showMessage('Agree to the Terms of Service and Privacy Policy to continue.', 'warning');
       setLandingOnboardingStep(5);
       return;
     }
     if (landingOnboardingStep === 5) {
-      if (!draft.legalAccepted) return showMessage('Agree to the Terms of Service and Privacy Policy to continue.', 'warning');
-      setLandingOnboardingStep(6);
-      return;
-    }
-    if (landingOnboardingStep === 6) {
       if (!draft.phoneE164) return showMessage('Enter a valid mobile number with country code.', 'warning');
       updateLandingDraft({ phoneCountryCode: draft.phoneCountryCode, phoneNumber: draft.phoneNumber, phoneE164: draft.phoneE164 });
-      setLandingOnboardingStep(7);
+      setLandingOnboardingStep(6);
     }
   }
 
@@ -8566,9 +8725,9 @@ function App() {
   }
 
   if (isPublicLandingRoute && isCreateAccountPopupOpen) {
-    const step = Math.min(10, Math.max(1, Number(landingOnboardingStep || 1)));
+    const step = Math.min(9, Math.max(1, Number(landingOnboardingStep || 1)));
     const progress = Math.round((step / ONBOARDING_TOTAL_STEPS) * 100);
-    const canGoBack = step > 1 && step <= 8 && landingSignup.status !== 'preparing' && landingOtp.status !== 'verifying';
+    const canGoBack = step > 1 && step <= 7 && landingSignup.status !== 'preparing' && landingOtp.status !== 'verifying';
     const selectedPlan = publicPlans.find((plan) => plan.code === landingAccountDraft.planCode) || null;
     const mobilePreview = buildPhoneE164(landingAccountDraft.phoneCountryCode, landingAccountDraft.phoneNumber);
     const otpDestination = landingOtp.channel === 'sms' ? maskPhone(mobilePreview) : maskEmail(landingAccountDraft.email);
@@ -8579,10 +8738,10 @@ function App() {
           <section className="onboarding-card onboarding-legal-card">
             <header className="onboarding-card-topbar">
               <button type="button" className="onboarding-back-button" onClick={closeSignupLegalDocument}><ArrowLeft size={18} /> Back</button>
-              <span className="onboarding-step-counter">Step 5 of {ONBOARDING_TOTAL_STEPS}</span>
+              <span className="onboarding-step-counter">Step 4 of {ONBOARDING_TOTAL_STEPS}</span>
             </header>
-            <div className="onboarding-progress-track" aria-label={`Onboarding progress ${Math.round((5 / ONBOARDING_TOTAL_STEPS) * 100)}%`}>
-              <span style={{ width: `${Math.round((5 / ONBOARDING_TOTAL_STEPS) * 100)}%` }} />
+            <div className="onboarding-progress-track" aria-label={`Onboarding progress ${Math.round((4 / ONBOARDING_TOTAL_STEPS) * 100)}%`}>
+              <span style={{ width: `${Math.round((4 / ONBOARDING_TOTAL_STEPS) * 100)}%` }} />
             </div>
             <div className="onboarding-legal-document" onClickCapture={handleSignupLegalDocumentClick}>
               <LegalPage page={signupLegalModal.page} embedded />
@@ -8650,23 +8809,6 @@ function App() {
             )}
 
             {step === 4 && (
-              <div className="onboarding-single-step onboarding-plan-step">
-                <div className="onboarding-step-icon"><CreditCard size={27} /></div>
-                <p className="eyebrow">Plan</p>
-                <h1>Choose your plan</h1>
-                <p>Tap the plan you want to use. Your trial starts only after both contact checks are complete. Creating the trial does not start a paid subscription.</p>
-                <div className="onboarding-plan-options">
-                  {publicPlans.map((plan) => (
-                    <button type="button" key={plan.code} className={`onboarding-plan-option ${landingAccountDraft.planCode === plan.code ? 'selected' : ''}`} onClick={() => { updateLandingDraft({ planCode: plan.code }); setLandingOnboardingStep(5); }}>
-                      <span><strong>{plan.displayName}</strong><small>{plan.description}</small></span>
-                      <b>{publicPlanPriceLabel(plan)}</b>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {step === 5 && (
               <div className="onboarding-single-step onboarding-legal-step">
                 <div className="onboarding-step-icon"><FileText size={27} /></div>
                 <p className="eyebrow">Before we continue</p>
@@ -8677,11 +8819,12 @@ function App() {
                   <button type="button" onClick={() => openSignupLegalDocument('privacy')}><ShieldCheck size={18} /> Privacy Policy <ChevronRight size={18} /></button>
                 </div>
                 <label className="onboarding-legal-check"><input type="checkbox" checked={landingAccountDraft.legalAccepted} onChange={(event) => updateLandingDraft({ legalAccepted: event.target.checked })} /><span>I agree to the Terms of Service and Privacy Policy.</span></label>
+                <p className="onboarding-small-note">Creating the trial does not start a paid subscription. You choose and confirm a paid plan at the end of the trial.</p>
                 <button type="button" className="primary-button onboarding-next-button" onClick={advanceLandingOnboardingStep} disabled={!landingAccountDraft.legalAccepted}>Next <ChevronRight size={18} /></button>
               </div>
             )}
 
-            {step === 6 && (
+            {step === 5 && (
               <div className="onboarding-single-step">
                 <div className="onboarding-step-icon"><Phone size={27} /></div>
                 <p className="eyebrow">Mobile number</p>
@@ -8699,7 +8842,7 @@ function App() {
               </div>
             )}
 
-            {step === 7 && (
+            {step === 6 && (
               <div className="onboarding-single-step onboarding-otp-request-step">
                 <div className="onboarding-step-icon"><Phone size={27} /></div>
                 <p className="eyebrow">Mobile verification</p>
@@ -8715,7 +8858,7 @@ function App() {
               </div>
             )}
 
-            {step === 8 && (
+            {step === 7 && (
               <div className="onboarding-single-step onboarding-otp-entry-step">
                 <div className="onboarding-step-icon"><ShieldCheck size={27} /></div>
                 <p className="eyebrow">SMS code</p>
@@ -8735,7 +8878,7 @@ function App() {
               </div>
             )}
 
-            {step === 9 && (
+            {step === 8 && (
               <div className="onboarding-single-step onboarding-otp-request-step">
                 <div className="onboarding-step-icon"><Mail size={27} /></div>
                 <p className="eyebrow">Email verification</p>
@@ -8750,7 +8893,7 @@ function App() {
               </div>
             )}
 
-            {step === 10 && (
+            {step === 9 && (
               <div className="onboarding-single-step onboarding-otp-entry-step">
                 <div className="onboarding-step-icon"><Mail size={27} /></div>
                 <p className="eyebrow">Email code</p>
@@ -8772,7 +8915,7 @@ function App() {
           </div>
 
           <footer className="onboarding-card-footer">
-            <span>{selectedPlan && step >= 5 ? selectedPlan.displayName : 'Secure account setup'}</span>
+            <span>{landingAccountDraft.planSelectionSource === 'landing_plan_card' && selectedPlan ? selectedPlan.displayName : 'Secure account setup'}</span>
             {onboardingStepCanSwipe(step) && <small>On mobile, swipe left or use Next.</small>}
           </footer>
         </section>
@@ -8866,7 +9009,7 @@ function App() {
             <h2>From signup to secure vault in five simple stages.</h2>
           </div>
           <div className="landing-step-grid landing-step-grid-five">
-            <article><span>1</span><strong>Account details</strong><p>Choose your plan and enter the details for your account.</p></article>
+            <article><span>1</span><strong>Account details</strong><p>Enter your details. A standard Personal trial is selected automatically unless you start from a specific plan below.</p></article>
             <article><span>2</span><strong>Verify your mobile</strong><p>Confirm the mobile number registered to the account.</p></article>
             <article><span>3</span><strong>Verify your email</strong><p>Confirm the email address linked to your account.</p></article>
             <article><span>4</span><strong>Create your master password</strong><p>Choose the private password that encrypts your vault.</p></article>
@@ -8982,7 +9125,7 @@ function App() {
           <div>
             <p className="eyebrow">Start securely</p>
             <h2>Your private vault is ready when you are.</h2>
-            <p>Choose a plan, verify your account and create the master password that only you know.</p>
+            <p>Verify your mobile and email, then create the master password that only you know.</p>
           </div>
           <button type="button" className="primary-button landing-primary-cta" onClick={() => openCreateAccountPopup()}><Sparkles size={18} /> Start free trial</button>
         </section>
@@ -9047,6 +9190,13 @@ function App() {
         )}
 
 
+      <OnboardingResetModal
+        state={onboardingResetModal}
+        onClose={() => setOnboardingResetModal((current) => ({ ...current, visible: false, busy: false }))}
+        onResume={resumePreviousOnboarding}
+        onRetryInstall={retryPreviousInstall}
+        onStartFresh={startFreshOnboarding}
+      />
       <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} phone={bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)} channel={otpChannel} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onChannelChange={chooseOtpChannel} onSend={() => requestSelectedOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} onCheck={handleVaultStatusCheck} />
@@ -9056,15 +9206,15 @@ function App() {
   }
 
   if (locked && newCustomerOnboardingEntry) {
-    const step = vaultOnboardingStep === 12 ? 12 : 11;
+    const step = vaultOnboardingStep === 11 ? 11 : 10;
     const progress = Math.round((step / ONBOARDING_TOTAL_STEPS) * 100);
     return (
       <main className="onboarding-card-screen vault-master-onboarding-screen">
         <section className="onboarding-card vault-master-onboarding-card">
           <header className="onboarding-card-topbar">
             <div className="onboarding-topbar-left">
-              {step === 12
-                ? <button type="button" className="onboarding-back-button" onClick={() => { setConfirmMasterPassword(''); setVaultOnboardingStep(11); }}><ArrowLeft size={18} /> Back</button>
+              {step === 11
+                ? <button type="button" className="onboarding-back-button" onClick={() => { setConfirmMasterPassword(''); setVaultOnboardingStep(10); }}><ArrowLeft size={18} /> Back</button>
                 : <span className="onboarding-brand-mini"><ShieldCheck size={18} /> Password-Encrypt</span>}
             </div>
             <span className="onboarding-step-counter">Step {step} of {ONBOARDING_TOTAL_STEPS}</span>
@@ -9072,25 +9222,25 @@ function App() {
           <div className="onboarding-progress-track" aria-label={`Onboarding progress ${progress}%`}><span style={{ width: `${progress}%` }} /></div>
 
           <div className="onboarding-card-body">
-            {step === 11 && (
+            {step === 10 && (
               <div className="onboarding-single-step">
                 <div className="onboarding-step-icon"><KeyRound size={27} /></div>
                 <p className="eyebrow">Master password</p>
                 <h1>Create your master password</h1>
                 <p>This is the private password that encrypts and unlocks your vault. Password-Encrypt cannot recover or reset it.</p>
                 <label className="onboarding-main-field">Master password
-                  <input id="onboarding-master-password" autoFocus className="onboarding-secret-mask" type={onboardingSecretInputType} inputMode="text" autoComplete="off" aria-autocomplete="none" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!onboardingSecretFieldsArmed.master} onPointerDown={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, master: true }))} onFocus={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, master: true }))} value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} placeholder="Create your master password" onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (masterPassword.length < 8) showMessage('Use at least 8 characters for your master password.', 'warning'); else { setConfirmMasterPassword(''); setVaultOnboardingStep(12); } } }} />
+                  <input id="onboarding-master-password" autoFocus className="onboarding-secret-mask" type={onboardingSecretInputType} inputMode="text" autoComplete="off" aria-autocomplete="none" spellCheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other" readOnly={!onboardingSecretFieldsArmed.master} onPointerDown={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, master: true }))} onFocus={() => setOnboardingSecretFieldsArmed((current) => ({ ...current, master: true }))} value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} placeholder="Create your master password" onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (masterPassword.length < 8) showMessage('Use at least 8 characters for your master password.', 'warning'); else { setConfirmMasterPassword(''); setVaultOnboardingStep(11); } } }} />
                 </label>
                 <div className="onboarding-info-panel warning"><Lock size={19} /><span>Keep this password somewhere safe. It is never sent to Password-Encrypt.</span></div>
                 {onboardingSecurityWarning && <p className="onboarding-inline-status error">{onboardingSecurityWarning}</p>}
                 {hasLocalVault && <p className="onboarding-inline-status error">This device already contains a local encrypted vault. Password-Encrypt will not overwrite it.</p>}
                 {customerSession.checked && !customerSession.authenticated && <p className="onboarding-inline-status error">Your verified onboarding session has expired. Return to account setup and verify again.</p>}
                 {message && <p className="onboarding-inline-status error">{message}</p>}
-                <button type="button" className="primary-button onboarding-next-button" onClick={() => { if (masterPassword.length < 8) return showMessage('Use at least 8 characters for your master password.', 'warning'); setConfirmMasterPassword(''); setVaultOnboardingStep(12); }} disabled={hasLocalVault || !customerSession.checked || !customerSession.authenticated}>Next <ChevronRight size={18} /></button>
+                <button type="button" className="primary-button onboarding-next-button" onClick={() => { if (masterPassword.length < 8) return showMessage('Use at least 8 characters for your master password.', 'warning'); setConfirmMasterPassword(''); setVaultOnboardingStep(11); }} disabled={hasLocalVault || !customerSession.checked || !customerSession.authenticated}>Next <ChevronRight size={18} /></button>
               </div>
             )}
 
-            {step === 12 && (
+            {step === 11 && (
               <form className="onboarding-single-step" onSubmit={createVaultFromOnboarding} autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-protonpass-ignore="true" data-form-type="other">
                 <div className="onboarding-step-icon"><ShieldCheck size={27} /></div>
                 <p className="eyebrow">Confirm password</p>
@@ -9116,13 +9266,13 @@ function App() {
 
   if ((showInstallOnboarding || onboardingInstallEntry) && hasLocalVault) {
     const installedNow = installStatus === 'installed' || isPasswordEncryptInstalled();
-    const progress = Math.round((13 / ONBOARDING_TOTAL_STEPS) * 100);
+    const progress = Math.round((12 / ONBOARDING_TOTAL_STEPS) * 100);
     return (
       <main className="onboarding-card-screen install-onboarding-screen">
         <section className="onboarding-card install-onboarding-card-v1010">
           <header className="onboarding-card-topbar">
             <span className="onboarding-brand-mini"><ShieldCheck size={18} /> Password-Encrypt</span>
-            <span className="onboarding-step-counter">Step 13 of {ONBOARDING_TOTAL_STEPS}</span>
+            <span className="onboarding-step-counter">Step 12 of {ONBOARDING_TOTAL_STEPS}</span>
           </header>
           <div className="onboarding-progress-track" aria-label={`Onboarding progress ${progress}%`}><span style={{ width: `${progress}%` }} /></div>
           <div className="onboarding-card-body">
