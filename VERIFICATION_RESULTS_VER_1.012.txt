@@ -1,0 +1,21 @@
+Password-Encrypt Ver-1.012 — Verification Results
+
+PASS  Security static checks: 13/13
+PASS  Reliability static checks: 20/20
+PASS  Legal/commercial readiness checks: 35/35
+PASS  Landing/plan UX checks: 36/36
+PASS  Mobile restoration checks: 6/6
+PASS  Trusted Person / Emergency Flow checks: 75/75
+PASS  Onboarding checks: 61/61
+PASS  Push Notification checks: 32/32
+PASS  Ver-1.012 Admin UX checks: 21/21
+PASS  TypeScript JSX parse check for AdminApp, AdminCustomerDetail and main: clean
+PASS  Node syntax check for updated Admin backend functions: clean
+
+No Supabase SQL migration required.
+No new Netlify environment variables required.
+
+Important backup-count clarification:
+- The Admin Last successful backup item total is the vault item_count from the last successful encrypted snapshot.
+- That total already includes Document and Picture vault entries present in that snapshot.
+- Current stored Document and Picture metadata counts are now shown separately so an older/stale snapshot is obvious.

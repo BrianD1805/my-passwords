@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatAppDate } from './dateFormat.js';
-import { AlertTriangle, BadgePoundSterling, CalendarClock, ChevronRight, Cloud, CreditCard, Eye, EyeOff, FileText, LogOut, Plus, RefreshCw, Save, Search, ShieldCheck, Trash2, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, BadgePoundSterling, CalendarClock, ChevronDown, ChevronRight, Cloud, CreditCard, Eye, EyeOff, FileText, LogOut, Menu, Plus, RefreshCw, Save, Search, ShieldCheck, Trash2, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import CustomSelect from './CustomSelect.jsx';
 import AdminCustomerDetail from './AdminCustomerDetail.jsx';
 import AdminAutomatedEmails from './AdminAutomatedEmails.jsx';
@@ -169,8 +169,11 @@ export default function AdminApp({ version }) {
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerFilters, setCustomerFilters] = useState({ plan: 'all', trial: 'all', payment: 'all', account: 'all' });
+  const [customerSort, setCustomerSort] = useState('newest');
   const [planVisibility, setPlanVisibility] = useState('active');
   const [notice, setNotice] = useState('');
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
+  const [selectedOverviewStat, setSelectedOverviewStat] = useState('');
 
   const sortedPlans = useMemo(() => [...(data.plans || [])]
     .filter((plan) => String(plan?.code || '').trim() && String(plan?.display_name || '').trim())
@@ -215,8 +218,54 @@ export default function AdminApp({ version }) {
       if (customerFilters.account === 'deletion' && !deletionActive) return false;
       if (!['all', 'pending_verification', 'deletion'].includes(customerFilters.account) && accountStatus !== customerFilters.account) return false;
       return true;
-    }).sort((left, right) => String(left.accountName || '').localeCompare(String(right.accountName || ''), undefined, { sensitivity: 'base', numeric: true }));
-  }, [data.customers, customerSearch, customerFilters]);
+    }).sort((left, right) => {
+      if (customerSort === 'oldest') return new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime();
+      if (customerSort === 'name_asc') return String(left.accountName || '').localeCompare(String(right.accountName || ''), undefined, { sensitivity: 'base', numeric: true });
+      if (customerSort === 'name_desc') return String(right.accountName || '').localeCompare(String(left.accountName || ''), undefined, { sensitivity: 'base', numeric: true });
+      if (customerSort === 'last_signin') return new Date(right.lastSignInAt || 0).getTime() - new Date(left.lastSignInAt || 0).getTime();
+      if (customerSort === 'last_backup') return new Date(right.lastSuccessfulBackupAt || 0).getTime() - new Date(left.lastSuccessfulBackupAt || 0).getTime();
+      return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime();
+    });
+  }, [data.customers, customerSearch, customerFilters, customerSort]);
+
+  function selectAdminTab(tab) {
+    setActiveTab(tab);
+    setSelectedCustomerId('');
+    setAdminMenuOpen(false);
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+  }
+
+  function openCustomer(customerId) {
+    setSelectedCustomerId(customerId);
+    setAdminMenuOpen(false);
+    setNotice('');
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+  }
+
+  function returnToCustomers() {
+    setSelectedCustomerId('');
+    setActiveTab('customers');
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+  }
+
+  const overviewStat = useMemo(() => {
+    if (!selectedOverviewStat) return null;
+    const customers = data.customers || [];
+    const stripeStatus = (customer) => String(customer.subscription?.status || '').toLowerCase();
+    const definitions = {
+      total_accounts: { title: 'Total accounts', rows: customers, kind: 'customers' },
+      active_accounts: { title: 'Active accounts', rows: customers.filter((customer) => String(customer.accountStatus || '').toLowerCase() === 'active'), kind: 'customers' },
+      active_trials: { title: 'Active trials', rows: customers.filter((customer) => ['trial_active', 'trialing'].includes(String(customer.subscription?.status || customer.planStatus || '').toLowerCase())), kind: 'customers' },
+      pending_signups: { title: 'Pending signups', rows: customers.filter((customer) => ['trial_pending', 'signup_pending'].includes(String(customer.planStatus || '').toLowerCase()) || !customer.onboardingCompletedAt), kind: 'customers' },
+      expired_trials: { title: 'Expired trials', rows: customers.filter((customer) => ['trial_expired', 'expired'].includes(String(customer.planStatus || customer.subscription?.status || '').toLowerCase())), kind: 'customers' },
+      published_plans: { title: 'Published plans', rows: activePublishedPlans, kind: 'plans' },
+      paid_subscriptions: { title: 'Paid subscriptions', rows: customers.filter((customer) => customer.subscription?.provider === 'stripe' && ['active', 'trialing'].includes(stripeStatus(customer))), kind: 'customers' },
+      payment_problems: { title: 'Payment problems', rows: customers.filter((customer) => ['past_due', 'unpaid', 'incomplete'].includes(stripeStatus(customer))), kind: 'customers' },
+      sync_issues: { title: 'Sync issues', rows: customers.filter((customer) => ['warning', 'error', 'failed'].includes(String(customer.syncDiagnostics?.latestEvent?.status || '').toLowerCase()) || String(customer.syncDiagnostics?.latestEvent?.event_type || '').includes('conflict')), kind: 'customers' },
+      admin_actions: { title: 'Recent Admin actions', rows: data.adminAuditEvents || [], kind: 'audit' }
+    };
+    return definitions[selectedOverviewStat] || null;
+  }, [selectedOverviewStat, data.customers, data.adminAuditEvents, activePublishedPlans]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -424,39 +473,67 @@ export default function AdminApp({ version }) {
     );
   }
 
+  if (selectedCustomerId) {
+    return (
+      <main className="admin-shell admin-customer-standalone-shell">
+        <AdminCustomerDetail
+          customerId={selectedCustomerId}
+          onBack={returnToCustomers}
+          onChanged={loadData}
+          onSessionExpired={(message) => { setAuth({ checking: false, authenticated: false, message: message || 'Admin sign-in is required.' }); setSelectedCustomerId(''); }}
+          setGlobalNotice={setNotice}
+        />
+        <footer className="admin-footer">{version} · customer administration</footer>
+      </main>
+    );
+  }
+
   return (
     <main className="admin-shell">
-      <header className="admin-header">
-        <div className="admin-header-brand"><img className="admin-header-brand-image" src="/images/password-encrypt-brand.png" alt="" /><div><p className="eyebrow">Password-Encrypt</p><h1>Admin</h1><span>Single-site SaaS administration</span></div></div>
-        <div className="admin-header-actions"><button type="button" className="secondary-button" onClick={loadData} disabled={busy}><RefreshCw size={17} className={busy ? 'spin-icon' : ''} /> Refresh</button><button type="button" className="secondary-button" onClick={logout}><LogOut size={17} /> Logout</button></div>
+      <header className={`admin-header ${adminMenuOpen ? 'menu-open' : ''}`}>
+        <div className="admin-header-topline">
+          <div className="admin-header-brand"><img className="admin-header-brand-image" src="/images/password-encrypt-brand.png" alt="" /><div><p className="eyebrow">Password-Encrypt</p><h1>Admin</h1><span>Single-site SaaS administration</span></div></div>
+          <div className="admin-header-actions">
+            <button type="button" className={`secondary-button admin-menu-toggle ${adminMenuOpen ? 'active' : ''}`} onClick={() => setAdminMenuOpen((current) => !current)} aria-expanded={adminMenuOpen}><Menu size={18} /> Admin menu <ChevronDown size={17} /></button>
+            <button type="button" className="secondary-button" onClick={loadData} disabled={busy}><RefreshCw size={17} className={busy ? 'spin-icon' : ''} /> Refresh</button>
+            <button type="button" className="secondary-button" onClick={logout}><LogOut size={17} /> Logout</button>
+          </div>
+        </div>
+        {adminMenuOpen && <nav className="admin-tabs admin-header-menu">
+          <button type="button" className={activeTab === 'overview' ? 'active' : ''} onClick={() => selectAdminTab('overview')}>Overview</button>
+          <button type="button" className={activeTab === 'plans' ? 'active' : ''} onClick={() => selectAdminTab('plans')}>Subscription Plans</button>
+          <button type="button" className={activeTab === 'customers' ? 'active' : ''} onClick={() => selectAdminTab('customers')}>Customers</button>
+          <button type="button" className={activeTab === 'billing' ? 'active' : ''} onClick={() => selectAdminTab('billing')}>Billing Events</button>
+          <button type="button" className={activeTab === 'sync' ? 'active' : ''} onClick={() => selectAdminTab('sync')}>Sync Health</button>
+          <button type="button" className={activeTab === 'emails' ? 'active' : ''} onClick={() => selectAdminTab('emails')}>Automated Emails</button>
+          <button type="button" className={activeTab === 'push' ? 'active' : ''} onClick={() => selectAdminTab('push')}>Push Notifications</button>
+          <button type="button" className={activeTab === 'health' ? 'active' : ''} onClick={() => selectAdminTab('health')}>Health</button>
+          <button type="button" className={activeTab === 'audit' ? 'active' : ''} onClick={() => selectAdminTab('audit')}>Admin Audit</button>
+        </nav>}
       </header>
-
-      <nav className="admin-tabs">
-        <button type="button" className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>Overview</button>
-        <button type="button" className={activeTab === 'plans' ? 'active' : ''} onClick={() => setActiveTab('plans')}>Subscription Plans</button>
-        <button type="button" className={activeTab === 'customers' ? 'active' : ''} onClick={() => setActiveTab('customers')}>Customers</button>
-        <button type="button" className={activeTab === 'billing' ? 'active' : ''} onClick={() => setActiveTab('billing')}>Billing Events</button>
-        <button type="button" className={activeTab === 'sync' ? 'active' : ''} onClick={() => setActiveTab('sync')}>Sync Health</button>
-        <button type="button" className={activeTab === 'emails' ? 'active' : ''} onClick={() => setActiveTab('emails')}>Automated Emails</button>
-        <button type="button" className={activeTab === 'push' ? 'active' : ''} onClick={() => setActiveTab('push')}>Push Notifications</button>
-        <button type="button" className={activeTab === 'health' ? 'active' : ''} onClick={() => setActiveTab('health')}>Health</button>
-        <button type="button" className={activeTab === 'audit' ? 'active' : ''} onClick={() => setActiveTab('audit')}>Admin Audit</button>
-      </nav>
 
       {notice && <div className="admin-notice">{notice}</div>}
 
       {activeTab === 'overview' && (
         <section className="admin-content">
           <div className="admin-stat-grid">
-            <article><UsersRound /><strong>{data.summary?.tenants || 0}</strong><span>Total accounts</span></article>
-            <article><UserRoundCheck /><strong>{data.summary?.activeAccounts || 0}</strong><span>Active accounts</span></article>
-            <article><ShieldCheck /><strong>{data.summary?.trials || 0}</strong><span>Active trials</span></article><article><CalendarClock /><strong>{data.summary?.pendingSignups || 0}</strong><span>Pending signups</span></article><article><AlertTriangle /><strong>{data.summary?.expiredTrials || 0}</strong><span>Expired trials</span></article>
-            <article><BadgePoundSterling /><strong>{data.summary?.publishedPlans || 0}</strong><span>Published plans</span></article>
-            <article><CreditCard /><strong>{data.summary?.paidSubscriptions || 0}</strong><span>Paid subscriptions</span></article>
-            <article><AlertTriangle /><strong>{data.summary?.paymentProblems || 0}</strong><span>Payment problems</span></article>
-            <article><AlertTriangle /><strong>{data.summary?.syncIssues || 0}</strong><span>Sync issues</span></article>
-            <article><FileText /><strong>{data.summary?.adminActions || 0}</strong><span>Recent Admin actions</span></article>
+            <button type="button" className={`admin-stat-card ${selectedOverviewStat === 'total_accounts' ? 'active' : ''}`} onClick={() => setSelectedOverviewStat('total_accounts')}><UsersRound /><strong>{data.summary?.tenants || 0}</strong><span>Total accounts</span><small>View accounts</small></button>
+            <button type="button" className={`admin-stat-card ${selectedOverviewStat === 'active_accounts' ? 'active' : ''}`} onClick={() => setSelectedOverviewStat('active_accounts')}><UserRoundCheck /><strong>{data.summary?.activeAccounts || 0}</strong><span>Active accounts</span><small>View active accounts</small></button>
+            <button type="button" className={`admin-stat-card ${selectedOverviewStat === 'active_trials' ? 'active' : ''}`} onClick={() => setSelectedOverviewStat('active_trials')}><ShieldCheck /><strong>{data.summary?.trials || 0}</strong><span>Active trials</span><small>View trial accounts</small></button>
+            <button type="button" className={`admin-stat-card ${selectedOverviewStat === 'pending_signups' ? 'active' : ''}`} onClick={() => setSelectedOverviewStat('pending_signups')}><CalendarClock /><strong>{data.summary?.pendingSignups || 0}</strong><span>Pending signups</span><small>View pending users</small></button>
+            <button type="button" className={`admin-stat-card ${selectedOverviewStat === 'expired_trials' ? 'active' : ''}`} onClick={() => setSelectedOverviewStat('expired_trials')}><AlertTriangle /><strong>{data.summary?.expiredTrials || 0}</strong><span>Expired trials</span><small>View expired trials</small></button>
+            <button type="button" className={`admin-stat-card ${selectedOverviewStat === 'published_plans' ? 'active' : ''}`} onClick={() => setSelectedOverviewStat('published_plans')}><BadgePoundSterling /><strong>{data.summary?.publishedPlans || 0}</strong><span>Published plans</span><small>View plans</small></button>
+            <button type="button" className={`admin-stat-card ${selectedOverviewStat === 'paid_subscriptions' ? 'active' : ''}`} onClick={() => setSelectedOverviewStat('paid_subscriptions')}><CreditCard /><strong>{data.summary?.paidSubscriptions || 0}</strong><span>Paid subscriptions</span><small>View subscribers</small></button>
+            <button type="button" className={`admin-stat-card ${selectedOverviewStat === 'payment_problems' ? 'active' : ''}`} onClick={() => setSelectedOverviewStat('payment_problems')}><AlertTriangle /><strong>{data.summary?.paymentProblems || 0}</strong><span>Payment problems</span><small>View accounts</small></button>
+            <button type="button" className={`admin-stat-card ${selectedOverviewStat === 'sync_issues' ? 'active' : ''}`} onClick={() => setSelectedOverviewStat('sync_issues')}><AlertTriangle /><strong>{data.summary?.syncIssues || 0}</strong><span>Sync issues</span><small>View affected accounts</small></button>
+            <button type="button" className={`admin-stat-card ${selectedOverviewStat === 'admin_actions' ? 'active' : ''}`} onClick={() => setSelectedOverviewStat('admin_actions')}><FileText /><strong>{data.summary?.adminActions || 0}</strong><span>Recent Admin actions</span><small>View actions</small></button>
           </div>
+          {overviewStat && <section className="admin-panel admin-overview-stat-detail">
+            <div className="admin-panel-heading"><div><p className="eyebrow">Overview detail</p><h2>{overviewStat.title}</h2></div><span>{overviewStat.rows.length} record(s)</span></div>
+            {overviewStat.kind === 'customers' && <div className="admin-overview-detail-list">{overviewStat.rows.slice(0, 50).map((customer) => { const owner = customer.primaryUser || customer.users?.[0] || {}; return <button type="button" key={`overview-${selectedOverviewStat}-${customer.id}`} onClick={() => openCustomer(customer.id)}><span><strong>{customer.accountName || 'Customer account'}</strong><small>{owner.displayName || 'Owner'} · {owner.email || owner.emailMasked || 'No email'}</small></span><span><strong>{customer.planName || planDisplayName(customer.planCode)}</strong><small>Created {dateLabel(customer.createdAt, true)}</small></span><ChevronRight size={19} /></button>; })}{!overviewStat.rows.length && <div className="admin-empty">No records currently match this stat.</div>}</div>}
+            {overviewStat.kind === 'plans' && <div className="admin-overview-detail-list">{overviewStat.rows.map((plan) => <button type="button" key={`overview-plan-${plan.code}`} onClick={() => { selectAdminTab('plans'); editPlan(plan); }}><span><strong>{plan.display_name}</strong><small>{plan.description || plan.code}</small></span><span><strong>{money(plan.monthly_price_minor)}</strong><small>Monthly</small></span><ChevronRight size={19} /></button>)}</div>}
+            {overviewStat.kind === 'audit' && <div className="admin-overview-detail-list">{overviewStat.rows.slice(0, 50).map((entry) => <button type="button" key={`overview-audit-${entry.id}`} onClick={() => entry.tenant_id ? openCustomer(entry.tenant_id) : selectAdminTab('audit')}><span><strong>{planStatusDisplayName(entry.action)}</strong><small>{entry.accountName || entry.tenant_id || 'Platform Admin'} · {adminAuditSummary(entry)}</small></span><span><strong>{dateLabel(entry.created_at, true)}</strong><small>{entry.tenant_id ? 'Open customer' : 'Platform action'}</small></span><ChevronRight size={19} /></button>)}</div>}
+          </section>}
         </section>
       )}
 
@@ -488,32 +565,25 @@ export default function AdminApp({ version }) {
         </section>
       )}
 
-      {activeTab === 'customers' && (selectedCustomerId ? (
-        <AdminCustomerDetail
-          customerId={selectedCustomerId}
-          onBack={() => setSelectedCustomerId('')}
-          onChanged={loadData}
-          onSessionExpired={(message) => { setAuth({ checking: false, authenticated: false, message: message || 'Admin sign-in is required.' }); setSelectedCustomerId(''); }}
-          setGlobalNotice={setNotice}
-        />
-      ) : (
+      {activeTab === 'customers' && (
         <section className="admin-content">
           <section className="admin-panel">
             <div className="admin-panel-heading"><div><p className="eyebrow">Accounts</p><h2>Customers</h2></div><span>{filteredCustomers.length} of {data.customers?.length || 0} accounts</span></div>
             <div className="admin-customer-filters">
               <label className="admin-customer-search"><Search size={18} /><input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Search name, email, phone or account ID" /></label>
+              <CustomSelect className="admin-custom-select" value={customerSort} ariaLabel="Sort customers" options={[{ value: 'newest', label: 'Newest first' }, { value: 'oldest', label: 'Oldest first' }, { value: 'name_asc', label: 'Name A–Z' }, { value: 'name_desc', label: 'Name Z–A' }, { value: 'last_signin', label: 'Most recent sign-in' }, { value: 'last_backup', label: 'Most recent backup' }]} onChange={setCustomerSort} />
               <CustomSelect className="admin-custom-select" value={customerFilters.plan} ariaLabel="Filter customers by plan" options={customerPlanOptions} onChange={(value) => setCustomerFilters((current) => ({ ...current, plan: value }))} />
               <CustomSelect className="admin-custom-select" value={customerFilters.trial} ariaLabel="Filter customers by trial status" options={[{ value: 'all', label: 'All trial statuses' }, { value: 'active', label: 'Active trial' }, { value: 'pending', label: 'Trial pending' }, { value: 'expired', label: 'Trial expired' }, { value: 'none', label: 'No trial' }]} onChange={(value) => setCustomerFilters((current) => ({ ...current, trial: value }))} />
               <CustomSelect className="admin-custom-select" value={customerFilters.payment} ariaLabel="Filter customers by payment status" options={[{ value: 'all', label: 'All payment statuses' }, { value: 'paid', label: 'Stripe active' }, { value: 'attention', label: 'Payment attention' }, { value: 'cancelling', label: 'Cancellation scheduled' }, { value: 'cancelled', label: 'Stripe cancelled' }, { value: 'not_stripe', label: 'No Stripe subscription' }]} onChange={(value) => setCustomerFilters((current) => ({ ...current, payment: value }))} />
               <CustomSelect className="admin-custom-select" value={customerFilters.account} ariaLabel="Filter customers by account status" options={[{ value: 'all', label: 'All account statuses' }, { value: 'active', label: 'Active' }, { value: 'pending_verification', label: 'Pending verification' }, { value: 'suspended', label: 'Suspended' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'deleted', label: 'Deleted' }, { value: 'deletion', label: 'Deletion requested' }]} onChange={(value) => setCustomerFilters((current) => ({ ...current, account: value }))} />
-              <button type="button" className="secondary-button" onClick={() => { setCustomerSearch(''); setCustomerFilters({ plan: 'all', trial: 'all', payment: 'all', account: 'all' }); }}>Clear filters</button>
+              <button type="button" className="secondary-button" onClick={() => { setCustomerSearch(''); setCustomerFilters({ plan: 'all', trial: 'all', payment: 'all', account: 'all' }); setCustomerSort('newest'); }}>Clear filters</button>
             </div>
             <div className="admin-customer-directory">
               {filteredCustomers.map((customer) => {
                 const owner = customer.primaryUser || customer.users?.[0] || {};
                 const paymentStatus = ['past_due', 'unpaid', 'incomplete'].includes(String(customer.subscription?.status || '').toLowerCase()) ? 'Payment attention' : customer.subscription?.provider === 'stripe' ? subscriptionLifecycleLabel(customer) : 'No Stripe subscription';
                 return (
-                  <button type="button" className="admin-customer-directory-card" key={customer.id} onClick={() => setSelectedCustomerId(customer.id)}>
+                  <button type="button" className="admin-customer-directory-card" key={customer.id} onClick={() => openCustomer(customer.id)}>
                     <span className="admin-customer-main">
                       <strong>{customer.accountName}</strong>
                       <span>{owner.displayName || 'Owner'} · {owner.email || owner.emailMasked || 'No email'} · {owner.phone || owner.phoneMasked || 'No mobile'}</span>
@@ -534,7 +604,7 @@ export default function AdminApp({ version }) {
             </div>
           </section>
         </section>
-      ))}
+      )}
 
 
       {activeTab === 'billing' && (
@@ -584,7 +654,7 @@ export default function AdminApp({ version }) {
         <AdminAutomatedEmails
           onSessionExpired={(message) => { setAuth({ checking: false, authenticated: false, message: message || 'Admin sign-in is required.' }); setSelectedCustomerId(''); }}
           setGlobalNotice={setNotice}
-          onOpenCustomer={(tenantId) => { setSelectedCustomerId(tenantId); setActiveTab('customers'); }}
+          onOpenCustomer={(tenantId) => openCustomer(tenantId)}
         />
       )}
 
@@ -614,7 +684,7 @@ export default function AdminApp({ version }) {
                 <article key={entry.id}>
                   <FileText size={18} />
                   <div><strong>{planStatusDisplayName(entry.action)}</strong><span>{entry.accountName || entry.tenant_id || 'Platform Admin'} · {adminAuditSummary(entry)}</span><small>{dateLabel(entry.created_at, true)}{entry.tenant_id ? ` · ${entry.tenant_id}` : ''}</small></div>
-                  {entry.tenant_id && <button type="button" className="admin-audit-open-customer" onClick={() => { setSelectedCustomerId(entry.tenant_id); setActiveTab('customers'); }} aria-label={`Open ${entry.accountName || 'customer'} details`}><ChevronRight size={18} /></button>}
+                  {entry.tenant_id && <button type="button" className="admin-audit-open-customer" onClick={() => openCustomer(entry.tenant_id)} aria-label={`Open ${entry.accountName || 'customer'} details`}><ChevronRight size={18} /></button>}
                 </article>
               ))}
               {!data.adminAuditEvents?.length && <div className="admin-empty">No Admin actions have been recorded yet.</div>}

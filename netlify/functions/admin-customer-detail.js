@@ -192,7 +192,7 @@ async function loadCustomerDetail(tenantId) {
   const tenant = tenantRows?.[0];
   if (!tenant?.id) return null;
 
-  const [users, subscriptions, plans, billingEvents, syncEvents, snapshots, sessions, devices, otpChallenges, deletionRequests, auditRows, notes, emailLog, customerEmailLog] = await Promise.all([
+  const [users, subscriptions, plans, billingEvents, syncEvents, snapshots, sessions, devices, otpChallenges, deletionRequests, auditRows, notes, emailLog, customerEmailLog, documentBlobs] = await Promise.all([
     safeSelect('users', `select=id,tenant_id,email,phone_e164,display_name,role,status,email_verified,phone_verified,otp_test_last_verified_at,otp_test_status,last_login_at,account_recovery_last_verified_at,onboarding_status,onboarding_completed_at,welcome_email_sent_at,created_at,updated_at&tenant_id=${eq(tenantId)}&order=created_at.asc&limit=50`),
     safeSelect('tenant_subscriptions', `select=*&tenant_id=${eq(tenantId)}&order=updated_at.desc&limit=5`),
     safeSelect('subscription_plans', 'select=*&order=display_order.asc&limit=250'),
@@ -206,7 +206,8 @@ async function loadCustomerDetail(tenantId) {
     safeSelect('audit_log', `select=id,tenant_id,user_id,action,metadata,created_at&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=1000`),
     safeSelect('admin_customer_notes', `select=id,tenant_id,note,created_by,created_at,updated_at&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=100`),
     safeSelect('admin_email_log', `select=id,tenant_id,user_id,email_type,recipient_masked,provider,provider_reference,status,error_message,metadata,created_at&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=100`),
-    safeSelect('customer_email_log', `select=id,tenant_id,user_id,email_type,idempotency_key,recipient_masked,subject,provider,provider_reference,status,attempts,error_message,last_attempt_at,sent_at,metadata,created_at,updated_at&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=200`)
+    safeSelect('customer_email_log', `select=id,tenant_id,user_id,email_type,idempotency_key,recipient_masked,subject,provider,provider_reference,status,attempts,error_message,last_attempt_at,sent_at,metadata,created_at,updated_at&tenant_id=${eq(tenantId)}&order=created_at.desc&limit=200`),
+    safeSelect('document_blobs', `select=id,blob_kind,file_size,storage_bytes,created_at,updated_at&tenant_id=${eq(tenantId)}&limit=5000`)
   ]);
 
   const subscription = subscriptions?.[0] || null;
@@ -223,6 +224,9 @@ async function loadCustomerDetail(tenantId) {
   const verifiedDevices = devices.filter((device) => !device.revoked_at);
   const lastVerifiedDevice = [...verifiedDevices].sort((a, b) => dateValue(b.last_verified_at) - dateValue(a.last_verified_at))[0] || null;
   const activeSessions = sessions.filter((session) => String(session.status || '').toLowerCase() === 'active' && dateValue(session.expires_at) > Date.now());
+  const storedDocumentCount = (documentBlobs || []).filter((entry) => String(entry.blob_kind || 'document') !== 'picture').length;
+  const storedPictureCount = (documentBlobs || []).filter((entry) => String(entry.blob_kind || 'document') === 'picture').length;
+  const storedFileBytes = (documentBlobs || []).reduce((total, entry) => total + Math.max(0, Number(entry.storage_bytes || entry.file_size || 0)), 0);
   const emailOptions = adminEmailTypesForCustomer({ user: primaryUser, tenant, subscription, deletion });
   const fullTimeline = buildTimeline({ tenant, users, subscription, billingEvents, syncEvents, snapshots, sessions, otpChallenges, deletionRequests, auditRows, notes, emailLog, customerEmailLog });
   const timeline = fullTimeline.slice(0, 400);
@@ -261,6 +265,12 @@ async function loadCustomerDetail(tenantId) {
       lastSignInAt,
       lastSuccessfulBackupAt: lastSuccessfulBackup?.created_at || null,
       lastSuccessfulBackupItems: Number(lastSuccessfulBackup?.item_count || 0),
+      lastSuccessfulBackupClientUpdatedAt: lastSuccessfulBackup?.client_updated_at || null,
+      lastSuccessfulBackupDeviceType: lastSuccessfulBackup?.device_type || '',
+      storedDocumentCount,
+      storedPictureCount,
+      storedFileBytes,
+      backupItemCountIncludesFileEntries: true,
       latestSyncStatus: syncEvents?.[0]?.status || (lastSuccessfulBackup ? 'success' : 'not_started'),
       latestSyncMessage: syncEvents?.[0]?.message || '',
       deletionStatus: deletion?.status || tenant.deletion_status || 'none'
