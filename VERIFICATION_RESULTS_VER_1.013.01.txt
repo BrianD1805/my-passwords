@@ -1,0 +1,14 @@
+Password-Encrypt Ver-1.013.01 verification results
+
+PASS  Security static checks: 13/13
+PASS  Reliability static checks: 20/20
+PASS  Legal/commercial readiness checks: 35/35
+PASS  Landing/plan UX checks: 36/36
+PASS  Mobile restoration checks: 6/6
+PASS  Emergency Access checks: 75/75
+PASS  Onboarding checks: 63/63
+PASS  Push notification checks: 32/32
+PASS  Ver-1.013.01 Firefox onboarding recovery checks: 14/14
+PASS  Netlify function JavaScript syntax
+
+Production npm build was not run in the packaging environment because node_modules is intentionally excluded and the package registry was unavailable. Run npm run build locally before deployment.

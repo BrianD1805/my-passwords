@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.013';
+const VERSION = 'Password-Encrypt Ver-1.013.01';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -129,14 +129,53 @@ if (typeof window !== 'undefined') {
   });
 }
 
-function readPendingOnboardingAccount() {
+const ONBOARDING_RECOVERY_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+
+function readFreshOnboardingRecord(key, timestampFields = ['updatedAt', 'createdAt']) {
   if (typeof window === 'undefined') return null;
-  try {
-    const parsed = JSON.parse(window.sessionStorage.getItem(PENDING_ONBOARDING_ACCOUNT_KEY) || 'null');
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
+  const candidates = [];
+  for (const storageName of ['sessionStorage', 'localStorage']) {
+    try {
+      const storage = window[storageName];
+      const parsed = JSON.parse(storage.getItem(key) || 'null');
+      if (!parsed || typeof parsed !== 'object') continue;
+      const timestamp = timestampFields.map((field) => parsed[field]).find(Boolean) || '';
+      const timestampMs = timestamp ? new Date(timestamp).getTime() : 0;
+      if (timestampMs && Date.now() - timestampMs > ONBOARDING_RECOVERY_MAX_AGE_MS) {
+        storage.removeItem(key);
+        continue;
+      }
+      candidates.push(parsed);
+    } catch {
+      // Restricted browser storage must never stop onboarding.
+    }
   }
+  if (!candidates.length) return null;
+  return candidates.sort((a, b) => {
+    const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
+    const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+    return bTime - aTime;
+  })[0];
+}
+
+function writeOnboardingRecoveryRecord(key, value) {
+  if (typeof window === 'undefined') return;
+  const encoded = JSON.stringify(value);
+  for (const storageName of ['sessionStorage', 'localStorage']) {
+    try { window[storageName].setItem(key, encoded); }
+    catch { /* Continue in-memory if this browser blocks a storage area. */ }
+  }
+}
+
+function clearOnboardingRecoveryRecord(key) {
+  if (typeof window === 'undefined') return;
+  for (const storageName of ['sessionStorage', 'localStorage']) {
+    try { window[storageName].removeItem(key); } catch {}
+  }
+}
+
+function readPendingOnboardingAccount() {
+  return readFreshOnboardingRecord(PENDING_ONBOARDING_ACCOUNT_KEY);
 }
 
 function savePendingOnboardingAccount(account = {}) {
@@ -144,52 +183,33 @@ function savePendingOnboardingAccount(account = {}) {
   const tenantId = String(account.tenantId || '').trim();
   const userId = String(account.userId || '').trim();
   if (!tenantId || !userId) return;
-  try {
-    window.sessionStorage.setItem(PENDING_ONBOARDING_ACCOUNT_KEY, JSON.stringify({
-      tenantId,
-      userId,
-      email: String(account.email || '').trim().toLowerCase(),
-      accountName: String(account.accountName || account.tenantName || '').trim(),
-      phoneE164: String(account.phoneE164 || '').trim(),
-      createdAt: new Date().toISOString()
-    }));
-  } catch {
-    // Onboarding still remains protected by the live signed session check.
-  }
+  const now = new Date().toISOString();
+  writeOnboardingRecoveryRecord(PENDING_ONBOARDING_ACCOUNT_KEY, {
+    tenantId,
+    userId,
+    email: String(account.email || '').trim().toLowerCase(),
+    accountName: String(account.accountName || account.tenantName || '').trim(),
+    phoneE164: String(account.phoneE164 || '').trim(),
+    createdAt: String(account.createdAt || now),
+    updatedAt: now
+  });
 }
 
 function clearPendingOnboardingAccount() {
-  if (typeof window === 'undefined') return;
-  try { window.sessionStorage.removeItem(PENDING_ONBOARDING_ACCOUNT_KEY); } catch {}
+  clearOnboardingRecoveryRecord(PENDING_ONBOARDING_ACCOUNT_KEY);
 }
 
 function readOnboardingFlowState() {
-  if (typeof window === 'undefined') return null;
-  try {
-    const parsed = JSON.parse(window.sessionStorage.getItem(ONBOARDING_FLOW_STATE_KEY) || 'null');
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (parsed.updatedAt && Date.now() - new Date(parsed.updatedAt).getTime() > 2 * 60 * 60 * 1000) {
-      window.sessionStorage.removeItem(ONBOARDING_FLOW_STATE_KEY);
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
+  return readFreshOnboardingRecord(ONBOARDING_FLOW_STATE_KEY, ['updatedAt']);
 }
 
 function saveOnboardingFlowState(state = {}) {
   if (typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.setItem(ONBOARDING_FLOW_STATE_KEY, JSON.stringify({ ...state, updatedAt: new Date().toISOString() }));
-  } catch {
-    // Onboarding can still continue in-memory if session storage is unavailable.
-  }
+  writeOnboardingRecoveryRecord(ONBOARDING_FLOW_STATE_KEY, { ...state, updatedAt: new Date().toISOString() });
 }
 
 function clearOnboardingFlowState() {
-  if (typeof window === 'undefined') return;
-  try { window.sessionStorage.removeItem(ONBOARDING_FLOW_STATE_KEY); } catch {}
+  clearOnboardingRecoveryRecord(ONBOARDING_FLOW_STATE_KEY);
 }
 
 function storedPasswordEncryptIdentity() {
@@ -202,6 +222,21 @@ function storedPasswordEncryptIdentity() {
     } catch {}
   }
   return null;
+}
+
+function recoverablePendingOnboardingIdentity(value = {}) {
+  const account = value && typeof value === 'object' ? value : {};
+  const tenantId = String(account.tenantId || '').trim();
+  const userId = String(account.userId || '').trim();
+  const email = String(account.email || '').trim().toLowerCase();
+  if (!tenantId || !userId || !email || account.accountVerified === true) return false;
+  const accountStatus = String(account.accountStatus || '').trim().toLowerCase();
+  const planStatus = String(account.planStatus || '').trim().toLowerCase();
+  const onboardingStatus = String(account.onboardingStatus || '').trim().toLowerCase();
+  return accountStatus === 'pending_verification'
+    || planStatus === 'signup_pending'
+    || onboardingStatus.includes('verification_required')
+    || onboardingStatus.includes('new_account_verification');
 }
 
 async function clearPasswordEncryptCaches() {
@@ -2675,7 +2710,7 @@ function OnboardingResetModal({ state, onClose, onResume, onRetryInstall, onStar
           {state.hasPendingOnboarding && state.canResume && (
             <button type="button" className="onboarding-reset-option" onClick={onResume} disabled={state.busy}>
               <span className="onboarding-reset-option-icon"><ChevronRight size={19} /></span>
-              <span><strong>Continue previous onboarding</strong><small>Return to the last saved setup card.</small></span>
+              <span><strong>Continue setup</strong><small>Return to the saved verification stage without starting again.</small></span>
             </button>
           )}
           {state.hasLocalVault && (
@@ -4014,9 +4049,9 @@ function App() {
 
   useEffect(() => {
     if (!isCreateAccountPopupOpen) return;
-    // Persist only non-secret onboarding state so switching to Messages/Gmail or
-    // a browser refresh can resume the same verification challenge. OTP values,
-    // local test codes and master passwords are intentionally never persisted.
+    // Persist only non-secret onboarding state in both tab and short-lived local recovery storage so
+    // switching to Messages/Gmail, Firefox tab recreation or a browser refresh can resume the same
+    // verification challenge. OTP values, local test codes and master passwords are intentionally never persisted.
     saveOnboardingFlowState({
       active: true,
       flowVersion: ONBOARDING_FLOW_VERSION,
@@ -6580,7 +6615,9 @@ function App() {
     const pendingOnboarding = readPendingOnboardingAccount();
     const storedIdentity = storedPasswordEncryptIdentity();
     const localVaultPresent = Boolean(readStoredVault());
-    const canResume = Boolean(savedFlow?.active && Number(savedFlow.flowVersion || 0) === ONBOARDING_FLOW_VERSION && Number(savedFlow.step || 0) >= 1 && Number(savedFlow.step || 0) <= 9);
+    const savedFlowCanResume = Boolean(savedFlow?.active && Number(savedFlow.flowVersion || 0) === ONBOARDING_FLOW_VERSION && Number(savedFlow.step || 0) >= 1 && Number(savedFlow.step || 0) <= 9);
+    const identityCanResume = recoverablePendingOnboardingIdentity(storedIdentity);
+    const canResume = Boolean(savedFlowCanResume || identityCanResume);
     const previousSetupFound = Boolean(savedFlow?.active || pendingOnboarding || storedIdentity || localVaultPresent || customerSession.authenticated);
 
     if (previousSetupFound) {
@@ -6590,11 +6627,13 @@ function App() {
         canResume,
         hasLocalVault: localVaultPresent,
         hasStoredAccount: Boolean(storedIdentity),
-        hasPendingOnboarding: Boolean(pendingOnboarding || savedFlow?.active),
+        hasPendingOnboarding: Boolean(pendingOnboarding || savedFlow?.active || identityCanResume),
         busy: false,
         message: localVaultPresent
           ? 'This device already contains Password-Encrypt setup data. You can continue the previous setup or deliberately clear this device and start a new onboarding flow.'
-          : 'Password-Encrypt found an earlier account or onboarding session on this device. Choose whether to continue it or start fresh.'
+          : canResume
+            ? 'Password-Encrypt found an unfinished onboarding session on this device. Continue from the saved verification stage or start fresh.'
+            : 'Password-Encrypt found an earlier account or onboarding session on this device. Choose whether to continue it or start fresh.'
       });
       return;
     }
@@ -6603,8 +6642,62 @@ function App() {
   }
 
   function resumePreviousOnboarding() {
+    const savedFlow = readOnboardingFlowState();
+    const savedFlowCanResume = Boolean(savedFlow?.active && Number(savedFlow.flowVersion || 0) === ONBOARDING_FLOW_VERSION && Number(savedFlow.step || 0) >= 1 && Number(savedFlow.step || 0) <= 9);
     setOnboardingResetModal((current) => ({ ...current, visible: false }));
-    startCreateAccountFlow('', { resumeSavedFlow: true });
+    if (savedFlowCanResume) {
+      startCreateAccountFlow('', { resumeSavedFlow: true });
+      return;
+    }
+
+    const savedAccount = readSavedAccount();
+    if (!recoverablePendingOnboardingIdentity(savedAccount)) {
+      startCreateAccountFlow('');
+      return;
+    }
+
+    const phoneVerified = Boolean(savedAccount.phoneVerified || savedAccount.phone_verified);
+    onboardingSessionIsolationRef.current = true;
+    setOnboardingSecurityWarning('');
+    setSignupLegalModal({ visible: false, page: 'terms' });
+    setLandingAccountDraft({
+      displayName: String(savedAccount.displayName || '').trim(),
+      email: String(savedAccount.email || '').trim().toLowerCase(),
+      phoneCountryCode: normaliseCountryCode(savedAccount.phoneCountryCode || '+254') || '+254',
+      phoneCountryIso: String(savedAccount.phoneCountryIso || getCountryByCode(savedAccount.phoneCountryCode || '+254').iso || 'ke').toLowerCase(),
+      phoneNumber: String(savedAccount.phoneNumber || '').trim(),
+      phoneE164: String(savedAccount.phoneE164 || buildPhoneE164(savedAccount.phoneCountryCode || '+254', savedAccount.phoneNumber || '')).trim(),
+      accountName: String(savedAccount.accountName || savedAccount.tenantName || 'My Private Vault').trim(),
+      planCode: String(savedAccount.planCode || publicPlans[0]?.code || DEFAULT_TRIAL_PLAN_CODE).trim().toLowerCase(),
+      planSelectionSource: 'default_trial',
+      legalAccepted: true
+    });
+    setLandingSignup({
+      status: phoneVerified ? 'mobile-verified' : 'ready-for-otp',
+      message: phoneVerified ? 'Mobile verified. Continue with email verification.' : 'Continue mobile verification to finish setting up this account.',
+      existingAccount: false,
+      tenantId: String(savedAccount.tenantId || '').trim(),
+      userId: String(savedAccount.userId || '').trim(),
+      planName: String(savedAccount.planName || planDisplayName(savedAccount.planCode || '') || '').trim(),
+      trialDays: Number(savedAccount.trialDays || 0),
+      trialStartedAt: String(savedAccount.trialStartedAt || ''),
+      trialEndsAt: String(savedAccount.trialEndsAt || ''),
+      welcomeEmailSent: false
+    });
+    setLandingOtp({
+      status: 'idle',
+      channel: phoneVerified ? 'email' : 'sms',
+      challengeId: '',
+      input: '',
+      message: phoneVerified ? 'Mobile verified. Send a fresh email code to continue.' : 'Send a fresh SMS code to continue.',
+      testCode: '',
+      expiresAt: '',
+      smsVerified: phoneVerified,
+      emailVerified: false
+    });
+    savePendingOnboardingAccount(savedAccount);
+    setLandingOnboardingStep(phoneVerified ? 8 : 6);
+    setIsCreateAccountPopupOpen(true);
   }
 
   function retryPreviousInstall() {

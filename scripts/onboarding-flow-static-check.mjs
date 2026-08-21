@@ -22,7 +22,7 @@ function check(label, condition) {
   else { console.error(`FAIL  ${label}`); failures += 1; }
 }
 
-check('Ver-1.013 app/package/service-worker versions align', pkg.version === '1.13.0' && /Password-Encrypt Ver-1\.013/.test(main) && /my-passwords-v1\.013/.test(sw));
+check('Ver-1.013.01 app/package/service-worker versions align', pkg.version === '1.13.1' && /Password-Encrypt Ver-1\.013\.01/.test(main) && /my-passwords-v1\.013\.01/.test(sw));
 check('Onboarding has twelve explicit progress steps', /ONBOARDING_TOTAL_STEPS = 12/.test(main) && /Step 12 of \{ONBOARDING_TOTAL_STEPS\}/.test(main));
 check('Public signup uses a dedicated card screen rather than rendering the landing page behind it', /isPublicLandingRoute && isCreateAccountPopupOpen/.test(main) && /onboarding-card-screen/.test(main));
 check('Dedicated onboarding card is not marked as a dialog', !/onboarding-card-screen[^\n]{0,300}role="dialog"/.test(main));
@@ -56,9 +56,11 @@ check('Existing account discovered during signup remains routed to existing vaul
 check('Existing activated account uses email verification rather than creating a new vault', /existingAccount \|\| mobileAlreadyVerified/.test(main) && /setLandingOnboardingStep\(8\)/.test(main));
 check('Pending signup can be safely resumed rather than being misclassified as an activated existing account', /pendingSignup/.test(bootstrap) && /resumedPendingSignup: true/.test(bootstrap) && /existingAccount: false/.test(bootstrap));
 check('Changing a pending unverified mobile number resets mobile verification before another SMS', /phoneChanged \? false : Boolean\(existingUser\.phone_verified\)/.test(bootstrap));
-check('Onboarding state is kept in sessionStorage with an expiry', /ONBOARDING_FLOW_STATE_KEY/.test(main) && /window\.sessionStorage\.setItem\(ONBOARDING_FLOW_STATE_KEY/.test(main) && /2 \* 60 \* 60 \* 1000/.test(main));
+check('Onboarding state is mirrored to session and local recovery storage with an expiry', /ONBOARDING_FLOW_STATE_KEY/.test(main) && /\['sessionStorage', 'localStorage'\]/.test(main) && /writeOnboardingRecoveryRecord\(ONBOARDING_FLOW_STATE_KEY/.test(main) && /ONBOARDING_RECOVERY_MAX_AGE_MS = 2 \* 60 \* 60 \* 1000/.test(main));
 check('Onboarding recovery state deliberately excludes OTP input and master password', /OTP values,[\s\S]*master passwords are intentionally never persisted/.test(main) && /otp: \{[\s\S]*challengeId:[\s\S]*smsVerified:[\s\S]*emailVerified:/.test(main));
 check('Saved onboarding flow resumes only when its flow version is current', /initialOnboardingFlowRef = useRef\(readOnboardingFlowState\(\)\)/.test(main) && /ONBOARDING_FLOW_VERSION/.test(main) && /flowVersion/.test(main) && /initialOnboardingFlowRef\.current\?\.active/.test(main));
+check('Firefox-style tab recreation can recover onboarding from local storage', /readFreshOnboardingRecord/.test(main) && /window\[storageName\]\.setItem/.test(main) && /sessionStorage', 'localStorage/.test(main));
+check('Pending onboarding identity can recover when the flow checkpoint is missing', /recoverablePendingOnboardingIdentity/.test(main) && /Continue setup/.test(main) && /phoneVerified \? 8 : 6/.test(main));
 check('OTP code itself is cleared when restoring saved onboarding state', /input: '', testCode: ''/.test(main));
 check('SMS OTP field exposes the browser one-time-code autofill hint', /name="one-time-code"[\s\S]{0,250}autoComplete="one-time-code"|autoComplete="one-time-code"[\s\S]{0,250}name="one-time-code"/.test(main));
 check('Email OTP field also exposes one-time-code autofill', /name="email-one-time-code"/.test(main) && /autoComplete="one-time-code"/.test(main));
@@ -88,4 +90,4 @@ if (failures) {
   console.error(`\n${failures} onboarding static check(s) failed.`);
   process.exit(1);
 }
-console.log(`\nAll Ver-1.013 onboarding static checks passed.`);
+console.log(`\nAll Ver-1.013.01 onboarding static checks passed.`);
