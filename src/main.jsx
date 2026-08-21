@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.014';
+const VERSION = 'Password-Encrypt Ver-1.015';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -35,6 +35,8 @@ const FRESH_ONBOARDING_QUERY_KEY = 'freshOnboarding';
 const DEFAULT_TRIAL_PLAN_CODE = 'personal';
 const ONBOARDING_FLOW_VERSION = 2;
 const ONBOARDING_TOTAL_STEPS = 12;
+const ONBOARDING_NETWORK_TIMEOUT_MS = 20000;
+const CONTACT_VERIFICATION_REMINDER_KEY = 'password-encrypt-contact-verification-reminder-v1';
 const GUIDED_TOUR_VERSION = 1;
 const GUIDED_TOUR_LATER_DELAY_MS = 24 * 60 * 60 * 1000;
 const GUIDED_TOUR_FALLBACK_KEY = 'password-encrypt-guided-tour-v1';
@@ -86,8 +88,34 @@ function sanitiseOnboardingSignupState(value = {}) {
   const state = value && typeof value === 'object' ? value : {};
   const message = String(state.message || '').trim();
   const staleDefaultPlanError = /plan is not currently available for new accounts/i.test(message) && /launch plan/i.test(message);
-  if (!staleDefaultPlanError) return state;
-  return { ...state, status: 'idle', message: '' };
+  if (staleDefaultPlanError) return { ...state, status: 'idle', message: '' };
+
+  // A network request cannot survive a page reload. If onboarding was persisted
+  // while account preparation/SMS sending was in flight, restore it as a
+  // recoverable state instead of recreating a permanent "Sending..." spinner.
+  if (state.status === 'preparing') {
+    const accountPrepared = Boolean(state.tenantId && state.userId);
+    return {
+      ...state,
+      status: accountPrepared ? 'ready-for-otp' : 'error',
+      message: accountPrepared
+        ? 'The previous SMS attempt was interrupted. Retry SMS, or verify by email instead.'
+        : 'The previous account setup attempt was interrupted. Retry when your connection is ready.'
+    };
+  }
+  return state;
+}
+
+function sanitiseOnboardingOtpState(value = {}) {
+  const state = value && typeof value === 'object' ? value : {};
+  if (state.status !== 'sending') return state;
+  return {
+    ...state,
+    status: 'error',
+    challengeId: '',
+    input: '',
+    message: `The previous ${state.channel === 'email' ? 'email' : 'SMS'} send was interrupted. Retry, or choose another verification method.`
+  };
 }
 
 
@@ -2934,6 +2962,30 @@ function AccountRecoveryModal({ state, setState, onClose, onRequest, onVerify })
   );
 }
 
+function ContactVerificationReminderModal({ state, onLater, onVerify }) {
+  if (!state?.visible) return null;
+  const missingEmail = state.missingChannel === 'email';
+  return (
+    <div className="item-popup-layer contact-verification-reminder-layer" role="presentation">
+      <button type="button" className="item-popup-backdrop" onClick={onLater} aria-label="Verify contact details later" />
+      <section className="item-popup-card contact-verification-reminder-card" role="dialog" aria-modal="true" aria-labelledby="contact-verification-reminder-title">
+        <header className="item-popup-header">
+          <h2 id="contact-verification-reminder-title"><ShieldCheck size={21} /> Complete account verification</h2>
+          <button type="button" className="icon-button" onClick={onLater} aria-label="Close"><X size={18} /></button>
+        </header>
+        <div className="item-popup-body contact-verification-reminder-body">
+          <div className="onboarding-info-panel warning"><AlertTriangle size={19} /><span>Your account is active because one contact method is verified. Your {missingEmail ? 'email address' : 'mobile number'} still needs verification.</span></div>
+          <p>We will remind you again on a future sign-in until both your email address and mobile number are verified.</p>
+        </div>
+        <footer className="item-popup-footer contact-verification-reminder-footer">
+          <button type="button" className="secondary-button" onClick={onLater}>Do this later</button>
+          <button type="button" className="primary-button" onClick={() => onVerify(state.missingChannel)}>{missingEmail ? <Mail size={17} /> : <Phone size={17} />} Verify {missingEmail ? 'email' : 'mobile'} now</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function ExitAppConfirmationModal({ visible, onStay, onExit }) {
   if (!visible) return null;
   return (
@@ -3164,6 +3216,7 @@ function App() {
   const [isFolderListPopupOpen, setIsFolderListPopupOpen] = useState(false);
   const [showAllHomeFolders, setShowAllHomeFolders] = useState(false);
   const [homeFolderPrompt, setHomeFolderPrompt] = useState({ visible: false, folderName: '', busy: false });
+  const [contactVerificationReminder, setContactVerificationReminder] = useState({ visible: false, missingChannel: '' });
   const [guidedTourState, setGuidedTourState] = useState({ loaded: false, status: '', tourVersion: GUIDED_TOUR_VERSION, updatedAt: '', busy: false });
   const [guidedTourPromptOpen, setGuidedTourPromptOpen] = useState(false);
   const [guidedTour, setGuidedTour] = useState({ active: false, stepIndex: 0, targetFound: false, targetRect: null });
@@ -3178,6 +3231,8 @@ function App() {
   const onboardingOtpAutoVerifyRef = useRef('');
   const onboardingWebOtpAbortRef = useRef(null);
   const onboardingWebOtpCodeRef = useRef('');
+  const onboardingNetworkAbortRef = useRef(null);
+  const onboardingNetworkTimeoutRef = useRef(null);
   const pushActivationPromptDeferredThisDocumentRef = useRef(false);
   const [isOpenVaultChoicePopupOpen, setIsOpenVaultChoicePopupOpen] = useState(false);
   const [signupLegalModal, setSignupLegalModal] = useState({ visible: false, page: 'terms' });
@@ -3200,7 +3255,7 @@ function App() {
   const [onboardingVaultDraft, setOnboardingVaultDraft] = useState(() => { const saved = readSavedAccount(); return { email: saved.email || '', phoneCountryCode: saved.phoneCountryCode || '+254', phoneCountryIso: saved.phoneCountryIso || 'ke', phoneNumber: saved.phoneNumber || '' }; });
   const [onboardingSecretFieldsArmed, setOnboardingSecretFieldsArmed] = useState({ master: false, confirm: false });
   const [vaultOnboardingStep, setVaultOnboardingStep] = useState(10);
-  const [landingOtp, setLandingOtp] = useState(() => ({ status: 'idle', channel: 'sms', challengeId: '', message: '', expiresAt: '', smsVerified: false, emailVerified: false, ...(initialOnboardingFlowRef.current?.otp || {}), input: '', testCode: '' }));
+  const [landingOtp, setLandingOtp] = useState(() => ({ status: 'idle', channel: 'sms', challengeId: '', message: '', expiresAt: '', smsVerified: false, emailVerified: false, ...sanitiseOnboardingOtpState(initialOnboardingFlowRef.current?.otp || {}), input: '', testCode: '' }));
   const installPromptRef = useRef(null);
   const [installPromptReady, setInstallPromptReady] = useState(false);
   const [installStatus, setInstallStatus] = useState(() => isPasswordEncryptInstalled() ? 'installed' : 'waiting');
@@ -3429,7 +3484,7 @@ function App() {
 
   function openAccountSecurityAction(mode, details = {}) {
     const titles = {
-      'change-email': 'Change email address',
+      'change-email': details.verifyExisting ? 'Verify email address' : 'Change email address',
       'change-phone': details.verifyExisting ? 'Verify mobile number' : 'Change mobile number',
       'remove-device': 'Remove verified device?',
       'end-all-sessions': 'End all account sessions?',
@@ -4255,10 +4310,11 @@ function App() {
         message: landingOtp.message || '',
         expiresAt: landingOtp.expiresAt || '',
         smsVerified: Boolean(landingOtp.smsVerified),
-        emailVerified: Boolean(landingOtp.emailVerified)
+        emailVerified: Boolean(landingOtp.emailVerified),
+        smsDeferred: Boolean(landingOtp.smsDeferred)
       }
     });
-  }, [isCreateAccountPopupOpen, landingOnboardingStep, landingAccountDraft, landingSignup, landingOtp.status, landingOtp.channel, landingOtp.challengeId, landingOtp.message, landingOtp.expiresAt, landingOtp.smsVerified, landingOtp.emailVerified]);
+  }, [isCreateAccountPopupOpen, landingOnboardingStep, landingAccountDraft, landingSignup, landingOtp.status, landingOtp.channel, landingOtp.challengeId, landingOtp.message, landingOtp.expiresAt, landingOtp.smsVerified, landingOtp.emailVerified, landingOtp.smsDeferred]);
 
   useEffect(() => {
     if (!isCreateAccountPopupOpen || landingOnboardingStep !== 7 || landingOtp.channel !== 'sms' || !landingOtp.challengeId) return undefined;
@@ -4272,13 +4328,48 @@ function App() {
   useEffect(() => {
     if (!isCreateAccountPopupOpen || landingSignup.existingAccount) return;
     if (![8, 9].includes(Number(landingOnboardingStep))) return;
-    if (landingOtp.smsVerified || bootstrap.phoneVerified) return;
-    // Never restore or navigate a new signup into email verification until the
-    // server has confirmed the mobile OTP. A stale onboarding checkpoint must
-    // return to the SMS verification step instead of silently skipping it.
+    if (landingOtp.smsVerified || bootstrap.phoneVerified || landingOtp.smsDeferred) return;
+    // Ver-1.015 allows email-first completion only after the customer deliberately
+    // chooses to defer SMS. Old saved checkpoints that accidentally jumped ahead
+    // still return to the SMS stage instead of silently changing verification order.
     setLandingOnboardingStep(landingOtp.channel === 'sms' && landingOtp.challengeId ? 7 : 6);
-  }, [isCreateAccountPopupOpen, landingSignup.existingAccount, landingOnboardingStep, landingOtp.smsVerified, landingOtp.channel, landingOtp.challengeId, bootstrap.phoneVerified]);
+  }, [isCreateAccountPopupOpen, landingSignup.existingAccount, landingOnboardingStep, landingOtp.smsVerified, landingOtp.smsDeferred, landingOtp.channel, landingOtp.challengeId, bootstrap.phoneVerified]);
 
+
+  function contactVerificationReminderSessionKey(session = customerSession) {
+    const tenantId = String(session?.tenantId || '').trim();
+    const userId = String(session?.userId || '').trim();
+    return `${CONTACT_VERIFICATION_REMINDER_KEY}:${tenantId || 'tenant'}:${userId || 'user'}`;
+  }
+
+  function dismissContactVerificationReminder() {
+    try { sessionStorage.setItem(contactVerificationReminderSessionKey(), 'shown'); } catch { /* no-op */ }
+    setContactVerificationReminder({ visible: false, missingChannel: '' });
+  }
+
+  async function verifyMissingContactNow(channel) {
+    dismissContactVerificationReminder();
+    const details = await loadAccountSecurity({ silent: true });
+    if (channel === 'email') {
+      const email = details?.user?.email || bootstrap.email || '';
+      openAccountSecurityAction('change-email', { newEmail: email, verifyExisting: true });
+      return;
+    }
+    const countryCode = details?.user?.phoneCountryCode || bootstrap.phoneCountryCode || '+254';
+    const phoneNumber = details?.user?.phoneNumber || bootstrap.phoneNumber || '';
+    openAccountSecurityAction('change-phone', { phoneCountryCode: countryCode, phoneCountryIso: bootstrap.phoneCountryIso || getCountryByCode(countryCode).iso || 'ke', phoneNumber, verifyExisting: true });
+  }
+
+  useEffect(() => {
+    if (!isVaultRoute || locked || !customerSession.authenticated) return;
+    if (newCustomerOnboardingEntry || onboardingInstallEntry || showInstallOnboarding || onboardingPushGate || guidedTourPromptOpen || guidedTour.active) return;
+    const account = customerSession.account || {};
+    if (typeof account.emailVerified !== 'boolean' || typeof account.phoneVerified !== 'boolean') return;
+    const missingChannel = account.emailVerified === false ? 'email' : account.phoneVerified === false ? 'sms' : '';
+    if (!missingChannel) return;
+    try { if (sessionStorage.getItem(contactVerificationReminderSessionKey(customerSession)) === 'shown') return; } catch { /* continue */ }
+    setContactVerificationReminder({ visible: true, missingChannel });
+  }, [isVaultRoute, locked, customerSession.authenticated, customerSession.tenantId, customerSession.userId, customerSession.account, newCustomerOnboardingEntry, onboardingInstallEntry, showInstallOnboarding, onboardingPushGate, guidedTourPromptOpen, guidedTour.active]);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return undefined;
@@ -4399,6 +4490,8 @@ function App() {
                 trialEndsAt: result.account?.trialEndsAt || currentBootstrap.trialEndsAt || '',
                 trialDaysRemaining: result.account?.trialDaysRemaining ?? currentBootstrap.trialDaysRemaining ?? null,
                 onboardingCompletedAt: result.account?.onboardingCompletedAt || currentBootstrap.onboardingCompletedAt || '',
+                emailVerified: Boolean(result.account?.emailVerified),
+                phoneVerified: Boolean(result.account?.phoneVerified),
                 accountVerified: true,
                 otpStatus: 'Device verified'
               };
@@ -4407,7 +4500,7 @@ function App() {
             });
             if (result.entitlements) updateEntitlements(result.entitlements);
             const cloudAccess = result.cloudAccess !== false;
-            setCustomerSession({ checked: true, authenticated: true, cloudAccess, accessCode: result.accessCode || '', tenantId: result.tenantId || '', userId: result.userId || '', message: result.message || (cloudAccess ? 'This device is verified for secure backup and syncing.' : 'Cloud features are paused for this account.'), subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), session: result.session || null, deletion: result.deletion || null });
+            setCustomerSession({ checked: true, authenticated: true, cloudAccess, accessCode: result.accessCode || '', tenantId: result.tenantId || '', userId: result.userId || '', message: result.message || (cloudAccess ? 'This device is verified for secure backup and syncing.' : 'Cloud features are paused for this account.'), subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), session: result.session || null, deletion: result.deletion || null, account: result.account || null });
             setBilling((current) => ({ ...current, subscription: result.subscription || null, stripeConfigured: Boolean(result.stripeConfigured), planCode: result.subscription?.planCode || result.account?.planCode || current.planCode || 'personal' }));
             setAccountStatus({ state: cloudAccess ? 'ready' : 'access-paused', message: result.message || (cloudAccess ? 'Cloud backup and secure syncing are active on this device.' : 'Cloud backup and syncing are currently paused.') });
           } else {
@@ -4559,7 +4652,7 @@ function App() {
   }, [locked, isOnline, customerSession.authenticated]);
 
   useEffect(() => {
-    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || homeFolderPrompt.visible || guidedTourPromptOpen || isCreateAccountPopupOpen || onboardingResetModal.visible || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
+    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || homeFolderPrompt.visible || contactVerificationReminder.visible || guidedTourPromptOpen || isCreateAccountPopupOpen || onboardingResetModal.visible || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
     document.body.classList.toggle('app-popup-open', popupOpen);
     if (popupOpen) {
       window.requestAnimationFrame(() => {
@@ -4569,7 +4662,7 @@ function App() {
       });
     }
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, homeFolderPrompt.visible, guidedTourPromptOpen, isCreateAccountPopupOpen, onboardingResetModal.visible, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, homeFolderPrompt.visible, contactVerificationReminder.visible, guidedTourPromptOpen, isCreateAccountPopupOpen, onboardingResetModal.visible, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
 
   // Ver-1.006: Vault Status is the single repair entry point.
   // Routine sync problems no longer open an automatic delayed warning popup.
@@ -6546,6 +6639,7 @@ function App() {
     mobileHeaderMenuOpen
     || exitAppConfirmationOpen
     || accountSecurityModal.visible
+    || contactVerificationReminder.visible
     || accountRecoveryModal.visible
     || entitlementModal.visible
     || deviceVerificationModal.visible
@@ -6577,6 +6671,7 @@ function App() {
     mobileHeaderMenuOpen,
     exitAppConfirmationOpen,
     accountSecurityModalVisible: accountSecurityModal.visible,
+    contactVerificationReminderVisible: contactVerificationReminder.visible,
     accountRecoveryModalVisible: accountRecoveryModal.visible,
     entitlementModalVisible: entitlementModal.visible,
     deviceVerificationModalVisible: deviceVerificationModal.visible,
@@ -6610,6 +6705,7 @@ function App() {
     }
     if (state.exitAppConfirmationOpen) { backNavigationStateRef.current.exitAppConfirmationOpen = false; setExitAppConfirmationOpen(false); return true; }
     if (state.accountSecurityModalVisible) { backNavigationStateRef.current.accountSecurityModalVisible = false; closeAccountSecurityModal(); return true; }
+    if (state.contactVerificationReminderVisible) { backNavigationStateRef.current.contactVerificationReminderVisible = false; dismissContactVerificationReminder(); return true; }
     if (state.accountRecoveryModalVisible) { backNavigationStateRef.current.accountRecoveryModalVisible = false; setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false }); return true; }
     if (state.entitlementModalVisible) { backNavigationStateRef.current.entitlementModalVisible = false; setEntitlementModal({ visible: false, feature: '', title: '', message: '' }); return true; }
     if (state.deviceVerificationModalVisible) { backNavigationStateRef.current.deviceVerificationModalVisible = false; setDeviceVerificationModal({ visible: false, purpose: '' }); return true; }
@@ -6857,7 +6953,7 @@ function App() {
       setLandingOnboardingStep(Number(savedFlow.step));
       setLandingAccountDraft((current) => ({ ...current, ...(savedFlow.draft || {}) }));
       setLandingSignup((current) => ({ ...current, ...sanitiseOnboardingSignupState(savedFlow.signup || {}) }));
-      setLandingOtp((current) => ({ ...current, ...(savedFlow.otp || {}), input: '', testCode: '' }));
+      setLandingOtp((current) => ({ ...current, ...sanitiseOnboardingOtpState(savedFlow.otp || {}), input: '', testCode: '' }));
       setIsCreateAccountPopupOpen(true);
       return;
     }
@@ -6872,7 +6968,7 @@ function App() {
     const planCode = requestedPlanCode || publicPlans[0]?.code || DEFAULT_TRIAL_PLAN_CODE;
     setLandingOnboardingStep(1);
     setLandingSignup({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
-    setLandingOtp({ status: 'idle', channel: 'sms', challengeId: '', input: '', message: '', testCode: '', expiresAt: '', smsVerified: false, emailVerified: false });
+    setLandingOtp({ status: 'idle', channel: 'sms', challengeId: '', input: '', message: '', testCode: '', expiresAt: '', smsVerified: false, emailVerified: false, smsDeferred: false });
     setLandingAccountDraft({
       displayName: '',
       email: '',
@@ -6993,7 +7089,7 @@ function App() {
       const status = await statusResponse.json().catch(() => ({}));
       if (status?.csrfToken) sessionStorage.setItem('mp_customer_csrf', status.csrfToken);
       if (status?.authenticated) {
-        const ended = await postJson('/.netlify/functions/session-status', { action: 'logout' });
+        const ended = await postJson('/.netlify/functions/session-status', { action: 'logout' }, { signal });
         if (!ended.ok) throw new Error(ended.message || 'The previous account session could not be ended safely.');
       }
     } catch (error) {
@@ -7043,7 +7139,7 @@ function App() {
     setSignupLegalModal({ visible: false, page: 'terms' });
     setIsCreateAccountPopupOpen(false);
     setLandingOnboardingStep(1);
-    setLandingOtp({ status: 'idle', channel: 'sms', challengeId: '', input: '', message: '', testCode: '', expiresAt: '', smsVerified: false, emailVerified: false });
+    setLandingOtp({ status: 'idle', channel: 'sms', challengeId: '', input: '', message: '', testCode: '', expiresAt: '', smsVerified: false, emailVerified: false, smsDeferred: false });
   }
 
   function openSignupLegalDocument(page) {
@@ -7102,11 +7198,11 @@ function App() {
     return '';
   }
 
-  async function isolateExistingCustomerSessionForNewOnboarding() {
+  async function isolateExistingCustomerSessionForNewOnboarding(signal) {
     try {
       // First refresh CSRF for an already-verified account, then deliberately end
       // that account session before a different tenant is onboarded in this tab.
-      const statusResponse = await fetch('/.netlify/functions/session-status', { method: 'GET', credentials: 'same-origin' });
+      const statusResponse = await fetch('/.netlify/functions/session-status', { method: 'GET', credentials: 'same-origin', signal });
       const status = await statusResponse.json().catch(() => ({}));
       if (status?.csrfToken) sessionStorage.setItem('mp_customer_csrf', status.csrfToken);
       if (status?.authenticated) {
@@ -7117,6 +7213,7 @@ function App() {
       setCustomerSession({ checked: true, authenticated: false, cloudAccess: false, accessCode: 'ONBOARDING_ISOLATED', tenantId: '', userId: '', message: 'New-account onboarding is isolated from any previous customer session.' });
       return true;
     } catch (error) {
+      if (error?.name === 'AbortError') throw error;
       throw new Error(error.message || 'Password-Encrypt could not safely isolate this browser from the previous account session.');
     }
   }
@@ -7134,9 +7231,10 @@ function App() {
       return;
     }
     setLandingSignup((current) => ({ ...current, status: 'preparing', message: 'Preparing your secure account...' }));
+    const controller = beginOnboardingNetworkRequest();
     try {
-      await isolateExistingCustomerSessionForNewOnboarding();
-      const result = await postJson('/.netlify/functions/bootstrap-admin', draft);
+      await isolateExistingCustomerSessionForNewOnboarding(controller.signal);
+      const result = await postJson('/.netlify/functions/bootstrap-admin', draft, { signal: controller.signal });
       if (!result.ok) throw new Error(result.message || 'Account setup could not continue.');
       const nextAccount = {
         ...bootstrap,
@@ -7174,6 +7272,7 @@ function App() {
         welcomeEmailSent: false
       });
       setLandingOtp({ status: 'idle', channel: existingAccount || mobileAlreadyVerified ? 'email' : 'sms', challengeId: '', input: '', message: mobileAlreadyVerified ? 'Mobile verified. Next verify your email address.' : '', testCode: '', expiresAt: '', smsVerified: mobileAlreadyVerified, emailVerified: Boolean(result.emailVerified) });
+      clearOnboardingNetworkRequest(controller);
       if (existingAccount || mobileAlreadyVerified) {
         setLandingOnboardingStep(8);
       } else if (sendInitialSms) {
@@ -7182,6 +7281,14 @@ function App() {
         setLandingOnboardingStep(6);
       }
     } catch (error) {
+      clearOnboardingNetworkRequest(controller);
+      if (error?.name === 'AbortError') {
+        const note = 'Account preparation timed out or was cancelled. Retry, or choose Do this later to verify your email instead.';
+        setLandingSignup((current) => ({ ...current, status: 'error', message: note }));
+        setLandingOtp((current) => ({ ...current, status: 'error', message: note }));
+        setLandingOnboardingStep(6);
+        return;
+      }
       setLandingSignup((current) => ({ ...current, status: 'error', message: error.message || 'Account setup could not continue.' }));
       showMessage(error.message || 'Account setup could not continue.', 'error');
     }
@@ -7201,6 +7308,41 @@ function App() {
   function stopOnboardingSmsWebOtpCapture() {
     try { onboardingWebOtpAbortRef.current?.abort?.(); } catch { /* no-op */ }
     onboardingWebOtpAbortRef.current = null;
+  }
+
+  function clearOnboardingNetworkRequest(controller = null) {
+    if (controller && onboardingNetworkAbortRef.current !== controller) return;
+    if (onboardingNetworkTimeoutRef.current) window.clearTimeout(onboardingNetworkTimeoutRef.current);
+    onboardingNetworkTimeoutRef.current = null;
+    if (!controller || onboardingNetworkAbortRef.current === controller) onboardingNetworkAbortRef.current = null;
+  }
+
+  function beginOnboardingNetworkRequest(timeoutMs = ONBOARDING_NETWORK_TIMEOUT_MS) {
+    try { onboardingNetworkAbortRef.current?.abort?.(); } catch { /* no-op */ }
+    clearOnboardingNetworkRequest();
+    const controller = new AbortController();
+    onboardingNetworkAbortRef.current = controller;
+    onboardingNetworkTimeoutRef.current = window.setTimeout(() => {
+      if (onboardingNetworkAbortRef.current === controller) controller.abort('timeout');
+    }, timeoutMs);
+    return controller;
+  }
+
+  function cancelOnboardingNetworkRequest() {
+    const controller = onboardingNetworkAbortRef.current;
+    try { controller?.abort?.('cancelled'); } catch { /* no-op */ }
+    clearOnboardingNetworkRequest(controller);
+    stopOnboardingSmsWebOtpCapture();
+    setLandingSignup((current) => current.status === 'preparing' ? { ...current, status: 'ready-for-otp', message: 'SMS sending was cancelled. Retry when your connection is ready, or continue with email verification.' } : current);
+    setLandingOtp((current) => ({ ...current, status: 'error', challengeId: '', input: '', message: 'SMS sending was cancelled. Retry, or choose Do this later to verify your email instead.' }));
+    setLandingOnboardingStep(6);
+  }
+
+  function deferOnboardingSms() {
+    cancelOnboardingNetworkRequest();
+    setLandingSignup((current) => ({ ...current, status: current.status === 'preparing' ? 'ready-for-otp' : current.status, message: 'Mobile verification can be completed later.' }));
+    setLandingOtp((current) => ({ ...current, status: 'idle', channel: 'email', challengeId: '', input: '', message: 'Mobile verification deferred. Verify your email address to continue.', smsDeferred: true }));
+    setLandingOnboardingStep(8);
   }
 
   function beginOnboardingSmsWebOtpCapture() {
@@ -7234,15 +7376,11 @@ function App() {
     const phoneE164 = landingAccountDraft.phoneE164 || buildPhoneE164(landingAccountDraft.phoneCountryCode, landingAccountDraft.phoneNumber);
     if (channel === 'email' && !email) return;
     if (channel === 'sms' && !phoneE164) return;
-    if (channel === 'email' && !landingSignup.existingAccount && !landingOtp.smsVerified && !bootstrap.phoneVerified) {
-      setLandingOtp((current) => ({ ...current, channel: 'sms', status: current.challengeId ? 'sent' : 'idle', message: 'Verify your mobile number before continuing to email verification.' }));
-      setLandingOnboardingStep(landingOtp.challengeId && landingOtp.channel === 'sms' ? 7 : 6);
-      return;
-    }
     if (channel === 'sms') beginOnboardingSmsWebOtpCapture();
     else stopOnboardingSmsWebOtpCapture();
     onboardingWebOtpCodeRef.current = '';
     setLandingOtp((current) => ({ ...current, channel, status: 'sending', challengeId: '', input: '', message: `Sending your ${channel === 'sms' ? 'SMS' : 'email'} verification code...` }));
+    const controller = beginOnboardingNetworkRequest();
     try {
       const result = channel === 'sms'
         ? await postJson('/.netlify/functions/request-sms-otp', {
@@ -7252,8 +7390,8 @@ function App() {
             email,
             purpose: 'production_onboarding',
             onboardingMode: 'primary_sms'
-          })
-        : await postJson('/.netlify/functions/request-email-otp-test', { email, purpose: 'production_onboarding' });
+          }, { signal: controller.signal })
+        : await postJson('/.netlify/functions/request-email-otp-test', { email, purpose: 'production_onboarding' }, { signal: controller.signal });
       if (!result.ok) throw new Error(result.message || `The ${channel === 'sms' ? 'SMS' : 'email'} code could not be sent.`);
       setLandingOtp((current) => ({
         ...current,
@@ -7265,9 +7403,16 @@ function App() {
         testCode: result.testOtpCode || '',
         expiresAt: result.expiresAt || ''
       }));
+      clearOnboardingNetworkRequest(controller);
       setLandingOnboardingStep(channel === 'sms' ? 7 : 9);
     } catch (error) {
-      setLandingOtp((current) => ({ ...current, channel, status: 'error', message: error.message || `The ${channel === 'sms' ? 'SMS' : 'email'} code could not be sent.` }));
+      clearOnboardingNetworkRequest(controller);
+      if (channel === 'sms') stopOnboardingSmsWebOtpCapture();
+      const timedOut = error?.name === 'AbortError';
+      const note = timedOut
+        ? `${channel === 'sms' ? 'SMS' : 'Email'} sending stopped after ${Math.round(ONBOARDING_NETWORK_TIMEOUT_MS / 1000)} seconds. Check your connection and retry${channel === 'sms' ? ', or choose Do this later to verify your email instead' : ''}.`
+        : (error.message || `The ${channel === 'sms' ? 'SMS' : 'email'} code could not be sent.`);
+      setLandingOtp((current) => ({ ...current, channel, status: 'error', challengeId: '', input: '', message: note }));
     }
   }
 
@@ -7315,7 +7460,7 @@ function App() {
         emailVerified: Boolean(result.emailVerified),
         phoneVerified: Boolean(result.phoneVerified),
         otpStatus: 'Device verified',
-        onboardingStatus: 'complete'
+        onboardingStatus: !result.emailVerified ? 'email_verification_required' : !result.phoneVerified ? 'phone_verification_required' : 'complete'
       };
       setBootstrap(nextAccount);
       if (result.entitlements) updateEntitlements(result.entitlements);
@@ -7333,7 +7478,8 @@ function App() {
         trialEndsAt: result.account?.trialEndsAt || current.trialEndsAt || '',
         welcomeEmailSent: Boolean(result.welcomeEmailSent)
       }));
-      setLandingOtp((current) => ({ ...current, status: 'verified', input: '', emailVerified: true, smsVerified: true, message: result.message || 'Email verified.' }));
+      setLandingOtp((current) => ({ ...current, status: 'verified', input: '', emailVerified: Boolean(result.emailVerified), smsVerified: Boolean(result.phoneVerified), message: result.message || `${result.verifiedChannel === 'sms' ? 'Mobile' : 'Email'} verified.` }));
+      try { sessionStorage.setItem(`${CONTACT_VERIFICATION_REMINDER_KEY}:${result.tenantId || nextAccount.tenantId}:${result.userId || nextAccount.userId}`, 'shown'); } catch { /* no-op */ }
       clearOnboardingFlowState();
       window.setTimeout(() => finishLandingOnboarding({ account: nextAccount, existingAccount: Boolean(landingSignup.existingAccount) }), 0);
     } catch (error) {
@@ -9360,8 +9506,13 @@ function App() {
                 {landingOtp.status === 'error' && <p className="onboarding-inline-status error">{landingOtp.message}</p>}
                 <button type="button" className="primary-button onboarding-next-button" onClick={startOrResendPrimaryOnboardingSms} disabled={landingSignup.status === 'preparing' || landingOtp.status === 'sending'}>
                   {(landingSignup.status === 'preparing' || landingOtp.status === 'sending') ? <RefreshCw size={18} className="spin-icon" /> : <Phone size={18} />}
-                  {(landingSignup.status === 'preparing' || landingOtp.status === 'sending') ? 'Sending code...' : 'Send SMS code'}
+                  {(landingSignup.status === 'preparing' || landingOtp.status === 'sending') ? 'Sending code...' : landingOtp.status === 'error' ? 'Retry SMS' : 'Send SMS code'}
                 </button>
+                {(landingSignup.status === 'preparing' || landingOtp.status === 'sending') ? (
+                  <button type="button" className="secondary-button onboarding-cancel-send-button" onClick={cancelOnboardingNetworkRequest}><X size={16} /> Cancel sending</button>
+                ) : (
+                  <button type="button" className="onboarding-text-action" onClick={deferOnboardingSms}><Mail size={15} /> Do this later — verify email instead</button>
+                )}
               </div>
             )}
 
@@ -9382,6 +9533,7 @@ function App() {
                   {landingOtp.status === 'verifying' ? 'Verifying...' : 'Verify mobile number'}
                 </button>
                 <button type="button" className="onboarding-text-action" onClick={() => sendLandingOnboardingOtp('sms')} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><RefreshCw size={15} /> Resend SMS code</button>
+                <button type="button" className="onboarding-text-action" onClick={deferOnboardingSms} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><Mail size={15} /> Do this later — verify email instead</button>
               </div>
             )}
 
@@ -9391,7 +9543,9 @@ function App() {
                 <p className="eyebrow">Email verification</p>
                 <h1>{landingSignup.existingAccount ? 'Verify your existing account' : 'Now verify your email'}</h1>
                 <p>Send a six-digit code to <strong>{maskEmail(landingAccountDraft.email) || landingAccountDraft.email}</strong>.</p>
-                {!landingSignup.existingAccount && <div className="onboarding-info-panel success"><Check size={19} /><span>Your mobile number is verified. Email verification is the final account check.</span></div>}
+                {!landingSignup.existingAccount && (landingOtp.smsVerified || bootstrap.phoneVerified
+                  ? <div className="onboarding-info-panel success"><Check size={19} /><span>Your mobile number is verified. You can verify your email now; otherwise Password-Encrypt will remind you after sign-in.</span></div>
+                  : <div className="onboarding-info-panel warning"><AlertTriangle size={19} /><span>Mobile verification is deferred. Verify your email now to activate the account. We will remind you to verify the mobile number later.</span></div>)}
                 {landingOtp.status === 'error' && <p className="onboarding-inline-status error">{landingOtp.message}</p>}
                 <button type="button" className="primary-button onboarding-next-button" onClick={() => sendLandingOnboardingOtp('email')} disabled={landingOtp.status === 'sending'}>
                   {landingOtp.status === 'sending' ? <RefreshCw size={18} className="spin-icon" /> : <Mail size={18} />}
@@ -11695,6 +11849,7 @@ function App() {
         </div>
       )}
 
+      <ContactVerificationReminderModal state={contactVerificationReminder} onLater={dismissContactVerificationReminder} onVerify={verifyMissingContactNow} />
       <AccountSecurityModal state={accountSecurityModal} setState={setAccountSecurityModal} onClose={closeAccountSecurityModal} onRequestCode={requestAccountSecurityOtp} onConfirmCode={confirmAccountSecurityOtp} onRemoveDevice={confirmRemoveVerifiedDevice} onEndAllSessions={confirmEndAllSessions} />
       <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} phone={bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)} channel={otpChannel} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onChannelChange={chooseOtpChannel} onSend={() => requestSelectedOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />

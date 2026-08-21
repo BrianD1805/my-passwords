@@ -1,0 +1,20 @@
+Password-Encrypt Ver-1.015 verification
+Build: Onboarding Verification Recovery
+Date: 21 August 2026
+
+PASS — Ver-1.015 feature checks: 16/16
+PASS — Onboarding flow static checks
+PASS — Security static checks: 13/13
+PASS — Reliability static checks: 20/20
+PASS — Legal readiness checks
+PASS — Landing/plan UX checks: 36/36
+PASS — Mobile restoration checks: 6/6
+PASS — Trusted Person / emergency-flow checks: 75/75
+PASS — Push notification checks: 32/32
+PASS — Changed Netlify functions pass Node syntax checks
+PASS — src/main.jsx parses cleanly as JSX
+PASS — Ver-1.014 Guided Tour/default Home-folder source retained
+PASS — No Supabase migration required for Ver-1.015
+
+Build note:
+The container dependency install did not complete within the execution window, so the Vite production bundle was not regenerated here. Run npm install followed by npm run build locally before publishing, as normal.

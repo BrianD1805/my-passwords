@@ -104,7 +104,7 @@ export async function handler(event) {
       const change = changes?.[0];
       if (!change?.id) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The pending email change was not found.' });
       const now = new Date().toISOString();
-      await updateRow('users', `id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}`, { email: change.requested_value, email_verified: true, updated_at: now });
+      await updateRow('users', `id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}`, { email: change.requested_value, email_verified: true, onboarding_status: user.phone_verified ? 'onboarding_complete' : 'phone_verification_required', updated_at: now });
       await updateRow('account_contact_changes', `id=${eq(change.id)}`, { status: 'verified', verified_at: now, updated_at: now });
       await updateRow('account_sessions', `user_id=${eq(session.userId)}&status=${eq('active')}&id=neq.${encodeURIComponent(session.sessionId || '')}`, { status: 'revoked', revoked_at: now, revoked_reason: 'email_changed', updated_at: now }).catch(() => null);
       if (session.deviceId) await updateRow('push_subscriptions', `tenant_id=${eq(session.tenantId)}&user_id=${eq(session.userId)}&device_id=neq.${encodeURIComponent(session.deviceId)}&status=${eq('active')}`, { status: 'disabled', disabled_at: now, disabled_reason: 'Other account sessions ended after email change.', updated_at: now }).catch(() => null);
@@ -145,7 +145,7 @@ export async function handler(event) {
       if (!change?.id) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The pending mobile change was not found.' });
       const now = new Date().toISOString();
       const verificationOnly = change.change_type === 'phone_verification' || change.requested_value === change.previous_value;
-      await updateRow('users', `id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}`, { phone_e164: change.requested_value, phone_country_code: change.phone_country_code, phone_number: change.phone_number, phone_verified: true, updated_at: now });
+      await updateRow('users', `id=${eq(session.userId)}&tenant_id=${eq(session.tenantId)}`, { phone_e164: change.requested_value, phone_country_code: change.phone_country_code, phone_number: change.phone_number, phone_verified: true, onboarding_status: user.email_verified ? 'onboarding_complete' : 'email_verification_required', updated_at: now });
       await updateRow('account_contact_changes', `id=${eq(change.id)}`, { status: 'verified', verified_at: now, updated_at: now });
       if (verificationOnly) {
         await audit(session, 'account_phone_verified', { phone_masked: maskPhone(change.requested_value) });

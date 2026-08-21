@@ -50,75 +50,8 @@ export async function handler(event) {
       trialDays = Math.max(0, Number(selectedPlan.trial_days || 0));
     }
 
-    // Ver-1.010 onboarding verifies the mobile number first, then the email.
-    // Mobile verification proves ownership of the entered number but deliberately
-    // does NOT activate the account, start the trial, issue a customer session or
-    // send welcome/admin onboarding emails. Final activation happens only after
-    // the subsequent email OTP succeeds.
-    const onboardingMobileFirst = firstActivation
-      && !isEmail
-      && String(challenge.purpose || '') === 'production_onboarding';
-    const onboardingEmailFinal = firstActivation
-      && isEmail
-      && String(challenge.purpose || '') === 'production_onboarding';
-    if (onboardingEmailFinal && !user.phone_verified) {
-      return jsonResponse(409, {
-        ok: false,
-        version: APP_VERSION,
-        code: 'MOBILE_VERIFICATION_REQUIRED',
-        message: 'Verify the mobile number before completing email verification.'
-      });
-    }
-    if (onboardingMobileFirst) {
-      await updateRow('users', `id=${eq(user.id)}&tenant_id=${eq(tenant.id)}`, {
-        phone_verified: true,
-        otp_test_last_verified_at: now,
-        otp_test_status: 'verified_sms',
-        onboarding_status: 'email_verification_required',
-        last_onboarding_step: 'mobile_verified_email_pending',
-        updated_at: now
-      });
-      await insertRow('audit_log', {
-        id: publicId('audit'),
-        tenant_id: tenant.id,
-        user_id: user.id,
-        action: 'production_onboarding_mobile_verified',
-        metadata: {
-          version: APP_VERSION,
-          delivery_channel: challenge.delivery_channel,
-          plan_code: tenant.plan_code || 'personal',
-          account_activation_deferred: true,
-          next_required_channel: 'email'
-        }
-      }).catch(() => null);
-      await resetRateLimit(event, { scope: 'otp_verify_challenge', identifier: challengeId });
-      return jsonResponse(200, {
-        ok: true,
-        version: APP_VERSION,
-        challengeId,
-        tenantId: tenant.id,
-        userId: user.id,
-        authenticated: false,
-        onboardingCompleted: false,
-        partialOnboarding: true,
-        nextRequiredChannel: 'email',
-        verifiedChannel: 'sms',
-        emailVerified: Boolean(user.email_verified),
-        phoneVerified: true,
-        account: {
-          accountName: tenant.account_name || tenant.name || '',
-          planCode: tenant.plan_code || 'personal',
-          planName,
-          planStatus: tenant.plan_status || 'signup_pending',
-          accountStatus: tenant.account_status || 'pending_verification',
-          tenantRole: tenant.tenant_role || 'primary_owner',
-          trialDays,
-          trialStartedAt: tenant.trial_started_at || null,
-          trialEndsAt: tenant.trial_ends_at || null
-        },
-        message: 'Mobile number verified. Next, verify your email address.'
-      });
-    }
+    // Ver-1.015 activates onboarding after either verified contact channel.
+    // The unverified channel remains recorded as pending and is reminded in-app on future sign-ins.
 
     if (firstActivation && !founder) {
       const plan = selectedPlan;
@@ -166,6 +99,7 @@ export async function handler(event) {
 
     const emailVerifiedAfter = isEmail ? true : Boolean(user.email_verified);
     const phoneVerifiedAfter = isEmail ? Boolean(user.phone_verified) : true;
+    const pendingVerificationChannel = !emailVerifiedAfter ? 'email' : !phoneVerifiedAfter ? 'phone' : '';
     const verifiedUserPatch = {
       status: 'active',
       email_verified: emailVerifiedAfter,
@@ -173,8 +107,14 @@ export async function handler(event) {
       otp_test_last_verified_at: now,
       otp_test_status: isEmail ? 'verified_email' : 'verified_sms',
       last_login_at: now,
-      onboarding_status: firstActivation ? 'onboarding_complete' : 'active_account_verified',
-      last_onboarding_step: firstActivation ? (isEmail ? 'email_verified_trial_started' : 'mobile_verified_trial_started') : 'device_verified',
+      onboarding_status: !emailVerifiedAfter
+        ? 'email_verification_required'
+        : !phoneVerifiedAfter
+          ? 'phone_verification_required'
+          : (firstActivation ? 'onboarding_complete' : 'active_account_verified'),
+      last_onboarding_step: firstActivation
+        ? (pendingVerificationChannel ? `${isEmail ? 'email' : 'mobile'}_verified_${pendingVerificationChannel}_pending` : `${isEmail ? 'email' : 'mobile'}_verified_trial_started`)
+        : 'device_verified',
       onboarding_completed_at: firstActivation ? now : undefined,
       updated_at: now
     };
@@ -216,7 +156,8 @@ export async function handler(event) {
         plan_status: planStatus,
         trial_started_at: trialStartedAt,
         trial_ends_at: trialEndsAt,
-        welcome_email_sent: Boolean(welcomeEmail.sent)
+        welcome_email_sent: Boolean(welcomeEmail.sent),
+        pending_verification_channel: pendingVerificationChannel || null
       }
     }).catch(() => null);
 
