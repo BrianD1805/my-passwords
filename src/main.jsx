@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.012';
+const VERSION = 'Password-Encrypt Ver-1.013';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -35,6 +35,13 @@ const FRESH_ONBOARDING_QUERY_KEY = 'freshOnboarding';
 const DEFAULT_TRIAL_PLAN_CODE = 'personal';
 const ONBOARDING_FLOW_VERSION = 2;
 const ONBOARDING_TOTAL_STEPS = 12;
+function sanitiseOnboardingSignupState(value = {}) {
+  const state = value && typeof value === 'object' ? value : {};
+  const message = String(state.message || '').trim();
+  const staleDefaultPlanError = /plan is not currently available for new accounts/i.test(message) && /launch plan/i.test(message);
+  if (!staleDefaultPlanError) return state;
+  return { ...state, status: 'idle', message: '' };
+}
 
 
 const LEGACY_VAULT_BACK_MARKER_KEYS = [
@@ -2986,7 +2993,7 @@ function App() {
     legalAccepted: false,
     ...(initialOnboardingFlowRef.current?.draft || {})
   }));
-  const [landingSignup, setLandingSignup] = useState(() => ({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false, ...(initialOnboardingFlowRef.current?.signup || {}) }));
+  const [landingSignup, setLandingSignup] = useState(() => ({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false, ...sanitiseOnboardingSignupState(initialOnboardingFlowRef.current?.signup || {}) }));
   const [onboardingVaultDraft, setOnboardingVaultDraft] = useState(() => { const saved = readSavedAccount(); return { email: saved.email || '', phoneCountryCode: saved.phoneCountryCode || '+254', phoneCountryIso: saved.phoneCountryIso || 'ke', phoneNumber: saved.phoneNumber || '' }; });
   const [onboardingSecretFieldsArmed, setOnboardingSecretFieldsArmed] = useState({ master: false, confirm: false });
   const [vaultOnboardingStep, setVaultOnboardingStep] = useState(10);
@@ -6536,7 +6543,7 @@ function App() {
       onboardingSessionIsolationRef.current = true;
       setLandingOnboardingStep(Number(savedFlow.step));
       setLandingAccountDraft((current) => ({ ...current, ...(savedFlow.draft || {}) }));
-      setLandingSignup((current) => ({ ...current, ...(savedFlow.signup || {}) }));
+      setLandingSignup((current) => ({ ...current, ...sanitiseOnboardingSignupState(savedFlow.signup || {}) }));
       setLandingOtp((current) => ({ ...current, ...(savedFlow.otp || {}), input: '', testCode: '' }));
       setIsCreateAccountPopupOpen(true);
       return;
@@ -6548,8 +6555,8 @@ function App() {
     setOnboardingSecurityWarning('');
     setSignupLegalModal({ visible: false, page: 'terms' });
     const requestedPlanCode = String(preselectedPlanCode || '').trim().toLowerCase();
-    const planCode = requestedPlanCode || DEFAULT_TRIAL_PLAN_CODE;
     const planSelectionSource = requestedPlanCode ? 'landing_plan_card' : 'default_trial';
+    const planCode = requestedPlanCode || publicPlans[0]?.code || DEFAULT_TRIAL_PLAN_CODE;
     setLandingOnboardingStep(1);
     setLandingSignup({ status: 'idle', message: '', existingAccount: false, tenantId: '', userId: '', planName: '', trialDays: 0, trialStartedAt: '', trialEndsAt: '', welcomeEmailSent: false });
     setLandingOtp({ status: 'idle', channel: 'sms', challengeId: '', input: '', message: '', testCode: '', expiresAt: '', smsVerified: false, emailVerified: false });
@@ -6695,6 +6702,8 @@ function App() {
   }
 
   function cleanLandingDraft() {
+    const planSelectionSource = landingAccountDraft.planSelectionSource === 'landing_plan_card' ? 'landing_plan_card' : 'default_trial';
+    const defaultTrialPlanCode = publicPlans[0]?.code || DEFAULT_TRIAL_PLAN_CODE;
     return {
       ...landingAccountDraft,
       phoneCountryCode: normaliseCountryCode(landingAccountDraft.phoneCountryCode || '+254') || '+254',
@@ -6704,8 +6713,10 @@ function App() {
       displayName: String(landingAccountDraft.displayName || '').trim(),
       accountName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
       tenantName: String(landingAccountDraft.accountName || 'My Private Vault').trim(),
-      planCode: landingAccountDraft.planCode || DEFAULT_TRIAL_PLAN_CODE,
-      planSelectionSource: landingAccountDraft.planSelectionSource || 'default_trial',
+      planCode: planSelectionSource === 'landing_plan_card'
+        ? (landingAccountDraft.planCode || defaultTrialPlanCode)
+        : defaultTrialPlanCode,
+      planSelectionSource,
       legalAccepted: Boolean(landingAccountDraft.legalAccepted),
       legalVersion: LEGAL_VERSION
     };
@@ -6803,6 +6814,17 @@ function App() {
       setLandingSignup((current) => ({ ...current, status: 'error', message: error.message || 'Account setup could not continue.' }));
       showMessage(error.message || 'Account setup could not continue.', 'error');
     }
+  }
+
+  async function startOrResendPrimaryOnboardingSms() {
+    // Once bootstrap has prepared the pending account, SMS retries must not run
+    // the whole signup bootstrap again. That avoids consuming signup limits when
+    // the only problem is SMS delivery/rate limiting.
+    if (landingSignup.tenantId && landingSignup.userId && !landingSignup.existingAccount) {
+      await sendLandingOnboardingOtp('sms');
+      return;
+    }
+    await prepareLandingOnboarding({ sendInitialSms: true });
   }
 
   function stopOnboardingSmsWebOtpCapture() {
@@ -7010,7 +7032,9 @@ function App() {
     }
     if (landingOnboardingStep === 5) {
       if (!draft.phoneE164) return showMessage('Enter a valid mobile number with country code.', 'warning');
-      updateLandingDraft({ phoneCountryCode: draft.phoneCountryCode, phoneNumber: draft.phoneNumber, phoneE164: draft.phoneE164 });
+      updateLandingDraft({ phoneCountryCode: draft.phoneCountryCode, phoneNumber: draft.phoneNumber, phoneE164: draft.phoneE164, planCode: draft.planCode, planSelectionSource: draft.planSelectionSource });
+      setLandingSignup((current) => current.status === 'error' ? { ...current, status: 'idle', message: '' } : current);
+      setLandingOtp((current) => current.status === 'error' ? { ...current, status: 'idle', message: '' } : current);
       setLandingOnboardingStep(6);
     }
   }
@@ -8875,7 +8899,7 @@ function App() {
                 <div className="onboarding-info-panel"><ShieldCheck size={19} /><span>This confirms the mobile number registered to your account.</span></div>
                 {landingSignup.status === 'error' && <p className="onboarding-inline-status error">{landingSignup.message}</p>}
                 {landingOtp.status === 'error' && <p className="onboarding-inline-status error">{landingOtp.message}</p>}
-                <button type="button" className="primary-button onboarding-next-button" onClick={() => prepareLandingOnboarding({ sendInitialSms: true })} disabled={landingSignup.status === 'preparing' || landingOtp.status === 'sending'}>
+                <button type="button" className="primary-button onboarding-next-button" onClick={startOrResendPrimaryOnboardingSms} disabled={landingSignup.status === 'preparing' || landingOtp.status === 'sending'}>
                   {(landingSignup.status === 'preparing' || landingOtp.status === 'sending') ? <RefreshCw size={18} className="spin-icon" /> : <Phone size={18} />}
                   {(landingSignup.status === 'preparing' || landingOtp.status === 'sending') ? 'Sending code...' : 'Send SMS code'}
                 </button>

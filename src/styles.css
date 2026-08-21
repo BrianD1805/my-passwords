@@ -19055,3 +19055,116 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   .admin-device-session-list article{grid-template-columns:auto minmax(0,1fr)}
   .admin-device-session-list article>.admin-status{grid-column:2;justify-self:start}
 }
+
+/* Password-Encrypt Ver-1.013 — Admin mega menu and onboarding fixes */
+.admin-header{
+  position:relative;
+  display:block;
+  overflow:visible;
+  z-index:40;
+}
+.admin-header-topline{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+}
+.admin-header-actions{
+  margin-left:auto;
+  justify-content:flex-end;
+  align-items:center;
+  flex-wrap:nowrap;
+}
+.admin-header-actions .admin-menu-toggle{
+  order:3;
+}
+.admin-header-menu{
+  position:absolute;
+  top:calc(100% + 9px);
+  right:0;
+  z-index:80;
+  width:min(690px, calc(100vw - 48px));
+  margin:0;
+  padding:14px;
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:9px;
+  background:#fff;
+  border:1px solid #d5e0e9;
+  border-radius:18px;
+  box-shadow:0 22px 52px rgba(26,52,78,.20);
+}
+.admin-header-menu button{
+  appearance:none;
+  width:100%;
+  min-height:44px;
+  border:1px solid #d6e2eb;
+  border-radius:12px;
+  background:#f8fbfd;
+  color:#2c4964;
+  padding:10px 13px;
+  font:inherit;
+  font-weight:800;
+  text-align:center;
+  cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.admin-header-menu button:hover,
+.admin-header-menu button:focus-visible{
+  outline:none;
+  border-color:#8eb3cf;
+  background:#eef6fb;
+}
+.admin-header-menu button.active{
+  border-color:#336699;
+  background:#336699;
+  color:#fff;
+}
+.admin-header.menu-open .admin-menu-toggle{
+  border-color:#8eb3cf;
+  background:#eef6fb;
+}
+.admin-header-brand span{
+  display:block;
+}
+
+@media(max-width:900px){
+  .admin-header-topline{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  .admin-header-actions{
+    width:100%;
+    margin-left:0;
+    justify-content:flex-end;
+  }
+  .admin-header-actions button{flex:0 1 auto}
+  .admin-header-menu{
+    right:0;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(max-width:560px){
+  .admin-header-actions{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:7px;
+  }
+  .admin-header-actions button{
+    width:100%;
+    min-width:0;
+    justify-content:center;
+    padding-left:9px;
+    padding-right:9px;
+  }
+  .admin-header-actions .admin-menu-toggle{grid-column:auto}
+  .admin-header-menu{
+    width:calc(100vw - 30px);
+    grid-template-columns:1fr 1fr;
+    padding:11px;
+  }
+}
+@media(max-width:390px){
+  .admin-header-actions{grid-template-columns:1fr}
+  .admin-header-menu{grid-template-columns:1fr}
+}

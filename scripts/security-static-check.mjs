@@ -29,7 +29,7 @@ check('Security HMAC controls require dedicated production session secret', /req
 check('Stripe webhook has atomic replay ledger claim', /claim_stripe_webhook_event/.test(webhook) && /claimWebhookEvent/.test(webhook));
 check('Browser no longer sends identity in sync/document URLs', !/sync-vault\?tenantId=/.test(main) && !/document-blob\?tenantId=/.test(main));
 check('Browser sensitive POST helper sends request marker and CSRF', /x-mp-request/.test(main) && /x-mp-csrf/.test(main));
-check('Signup plan is validated against server-side published plan data', /loadPlan\(selectedPlanCode\)/.test(bootstrap) && /plan\.is_active === false/.test(bootstrap) && /plan\.is_public === false/.test(bootstrap));
+check('Signup plan is validated against server-side published plan data', /function canStartSignupOnPlan/.test(bootstrap) && /plan\.is_active !== false/.test(bootstrap) && /plan\.is_public !== false/.test(bootstrap) && /resolveSignupPlan/.test(bootstrap));
 check('Stripe checkout uses server-loaded plan and validated billing session', /getBillingContext\(event\)/.test(checkout) && /loadPlan\(planCode\)/.test(checkout) && /plan\[interval\.priceColumn\]/.test(checkout));
 
 const failed = checks.filter((item) => !item.pass);

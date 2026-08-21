@@ -73,10 +73,17 @@ export async function handler(event) {
         : 'Local SMS test code created because production SMS delivery is unavailable in development mode.'
     });
   } catch (error) {
+    const retryAfter = Math.max(0, Number(error.retryAfter || 0));
+    const waitMinutes = retryAfter ? Math.max(1, Math.ceil(retryAfter / 60)) : 0;
+    const rateLimited = error.code === 'RATE_LIMITED' || error.code === 'OTP_RATE_LIMITED' || Number(error.status) === 429;
     return jsonResponse(error.status || 500, {
       ok: false,
       version: APP_VERSION,
-      message: error.message || 'The SMS verification code could not be sent.',
+      code: error.code || (rateLimited ? 'SMS_RATE_LIMITED' : 'SMS_SEND_FAILED'),
+      retryAfterSeconds: retryAfter || null,
+      message: rateLimited
+        ? `SMS verification is temporarily limited after repeated requests. Try again in about ${waitMinutes || 15} minute${(waitMinutes || 15) === 1 ? '' : 's'}.`
+        : (error.message || 'The SMS verification code could not be sent.'),
       error: error.status ? undefined : error.message,
       details: error.details || null
     }, securityErrorResponseHeaders(error));

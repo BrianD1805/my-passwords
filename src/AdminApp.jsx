@@ -174,6 +174,7 @@ export default function AdminApp({ version }) {
   const [notice, setNotice] = useState('');
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [selectedOverviewStat, setSelectedOverviewStat] = useState('');
+  const shortVersion = String(version || '').replace(/^Password-Encrypt\s*/i, '') || 'Ver-1.013';
 
   const sortedPlans = useMemo(() => [...(data.plans || [])]
     .filter((plan) => String(plan?.code || '').trim() && String(plan?.display_name || '').trim())
@@ -281,6 +282,23 @@ export default function AdminApp({ version }) {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  useEffect(() => {
+    if (!adminMenuOpen) return undefined;
+    const closeMenu = (event) => {
+      if (event.key === 'Escape') {
+        setAdminMenuOpen(false);
+        return;
+      }
+      if (event.type === 'pointerdown' && !event.target?.closest?.('.admin-header')) setAdminMenuOpen(false);
+    };
+    window.addEventListener('keydown', closeMenu);
+    window.addEventListener('pointerdown', closeMenu);
+    return () => {
+      window.removeEventListener('keydown', closeMenu);
+      window.removeEventListener('pointerdown', closeMenu);
+    };
+  }, [adminMenuOpen]);
 
   useEffect(() => {
     if (!planEditorOpen) return undefined;
@@ -492,14 +510,14 @@ export default function AdminApp({ version }) {
     <main className="admin-shell">
       <header className={`admin-header ${adminMenuOpen ? 'menu-open' : ''}`}>
         <div className="admin-header-topline">
-          <div className="admin-header-brand"><img className="admin-header-brand-image" src="/images/password-encrypt-brand.png" alt="" /><div><p className="eyebrow">Password-Encrypt</p><h1>Admin</h1><span>Single-site SaaS administration</span></div></div>
+          <div className="admin-header-brand"><img className="admin-header-brand-image" src="/images/password-encrypt-brand.png" alt="" /><div><p className="eyebrow">Password-Encrypt</p><h1>Admin</h1><span>Single-site SaaS administration · {shortVersion}</span></div></div>
           <div className="admin-header-actions">
-            <button type="button" className={`secondary-button admin-menu-toggle ${adminMenuOpen ? 'active' : ''}`} onClick={() => setAdminMenuOpen((current) => !current)} aria-expanded={adminMenuOpen}><Menu size={18} /> Admin menu <ChevronDown size={17} /></button>
             <button type="button" className="secondary-button" onClick={loadData} disabled={busy}><RefreshCw size={17} className={busy ? 'spin-icon' : ''} /> Refresh</button>
             <button type="button" className="secondary-button" onClick={logout}><LogOut size={17} /> Logout</button>
+            <button type="button" className={`secondary-button admin-menu-toggle ${adminMenuOpen ? 'active' : ''}`} onClick={() => setAdminMenuOpen((current) => !current)} aria-expanded={adminMenuOpen} aria-haspopup="menu"><Menu size={18} /> Admin menu <ChevronDown size={17} /></button>
           </div>
         </div>
-        {adminMenuOpen && <nav className="admin-tabs admin-header-menu">
+        {adminMenuOpen && <nav className="admin-header-menu" aria-label="Admin sections">
           <button type="button" className={activeTab === 'overview' ? 'active' : ''} onClick={() => selectAdminTab('overview')}>Overview</button>
           <button type="button" className={activeTab === 'plans' ? 'active' : ''} onClick={() => selectAdminTab('plans')}>Subscription Plans</button>
           <button type="button" className={activeTab === 'customers' ? 'active' : ''} onClick={() => selectAdminTab('customers')}>Customers</button>

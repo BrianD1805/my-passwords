@@ -102,6 +102,8 @@ export async function createAccountOtp({ tenantId, userId, purpose, channel, des
   if (await rateLimited(userId, purpose, destination)) {
     const error = new Error('Too many codes were requested. Wait 15 minutes before trying again.');
     error.status = 429;
+    error.code = 'OTP_RATE_LIMITED';
+    error.retryAfter = 15 * 60;
     throw error;
   }
 

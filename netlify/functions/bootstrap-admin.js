@@ -45,8 +45,37 @@ async function findByPhone(phoneE164) {
 }
 
 async function loadPlan(planCode) {
-  const rows = await selectRows('subscription_plans', `select=code,display_name,trial_days,is_public,is_active,currency,max_users,storage_limit_mb,document_limit,photo_limit,feature_flags&code=${eq(planCode)}&limit=1`).catch(() => []);
+  if (!planCode) return null;
+  const rows = await selectRows('subscription_plans', `select=code,display_name,trial_days,is_public,is_active,currency,max_users,storage_limit_mb,document_limit,photo_limit,feature_flags,display_order&code=${eq(planCode)}&limit=1`).catch(() => []);
   return rows?.[0] || null;
+}
+
+function canStartSignupOnPlan(plan) {
+  return Boolean(plan?.code && plan.is_active !== false && plan.is_public !== false && launchReadyPlan(plan.code));
+}
+
+async function loadDefaultTrialPlan() {
+  const rows = await selectRows(
+    'subscription_plans',
+    'select=code,display_name,trial_days,is_public,is_active,currency,max_users,storage_limit_mb,document_limit,photo_limit,feature_flags,display_order&is_public=eq.true&is_active=eq.true&order=display_order.asc,display_name.asc&limit=25'
+  ).catch(() => []);
+  return (rows || []).find((plan) => canStartSignupOnPlan(plan)) || null;
+}
+
+async function resolveSignupPlan({ planSelectionSource, requestedPlanCode = '', existingPlanCode = '' } = {}) {
+  if (planSelectionSource === 'landing_plan_card') {
+    const explicit = await loadPlan(requestedPlanCode);
+    return canStartSignupOnPlan(explicit) ? explicit : null;
+  }
+
+  // Generic Start Free Trial must follow Admin's Plan 1 ordering rather than a
+  // hard-coded plan code. This keeps onboarding working when the published
+  // Personal plan is named/code-versioned differently (for example Personal 150).
+  if (existingPlanCode) {
+    const existing = await loadPlan(existingPlanCode);
+    if (canStartSignupOnPlan(existing)) return existing;
+  }
+  return loadDefaultTrialPlan();
 }
 
 export async function handler(event) {
@@ -61,9 +90,7 @@ export async function handler(event) {
   const displayName = String(body.displayName || '').trim() || 'Vault User';
   const accountName = String(body.accountName || body.tenantName || '').trim() || `${displayName}'s Private Vault`;
   const planSelectionSource = String(body.planSelectionSource || '').trim() === 'landing_plan_card' ? 'landing_plan_card' : 'default_trial';
-  const selectedPlanCode = planSelectionSource === 'landing_plan_card'
-    ? (requestedPlan(body.planCode || 'personal') || 'personal')
-    : 'personal';
+  const requestedPlanCode = requestedPlan(body.planCode || '');
   const legalAccepted = body.legalAccepted === true;
   const legalVersion = String(body.legalVersion || '').trim();
 
@@ -71,8 +98,23 @@ export async function handler(event) {
   if (!phoneE164) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'A mobile number with country code is required.' });
 
   try {
-    await consumeRateLimit(event, { scope: 'signup_ip', identifier: requestIpHash(event), limit: 8, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
-    await consumeRateLimit(event, { scope: 'signup_email', identifier: email, limit: 5, windowSeconds: 60 * 60, blockSeconds: 60 * 60 });
+    // Resolve the requested/default plan before consuming signup attempt limits.
+    // A publishing/configuration problem must never burn a customer's onboarding
+    // attempts before an account has even been prepared.
+    const requestedSignupPlan = await resolveSignupPlan({ planSelectionSource, requestedPlanCode });
+    if (!requestedSignupPlan?.code) {
+      return jsonResponse(409, {
+        ok: false,
+        version: APP_VERSION,
+        code: 'TRIAL_TEMPORARILY_UNAVAILABLE',
+        message: planSelectionSource === 'landing_plan_card'
+          ? 'That selected plan is no longer available. Choose another published plan or start the standard free trial.'
+          : 'The free trial is temporarily unavailable. Please try again shortly.'
+      });
+    }
+
+    await consumeRateLimit(event, { scope: 'signup_ip_v1013', identifier: requestIpHash(event), limit: 8, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
+    await consumeRateLimit(event, { scope: 'signup_email_v1013', identifier: email, limit: 5, windowSeconds: 60 * 60, blockSeconds: 60 * 60 });
     const [emailUser, phoneUser] = await Promise.all([findByEmail(email), findByPhone(phoneE164)]);
     if (emailUser?.id && phoneUser?.id && emailUser.id !== phoneUser.id) {
       return jsonResponse(409, {
@@ -100,10 +142,20 @@ export async function handler(event) {
             message: 'Read and agree to the current Terms of Service and Privacy Policy before continuing the pending signup.'
           });
         }
-        const plan = await loadPlan(selectedPlanCode);
-        if (!plan?.code || plan.is_active === false || plan.is_public === false || !launchReadyPlan(plan.code)) {
-          return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'PLAN_NOT_AVAILABLE', message: 'That plan is not currently available for new accounts.' });
+        const plan = planSelectionSource === 'landing_plan_card'
+          ? requestedSignupPlan
+          : (await resolveSignupPlan({ planSelectionSource, requestedPlanCode, existingPlanCode: tenant.plan_code || '' })) || requestedSignupPlan;
+        if (!plan?.code) {
+          return jsonResponse(409, {
+            ok: false,
+            version: APP_VERSION,
+            code: 'TRIAL_TEMPORARILY_UNAVAILABLE',
+            message: planSelectionSource === 'landing_plan_card'
+              ? 'That selected plan is no longer available. Choose another published plan or start the standard free trial.'
+              : 'The free trial is temporarily unavailable. Please try again shortly.'
+          });
         }
+        const selectedPlanCode = plan.code;
         const now = new Date().toISOString();
         const phoneChanged = Boolean(existingUser.phone_e164 && existingUser.phone_e164 !== phoneE164);
         await updateRow('users', `id=${eq(existingUser.id)}&tenant_id=${eq(tenant.id)}`, {
@@ -191,15 +243,18 @@ export async function handler(event) {
       });
     }
 
-    const plan = await loadPlan(selectedPlanCode);
-    if (!plan?.code || plan.is_active === false || plan.is_public === false || !launchReadyPlan(plan.code)) {
+    const plan = requestedSignupPlan;
+    if (!plan?.code) {
       return jsonResponse(409, {
         ok: false,
         version: APP_VERSION,
-        code: 'PLAN_NOT_AVAILABLE',
-        message: 'That plan is not currently available for new accounts. Personal is the available launch plan.'
+        code: 'TRIAL_TEMPORARILY_UNAVAILABLE',
+        message: planSelectionSource === 'landing_plan_card'
+          ? 'That selected plan is no longer available. Choose another published plan or start the standard free trial.'
+          : 'The free trial is temporarily unavailable. Please try again shortly.'
       });
     }
+    const selectedPlanCode = plan.code;
 
     const signupEntitlements = entitlementSnapshotFromPlan(plan);
     assertUserCapacity({ effective: signupEntitlements, usage: { users: 0 } }, 1);
