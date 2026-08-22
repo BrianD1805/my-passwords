@@ -19885,3 +19885,42 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     justify-content: center;
   }
 }
+
+
+/* Password-Encrypt Ver-1.020.01 — popup accent temporarily removed globally. */
+.item-popup-header::before,
+.admin-plan-window-header::before,
+.entitlement-modal > header::before,
+.item-popup-card::before,
+.item-form.item-popup-card::before,
+.admin-plan-window::before,
+.entitlement-modal::before,
+.country-picker-panel::before,
+.verify-modal::before {
+  content: none !important;
+  display: none !important;
+  border: 0 !important;
+  -webkit-mask: none !important;
+  mask: none !important;
+}
+
+.item-popup-card,
+.item-form.item-popup-card,
+.admin-plan-window,
+.entitlement-modal,
+.country-picker-panel,
+.verify-modal {
+  border: 1px solid rgba(29, 53, 87, 0.10) !important;
+}
+
+@media (max-width: 860px) {
+  .mobile-header-menu .lock-menu-item {
+    margin-top: 4px;
+    border-top: 1px solid #e4ebf1;
+    border-radius: 14px;
+  }
+  .mobile-header-menu .help-menu-item {
+    margin-top: 0;
+    border-radius: 14px;
+  }
+}

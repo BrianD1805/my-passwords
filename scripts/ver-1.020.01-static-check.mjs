@@ -1,0 +1,24 @@
+import fs from 'node:fs';
+let failures = 0;
+let checks = 0;
+const read = (file) => fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+const check = (label, ok) => { checks += 1; if (ok) console.log(`PASS  ${label}`); else { failures += 1; console.error(`FAIL  ${label}`); } };
+const main = read('src/main.jsx');
+const styles = read('src/styles.css');
+const db = read('netlify/functions/_db.js');
+const sw = read('public/sw.js');
+const offline = read('public/offline.html');
+const admin = read('src/AdminApp.jsx');
+const pkg = JSON.parse(read('package.json'));
+const pkgLock = JSON.parse(read('package-lock.json'));
+check('Ver-1.020.01 versions align', pkg.version === '1.20.1' && pkgLock.version === '1.20.1' && /Password-Encrypt Ver-1\.020\.01/.test(main) && /Password-Encrypt Ver-1\.020\.01/.test(db) && /my-passwords-v1\.020\.01/.test(sw) && /Password-Encrypt Ver-1\.020\.01/.test(offline) && /Ver-1\.020\.01/.test(admin));
+check('SMS defer moves immediately to Step 8', /setLandingOnboardingStep\(8\);[\s\S]{0,500}prepareLandingOnboarding\(\{ deferSms: true, silentDefer: true \}\)/.test(main));
+check('Deferred account preparation never uses visible SMS sending state', /status: silentDefer \? 'preparing-email' : 'preparing'/.test(main));
+check('Email send waits for silent account preparation', /disabled=\{landingSignup\.status === 'preparing-email' \|\| landingOtp\.status === 'sending'\}/.test(main));
+check('Popup green accent is disabled globally', /popup accent temporarily removed globally[\s\S]*content: none !important;[\s\S]*display: none !important;/.test(styles));
+const start = main.indexOf('<nav className="mobile-header-menu"');
+const end = main.indexOf('</nav>', start);
+const menu = main.slice(start, end);
+check('Vault menu order matches request', menu.indexOf('Vault Home') < menu.indexOf('Settings') && menu.indexOf('Settings') < menu.indexOf('Lock Vault') && menu.indexOf('Lock Vault') < menu.indexOf("Help & FAQ'S"));
+if (failures) { console.error(`\n${failures} Ver-1.020.01 check(s) failed.`); process.exit(1); }
+console.log(`\n${checks}/${checks} Ver-1.020.01 Small Bug Fixes checks passed.`);

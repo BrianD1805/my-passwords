@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.020';
+const VERSION = 'Password-Encrypt Ver-1.020.01';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -7459,7 +7459,7 @@ function App() {
     }
   }
 
-  async function prepareLandingOnboarding({ sendInitialSms = false, deferSms = false } = {}) {
+  async function prepareLandingOnboarding({ sendInitialSms = false, deferSms = false, silentDefer = false } = {}) {
     const draft = cleanLandingDraft();
     const validationMessage = validateLandingDraft(draft);
     if (validationMessage) {
@@ -7471,7 +7471,7 @@ function App() {
       else if (/mobile/i.test(validationMessage)) setLandingOnboardingStep(5);
       return;
     }
-    setLandingSignup((current) => ({ ...current, status: 'preparing', message: 'Preparing your secure account...' }));
+    setLandingSignup((current) => ({ ...current, status: silentDefer ? 'preparing-email' : 'preparing', message: silentDefer ? '' : 'Preparing your secure account...' }));
     const controller = beginOnboardingNetworkRequest();
     try {
       await isolateExistingCustomerSessionForNewOnboarding(controller.signal);
@@ -7530,7 +7530,7 @@ function App() {
         const note = 'Account preparation timed out or was cancelled. Retry, or choose Do this later to verify your email instead.';
         setLandingSignup((current) => ({ ...current, status: 'error', message: note }));
         setLandingOtp((current) => ({ ...current, status: 'error', message: note }));
-        setLandingOnboardingStep(6);
+        setLandingOnboardingStep(silentDefer ? 8 : 6);
         return;
       }
       setLandingSignup((current) => ({ ...current, status: 'error', message: error.message || 'Account setup could not continue.' }));
@@ -7584,16 +7584,20 @@ function App() {
 
   async function deferOnboardingSms() {
     stopOnboardingSmsWebOtpCapture();
-    if (!landingSignup.tenantId || !landingSignup.userId) {
-      setLandingSignup((current) => ({ ...current, status: 'preparing', message: 'Preparing your account for email verification...' }));
-      setLandingOtp((current) => ({ ...current, status: 'idle', channel: 'email', challengeId: '', input: '', message: 'Preparing email verification...', smsDeferred: true }));
-      await prepareLandingOnboarding({ deferSms: true });
-      return;
-    }
     clearOnboardingNetworkRequest();
-    setLandingSignup((current) => ({ ...current, status: current.status === 'preparing' ? 'ready-for-otp' : current.status, message: 'Mobile verification can be completed later.' }));
+
+    // Move to Email Verification immediately. Any pending-account preparation
+    // runs silently on Step 8 and must never look like an SMS request started.
     setLandingOtp((current) => ({ ...current, status: 'idle', channel: 'email', challengeId: '', input: '', message: 'Mobile verification deferred. Verify your email address to continue.', smsDeferred: true }));
     setLandingOnboardingStep(8);
+
+    if (!landingSignup.tenantId || !landingSignup.userId) {
+      setLandingSignup((current) => ({ ...current, status: 'preparing-email', message: '' }));
+      await prepareLandingOnboarding({ deferSms: true, silentDefer: true });
+      return;
+    }
+
+    setLandingSignup((current) => ({ ...current, status: 'ready-for-otp', message: 'Mobile verification can be completed later.' }));
   }
 
   function deferOnboardingEmail() {
@@ -9848,8 +9852,9 @@ function App() {
                 {!landingSignup.existingAccount && (landingOtp.smsVerified || bootstrap.phoneVerified
                   ? <div className="onboarding-info-panel success"><Check size={19} /><span>Your mobile number is verified. You can verify your email now; otherwise Password-Encrypt will remind you after sign-in.</span></div>
                   : <div className="onboarding-info-panel warning"><AlertTriangle size={19} /><span>Mobile verification is deferred. Verify your email now to activate the account. We will remind you to verify the mobile number later.</span></div>)}
+                {landingSignup.status === 'error' && <p className="onboarding-inline-status error">{landingSignup.message}</p>}
                 {landingOtp.status === 'error' && <p className="onboarding-inline-status error">{landingOtp.message}</p>}
-                <button type="button" className="primary-button onboarding-next-button" onClick={() => sendLandingOnboardingOtp('email')} disabled={landingOtp.status === 'sending'}>
+                <button type="button" className="primary-button onboarding-next-button" onClick={() => sendLandingOnboardingOtp('email')} disabled={landingSignup.status === 'preparing-email' || landingOtp.status === 'sending'}>
                   {landingOtp.status === 'sending' ? <RefreshCw size={18} className="spin-icon" /> : <Mail size={18} />}
                   {landingOtp.status === 'sending' ? 'Sending code...' : 'Send email code'}
                 </button>
@@ -10750,10 +10755,10 @@ function App() {
         {mobileHeaderMenuOpen && <>
           <button type="button" className="mobile-header-menu-backdrop" onClick={() => setMobileHeaderMenuOpen(false)} aria-label="Close vault menu" />
           <nav className="mobile-header-menu" aria-label="Vault menu">
-            <button type="button" className={activePage === 'home' ? 'active' : ''} onClick={() => { setMobileHeaderMenuOpen(false); setActivePage('home'); }}><KeyRound size={19} /><span>Vault home</span></button>
-            <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'active' : ''} onClick={() => { setMobileHeaderMenuOpen(false); openFaqSettings(); }}><CircleHelp size={19} /><span>Help & FAQs</span></button>
+            <button type="button" className={activePage === 'home' ? 'active' : ''} onClick={() => { setMobileHeaderMenuOpen(false); setActivePage('home'); }}><KeyRound size={19} /><span>Vault Home</span></button>
             <button type="button" className={activePage === 'settings' && activeSettingsSection !== 'faq' ? 'active' : ''} onClick={() => { setMobileHeaderMenuOpen(false); openSettingsHome(); }}><Settings size={19} /><span>Settings</span></button>
-            <button type="button" className="lock-menu-item" onClick={() => { setMobileHeaderMenuOpen(false); lockVault(); }}><Lock size={19} /><span>Lock vault</span></button>
+            <button type="button" className="lock-menu-item" onClick={() => { setMobileHeaderMenuOpen(false); lockVault(); }}><Lock size={19} /><span>Lock Vault</span></button>
+            <button type="button" className={activePage === 'settings' && activeSettingsSection === 'faq' ? 'active help-menu-item' : 'help-menu-item'} onClick={() => { setMobileHeaderMenuOpen(false); openFaqSettings(); }}><CircleHelp size={19} /><span>Help & FAQ'S</span></button>
           </nav>
         </>}
       </header>
