@@ -38,7 +38,7 @@ check('Emergency package title can be fully cleared before retyping', main.inclu
 check('Subscription overview no longer has the long introductory paragraph', !main.includes('See your current status, renewal and payment history here.'));
 check('Cross-device check has visible busy and completion feedback', main.includes('cloudChangeCheckBusy') && main.includes('Checking for changes...') && main.includes('Check complete. This device already has the latest protected vault copy.'));
 check('Vault Safety redundant device/backup/conflict explainer panels are removed', !main.includes('vault-safety-explainer-grid'));
-check('Recovery point check has clearer label and working feedback', main.includes('Checkup recovery points') && main.includes('Checking recovery points...') && main.includes('recovery-check-status'));
+check('Recovery point check has clearer label and working feedback', main.includes('Check recovery points') && main.includes('Checking recovery points...') && main.includes('recovery-check-status'));
 check('Everything important appears before Next of Kin spotlight', main.indexOf('Everything important, neatly organised') < main.indexOf('Next of Kin / Trusted Person Access'));
 check('Trial payment note no longer mentions Stripe Checkout', main.includes('You only enter payment details if you later choose to purchase a subscription.') && !main.includes('You only enter payment details if you later choose to purchase a subscription through Stripe Checkout.'));
 

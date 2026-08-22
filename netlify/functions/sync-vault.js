@@ -8,6 +8,25 @@ function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
 }
 
+const MAX_RECOVERY_POINTS = 30;
+
+async function pruneVaultRecoveryPoints(tenantId, userId) {
+  const rows = await selectRows('vault_sync_snapshots', `select=id,created_at&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&order=created_at.desc&limit=1000`);
+  const stale = rows.slice(MAX_RECOVERY_POINTS);
+  let removed = 0;
+  for (let offset = 0; offset < stale.length; offset += 100) {
+    const batch = stale.slice(offset, offset + 100).map((row) => String(row.id || '').trim()).filter(Boolean);
+    if (!batch.length) continue;
+    const filter = batch.map((id) => encodeURIComponent(id)).join(',');
+    const deleted = await supabaseRequest(`vault_sync_snapshots?tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=in.(${filter})&select=id`, {
+      method: 'DELETE',
+      headers: { Prefer: 'return=representation' }
+    });
+    removed += Array.isArray(deleted) ? deleted.length : 0;
+  }
+  return { kept: Math.min(rows.length, MAX_RECOVERY_POINTS), removed, limit: MAX_RECOVERY_POINTS };
+}
+
 async function recordSyncEvent({ tenantId, userId, eventType, status = 'info', itemCount = 0, message = '', deviceId = '', metadata = {} }) {
   return insertRow('vault_sync_events', {
     id: publicId('sync_event'),
@@ -72,6 +91,15 @@ export async function handler(event) {
   if (String(body.action || '') === 'record_event') {
     await recordSyncEvent({ tenantId, userId, eventType: body.eventType, status: body.status, itemCount: body.itemCount, message: body.message, deviceId: body.deviceId, metadata: body.metadata || {} });
     return jsonResponse(200, { ok: true, version: APP_VERSION, message: 'Sync diagnostic recorded.' });
+  }
+  if (String(body.action || '') === 'prune_snapshot_history') {
+    try {
+      const retention = await pruneVaultRecoveryPoints(tenantId, userId);
+      return jsonResponse(200, { ok: true, version: APP_VERSION, retention, message: `Recovery history is limited to the latest ${MAX_RECOVERY_POINTS} encrypted recovery points.` });
+    } catch (error) {
+      await recordFunctionFailure('sync-vault', error, { tenantId, userId, action: 'prune_snapshot_history' });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Recovery-point cleanup could not be completed.', error: error.message });
+    }
   }
   const encryptedBlob = String(body.encryptedBlob || '').trim();
   const localSalt = String(body.localSalt || '').trim();
@@ -163,8 +191,10 @@ export async function handler(event) {
     const reusedExistingBackup = Boolean(saved.reusedExistingBackup || saved.reused);
     await insertRow('audit_log', { id: publicId('audit'), tenant_id: tenantId, user_id: userId, action: reusedExistingBackup ? 'encrypted_snapshot_reused' : 'encrypted_snapshot_uploaded', metadata: { version: APP_VERSION, itemCount, provider: 'supabase', tenant_identity_source: 'secure_session', base_snapshot_id: body.baseSnapshotId || '', snapshot_id: effectiveSnapshotId, reused_existing_backup: reusedExistingBackup, forced_conflict_choice: Boolean(body.explicitConflictChoice) } });
     await recordSyncEvent({ tenantId, userId, eventType: reusedExistingBackup ? 'backup_duplicate_reused' : 'backup_success', status: 'success', itemCount, message: reusedExistingBackup ? 'Matching encrypted vault backup already existed and was reused.' : 'Encrypted vault backup saved.', deviceId: body.deviceId, metadata: { deviceType: body.deviceType || '', snapshotId: effectiveSnapshotId, baseSnapshotId: body.baseSnapshotId || '', reusedExistingBackup, forcedConflictChoice: Boolean(body.explicitConflictChoice) } });
+    let retention = { kept: 0, removed: 0, limit: MAX_RECOVERY_POINTS };
+    try { retention = await pruneVaultRecoveryPoints(tenantId, userId); } catch { /* Retention cleanup must never turn a successful encrypted backup into a failed backup. */ }
     const updatedEntitlements = serialiseEntitlements(access.entitlementContext?.effective || {}, { ...currentUsage, vaultItems: itemCount, vaultStorageBytes: newVaultStorageBytes, storageBytes: projectedStorageBytes });
-    return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', version: APP_VERSION, snapshotId: effectiveSnapshotId, reusedExistingBackup, itemCount, clientUpdatedAt, entitlements: updatedEntitlements, message: reusedExistingBackup ? 'Matching secure backup already exists and is now linked to this device.' : 'Cloud backup saved for the authenticated account.' });
+    return jsonResponse(200, { ok: true, connected: true, provider: 'supabase', version: APP_VERSION, snapshotId: effectiveSnapshotId, reusedExistingBackup, itemCount, clientUpdatedAt, entitlements: updatedEntitlements, retention, message: reusedExistingBackup ? 'Matching secure backup already exists and is now linked to this device.' : 'Cloud backup saved for the authenticated account.' });
   } catch (error) {
     await recordSyncEvent({ tenantId, userId, eventType: 'backup_failure', status: 'error', itemCount, message: 'Encrypted cloud backup failed.', deviceId: body.deviceId, metadata: { deviceType: body.deviceType || '', errorCode: error?.code || error?.name || 'BACKUP_FAILED' } });
     await recordOperationalEvent({ source: 'vault_backup', eventType: 'backup_failure', severity: 'error', errorCode: error?.code || error?.name || 'BACKUP_FAILED', message: 'An encrypted vault cloud backup failed.', tenantId, userId, metadata: { itemCount, deviceType: body.deviceType || '' } });

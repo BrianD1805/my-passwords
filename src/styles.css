@@ -19565,3 +19565,79 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
 /* Password-Encrypt Ver-1.017 — Guided Tour is modal during the tour; highlighted controls are display-only until the tour step is closed. */
 
 /* Password-Encrypt Ver-1.018 — Guided Tour auto welcome popup removed; Step 14/manual Help entry are the supported launch points. */
+
+/* Password-Encrypt Ver-1.019 — Vault Safety / Recovery Tools spacing and action progress feedback. */
+.advanced-recovery-card.settings-inner-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+.advanced-recovery-card.settings-inner-card > p,
+.advanced-recovery-card.settings-inner-card > button {
+  margin: 0;
+}
+.advanced-recovery-card.settings-inner-card .recovery-check-status {
+  width: 100%;
+  box-sizing: border-box;
+}
+.vault-action-progress-card {
+  max-width: 520px;
+}
+.vault-action-progress-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.vault-action-progress-body {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 28px 24px 30px;
+}
+.vault-action-progress-body > strong {
+  color: #20364d;
+  font-size: 1.08rem;
+}
+.vault-action-progress-body > p {
+  margin: 0;
+  max-width: 390px;
+  color: #62768a;
+  line-height: 1.55;
+}
+.vault-action-progress-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  background: #eef6fb;
+  color: #336699;
+  border: 1px solid #d7e7f2;
+}
+.vault-action-progress-icon.success {
+  background: #f0f8f3;
+  color: #34704c;
+  border-color: #cfe3d6;
+}
+.vault-action-progress-icon.warning,
+.vault-action-progress-icon.error {
+  background: #fff7f2;
+  color: #a75b3d;
+  border-color: #eed8cc;
+}
+.vault-action-progress-footer {
+  justify-content: center;
+}
+.vault-action-progress-footer .primary-button {
+  min-width: 132px;
+}
+@media (max-width: 680px) {
+  .advanced-recovery-card.settings-inner-card {
+    gap: 14px;
+    padding: 16px;
+  }
+  .vault-action-progress-body {
+    padding: 24px 18px 27px;
+  }
+}
