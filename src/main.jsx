@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.017';
+const VERSION = 'Password-Encrypt Ver-1.018';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -38,7 +38,6 @@ const ONBOARDING_TOTAL_STEPS = 14;
 const ONBOARDING_NETWORK_TIMEOUT_MS = 20000;
 const CONTACT_VERIFICATION_REMINDER_KEY = 'password-encrypt-contact-verification-reminder-v1';
 const GUIDED_TOUR_VERSION = 1;
-const GUIDED_TOUR_LATER_DELAY_MS = 24 * 60 * 60 * 1000;
 const GUIDED_TOUR_FALLBACK_KEY = 'password-encrypt-guided-tour-v1';
 const DEFAULT_HOME_FOLDERS = ['Passwords', 'Cards', 'Bank Details', 'Notes', 'Documents'];
 const HOME_FOLDER_COLLAPSED_LIMIT = 6;
@@ -3000,30 +2999,6 @@ function ExitAppConfirmationModal({ visible, onStay, onExit }) {
   );
 }
 
-function GuidedTourWelcomeModal({ visible, busy, onStart, onLater, onSkip }) {
-  if (!visible) return null;
-  return (
-    <div className="item-popup-layer guided-tour-welcome-layer" role="presentation">
-      <button type="button" className="item-popup-backdrop" onClick={busy ? undefined : onLater} aria-label="Decide about the guided tour later" />
-      <section className="item-popup-card guided-tour-welcome-card" role="dialog" aria-modal="true" aria-labelledby="guided-tour-welcome-title">
-        <header className="item-popup-header">
-          <h2 id="guided-tour-welcome-title"><Sparkles size={21} /> Welcome to Password-Encrypt</h2>
-        </header>
-        <div className="item-popup-body guided-tour-welcome-body">
-          <div className="guided-tour-welcome-icon"><ShieldCheck size={29} /></div>
-          <p>Would you like a quick guided tour? We’ll show you the main areas and where to find the controls you’ll use most.</p>
-          <div className="master-password-boundary-note compact"><CircleHelp size={18} /><span><strong>You stay in control</strong><small>You can skip the tour, choose Maybe later, or run it again at any time from Settings → Help and support.</small></span></div>
-        </div>
-        <footer className="item-popup-footer guided-tour-welcome-footer">
-          <button type="button" className="secondary-button" onClick={onLater} disabled={busy}>Maybe later</button>
-          <button type="button" className="secondary-button" onClick={onSkip} disabled={busy}>Skip tour</button>
-          <button type="button" className="primary-button" onClick={onStart} disabled={busy}>{busy ? 'Saving...' : 'Start tour'}</button>
-        </footer>
-      </section>
-    </div>
-  );
-}
-
 function GuidedTourOverlay({ active, stepIndex, targetFound, targetRect, onBack, onNext, onSkip }) {
   if (!active) return null;
   const step = GUIDED_TOUR_STEPS[stepIndex] || GUIDED_TOUR_STEPS[0];
@@ -4565,10 +4540,7 @@ function App() {
   }, [customerSession.authenticated, customerSession.userId]);
 
   useEffect(() => {
-    const guidedLaterAt = guidedTourState.updatedAt ? new Date(guidedTourState.updatedAt).getTime() : 0;
-    const guidedTourAutoOfferPending = guidedTourState.status === 'not_started'
-      || (guidedTourState.status === 'later' && (!guidedLaterAt || Date.now() - guidedLaterAt >= GUIDED_TOUR_LATER_DELAY_MS));
-    if (locked || showInstallOnboarding || onboardingInstallEntry || onboardingPushGate || !guidedTourState.loaded || guidedTourAutoOfferPending || guidedTourPromptOpen || guidedTour.active || !customerSession.authenticated || !pushNotifications.loaded || pushActivationPromptShownRef.current) return;
+    if (locked || showInstallOnboarding || onboardingInstallEntry || onboardingPushGate || !guidedTourState.loaded || guidedTour.active || !customerSession.authenticated || !pushNotifications.loaded || pushActivationPromptShownRef.current) return;
     if (!pushNotifications.supported || !pushNotifications.configured || pushNotifications.enabledThisDevice) return;
     if (isPushActivationPromptSuppressed(customerSession)) return;
     if (pushActivationPromptDeferredThisDocumentRef.current) return;
@@ -4577,7 +4549,7 @@ function App() {
     } catch {}
     pushActivationPromptShownRef.current = true;
     setPushActivationPromptOpen(true);
-  }, [locked, showInstallOnboarding, onboardingInstallEntry, onboardingPushGate, guidedTourState.loaded, guidedTourState.status, guidedTourState.updatedAt, guidedTourPromptOpen, guidedTour.active, customerSession.authenticated, customerSession.tenantId, customerSession.userId, pushNotifications.loaded, pushNotifications.supported, pushNotifications.configured, pushNotifications.enabledThisDevice]);
+  }, [locked, showInstallOnboarding, onboardingInstallEntry, onboardingPushGate, guidedTourState.loaded, guidedTour.active, customerSession.authenticated, customerSession.tenantId, customerSession.userId, pushNotifications.loaded, pushNotifications.supported, pushNotifications.configured, pushNotifications.enabledThisDevice]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -6560,9 +6532,9 @@ function App() {
         await saveItems(nextItems, { autoSync: true, silentAutoSync: true }).catch(() => null);
       }
 
-      const laterAt = nextState.updatedAt ? new Date(nextState.updatedAt).getTime() : 0;
-      const laterReady = nextState.status === 'later' && (!laterAt || Date.now() - laterAt >= GUIDED_TOUR_LATER_DELAY_MS);
-      if (nextState.status === 'not_started' || laterReady) setGuidedTourPromptOpen(true);
+      // Ver-1.018: never auto-open a Guided Tour welcome popup. New users choose
+      // the tour explicitly at onboarding Step 14, and existing users can start it
+      // manually from Settings -> Help and support.
     }, 700);
     return () => {
       cancelled = true;
@@ -11960,14 +11932,6 @@ function App() {
         state={homeFolderPrompt}
         onNotNow={() => setHomeFolderPrompt({ visible: false, folderName: '', busy: false })}
         onAdd={addNewFolderToHome}
-      />
-
-      <GuidedTourWelcomeModal
-        visible={guidedTourPromptOpen}
-        busy={guidedTourState.busy}
-        onStart={() => startGuidedTour()}
-        onLater={async () => { setGuidedTourPromptOpen(false); await saveGuidedTourStatus('later'); }}
-        onSkip={async () => { setGuidedTourPromptOpen(false); await saveGuidedTourStatus('skipped'); }}
       />
 
       <GuidedTourOverlay

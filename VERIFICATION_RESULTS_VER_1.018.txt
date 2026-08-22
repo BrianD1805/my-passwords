@@ -1,0 +1,22 @@
+Password-Encrypt Ver-1.018 verification
+
+PASS — Feature checks: 10/10
+PASS — Onboarding checks: 68/68
+PASS — Security checks: 13/13
+PASS — Reliability checks: 20/20
+PASS — Legal/commercial checks: 35/35
+PASS — Landing UX checks: 36/36
+PASS — Mobile checks: 6/6
+PASS — Trusted Person / Emergency Access checks: 75/75
+PASS — Push Notification checks: 32/32
+
+Ver-1.018 coverage:
+- Guided Tour welcome popup removed from normal vault startup/rendering.
+- No delayed not_started/later auto-offer can open behind the active tour.
+- Step 14 Start tour still opens the vault and starts the guided overlay directly.
+- Settings -> Help and support -> Take the guided tour remains available for manual replay.
+- Guided Tour status persistence and default Home-folder initialization remain intact.
+- Push-notification prompting no longer waits for the obsolete Guided Tour auto-offer state.
+- No Supabase SQL/database migration required.
+
+Note: npm install was attempted in the isolated build environment but did not complete within the execution window. Run npm install and npm run build locally before publishing.
