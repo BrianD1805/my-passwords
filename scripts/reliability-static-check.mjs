@@ -24,7 +24,7 @@ const netlify = read('netlify.toml');
 const retention = read('netlify/functions/operational-retention-cleanup.js');
 const pkg = JSON.parse(read('package.json'));
 
-check('Ver-1.019 version and cache are aligned', pkg.version === '1.19.0' && /Password-Encrypt Ver-1\.019/.test(main) && /my-passwords-v1\.019/.test(read('public/sw.js')));
+check('Ver-1.019.01 version and cache are aligned', pkg.version === '1.19.1' && /Password-Encrypt Ver-1\.019\.01/.test(main) && /my-passwords-v1\.019\.01/.test(read('public/sw.js')));
 check('Operational monitoring tables use RLS and service-role-only grants', /create table if not exists public\.operational_events/.test(migration) && /create table if not exists public\.scheduled_check_runs/.test(migration) && /create table if not exists public\.stripe_reconciliation_runs/.test(migration) && /enable row level security/.test(migration) && /revoke all on table public\.operational_events[\s\S]*from anon, authenticated/.test(migration) && /grant select, insert, update, delete on public\.operational_events to service_role/.test(migration));
 check('Operational metadata has a sensitive-key denylist and text redaction', /SENSITIVE_KEY/.test(operations) && /encrypted_blob/.test(operations) && /master_password/.test(operations) && /recovery_code/.test(operations) && /provider-key-redacted/.test(operations));
 check('Failed functions create sanitised operational events', /queueFunctionFailureResponse/.test(read('netlify/functions/_db.js')) && /eventType: 'function_failure'/.test(read('netlify/functions/_db.js')) && /recordFunctionFailure/.test(operations));

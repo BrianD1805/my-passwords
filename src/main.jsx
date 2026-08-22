@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.019';
+const VERSION = 'Password-Encrypt Ver-1.019.01';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -4720,7 +4720,7 @@ function App() {
   }, [locked, isOnline, customerSession.authenticated]);
 
   useEffect(() => {
-    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || homeFolderPrompt.visible || contactVerificationReminder.visible || guidedTourPromptOpen || isCreateAccountPopupOpen || onboardingResetModal.visible || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
+    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || homeFolderPrompt.visible || contactVerificationReminder.visible || guidedTourPromptOpen || isCreateAccountPopupOpen || onboardingResetModal.visible || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || actionProgress.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
     document.body.classList.toggle('app-popup-open', popupOpen);
     if (popupOpen) {
       window.requestAnimationFrame(() => {
@@ -4730,7 +4730,7 @@ function App() {
       });
     }
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, homeFolderPrompt.visible, contactVerificationReminder.visible, guidedTourPromptOpen, isCreateAccountPopupOpen, onboardingResetModal.visible, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, homeFolderPrompt.visible, contactVerificationReminder.visible, guidedTourPromptOpen, isCreateAccountPopupOpen, onboardingResetModal.visible, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, actionProgress.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
 
   // Ver-1.006: Vault Status is the single repair entry point.
   // Routine sync problems no longer open an automatic delayed warning popup.
@@ -12112,6 +12112,7 @@ function App() {
       <AccountSecurityModal state={accountSecurityModal} setState={setAccountSecurityModal} onClose={closeAccountSecurityModal} onRequestCode={requestAccountSecurityOtp} onConfirmCode={confirmAccountSecurityOtp} onRemoveDevice={confirmRemoveVerifiedDevice} onEndAllSessions={confirmEndAllSessions} />
       <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} phone={bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)} channel={otpChannel} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onChannelChange={chooseOtpChannel} onSend={() => requestSelectedOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
+      <ActionProgressModal state={actionProgress} onClose={closeActionProgress} />
       <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} onCheck={handleVaultStatusCheck} />
       <ExitAppConfirmationModal visible={exitAppConfirmationOpen} onStay={() => setExitAppConfirmationOpen(false)} onExit={confirmExitApp} />
       <HomeFolderPromptModal
