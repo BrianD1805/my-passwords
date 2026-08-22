@@ -28,7 +28,7 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-1.019.01 version is aligned', pkg.version === '1.19.1' && /Password-Encrypt Ver-1\.019\.01/.test(main) && /my-passwords-v1\.019\.01/.test(read('public/sw.js')));
+check('Ver-1.020 version is aligned', pkg.version === '1.20.0' && /Password-Encrypt Ver-1\.020/.test(main) && /my-passwords-v1\.020/.test(read('public/sw.js')));
 check('Nominate a Trusted Person heading has a same-line Help and FAQ control', /Nominate a Trusted Person<\/h4>/.test(main) && /trusted-person-help-button/.test(main) && /Open Trusted Person help and FAQs/.test(main));
 check('Current progress is setup-only and explicitly shows Stage X of 4', /emergencySetupStageNumber/.test(main) && /Stage \{emergencySetupStageNumber\} of 4 setup/.test(main) && /emergencySetupCompleteCount/.test(main));
 check('Current progress panel jumps directly to its setup stage', /goToEmergencySetupStage/.test(main) && /onClick=\{\(\) => goToEmergencySetupStage\(emergencySetupStageNumber\)\}/.test(main) && /scrollIntoView/.test(main));
@@ -60,7 +60,7 @@ check('Trusted Person action dropdown options use lighter readable typography', 
 check('Waiting-period actions sit on Step 6 dropdown', /placeholder="Waiting-period actions"/.test(main) && /options=\{emergencyWaitingStageOptions\}/.test(main));
 check('Completed stages have a large tick status', /emergency-flow-stage-status/.test(main) && /<Check size=\{29\} strokeWidth=\{3\}/.test(main));
 check('Reset to zero remains in a maintenance dropdown, not the main route', /Manage or reset this flow/.test(main) && /placeholder="Manage flow"/.test(main) && /options=\{emergencyManagementOptions\}/.test(main));
-check('Optional event-history accordion shows dated flow events', /<strong>Event history<\/strong>/.test(main) && /formatAppDate\(event\.occurredAt, true\)/.test(main));
+check('Optional event-history accordion shows dated flow events', /<strong>Event history<\/strong>/.test(main) && /formatUserDate\(event\.occurredAt, true\)/.test(main));
 check('Flow events remain metadata-only invitation history', /flow_events/.test(flow) && /slice\(0, 120\)/.test(flow) && /buildEmergencyFlowEvents/.test(flow));
 check('Reset to zero removes current flow and audit source', /reset_zero/.test(main) && /resetEmergencyFlowToZero/.test(invite) && /deleteRow\('emergency_access_invitations'/.test(flow));
 check('Reset to zero removes local encrypted Trusted Person plan metadata', /items\.filter\(\(item\) => !isEmergencyAccessMetaItem\(item\)\)/.test(main) && /setEmergencyFlowEvents\(\[\]\)/.test(main));
@@ -96,14 +96,14 @@ check('Admin customer detail includes explicit permanent-delete action', /hard_d
 check('Admin hard delete blocks Founder account and safely ends active Stripe subscription', /Founder account cannot be hard deleted/.test(detail) && /stripeRequest\(`subscriptions\//.test(detail) && /method: 'DELETE'/.test(detail));
 check('Admin hard delete removes tenant and tenant-scoped residual rows', /deleteRow\('tenants'/.test(detail) && /stripe_reconciliation_runs/.test(detail) && /operational_events/.test(detail));
 check('Deleted-account email exists and gives no deletion reason', /account_deleted/.test(adminEmail) && /account has been deleted/i.test(adminEmail) && !/reason for deletion/i.test(adminEmail));
-check('Hard-delete audit does not retain deleted tenant id', /admin_customer_hard_deleted/.test(detail) && /A customer account was permanently deleted from Admin for testing/.test(detail));
+check('Hard-delete audit does not retain deleted tenant id', /admin_customer_hard_deleted/.test(detail) && /A customer account was permanently deleted from Admin\./.test(detail));
 
 check('Trusted Person help FAQs use one question-answer row and normal-weight answers', /trusted-person-help-faq[\s\S]*?grid-template-columns: 1fr !important/.test(styles) && /trusted-person-help-faq p,[\s\S]*?font-weight: 400 !important/.test(styles));
 check('New Trusted Person plans default release scope to full vault package', /accessScope: 'Full vault access'/.test(main));
 check('Successful Step 1 and Step 2 saves close their editor dropdowns', /stageId = section === 'trusted_person'/.test(main) && /stagePanel\?\.open/.test(main));
 check('Desktop Send invitation action aligns to the right', /@media \(min-width: 761px\)[\s\S]*?\.emergency-flow-stage-action[\s\S]*?justify-content: flex-end/.test(styles));
 check('Duplicate Trusted Person setup intro panel is removed', !/Complete Stages 1–4 in order/.test(main));
-check('App date formatter uses dd\/mmm\/yyyy format', /formatAppDate/.test(main) && /padStart\(2, '0'\)/.test(read('src/dateFormat.js')) && /\$\{day\}\/\$\{month\}\/\$\{year\}/.test(read('src/dateFormat.js')));
+check('App date formatter uses dd\/mmm\/yyyy format', /formatUserDate/.test(main) && /padStart\(2, '0'\)/.test(read('src/dateFormat.js')) && /\$\{day\}\/\$\{monthText\}\/\$\{year\}/.test(read('src/dateFormat.js')));
 
 if (failed) {
   console.error(`\n${failed} Trusted Person / emergency-flow static check(s) failed; ${passed} passed.`);

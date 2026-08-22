@@ -6,9 +6,9 @@ import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
-import { formatAppDate } from './dateFormat.js';
+import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.019.01';
+const VERSION = 'Password-Encrypt Ver-1.020';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -17,6 +17,7 @@ const SALT_KEY = 'my-passwords-v0.002-salt';
 const LEGACY_SALT_KEY = 'my-passwords-v0.001-salt';
 const BOOTSTRAP_KEY = 'my-passwords-v0.002-bootstrap-profile';
 const ACCOUNT_KEY = 'my-passwords-v0.011-account-identity';
+const USER_SETTINGS_KEY = 'password-encrypt-user-settings-v1';
 const BIOMETRIC_UNLOCK_KEY = 'my-passwords-v0.038-device-biometric-unlock';
 const BIOMETRIC_KEY_DB_NAME = 'my-passwords-device-biometric-key-v0.038';
 const BIOMETRIC_KEY_STORE = 'deviceKeys';
@@ -453,7 +454,35 @@ function removePendingDocumentDeletion(entry) {
   localStorage.setItem(PENDING_DOCUMENT_DELETIONS_KEY, JSON.stringify(next));
 }
 const SECURE_DEVICE_PASSWORD_CONFIRM_DAYS = 14;
-const SECURE_DEVICE_UNLOCK_COUNT_LIMIT = 10;
+const DEFAULT_SECURE_DEVICE_UNLOCK_COUNT_LIMIT = 10;
+const USER_SETTINGS_DEFAULTS = Object.freeze({
+  secureDeviceUnlockCount: DEFAULT_SECURE_DEVICE_UNLOCK_COUNT_LIMIT,
+  neverForcePasswordAgain: false,
+  dateFormat: APP_DATE_FORMATS.DMY_TEXT
+});
+
+function normaliseUserSettings(value = {}) {
+  const count = Math.min(999, Math.max(1, Number.parseInt(value.secureDeviceUnlockCount, 10) || DEFAULT_SECURE_DEVICE_UNLOCK_COUNT_LIMIT));
+  return {
+    secureDeviceUnlockCount: count,
+    neverForcePasswordAgain: Boolean(value.neverForcePasswordAgain),
+    dateFormat: normaliseAppDateFormat(value.dateFormat)
+  };
+}
+
+function readUserSettings() {
+  try {
+    return normaliseUserSettings(JSON.parse(localStorage.getItem(USER_SETTINGS_KEY) || '{}'));
+  } catch {
+    return { ...USER_SETTINGS_DEFAULTS };
+  }
+}
+
+function writeUserSettings(value) {
+  const next = normaliseUserSettings(value);
+  localStorage.setItem(USER_SETTINGS_KEY, JSON.stringify(next));
+  return next;
+}
 
 const FALLBACK_SAAS_PLANS = [];
 
@@ -764,8 +793,12 @@ function planStatusDisplayName(planStatus, accountStatus = '') {
 }
 
 
+function formatUserDate(value, includeTime = false, fallback = '—') {
+  return formatAppDate(value, includeTime, fallback, readUserSettings().dateFormat);
+}
+
 function formatAccountDate(value, includeTime = false) {
-  return formatAppDate(value, includeTime, '—');
+  return formatUserDate(value, includeTime, '—');
 }
 
 function accountTrialDaysRemaining(value) {
@@ -977,12 +1010,14 @@ function saveBiometricUnlockRecord(record) {
 
 function getSecureDevicePasswordReminderReason(record) {
   if (!record) return '';
+  const settings = readUserSettings();
+  if (settings.neverForcePasswordAgain) return '';
   const lastPasswordCheck = Date.parse(record.lastPasswordCheckAt || record.createdAt || '');
   const ageMs = Number.isFinite(lastPasswordCheck) ? Date.now() - lastPasswordCheck : Infinity;
   const ageDays = ageMs / (1000 * 60 * 60 * 24);
   if (ageDays >= SECURE_DEVICE_PASSWORD_CONFIRM_DAYS) return `It has been ${SECURE_DEVICE_PASSWORD_CONFIRM_DAYS} days since you last typed your password on this device.`;
   const unlockCount = Number(record.quickUnlockCount || 0);
-  if (unlockCount >= SECURE_DEVICE_UNLOCK_COUNT_LIMIT) return `You have used secure device unlock ${unlockCount} times since last typing your password.`;
+  if (unlockCount >= settings.secureDeviceUnlockCount) return `You have used secure device unlock ${unlockCount} times since last typing your password.`;
   return '';
 }
 
@@ -1479,9 +1514,9 @@ function emergencyPackagePlainText(packageData, releaseExpiresAt = '') {
   lines.push('PASSWORD-ENCRYPT EMERGENCY PACKAGE');
   lines.push(`Package: ${packageData?.title || 'Emergency package'}`);
   if (packageData?.ownerName) lines.push(`Prepared by: ${packageData.ownerName}`);
-  if (packageData?.preparedAt) lines.push(`Prepared: ${formatAppDate(packageData.preparedAt, true)}`);
+  if (packageData?.preparedAt) lines.push(`Prepared: ${formatUserDate(packageData.preparedAt, true)}`);
   if (packageData?.releaseScope) lines.push(`Access scope: ${packageData.releaseScope}`);
-  if (releaseExpiresAt) lines.push(`Secure link available until: ${formatAppDate(releaseExpiresAt, true)}`);
+  if (releaseExpiresAt) lines.push(`Secure link available until: ${formatUserDate(releaseExpiresAt, true)}`);
   pushSection('Emergency message', packageData?.message);
   pushSection('Important contacts', packageData?.importantContacts);
   pushSection('Documents and locations', packageData?.documentsAndLocations);
@@ -2376,9 +2411,9 @@ function emergencyImportedNotes(item) {
 function emergencyPackageOverviewNotes(packageData, releaseExpiresAt = '') {
   const blocks = [
     `Emergency Package received from ${packageData?.ownerName || 'the account owner'}.`,
-    packageData?.preparedAt ? `Prepared: ${formatAppDate(packageData.preparedAt, true)}` : '',
+    packageData?.preparedAt ? `Prepared: ${formatUserDate(packageData.preparedAt, true)}` : '',
     packageData?.releaseScope ? `Release scope: ${packageData.releaseScope}` : '',
-    releaseExpiresAt ? `Original secure release link expiry: ${formatAppDate(releaseExpiresAt, true)}` : '',
+    releaseExpiresAt ? `Original secure release link expiry: ${formatUserDate(releaseExpiresAt, true)}` : '',
     packageData?.message ? `Emergency message\n${packageData.message}` : '',
     packageData?.importantContacts ? `Important contacts\n${packageData.importantContacts}` : '',
     packageData?.documentsAndLocations ? `Documents and locations\n${packageData.documentsAndLocations}` : '',
@@ -2801,13 +2836,13 @@ function SyncSafetyModal({ state, onClose, onRetry, onVerify, onOpenSafety, onKe
                 <button type="button" className={`sync-conflict-choice ${recommendedCopy === 'local' ? 'recommended' : ''}`} onClick={onKeepDevice}>
                   <span className="sync-conflict-choice-heading"><strong>This device</strong>{recommendedCopy === 'local' && <em>Recommended</em>}</span>
                   <span className="sync-conflict-choice-count">{details.localItemCount ?? 0} item(s)</span>
-                  <small>{localChangedAt ? `Changed ${formatAppDate(localChangedAt, true)}` : 'Change time unavailable'}</small>
+                  <small>{localChangedAt ? `Changed ${formatUserDate(localChangedAt, true)}` : 'Change time unavailable'}</small>
                   <span className="sync-conflict-choice-action">Use this copy <ChevronRight size={18} /></span>
                 </button>
                 <button type="button" className={`sync-conflict-choice ${recommendedCopy === 'cloud' ? 'recommended' : ''}`} onClick={onUseCloud}>
                   <span className="sync-conflict-choice-heading"><strong>Secure backup</strong>{recommendedCopy === 'cloud' && <em>Recommended</em>}</span>
                   <span className="sync-conflict-choice-count">{details.cloudItemCount ?? 0} item(s)</span>
-                  <small>{cloudChangedAt ? `Changed ${formatAppDate(cloudChangedAt, true)}` : 'Change time unavailable'}</small>
+                  <small>{cloudChangedAt ? `Changed ${formatUserDate(cloudChangedAt, true)}` : 'Change time unavailable'}</small>
                   <span className="sync-conflict-choice-action">Use this copy <ChevronRight size={18} /></span>
                 </button>
               </div>
@@ -3165,6 +3200,9 @@ function App() {
   const [biometricStatus, setBiometricStatus] = useState(() => ({ supported: isBiometricUnlockSupported(), label: isBiometricUnlockSupported() ? friendlyBiometricName() : 'Not supported on this browser/device', state: readBiometricUnlockRecord() ? 'enabled' : 'available' }));
   const [activePage, setActivePage] = useState('home');
   const [activeSettingsSection, setActiveSettingsSection] = useState('overview');
+  const [userSettings, setUserSettings] = useState(() => readUserSettings());
+  const [userSettingsDraft, setUserSettingsDraft] = useState(() => readUserSettings());
+  const [userSettingsSaving, setUserSettingsSaving] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(() => ({
     loaded: false,
     loading: false,
@@ -3299,6 +3337,21 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPublicLandingRoute]);
 
+  useEffect(() => {
+    if (!customerSession.authenticated || !customerSession.tenantId || !customerSession.userId) return undefined;
+    let cancelled = false;
+    fetch('/.netlify/functions/user-settings', { credentials: 'same-origin', cache: 'no-store' })
+      .then((response) => response.json().catch(() => ({})))
+      .then((result) => {
+        if (cancelled || !result?.ok || !result.settings) return;
+        const next = writeUserSettings(result.settings);
+        setUserSettings(next);
+        setUserSettingsDraft(next);
+      })
+      .catch(() => null);
+    return () => { cancelled = true; };
+  }, [customerSession.authenticated, customerSession.tenantId, customerSession.userId]);
+
   function scrollSettingsToTop() {
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
@@ -3323,6 +3376,32 @@ function App() {
 
   function openVaultSafetySettings() {
     openSettingsSection('safety');
+  }
+
+  function openUserSettings() {
+    const current = readUserSettings();
+    setUserSettings(current);
+    setUserSettingsDraft(current);
+    openSettingsSection('user-settings');
+  }
+
+  async function saveUserSettings() {
+    const next = normaliseUserSettings(userSettingsDraft);
+    setUserSettingsSaving(true);
+    if (customerSession.authenticated) {
+      const result = await postJson('/.netlify/functions/user-settings', next);
+      if (!result.ok) {
+        setUserSettingsSaving(false);
+        showMessage(result.message || 'User settings could not be saved.', 'error');
+        return;
+      }
+      Object.assign(next, normaliseUserSettings(result.settings || next));
+    }
+    const stored = writeUserSettings(next);
+    setUserSettings(stored);
+    setUserSettingsDraft(stored);
+    setUserSettingsSaving(false);
+    showMessage('User settings saved.', 'success');
   }
 
   function openSubscriptionSettings() {
@@ -4062,7 +4141,7 @@ function App() {
     if (result?.ok) {
       const latest = result?.verified?.snapshot || null;
       const note = latest
-        ? `Your latest secured cloud backup contains ${Number(latest.item_count || getVisibleVaultItems(items).length)} item(s) from ${formatAppDate(latest.created_at || latest.client_updated_at || new Date().toISOString(), true)}.`
+        ? `Your latest secured cloud backup contains ${Number(latest.item_count || getVisibleVaultItems(items).length)} item(s) from ${formatUserDate(latest.created_at || latest.client_updated_at || new Date().toISOString(), true)}.`
         : 'Your latest vault changes are securely backed up and available on your verified devices.';
       finishActionProgress('success', 'Backup complete', note, 'Vault check and backup complete.', 'success');
     } else if (result?.conflict) {
@@ -6298,7 +6377,7 @@ function App() {
         total: Number(result.snapshotCount || 0),
         snapshots,
         message: latestSnapshot
-          ? `Your latest secured cloud backup contains ${Number(latestSnapshot.item_count || 0)} item(s) from ${formatAppDate(latestSnapshot.created_at || latestSnapshot.client_updated_at, true)}.`
+          ? `Your latest secured cloud backup contains ${Number(latestSnapshot.item_count || 0)} item(s) from ${formatUserDate(latestSnapshot.created_at || latestSnapshot.client_updated_at, true)}.`
           : 'No secured cloud backup has been created yet.'
       };
       setSnapshotHistory(next);
@@ -6562,7 +6641,7 @@ function App() {
     const itemCount = Number(latest?.item_count ?? getVisibleVaultItems(items).length);
     const dateValue = latest?.created_at || latest?.client_updated_at || syncSafety.lastSuccessAt || new Date().toISOString();
     const note = latest
-      ? `Check complete. The latest secured cloud backup contains ${itemCount} item(s) from ${formatAppDate(dateValue, true)}.`
+      ? `Check complete. The latest secured cloud backup contains ${itemCount} item(s) from ${formatUserDate(dateValue, true)}.`
       : 'Check complete. No secured cloud backup was found and this device was not changed.';
     finishActionProgress('success', 'Check complete', note, 'Cloud change check complete.', 'success');
   }
@@ -7262,7 +7341,7 @@ function App() {
     try {
       [
         STORAGE_KEY, LEGACY_STORAGE_KEY, SALT_KEY, LEGACY_SALT_KEY,
-        BOOTSTRAP_KEY, ACCOUNT_KEY, BIOMETRIC_UNLOCK_KEY, SYNC_SAFETY_KEY,
+        BOOTSTRAP_KEY, ACCOUNT_KEY, USER_SETTINGS_KEY, BIOMETRIC_UNLOCK_KEY, SYNC_SAFETY_KEY,
         SYNC_DEVICE_ID_KEY, ENTITLEMENTS_CACHE_KEY, PENDING_DOCUMENT_DELETIONS_KEY,
         ACCOUNT_DEVICE_INSTALL_KEY, PUSH_BINDING_KEY, PUSH_PROMPT_NEXT_OPEN_KEY
       ].forEach((key) => localStorage.removeItem(key));
@@ -7380,7 +7459,7 @@ function App() {
     }
   }
 
-  async function prepareLandingOnboarding({ sendInitialSms = false } = {}) {
+  async function prepareLandingOnboarding({ sendInitialSms = false, deferSms = false } = {}) {
     const draft = cleanLandingDraft();
     const validationMessage = validateLandingDraft(draft);
     if (validationMessage) {
@@ -7433,9 +7512,12 @@ function App() {
         trialEndsAt: result.trialEndsAt || '',
         welcomeEmailSent: false
       });
-      setLandingOtp({ status: 'idle', channel: existingAccount || mobileAlreadyVerified ? 'email' : 'sms', challengeId: '', input: '', message: mobileAlreadyVerified ? 'Mobile verified. Next verify your email address.' : '', testCode: '', expiresAt: '', smsVerified: mobileAlreadyVerified, emailVerified: Boolean(result.emailVerified) });
+      setLandingOtp({ status: 'idle', channel: existingAccount || mobileAlreadyVerified || deferSms ? 'email' : 'sms', challengeId: '', input: '', message: mobileAlreadyVerified ? 'Mobile verified. Next verify your email address.' : deferSms ? 'Mobile verification deferred. Verify your email address to continue.' : '', testCode: '', expiresAt: '', smsVerified: mobileAlreadyVerified, emailVerified: Boolean(result.emailVerified), smsDeferred: Boolean(deferSms && !mobileAlreadyVerified) });
       clearOnboardingNetworkRequest(controller);
       if (existingAccount || mobileAlreadyVerified) {
+        setLandingOnboardingStep(8);
+      } else if (deferSms) {
+        setLandingSignup((current) => ({ ...current, status: 'ready-for-otp', message: 'Mobile verification can be completed later. Verify your email to activate the account.' }));
         setLandingOnboardingStep(8);
       } else if (sendInitialSms) {
         await sendLandingOnboardingOtp('sms');
@@ -7500,8 +7582,15 @@ function App() {
     setLandingOnboardingStep(6);
   }
 
-  function deferOnboardingSms() {
-    cancelOnboardingNetworkRequest();
+  async function deferOnboardingSms() {
+    stopOnboardingSmsWebOtpCapture();
+    if (!landingSignup.tenantId || !landingSignup.userId) {
+      setLandingSignup((current) => ({ ...current, status: 'preparing', message: 'Preparing your account for email verification...' }));
+      setLandingOtp((current) => ({ ...current, status: 'idle', channel: 'email', challengeId: '', input: '', message: 'Preparing email verification...', smsDeferred: true }));
+      await prepareLandingOnboarding({ deferSms: true });
+      return;
+    }
+    clearOnboardingNetworkRequest();
     setLandingSignup((current) => ({ ...current, status: current.status === 'preparing' ? 'ready-for-otp' : current.status, message: 'Mobile verification can be completed later.' }));
     setLandingOtp((current) => ({ ...current, status: 'idle', channel: 'email', challengeId: '', input: '', message: 'Mobile verification deferred. Verify your email address to continue.', smsDeferred: true }));
     setLandingOnboardingStep(8);
@@ -9350,7 +9439,7 @@ function App() {
                 <div className="emergency-invite-status accepted">{trustedPersonReminderConfirmation.message}</div>
                 {trustedPersonReminderConfirmation.ownerName && <p>You remain the nominated trusted person for <strong>{trustedPersonReminderConfirmation.ownerName}</strong>.</p>}
                 <p className="emergency-invite-note">This confirmation did not request Emergency Access and did not reveal any vault information.</p>
-                {trustedPersonReminderConfirmation.confirmedAt && <p className="trusted-reminder-confirmed-time">Confirmed {formatAppDate(trustedPersonReminderConfirmation.confirmedAt, true)}.</p>}
+                {trustedPersonReminderConfirmation.confirmedAt && <p className="trusted-reminder-confirmed-time">Confirmed {formatUserDate(trustedPersonReminderConfirmation.confirmedAt, true)}.</p>}
               </>
             ) : (
               <>
@@ -9421,7 +9510,7 @@ function App() {
                   <>
                     <div className="emergency-package-access-window">
                       <ShieldCheck size={18} />
-                      <div><strong>This secure link is available for 30 days</strong><span>{emergencyRequestState.releaseExpiresAt ? `Available until ${formatAppDate(emergencyRequestState.releaseExpiresAt, true)}.` : 'The 30-day access period starts when the package becomes available.'} Keep this link private.</span></div>
+                      <div><strong>This secure link is available for 30 days</strong><span>{emergencyRequestState.releaseExpiresAt ? `Available until ${formatUserDate(emergencyRequestState.releaseExpiresAt, true)}.` : 'The 30-day access period starts when the package becomes available.'} Keep this link private.</span></div>
                     </div>
                     <div className="emergency-invite-qa-card emergency-final-qa">
                       <details>
@@ -10414,7 +10503,7 @@ function App() {
   const emergencyCurrentStage = isEmergencyReleaseReady
     ? { number: 6, step: 'Stage 6', title: 'Emergency package ready', copy: 'The waiting period completed without cancellation. Your trusted person can open only the emergency package you prepared.' }
     : hasActiveEmergencyRequest
-      ? { number: 6, step: 'Stage 6', title: 'Waiting period active', copy: `An Emergency Access request is active. No vault contents have been released. You can cancel before ${emergencyDraft.requestWaitingEndsAt ? formatAppDate(emergencyDraft.requestWaitingEndsAt, true) : 'the waiting period ends'}.` }
+      ? { number: 6, step: 'Stage 6', title: 'Waiting period active', copy: `An Emergency Access request is active. No vault contents have been released. You can cancel before ${emergencyDraft.requestWaitingEndsAt ? formatUserDate(emergencyDraft.requestWaitingEndsAt, true) : 'the waiting period ends'}.` }
       : emergencyInvitationAccepted
         ? { number: 5, step: 'Stage 5', title: 'Waiting for an Emergency Access request', copy: 'Your trusted person has accepted and has their secure Emergency Access link. Nothing else happens unless they use that link in a genuine emergency.' }
         : emergencyInvitationWasSent
@@ -10954,6 +11043,12 @@ function App() {
                     <span className="settings-directory-meta">{planDisplayName(bootstrap.planCode)}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
+                  <button type="button" className="settings-directory-row" onClick={openUserSettings}>
+                    <span className="settings-directory-icon"><Settings size={22} /></span>
+                    <span className="settings-directory-copy"><strong>User Settings</strong><small>Password reminder frequency and how dates are displayed.</small></span>
+                    <span className="settings-directory-meta">{userSettings.neverForcePasswordAgain ? 'Password reminder off' : `${userSettings.secureDeviceUnlockCount} opens`}</span>
+                    <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
+                  </button>
                   <button type="button" className="settings-directory-row" onClick={openSubscriptionSettings}>
                     <span className="settings-directory-icon"><CreditCard size={22} /></span>
                     <span className="settings-directory-copy"><strong>My Subscription</strong><small>Choose billing, manage payments and view renewal status.</small></span>
@@ -11015,6 +11110,46 @@ function App() {
             <div className="settings-subpage-nav">
               <button type="button" onClick={openSettingsHome}><ArrowLeft size={18} /> Back to Settings</button>
             </div>
+          )}
+
+          {activeSettingsSection === 'user-settings' && (
+            <section className="settings-section-panel user-settings-panel" aria-label="User Settings">
+              <div className="settings-section-heading">
+                <p className="eyebrow">User Settings</p>
+                <h3><Settings size={20} /> Your preferences</h3>
+                <p>Choose how often this device asks for your master password and how dates are shown inside your vault.</p>
+              </div>
+
+              <section className="settings-inner-card user-settings-card">
+                <div className="user-settings-card-heading"><KeyRound size={20} /><div><strong>Master password reminder</strong><small>These controls apply to Secure device unlock on this device.</small></div></div>
+                <label className="user-settings-number-field">
+                  <span><strong>Vault opens before password is required</strong><small>Default: 10 secure-device opens.</small></span>
+                  <input type="number" min="1" max="999" inputMode="numeric" value={userSettingsDraft.secureDeviceUnlockCount} disabled={userSettingsDraft.neverForcePasswordAgain} onChange={(event) => setUserSettingsDraft((current) => ({ ...current, secureDeviceUnlockCount: event.target.value }))} />
+                </label>
+                <label className="user-settings-check-row">
+                  <input type="checkbox" checked={Boolean(userSettingsDraft.neverForcePasswordAgain)} onChange={(event) => setUserSettingsDraft((current) => ({ ...current, neverForcePasswordAgain: event.target.checked }))} />
+                  <span><strong>Never Force Password Again</strong><small>When selected, Password-Encrypt will not automatically interrupt Secure device unlock to request the master password because of elapsed days or number of vault opens.</small></span>
+                </label>
+              </section>
+
+              <section className="settings-inner-card user-settings-card">
+                <div className="user-settings-card-heading"><CalendarClock size={20} /><div><strong>User Data Format</strong><small>Reference date: 5th June 2026</small></div></div>
+                <div className="user-date-format-options" role="radiogroup" aria-label="Date format">
+                  {[
+                    { value: APP_DATE_FORMATS.DMY_NUMERIC, label: '05/06/2026' },
+                    { value: APP_DATE_FORMATS.MDY_NUMERIC, label: '06/05/2026' },
+                    { value: APP_DATE_FORMATS.DMY_TEXT, label: '05/Jun/2026', defaultLabel: true }
+                  ].map((option) => (
+                    <label key={option.value} className={`user-date-format-option ${userSettingsDraft.dateFormat === option.value ? 'selected' : ''}`}>
+                      <input type="radio" name="user-date-format" value={option.value} checked={userSettingsDraft.dateFormat === option.value} onChange={() => setUserSettingsDraft((current) => ({ ...current, dateFormat: option.value }))} />
+                      <span><strong>{option.label}</strong>{option.defaultLabel && <small>Default</small>}</span>
+                    </label>
+                  ))}
+                </div>
+              </section>
+
+              <div className="user-settings-actions"><button type="button" className="primary-button" onClick={saveUserSettings} disabled={userSettingsSaving}>{userSettingsSaving ? <RefreshCw size={17} className="spin-icon" /> : <Save size={17} />} {userSettingsSaving ? 'Saving...' : 'Save settings'}</button></div>
+            </section>
           )}
 
           {activeSettingsSection === 'account' && (
@@ -11147,13 +11282,13 @@ function App() {
                   <span><strong>Status</strong>{!featureIncluded('secureDeviceUnlock') ? 'Not included in current plan' : biometricUnlock ? 'Enabled on this device' : (biometricStatus.supported ? 'Ready to set up' : 'Not available')}</span>
                   <span><strong>Device method</strong>{biometricStatus.label}</span>
                   <span><strong>Scope</strong>This device only</span>
-                  <span><strong>Password check</strong>Required every 14 days or 10 quick unlocks</span>
+                  <span><strong>Password check</strong>{userSettings.neverForcePasswordAgain ? 'Not forced automatically' : `Required every 14 days or ${userSettings.secureDeviceUnlockCount} quick unlocks`}</span>
                 </div>
                 <div className="biometric-actions">
                   {!biometricUnlock && biometricStatus.supported && featureIncluded('secureDeviceUnlock') && <button type="button" className="secondary-button" onClick={enableBiometricUnlock}>Set up secure device unlock</button>}
                   {biometricUnlock && <button type="button" className="secondary-button danger-lite" onClick={disableBiometricUnlock}>Remove from this device</button>}
                 </div>
-                <p className="biometric-note"><strong>Security note:</strong> this is a trusted-device convenience feature, not a password replacement. Your browser may offer PIN, fingerprint, face unlock, passkey or device lock. Password-Encrypt will pause quick unlock every 14 days or after 10 quick unlocks and ask you to type your master password, so you do not forget it.</p>
+                <p className="biometric-note"><strong>Security note:</strong> this is a trusted-device convenience feature, not a password replacement. Your browser may offer PIN, fingerprint, face unlock, passkey or device lock. {userSettings.neverForcePasswordAgain ? 'You have chosen not to force periodic master-password entry on this device. You can change this under User Settings at any time.' : `Password-Encrypt will pause quick unlock every ${SECURE_DEVICE_PASSWORD_CONFIRM_DAYS} days or after ${userSettings.secureDeviceUnlockCount} quick unlocks and ask you to type your master password.`}</p>
               </section>
                   </div>
                 </details>
@@ -11543,7 +11678,7 @@ function App() {
                                 ? emergencyPackageFreshness.message || 'Password-Encrypt will refresh the prepared package when this vault is online and unlocked.'
                                 : emergencyPackageFreshness.state === 'refreshing'
                                   ? 'Password-Encrypt is rebuilding the prepared release snapshot from the latest unlocked vault.'
-                                  : `Changes you make to included vault items are automatically reflected before release.${emergencyPackageFreshness.lastRefreshedAt ? ` Last refreshed: ${formatAppDate(emergencyPackageFreshness.lastRefreshedAt, true)}.` : ''}`}</small>
+                                  : `Changes you make to included vault items are automatically reflected before release.${emergencyPackageFreshness.lastRefreshedAt ? ` Last refreshed: ${formatUserDate(emergencyPackageFreshness.lastRefreshedAt, true)}.` : ''}`}</small>
                             {emergencyPackageFreshness.state !== 'frozen' && <small>Because Password-Encrypt cannot decrypt your vault on the server, refresh happens when the vault is unlocked and online. The package is frozen when the waiting period completes.</small>}
                           </span>
                         </div>}
@@ -11593,7 +11728,7 @@ function App() {
                   <section id="emergency-stage-6" className={`emergency-flow-stage ${isEmergencyReleaseReady ? 'completed' : emergencyCurrentStage.number === 6 ? 'current active' : 'locked'}`}>
                     <div className="emergency-flow-stage-summary">
                       <span className="emergency-flow-step-number">6</span>
-                      <span className="emergency-flow-stage-copy"><strong>Waiting period completes</strong><small>{isEmergencyReleaseReady ? 'The waiting period completed without cancellation and the prepared package is available to your trusted person.' : hasActiveEmergencyRequest ? `The waiting period is active. You can still cancel before ${emergencyDraft.requestWaitingEndsAt ? formatAppDate(emergencyDraft.requestWaitingEndsAt, true) : 'it ends'}.` : 'Nothing is released unless an Emergency Access request reaches this step. Once the waiting period ends, Password-Encrypt checks automatically and emails the final package link.'}</small></span>
+                      <span className="emergency-flow-stage-copy"><strong>Waiting period completes</strong><small>{isEmergencyReleaseReady ? 'The waiting period completed without cancellation and the prepared package is available to your trusted person.' : hasActiveEmergencyRequest ? `The waiting period is active. You can still cancel before ${emergencyDraft.requestWaitingEndsAt ? formatUserDate(emergencyDraft.requestWaitingEndsAt, true) : 'it ends'}.` : 'Nothing is released unless an Emergency Access request reaches this step. Once the waiting period ends, Password-Encrypt checks automatically and emails the final package link.'}</small></span>
                       <span className="emergency-flow-stage-action">
                         {hasActiveEmergencyRequest ? <CustomSelect value="" placeholder="Waiting-period actions" ariaLabel="Waiting period actions" className="emergency-flow-action-select" menuClassName="emergency-flow-action-menu" options={emergencyWaitingStageOptions} onChange={runEmergencyFlowAction} /> : isEmergencyReleaseReady ? <span className="emergency-flow-complete-label">Package released</span> : <span className="emergency-flow-waiting-label">Waiting for Step 5</span>}
                       </span>
@@ -11609,7 +11744,7 @@ function App() {
                     <summary><span className="settings-directory-icon"><FileText size={21} /></span><span className="settings-directory-copy"><strong>Event history</strong><small>Optional audit of this Trusted Person flow with dates and times.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                       <div className="emergency-flow-audit-list">
-                        {emergencyFlowEvents.map((event) => <article key={event.id || `${event.type}-${event.occurredAt}`}><span className="emergency-flow-audit-dot" /><div><strong>{event.title || String(event.type || '').replace(/_/g, ' ')}</strong>{event.message && <p>{event.message}</p>}<small>{event.occurredAt ? formatAppDate(event.occurredAt, true) : 'Time unavailable'}</small></div></article>)}
+                        {emergencyFlowEvents.map((event) => <article key={event.id || `${event.type}-${event.occurredAt}`}><span className="emergency-flow-audit-dot" /><div><strong>{event.title || String(event.type || '').replace(/_/g, ' ')}</strong>{event.message && <p>{event.message}</p>}<small>{event.occurredAt ? formatUserDate(event.occurredAt, true) : 'Time unavailable'}</small></div></article>)}
                         {!emergencyFlowEvents.length && <p className="emergency-flow-audit-empty">No flow events are recorded yet.</p>}
                       </div>
                     </div>
@@ -11622,7 +11757,7 @@ function App() {
                     </div>
                   </details>
                 </div>
-                {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last saved: {formatAppDate(emergencyDraft.updatedAt, true)}</p>}
+                {emergencyDraft.updatedAt && <p className="emergency-access-updated">Last saved: {formatUserDate(emergencyDraft.updatedAt, true)}</p>}
               </form>
               </section>
               )}
@@ -11648,7 +11783,7 @@ function App() {
                     <strong>Emergency Packages received</strong>
                     {receivedEmergencyPackages.length ? receivedEmergencyPackages.map((received) => (
                       <button type="button" className="emergency-access-package-link" key={received.fingerprint} onClick={() => { setQuery(''); openVaultSection(received.folderName); }}>
-                        <span><b>{received.ownerName || 'Account owner'}</b><small>{received.importedAt ? `Imported ${formatAppDate(received.importedAt, true)}` : 'Imported package'} · {received.itemCount || 0} item(s){received.documentCount ? ` · ${received.documentCount} document(s)` : ''}</small></span>
+                        <span><b>{received.ownerName || 'Account owner'}</b><small>{received.importedAt ? `Imported ${formatUserDate(received.importedAt, true)}` : 'Imported package'} · {received.itemCount || 0} item(s){received.documentCount ? ` · ${received.documentCount} document(s)` : ''}</small></span>
                         <ChevronRight size={18} />
                       </button>
                     )) : <p>No Emergency Packages have been imported into this vault yet.</p>}
@@ -11678,7 +11813,7 @@ function App() {
                 <div>
                   <strong>{!featureIncluded('cloudBackupSync') ? 'Your vault is stored locally on this device' : vaultSessionCheckFailed ? 'Device verification status needs checking' : vaultVerificationRequired ? 'Device verification required' : vaultCloudAccessPaused ? 'Cloud backup is paused' : syncSafety.conflict ? 'Different vault changes need review' : syncSafety.pending ? 'Changes are waiting to be backed up' : syncSafety.state === 'unknown' ? 'Vault safety has not been checked yet' : 'Your vault is up to date'}</strong>
                   <span>{!featureIncluded('cloudBackupSync') ? 'Local saves continue to be encrypted. They are not backed up or available on another device under the current plan.' : vaultSessionCheckFailed ? 'Password-Encrypt could not confirm the current verified-device session. Use Vault Status to check again.' : vaultVerificationRequired ? (customerSession.message || 'Verify this device before secure backup and syncing can continue.') : vaultCloudAccessPaused ? (customerSession.message || 'This device is verified, but cloud backup and syncing are currently paused.') : syncSafety.message || (syncSafety.pending ? 'Your latest changes are currently stored on this device only.' : syncSafety.state === 'unknown' ? 'Use Check and back up now to confirm this device is protected.' : 'Your latest changes are protected and available on your verified devices.')}</span>
-                  <small>{featureIncluded('cloudBackupSync') ? `${syncSafety.lastSuccessAt ? `Last successful backup: ${formatAppDate(syncSafety.lastSuccessAt, true)}` : 'No successful backup recorded on this device yet.'}${syncSafety.itemCount ? ` · ${syncSafety.itemCount} item(s)` : ''}` : `${getVisibleVaultItems(items).length} vault item(s) stored in this device’s encrypted local copy`}</small>
+                  <small>{featureIncluded('cloudBackupSync') ? `${syncSafety.lastSuccessAt ? `Last successful backup: ${formatUserDate(syncSafety.lastSuccessAt, true)}` : 'No successful backup recorded on this device yet.'}${syncSafety.itemCount ? ` · ${syncSafety.itemCount} item(s)` : ''}` : `${getVisibleVaultItems(items).length} vault item(s) stored in this device’s encrypted local copy`}</small>
                 </div>
               </div>
 
@@ -11852,7 +11987,7 @@ function App() {
                         <strong>Emergency Packages received</strong>
                         {receivedPackages.length ? receivedPackages.map((received) => (
                           <button type="button" className="emergency-access-package-link" key={received.fingerprint} onClick={() => { closeViewItem(); setQuery(''); openVaultSection(received.folderName); }}>
-                            <span><b>{received.ownerName || 'Account owner'}</b><small>{received.importedAt ? `Imported ${formatAppDate(received.importedAt, true)}` : 'Imported package'} · {received.itemCount || 0} item(s)</small></span>
+                            <span><b>{received.ownerName || 'Account owner'}</b><small>{received.importedAt ? `Imported ${formatUserDate(received.importedAt, true)}` : 'Imported package'} · {received.itemCount || 0} item(s)</small></span>
                             <ChevronRight size={18} />
                           </button>
                         )) : <p>No Emergency Packages have been imported into this vault yet.</p>}
@@ -11987,7 +12122,7 @@ function App() {
                         </div>
                       </div>
                     )}
-                    <p className="updated">Updated {formatAppDate(viewedItem.updatedAt, true)}</p>
+                    <p className="updated">Updated {formatUserDate(viewedItem.updatedAt, true)}</p>
                   </>
                 );
               })()}

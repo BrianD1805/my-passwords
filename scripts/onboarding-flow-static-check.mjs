@@ -22,7 +22,7 @@ function check(label, condition) {
   else { console.error(`FAIL  ${label}`); failures += 1; }
 }
 
-check('Ver-1.019.01 app/package/service-worker versions align', pkg.version === '1.19.1' && /Password-Encrypt Ver-1\.019\.01/.test(main) && /my-passwords-v1\.019\.01/.test(sw));
+check('Ver-1.020 app/package/service-worker versions align', pkg.version === '1.20.0' && /Password-Encrypt Ver-1\.020/.test(main) && /my-passwords-v1\.020/.test(sw));
 check('Onboarding has fourteen explicit progress steps', /ONBOARDING_TOTAL_STEPS = 14/.test(main) && /step === 14/.test(main));
 check('Public signup uses a dedicated card screen rather than rendering the landing page behind it', /isPublicLandingRoute && isCreateAccountPopupOpen/.test(main) && /onboarding-card-screen/.test(main));
 check('Dedicated onboarding card is not marked as a dialog', !/onboarding-card-screen[^\n]{0,300}role="dialog"/.test(main));
@@ -95,4 +95,4 @@ if (failures) {
   console.error(`\n${failures} onboarding static check(s) failed.`);
   process.exit(1);
 }
-console.log(`\nAll Ver-1.019.01 onboarding static checks passed.`);
+console.log(`\nAll Ver-1.020 onboarding static checks passed.`);

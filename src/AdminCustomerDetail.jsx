@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { formatAppDate } from './dateFormat.js';
 import { AlertTriangle, ArrowLeft, Ban, CalendarClock, Check, ChevronRight, ClipboardCopy, Cloud, CreditCard, Database, FileText, Mail, RefreshCw, Save, ShieldCheck, Smartphone, Trash2, UserRoundCheck, UsersRound } from 'lucide-react';
 import CustomSelect from './CustomSelect.jsx';
@@ -86,6 +87,7 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
   const [trialDays, setTrialDays] = useState('7');
   const [emailType, setEmailType] = useState('');
   const [supportReport, setSupportReport] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState({ visible: false, input: '', message: '', busy: false });
   const [openSections, setOpenSections] = useState({ account: true, billing: false, devices: false, operations: false, diagnostics: false, notes: false, email: false, timeline: false, subscriptionHistory: false, deletion: false, billingEvents: false, sync: false, audit: false });
 
   useEffect(() => {
@@ -93,6 +95,13 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
     setOpenSections({ account: true, billing: false, devices: false, operations: false, diagnostics: false, notes: false, email: false, timeline: false, subscriptionHistory: false, deletion: false, billingEvents: false, sync: false, audit: false });
     loadDetail();
   }, [customerId]);
+
+  useEffect(() => {
+    if (!deleteConfirm.visible) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [deleteConfirm.visible]);
 
   async function loadDetail() {
     setLoading(true);
@@ -186,23 +195,41 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
     await runDetailAction('resend_account_email', { emailType }, 'Account email sent.');
   }
 
+  function openHardDeleteAccount() {
+    setDeleteConfirm({ visible: true, input: '', message: '', busy: false });
+  }
+
+  function closeHardDeleteAccount() {
+    if (deleteConfirm.busy) return;
+    setDeleteConfirm({ visible: false, input: '', message: '', busy: false });
+  }
+
   async function hardDeleteAccount() {
-    const confirmText = window.prompt('Permanent testing action. Type DELETE to remove this account, its cloud data, sessions, billing metadata and Trusted Person flow.');
-    if (String(confirmText || '').trim().toUpperCase() !== 'DELETE') return;
-    if (!window.confirm('Permanently delete this customer account now? This cannot be undone.')) return;
+    if (String(deleteConfirm.input || '').trim().toUpperCase() !== 'DELETE') {
+      setDeleteConfirm((current) => ({ ...current, message: 'Type DELETE in the box to confirm this permanent action.' }));
+      return;
+    }
     setBusy(true);
+    setDeleteConfirm((current) => ({ ...current, busy: true, message: '' }));
     const result = await requestJson('/.netlify/functions/admin-customer-detail', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'hard_delete_account', tenantId: customerId, confirmText: 'DELETE' })
     });
     setBusy(false);
-    if (result.httpStatus === 401 && onSessionExpired) { onSessionExpired(result.message || 'Admin sign-in is required.'); return; }
+    if (result.httpStatus === 401 && onSessionExpired) {
+      setDeleteConfirm((current) => ({ ...current, busy: false, message: result.message || 'Admin sign-in is required.' }));
+      onSessionExpired(result.message || 'Admin sign-in is required.');
+      return;
+    }
     setNotice(result.message || (result.ok ? 'Account permanently deleted.' : 'Account deletion failed.'));
     if (setGlobalNotice) setGlobalNotice(result.message || '');
     if (result.ok) {
+      setDeleteConfirm({ visible: false, input: '', message: '', busy: false });
       if (onChanged) await onChanged();
       onBack?.();
+      return;
     }
+    setDeleteConfirm((current) => ({ ...current, busy: false, message: result.message || 'Account deletion failed.' }));
   }
 
   const timeline = useMemo(() => detail?.timeline || [], [detail]);
@@ -234,6 +261,7 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
   }
 
   return (
+    <>
     <section className="admin-content admin-customer-detail-page">
       <section className="admin-detail-header admin-panel">
         <div className="admin-detail-heading">
@@ -333,7 +361,7 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
           {!founder && <div className="admin-operation-row"><div><strong>{tenant.account_status === 'suspended' ? 'Reactivate account' : 'Suspend account'}</strong><span>Controls access to account services. It does not read or alter the encrypted vault.</span></div>{tenant.account_status === 'suspended' ? <button type="button" className="secondary-button" disabled={busy} onClick={() => runCustomerAction('set_account_status', { accountStatus: 'active' }, 'Account reactivated.')}><UserRoundCheck size={16} /> Reactivate</button> : <button type="button" className="secondary-button danger-soft" disabled={busy} onClick={() => window.confirm('Suspend this customer account?') && runCustomerAction('set_account_status', { accountStatus: 'suspended' }, 'Account suspended.')}><Ban size={16} /> Suspend</button>}</div>}
           {!founder && trialExtendable && <div className="admin-operation-row"><div><strong>Extend trial</strong><span>{stripeManaged ? 'Extends an active Stripe trial and records the change.' : 'Extends the internal trial end date.'}</span></div><div className="admin-inline-action"><input type="number" min="1" max="365" value={trialDays} onChange={(event) => setTrialDays(event.target.value)} aria-label="Trial extension days" /><button type="button" className="secondary-button" disabled={busy} onClick={() => runCustomerAction('extend_trial', { days: Number(trialDays || 7) }, 'Trial extended.')}><CalendarClock size={16} /> Extend</button></div></div>}
           {stripeManaged && <div className="admin-operation-row"><div><strong>Refresh subscription from Stripe</strong><span>Pulls the latest status, renewal, payment and schedule information.</span></div><button type="button" className="secondary-button" disabled={busy} onClick={() => runCustomerAction('refresh_stripe_subscription', {}, 'Stripe subscription refreshed.')}><RefreshCw size={16} /> Refresh Stripe</button></div>}
-          {!founder && <div className="admin-operation-row admin-hard-delete-row"><div><strong>Delete account permanently</strong><span>Testing tool. Removes the customer account and server-side account data, cancels an active Stripe subscription first where applicable, then emails the account holder that the account was deleted.</span></div><button type="button" className="secondary-button danger-soft" disabled={busy} onClick={hardDeleteAccount}><Trash2 size={16} /> Delete account</button></div>}
+          {!founder && <div className="admin-operation-row admin-hard-delete-row"><div><strong>Delete account permanently</strong><span>Removes the customer account and server-side account data, cancels an active Stripe subscription first where applicable, then emails the account holder that the account was deleted.</span></div><button type="button" className="secondary-button danger-soft" disabled={busy} onClick={openHardDeleteAccount}><Trash2 size={16} /> Delete account</button></div>}
         </div>
       </DetailAccordion>
 
@@ -381,5 +409,26 @@ export default function AdminCustomerDetail({ customerId, onBack, onChanged, onS
         <div className="admin-audit-list">{(detail.auditLog || []).map((entry) => <article key={entry.id}><FileText size={18} /><div><strong>{label(entry.action)}</strong><span>{auditSummary(entry)}</span><small>{dateLabel(entry.created_at)}</small></div></article>)}{!detail.auditLog?.length && <div className="admin-empty">No audit entries have been recorded.</div>}</div>
       </DetailAccordion>
     </section>
+    {deleteConfirm.visible && createPortal(
+      <div className="admin-modal-overlay admin-delete-confirm-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeHardDeleteAccount(); }}>
+        <section className="admin-plan-window admin-delete-confirm-window" role="dialog" aria-modal="true" aria-labelledby="admin-delete-confirm-title">
+          <header className="admin-plan-window-header admin-delete-confirm-header">
+            <div><p className="eyebrow">Permanent account deletion</p><h2 id="admin-delete-confirm-title"><AlertTriangle size={23} /> Delete customer account</h2></div>
+            <button type="button" className="admin-window-close" onClick={closeHardDeleteAccount} disabled={deleteConfirm.busy} aria-label="Close delete account warning">×</button>
+          </header>
+          <div className="admin-plan-window-body admin-delete-confirm-body">
+            <div className="admin-delete-danger-card"><AlertTriangle size={24} /><div><strong>This action cannot be undone.</strong><p>Password-Encrypt will permanently remove <b>{tenant.account_name || tenant.name || 'this customer account'}</b>, its cloud data, sessions, billing metadata and Trusted Person flow. An active Stripe subscription is cancelled first where applicable.</p></div></div>
+            <label className="admin-delete-confirm-field"><span>Type <strong>DELETE</strong> to confirm</span><input autoFocus value={deleteConfirm.input} onChange={(event) => setDeleteConfirm((current) => ({ ...current, input: event.target.value, message: '' }))} disabled={deleteConfirm.busy} autoComplete="off" /></label>
+            {deleteConfirm.message && <div className="admin-delete-confirm-message" role="alert">{deleteConfirm.message}</div>}
+          </div>
+          <footer className="admin-plan-window-footer admin-delete-confirm-footer">
+            <button type="button" className="secondary-button" onClick={closeHardDeleteAccount} disabled={deleteConfirm.busy}>Cancel</button>
+            <button type="button" className="primary-button admin-delete-confirm-button" onClick={hardDeleteAccount} disabled={deleteConfirm.busy || String(deleteConfirm.input || '').trim().toUpperCase() !== 'DELETE'}>{deleteConfirm.busy ? <RefreshCw size={17} className="spin-icon" /> : <Trash2 size={17} />} {deleteConfirm.busy ? 'Deleting account...' : 'Delete account permanently'}</button>
+          </footer>
+        </section>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }

@@ -19643,3 +19643,245 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
 }
 
 /* Password-Encrypt Ver-1.019.01 — action progress modal is mounted in the unlocked vault; existing popup styling retained. */
+
+/* Password-Encrypt Ver-1.020 — User Settings and permanent-delete warning popup. */
+.user-settings-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.user-settings-card {
+  display: grid;
+  gap: 18px;
+}
+
+.user-settings-card-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.user-settings-card-heading > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--mp-primary);
+}
+
+.user-settings-card-heading > div,
+.user-settings-number-field > span,
+.user-settings-check-row > span {
+  display: grid;
+  gap: 4px;
+}
+
+.user-settings-card-heading strong,
+.user-settings-number-field strong,
+.user-settings-check-row strong {
+  color: var(--mp-text);
+}
+
+.user-settings-card-heading small,
+.user-settings-number-field small,
+.user-settings-check-row small {
+  color: var(--mp-muted);
+  line-height: 1.5;
+}
+
+.user-settings-number-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 0;
+  border-top: 1px solid var(--mp-border);
+  border-bottom: 1px solid var(--mp-border);
+}
+
+.user-settings-number-field input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  border: 1px solid var(--mp-border-strong, #b8cad8);
+  border-radius: 13px;
+  padding: 10px 12px;
+  background: var(--mp-surface);
+  color: var(--mp-text);
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+}
+
+.user-settings-number-field input:disabled {
+  opacity: .55;
+  background: var(--mp-background);
+}
+
+.user-settings-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.user-settings-check-row input,
+.user-date-format-option input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  accent-color: var(--mp-primary);
+}
+
+.user-date-format-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.user-date-format-option {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--mp-border);
+  border-radius: 15px;
+  background: var(--mp-surface);
+  cursor: pointer;
+}
+
+.user-date-format-option.selected {
+  border-color: var(--mp-primary);
+  box-shadow: inset 0 0 0 1px var(--mp-primary);
+}
+
+.user-date-format-option > span {
+  display: grid;
+  gap: 3px;
+}
+
+.user-date-format-option small {
+  color: var(--mp-primary);
+  font-weight: 700;
+}
+
+.user-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-delete-confirm-window {
+  width: min(680px, 100%);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.admin-delete-confirm-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-delete-confirm-body {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
+.admin-delete-danger-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 17px 18px;
+  border: 1px solid #e7b4b4;
+  border-radius: 16px;
+  background: #fff5f5;
+  color: #7f2626;
+}
+
+.admin-delete-danger-card > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.admin-delete-danger-card strong,
+.admin-delete-danger-card p {
+  margin: 0;
+}
+
+.admin-delete-danger-card p {
+  margin-top: 6px;
+  line-height: 1.55;
+}
+
+.admin-delete-confirm-field {
+  display: grid;
+  gap: 8px;
+  color: var(--mp-text);
+  font-weight: 700;
+}
+
+.admin-delete-confirm-field input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 50px;
+  border: 1px solid var(--mp-border-strong, #b8cad8);
+  border-radius: 13px;
+  padding: 11px 13px;
+  background: var(--mp-surface);
+  color: var(--mp-text);
+  font: inherit;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.admin-delete-confirm-field input:focus {
+  outline: 2px solid rgba(51, 102, 153, .22);
+  border-color: var(--mp-primary);
+}
+
+.admin-delete-confirm-message {
+  padding: 12px 14px;
+  border: 1px solid #e7b4b4;
+  border-radius: 12px;
+  background: #fff5f5;
+  color: #8a2525;
+  font-weight: 700;
+}
+
+.admin-delete-confirm-footer {
+  justify-content: flex-end;
+}
+
+.admin-delete-confirm-button {
+  background: #a93434 !important;
+  border-color: #a93434 !important;
+}
+
+.admin-delete-confirm-button:disabled {
+  opacity: .5;
+}
+
+@media (max-width: 720px) {
+  .user-date-format-options {
+    grid-template-columns: 1fr;
+  }
+  .user-settings-number-field {
+    grid-template-columns: 1fr;
+  }
+  .user-settings-number-field input {
+    width: 120px;
+    text-align: left;
+  }
+  .user-settings-actions,
+  .user-settings-actions .primary-button {
+    width: 100%;
+  }
+  .admin-delete-confirm-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .admin-delete-confirm-footer button {
+    width: 100%;
+    justify-content: center;
+  }
+}
