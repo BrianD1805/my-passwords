@@ -1,0 +1,26 @@
+Password-Encrypt Ver-1.017 verification
+Build: Onboarding Flow Bugs
+Date: 22 August 2026
+
+PASS — Ver-1.017 feature checks: 30/30
+PASS — Onboarding flow static checks
+PASS — Security static checks: 13/13
+PASS — Reliability static checks: 20/20
+PASS — Legal/commercial readiness checks: 35/35
+PASS — Landing/plan UX checks: 36/36
+PASS — Mobile restoration checks: 6/6
+PASS — Trusted Person / emergency-flow checks: 75/75
+PASS — Push notification checks: 32/32
+PASS — Changed Node scripts/server files pass Node syntax checks
+PASS — Version alignment: app/server/package/service worker/offline/admin fallback Ver-1.017
+PASS — No Supabase migration required for Ver-1.017
+
+Ver-1.017 coverage includes:
+- suppress Guided Tour/push startup popup between Step 11 and Step 12
+- arm Step 12/13/14 onboarding gates before unlocking the created vault
+- accepted install reports background download/install and exposes Continue immediately
+- Guided Tour overlay absorbs background clicks
+- highlighted Guided Tour controls cannot be activated while the tour is active
+
+Build note:
+The isolated packaging workspace could not complete npm install within its execution window and produced an incomplete node_modules folder. That folder was removed before packaging. Run npm install followed by npm run build locally before publishing.

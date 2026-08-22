@@ -19204,7 +19204,7 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   position: fixed;
   inset: 0;
   z-index: 20000;
-  pointer-events: none;
+  pointer-events: auto;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -19296,6 +19296,7 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
 
 .guided-tour-target {
   z-index: 20002 !important;
+  pointer-events: none !important;
   outline: 4px solid rgba(255,255,255,0.96) !important;
   outline-offset: 4px !important;
   box-shadow: 0 0 0 8px rgba(49,93,126,0.82), 0 16px 44px rgba(0,0,0,0.22) !important;
@@ -19397,7 +19398,7 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   }
 }
 
-/* Password-Encrypt Ver-1.016 — final onboarding flow */
+/* Password-Encrypt Ver-1.017 — final onboarding flow + onboarding/tour bug fixes */
 .onboarding-phone-combo {
   position: relative;
   overflow: hidden !important;
@@ -19516,7 +19517,7 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   line-height: 1.45;
 }
 
-.final-onboarding-card-v1016 .onboarding-card-body {
+.final-onboarding-card-v1017 .onboarding-card-body {
   align-items: center;
 }
 .onboarding-final-choice-row {
@@ -19559,3 +19560,6 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Password-Encrypt Ver-1.017 — Guided Tour is modal during the tour; highlighted controls are display-only until the tour step is closed. */

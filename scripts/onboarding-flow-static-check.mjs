@@ -22,7 +22,7 @@ function check(label, condition) {
   else { console.error(`FAIL  ${label}`); failures += 1; }
 }
 
-check('Ver-1.016 app/package/service-worker versions align', pkg.version === '1.16.0' && /Password-Encrypt Ver-1\.016/.test(main) && /my-passwords-v1\.016/.test(sw));
+check('Ver-1.017 app/package/service-worker versions align', pkg.version === '1.17.0' && /Password-Encrypt Ver-1\.017/.test(main) && /my-passwords-v1\.017/.test(sw));
 check('Onboarding has fourteen explicit progress steps', /ONBOARDING_TOTAL_STEPS = 14/.test(main) && /step === 14/.test(main));
 check('Public signup uses a dedicated card screen rather than rendering the landing page behind it', /isPublicLandingRoute && isCreateAccountPopupOpen/.test(main) && /onboarding-card-screen/.test(main));
 check('Dedicated onboarding card is not marked as a dialog', !/onboarding-card-screen[^\n]{0,300}role="dialog"/.test(main));
@@ -88,11 +88,11 @@ check('Push activation is suppressed during install onboarding', /showInstallOnb
 check('Completing install advances to push notifications inside onboarding', /setFinalOnboardingStep\(13\)/.test(main) && /pushActivationPromptDeferredThisDocumentRef\.current = true/.test(main));
 check('Push notifications are onboarding step 13', /step === 13[\s\S]*Push notifications[\s\S]*Activate notifications/.test(main));
 check('Guided tour choice is the final onboarding step 14', /step === 14[\s\S]*Welcome to Password-Encrypt[\s\S]*Start tour/.test(main) && /Your vault opens after this step/.test(main));
-check('Final onboarding no longer uses push or guided-tour welcome popups', /setPushActivationPromptOpen\(false\)/.test(main) && /setGuidedTourPromptOpen\(false\)/.test(main) && /final-onboarding-card-v1016/.test(main));
+check('Final onboarding no longer uses push or guided-tour welcome popups', /setPushActivationPromptOpen\(false\)/.test(main) && /setGuidedTourPromptOpen\(false\)/.test(main) && /final-onboarding-card-v1017/.test(main));
 check('Landing-page setup explanation reflects mobile, email, master password and install stages', /Verify your mobile/.test(main) && /Verify your email/.test(main) && /Create your master password/.test(main) && /Install the app/.test(main));
 
 if (failures) {
   console.error(`\n${failures} onboarding static check(s) failed.`);
   process.exit(1);
 }
-console.log(`\nAll Ver-1.016 onboarding static checks passed.`);
+console.log(`\nAll Ver-1.017 onboarding static checks passed.`);

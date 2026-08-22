@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { formatAppDate } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.016';
+const VERSION = 'Password-Encrypt Ver-1.017';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -5287,7 +5287,19 @@ function App() {
         ? { state: 'backup-pending', pending: true, conflict: false, sessionRequired: !customerSession.authenticated, message: 'Your new vault is saved on this device and is waiting to be backed up.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' }
         : { state: 'plan-local-only', pending: false, conflict: false, sessionRequired: false, message: 'Your new encrypted vault is saved locally. Cloud backup and sync are not included in the current plan.', itemCount: getVisibleVaultItems(starterItems).length, lastFailureAt: '', acknowledgedAt: '' });
       if (!fromBiometric) confirmSecureDevicePasswordCheck();
-      if (options.afterCreateOnboardingInstall) pushActivationPromptDeferredThisDocumentRef.current = true;
+      if (options.afterCreateOnboardingInstall) {
+        // Ver-1.017: arm the remaining onboarding gates before unlocking the vault.
+        // This prevents the normal vault startup effects from briefly opening the
+        // Guided Tour / push popups between master-password creation and Step 12.
+        pushActivationPromptDeferredThisDocumentRef.current = true;
+        setFinalOnboardingStep(12);
+        setShowInstallOnboarding(true);
+        setOnboardingPushGate(true);
+        setPushActivationPromptOpen(false);
+        setGuidedTourPromptOpen(false);
+        window.history.replaceState({ onboardingInstall: true }, '', '/vault?entry=install');
+        setActivePage('home');
+      }
       backNavigationStateRef.current.locked = false;
       backNavigationStateRef.current.activePage = 'home';
       setLocked(false);
@@ -5303,13 +5315,6 @@ function App() {
       }
       if (options.setupBiometricAfterPassword) await setupBiometricUnlockForPassword(password, { fromLoginIcon: true });
       if (options.afterCreateOnboardingInstall) {
-        window.history.replaceState({ onboardingInstall: true }, '', '/vault?entry=install');
-        setFinalOnboardingStep(12);
-        setShowInstallOnboarding(true);
-        setOnboardingPushGate(true);
-        setPushActivationPromptOpen(false);
-        setGuidedTourPromptOpen(false);
-        setActivePage('home');
         window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
       }
     } catch (error) {
@@ -7655,8 +7660,8 @@ function App() {
       installPromptRef.current = null;
       setInstallPromptReady(false);
       if (choice?.outcome === 'accepted') {
-        setInstallStatus('installed');
-        setInstallMessage('Installation accepted. Password-Encrypt can now be opened from your device like an app.');
+        setInstallStatus('installing');
+        setInstallMessage('Installation has started and will finish in the background. You can continue setup now while Password-Encrypt downloads and installs.');
       } else {
         setInstallStatus('declined');
         setInstallMessage('Installation was not completed. You can choose Install again when Chrome offers the prompt, or use the browser install icon.');
@@ -9985,13 +9990,15 @@ function App() {
 
   if ((showInstallOnboarding || onboardingInstallEntry) && hasLocalVault) {
     const installedNow = installStatus === 'installed' || isPasswordEncryptInstalled();
+    const installationStarted = installStatus === 'installing';
+    const installCanContinue = installedNow || installationStarted;
     const step = Math.min(14, Math.max(12, Number(finalOnboardingStep || 12)));
     const progress = Math.round((step / ONBOARDING_TOTAL_STEPS) * 100);
     const pushBlocked = pushNotifications.permission === 'denied';
     const pushAvailable = Boolean(pushNotifications.loaded && pushNotifications.supported && pushNotifications.configured);
     return (
       <main className="onboarding-card-screen install-onboarding-screen">
-        <section className="onboarding-card install-onboarding-card-v1010 final-onboarding-card-v1016">
+        <section className="onboarding-card install-onboarding-card-v1010 final-onboarding-card-v1017">
           <header className="onboarding-card-topbar">
             <span className="onboarding-brand-mini"><ShieldCheck size={18} /> Password-Encrypt</span>
             <span className="onboarding-step-counter">Step {step} of {ONBOARDING_TOTAL_STEPS}</span>
@@ -10002,17 +10009,17 @@ function App() {
               <div className="onboarding-single-step install-final-step">
                 <div className="onboarding-step-icon"><MonitorSmartphone size={27} /></div>
                 <p className="eyebrow">Install app</p>
-                <h1>{installedNow ? 'Password-Encrypt is installed' : 'Install Password-Encrypt'}</h1>
-                <p>{installedNow ? 'Installation is ready. There are two short setup choices left before your vault opens.' : 'Install the app for quicker everyday access from your phone, computer or app launcher.'}</p>
-                <div className={`onboarding-info-panel ${installedNow ? 'success' : ''}`}>
-                  {installedNow ? <Check size={19} /> : installStatus === 'prompting' ? <RefreshCw size={19} className="spin-icon" /> : <MonitorSmartphone size={19} />}
+                <h1>{installedNow ? 'Password-Encrypt is installed' : installationStarted ? 'Installation started' : 'Install Password-Encrypt'}</h1>
+                <p>{installedNow ? 'Installation is ready. There are two short setup choices left before your vault opens.' : installationStarted ? 'Password-Encrypt will finish downloading and installing in the background. You do not need to wait here.' : 'Install the app for quicker everyday access from your phone, computer or app launcher.'}</p>
+                <div className={`onboarding-info-panel ${installCanContinue ? 'success' : ''}`}>
+                  {installCanContinue ? <Check size={19} /> : installStatus === 'prompting' ? <RefreshCw size={19} className="spin-icon" /> : <MonitorSmartphone size={19} />}
                   <span>{installMessage || passwordEncryptInstallInstructions()}</span>
                 </div>
-                {!installedNow && (
+                {!installCanContinue && (
                   <button type="button" className="primary-button onboarding-next-button" onClick={installPasswordEncryptApp} disabled={installStatus === 'prompting'}><Download size={18} /> {installStatus === 'prompting' ? 'Opening install...' : installPromptReady ? 'Install Password-Encrypt' : 'Install app'}</button>
                 )}
-                {installedNow && <button type="button" className="primary-button onboarding-next-button" onClick={finishInstallOnboarding}>Continue <ChevronRight size={18} /></button>}
-                {!installedNow && <button type="button" className="onboarding-text-action continue-browser-action" onClick={finishInstallOnboarding}>Continue without installing <ChevronRight size={15} /></button>}
+                {installCanContinue && <button type="button" className="primary-button onboarding-next-button" onClick={finishInstallOnboarding}>Continue <ChevronRight size={18} /></button>}
+                {!installCanContinue && <button type="button" className="onboarding-text-action continue-browser-action" onClick={finishInstallOnboarding}>Continue without installing <ChevronRight size={15} /></button>}
               </div>
             )}
 
