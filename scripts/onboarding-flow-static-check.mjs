@@ -22,8 +22,8 @@ function check(label, condition) {
   else { console.error(`FAIL  ${label}`); failures += 1; }
 }
 
-check('Ver-1.015 app/package/service-worker versions align', pkg.version === '1.15.0' && /Password-Encrypt Ver-1\.015/.test(main) && /my-passwords-v1\.015/.test(sw));
-check('Onboarding has twelve explicit progress steps', /ONBOARDING_TOTAL_STEPS = 12/.test(main) && /Step 12 of \{ONBOARDING_TOTAL_STEPS\}/.test(main));
+check('Ver-1.016 app/package/service-worker versions align', pkg.version === '1.16.0' && /Password-Encrypt Ver-1\.016/.test(main) && /my-passwords-v1\.016/.test(sw));
+check('Onboarding has fourteen explicit progress steps', /ONBOARDING_TOTAL_STEPS = 14/.test(main) && /step === 14/.test(main));
 check('Public signup uses a dedicated card screen rather than rendering the landing page behind it', /isPublicLandingRoute && isCreateAccountPopupOpen/.test(main) && /onboarding-card-screen/.test(main));
 check('Dedicated onboarding card is not marked as a dialog', !/onboarding-card-screen[^\n]{0,300}role="dialog"/.test(main));
 check('Onboarding has a visible progress track', /onboarding-progress-track/.test(main) && /progress = Math\.round\(\(step \/ ONBOARDING_TOTAL_STEPS\) \* 100\)/.test(main));
@@ -42,14 +42,16 @@ check('Email request is isolated on step 8', /step === 8[\s\S]*Send email code/.
 check('Email OTP entry is isolated on step 9', /step === 9[\s\S]*Enter the email code/.test(main));
 check('Master password creation is isolated on step 10', /step === 10[\s\S]*Create your master password/.test(main));
 check('Master password confirmation is isolated on step 11', /step === 11[\s\S]*Confirm your master password/.test(main));
-check('Install app is the final step 12', /Step 12 of \{ONBOARDING_TOTAL_STEPS\}/.test(main) && /Install Password-Encrypt/.test(main));
+check('Install app remains step 12 before final choices', /step === 12[\s\S]*Install Password-Encrypt/.test(main));
 check('Mobile step advances to a separate SMS request screen before spending an SMS', /landingOnboardingStep === 5[\s\S]*setLandingOnboardingStep\(6\)/.test(main) && /prepareLandingOnboarding\(\{ sendInitialSms: true \}\)/.test(main));
 check('Onboarding SMS is now a primary verification channel, not an email-failure fallback', /onboarding_sms_primary/.test(requestSms) && !/SMS_FALLBACK_NOT_AVAILABLE/.test(requestSms));
 check('Paid onboarding SMS has a strict two-per-ten-minute limiter', /scope: 'onboarding_sms_primary'/.test(requestSms) && /limit: 2/.test(requestSms) && /windowSeconds: 10 \* 60/.test(requestSms));
 check('Onboarding network requests have a hard twenty-second timeout and manual cancel path', /ONBOARDING_NETWORK_TIMEOUT_MS = 20000/.test(main) && /Cancel sending/.test(main) && /beginOnboardingNetworkRequest/.test(main));
+check('SMS request keeps the customer informed while delivery is pending', /Your SMS has been requested/.test(main) && /This can take a little while/.test(main) && /SMS requested/.test(main));
 check('SMS can be deferred so email verification can continue', /Do this later — verify email instead/.test(main) && /smsDeferred/.test(main) && /setLandingOnboardingStep\(8\)/.test(main));
 check('Onboarding email request no longer requires prior mobile verification', !/MOBILE_VERIFICATION_REQUIRED/.test(requestEmail));
 check('Either verified onboarding channel can activate the account', !/partialOnboarding: true/.test(verifyOtp) && /pendingVerificationChannel/.test(verifyOtp) && /createVerifiedCustomerSession\(event/.test(verifyOtp));
+check('Successful mobile verification still presents email verification before master-password setup', /landingOtp\.channel === 'sms' && !result\.emailVerified/.test(main) && /setLandingOnboardingStep\(8\)/.test(main) && /Do this later — continue setup/.test(main));
 check('Incomplete contact verification is recorded without blocking account activation', /email_verification_required/.test(verifyOtp) && /phone_verification_required/.test(verifyOtp));
 check('Future authenticated sign-ins can show the missing-contact reminder', /Complete account verification/.test(main) && /CONTACT_VERIFICATION_REMINDER_KEY/.test(main) && /We will remind you again on a future sign-in/.test(main));
 check('Existing account discovered during signup remains routed to existing vault access', /const target = isExistingAccount \? '\/vault\?entry=existing' : '\/vault\?entry=onboarding'/.test(main));
@@ -73,20 +75,24 @@ check('Twilio Verify supports an optional custom template SID for domain-bound W
 check('Messaging fallback SMS includes the Password-Encrypt origin-bound WebOTP line', /@password-encrypt\.com #\$\{code\}/.test(sms));
 check('Master password is never persisted as onboarding recovery state', !/saveOnboardingFlowState\([\s\S]{0,1400}masterPassword/.test(main));
 check('Master password fields retain password-manager suppression hints', /onboarding-secret-mask[\s\S]{0,450}data-lpignore="true"[\s\S]{0,300}data-1p-ignore="true"/.test(main));
+check('Master password onboarding fields have vault-style show and hide controls', /onboarding-password-toggle/.test(main) && /showOnboardingMasterPassword/.test(main) && /showOnboardingConfirmPassword/.test(main) && /<EyeOff/.test(main));
+check('Master password mismatch is a prominent alert panel', /onboarding-password-mismatch/.test(main) && /Passwords do not match/.test(main) && /role="alert"/.test(main));
 check('Vault creation requires a live verified customer session matching the onboarded account', /verifyOnboardingSessionMatchesAccount/.test(main) && /ACCOUNT_SESSION_MISMATCH/.test(main));
 check('New onboarding refuses to overwrite an existing local encrypted vault', /New-account onboarding will not overwrite it/.test(main));
 check('Creating the vault routes to install onboarding before vault home', /afterCreateOnboardingInstall: true/.test(main) && /entry=install/.test(main) && /setShowInstallOnboarding\(true\)/.test(main));
 check('PWA install prompt is captured and invoked where supported', /beforeinstallprompt/.test(main) && /await promptEvent\.prompt\(\)/.test(main) && /await promptEvent\.userChoice/.test(main));
 check('PWA install opportunity is captured before the React module loads', /__passwordEncryptInstallPrompt/.test(indexHtml) && indexHtml.indexOf('__passwordEncryptInstallPrompt') < indexHtml.indexOf('/src/main.jsx'));
 check('Manifest retains stable standalone vault identity', manifest.id === '/vault' && manifest.start_url === '/vault' && manifest.display === 'standalone');
-check('Install onboarding still provides a continue-in-browser fallback', /Continue in browser/.test(main) && /finishInstallOnboarding/.test(main));
+check('Install onboarding still provides a continue-without-installing fallback', /Continue without installing/.test(main) && /finishInstallOnboarding/.test(main));
 check('Push activation is suppressed during install onboarding', /showInstallOnboarding \|\| onboardingInstallEntry/.test(main));
-check('Completing install defers push activation until the next document/app opening', /PUSH_PROMPT_NEXT_OPEN_KEY/.test(main) && /pushActivationPromptDeferredThisDocumentRef\.current = true/.test(main));
-check('Push notification activation is not one of the twelve onboarding cards', !/step === 12[\s\S]{0,1200}Activate push notifications/.test(main));
+check('Completing install advances to push notifications inside onboarding', /setFinalOnboardingStep\(13\)/.test(main) && /pushActivationPromptDeferredThisDocumentRef\.current = true/.test(main));
+check('Push notifications are onboarding step 13', /step === 13[\s\S]*Push notifications[\s\S]*Activate notifications/.test(main));
+check('Guided tour choice is the final onboarding step 14', /step === 14[\s\S]*Welcome to Password-Encrypt[\s\S]*Start tour/.test(main) && /Your vault opens after this step/.test(main));
+check('Final onboarding no longer uses push or guided-tour welcome popups', /setPushActivationPromptOpen\(false\)/.test(main) && /setGuidedTourPromptOpen\(false\)/.test(main) && /final-onboarding-card-v1016/.test(main));
 check('Landing-page setup explanation reflects mobile, email, master password and install stages', /Verify your mobile/.test(main) && /Verify your email/.test(main) && /Create your master password/.test(main) && /Install the app/.test(main));
 
 if (failures) {
   console.error(`\n${failures} onboarding static check(s) failed.`);
   process.exit(1);
 }
-console.log(`\nAll Ver-1.015 onboarding static checks passed.`);
+console.log(`\nAll Ver-1.016 onboarding static checks passed.`);

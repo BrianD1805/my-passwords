@@ -19396,3 +19396,166 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     justify-content: center;
   }
 }
+
+/* Password-Encrypt Ver-1.016 — final onboarding flow */
+.onboarding-phone-combo {
+  position: relative;
+  overflow: hidden !important;
+  background-clip: padding-box;
+}
+.onboarding-phone-combo .country-picker {
+  min-height: 52px !important;
+  align-self: stretch;
+}
+.onboarding-phone-combo .country-picker-trigger {
+  height: 52px !important;
+  min-height: 52px !important;
+  border-radius: 14px 0 0 14px !important;
+}
+
+.onboarding-info-panel > span {
+  display: grid;
+  gap: 2px;
+}
+.onboarding-info-panel > span > strong,
+.onboarding-info-panel > span > small {
+  display: block;
+}
+.onboarding-info-panel > span > strong {
+  color: inherit;
+  font-weight: 700;
+}
+.onboarding-info-panel > span > small {
+  color: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.onboarding-sms-waiting {
+  border-color: #bfd5e5;
+  background: #f1f7fb;
+}
+.onboarding-sms-delivery-note {
+  border-color: #d7e4ee;
+  background: #f8fbfd;
+}
+
+.onboarding-password-field {
+  position: relative;
+  display: grid;
+  width: 100%;
+}
+.onboarding-password-field input {
+  width: 100%;
+  min-height: 54px;
+  box-sizing: border-box;
+  border: 1px solid #cbd8e2;
+  border-radius: 15px;
+  padding: 0 58px 0 16px;
+  background: #ffffff;
+  color: #26384a;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  outline: none;
+}
+.onboarding-password-field input:focus {
+  border-color: #6699cc;
+  box-shadow: 0 0 0 3px rgba(51, 102, 153, 0.12);
+}
+.onboarding-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #eef4f8;
+  color: #26384f;
+  border: 1px solid #d8e4ec;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+.onboarding-password-toggle:hover,
+.onboarding-password-toggle:focus-visible {
+  transform: translateY(-50%);
+  background: #e3edf5;
+  color: #14263b;
+  box-shadow: none !important;
+}
+.onboarding-password-mismatch {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin: 0;
+  padding: 14px 15px;
+  border: 2px solid #d85252;
+  border-radius: 15px;
+  background: #fff1f1;
+  color: #8e2323;
+  box-shadow: 0 0 0 3px rgba(216, 82, 82, 0.08);
+}
+.onboarding-password-mismatch svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.onboarding-password-mismatch span {
+  display: grid;
+  gap: 3px;
+}
+.onboarding-password-mismatch strong {
+  font-size: 15px;
+}
+.onboarding-password-mismatch small {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.final-onboarding-card-v1016 .onboarding-card-body {
+  align-items: center;
+}
+.onboarding-final-choice-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.onboarding-final-choice-row .secondary-button {
+  width: 100%;
+}
+.onboarding-muted-action {
+  color: #6e7f8f;
+}
+
+/* Guided-tour welcome popup remains available from Settings; keep its spacing aligned
+   with the standard Password-Encrypt popup rules. */
+.guided-tour-welcome-body {
+  padding: 24px 26px 28px;
+  gap: 16px;
+}
+.guided-tour-welcome-footer {
+  padding: 18px 26px 22px;
+}
+
+@media (max-width: 820px) {
+  .onboarding-password-field input {
+    min-height: 56px;
+    font-size: 19px;
+  }
+}
+
+@media (max-width: 520px) {
+  .guided-tour-welcome-body {
+    padding: 20px 22px 24px;
+  }
+  .guided-tour-welcome-footer {
+    padding: 16px 22px 20px;
+  }
+  .onboarding-final-choice-row {
+    grid-template-columns: 1fr;
+  }
+}

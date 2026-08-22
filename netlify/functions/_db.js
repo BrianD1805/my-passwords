@@ -1,4 +1,4 @@
-export const APP_VERSION = 'Password-Encrypt Ver-1.015';
+export const APP_VERSION = 'Password-Encrypt Ver-1.016';
 
 export function jsonResponse(statusCode, body, extraHeaders = {}) {
   if (Number(statusCode) >= 500) queueFunctionFailureResponse(statusCode, body);

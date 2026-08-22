@@ -50,7 +50,7 @@ export async function handler(event) {
       trialDays = Math.max(0, Number(selectedPlan.trial_days || 0));
     }
 
-    // Ver-1.015 activates onboarding after either verified contact channel.
+    // Ver-1.016 activates onboarding after either verified contact channel.
     // The unverified channel remains recorded as pending and is reminded in-app on future sign-ins.
 
     if (firstActivation && !founder) {

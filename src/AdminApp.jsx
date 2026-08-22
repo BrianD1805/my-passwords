@@ -174,7 +174,7 @@ export default function AdminApp({ version }) {
   const [notice, setNotice] = useState('');
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [selectedOverviewStat, setSelectedOverviewStat] = useState('');
-  const shortVersion = String(version || '').replace(/^Password-Encrypt\s*/i, '') || 'Ver-1.015';
+  const shortVersion = String(version || '').replace(/^Password-Encrypt\s*/i, '') || 'Ver-1.016';
 
   const sortedPlans = useMemo(() => [...(data.plans || [])]
     .filter((plan) => String(plan?.code || '').trim() && String(plan?.display_name || '').trim())

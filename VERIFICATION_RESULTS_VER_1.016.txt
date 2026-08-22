@@ -1,0 +1,36 @@
+Password-Encrypt Ver-1.016 verification
+Build: Final Onboarding Flow
+Date: 22 August 2026
+
+PASS — Ver-1.016 feature checks: 26/26
+PASS — Onboarding flow static checks
+PASS — Security static checks: 13/13
+PASS — Reliability static checks: 20/20
+PASS — Legal/commercial readiness checks: 35/35
+PASS — Landing/plan UX checks: 36/36
+PASS — Mobile restoration checks: 6/6
+PASS — Trusted Person / emergency-flow checks: 75/75
+PASS — Push notification checks: 32/32
+PASS — src/main.jsx parses cleanly as JSX
+PASS — src/AdminApp.jsx parses cleanly as JSX
+PASS — src/AdminPushNotifications.jsx parses cleanly as JSX
+PASS — Changed Netlify functions pass Node syntax checks
+PASS — Version alignment: app/server/package/service worker Ver-1.016
+PASS — No Supabase migration required for Ver-1.016
+
+Ver-1.016 onboarding coverage includes:
+- clean mobile-number field outline
+- live SMS request/delivery status
+- SMS success continues to email verification rather than skipping steps
+- one verified contact method remains sufficient for onboarding
+- deferred second contact verification remains recoverable/reminded
+- show/hide eyes on both master-password fields
+- prominent password mismatch warning
+- Install App at Step 12
+- Push Notifications at Step 13 inside onboarding
+- Guided Tour choice at Step 14 inside onboarding
+- vault does not open until the final onboarding choice
+- generic Guided Tour welcome copy and corrected popup padding
+
+Build note:
+The isolated build workspace did not contain dependencies. npm install exceeded the execution window and left an incomplete node_modules, which was removed before packaging. The Vite production bundle was therefore not regenerated in the container. Run npm install followed by npm run build locally before publishing.
