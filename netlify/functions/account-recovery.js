@@ -94,7 +94,7 @@ export async function handler(event) {
           trialStartedAt: tenant.trial_started_at || null,
           trialEndsAt: tenant.trial_ends_at || null
         },
-        message: 'Account access has been restored on this device. Your encrypted vault still requires the correct master password and cannot be decrypted without it.'
+        message: 'Account access has been restored on this device. Your encrypted vault still requires its master password, Secure device unlock on a previously configured device, or one of your previously generated Emergency Backup Codes.'
       }, { 'set-cookie': verified.cookie });
     }
 

@@ -1,0 +1,44 @@
+import fs from 'node:fs';
+let failures = 0;
+let checks = 0;
+const read = (file) => fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+const check = (label, ok) => { checks += 1; if (ok) console.log(`PASS  ${label}`); else { failures += 1; console.error(`FAIL  ${label}`); } };
+const main = read('src/main.jsx');
+const styles = read('src/styles.css');
+const server = read('netlify/functions/emergency-backup-codes.js');
+const reminders = read('netlify/functions/emergency-backup-code-reminder-process.js');
+const db = read('netlify/functions/_db.js');
+const sw = read('public/sw.js');
+const offline = read('public/offline.html');
+const admin = read('src/AdminApp.jsx');
+const legal = read('src/LegalPages.jsx');
+const bootstrap = read('netlify/functions/bootstrap-admin.js');
+const sql = read('SUPABASE_SQL_PASSWORD_ENCRYPT_VER_1.021.sql');
+const toml = read('netlify.toml');
+const pkg = JSON.parse(read('package.json'));
+const pkgLock = JSON.parse(read('package-lock.json'));
+
+check('Ver-1.021 versions align', pkg.version === '1.21.0' && pkgLock.version === '1.21.0' && /Password-Encrypt Ver-1\.021/.test(main) && /Password-Encrypt Ver-1\.021/.test(db) && /my-passwords-v1\.021/.test(sw) && /Password-Encrypt Ver-1\.021/.test(offline) && /Ver-1\.021/.test(admin));
+check('Emergency Backup Codes are exposed in Settings', /Emergency Backup Codes/.test(main) && /openEmergencyBackupCodesSettings/.test(main) && /activeSettingsSection === 'backup-codes'/.test(main));
+check('Ten high-entropy 24-character backup codes are generated in the browser', /EMERGENCY_BACKUP_CODE_COUNT = 10/.test(main) && /EMERGENCY_BACKUP_CODE_BYTES = 15/.test(main) && /slice\(0, 24\)/.test(main) && /crypto\.getRandomValues/.test(main));
+check('Backup codes wrap and unwrap the master password client-side with AES-GCM', /wrapMasterPasswordWithEmergencyBackupCode/.test(main) && /unwrapMasterPasswordWithEmergencyBackupCode/.test(main) && /crypto\.subtle\.encrypt\(\{ name: 'AES-GCM'/.test(main) && /crypto\.subtle\.decrypt/.test(main));
+check('Server stores encrypted envelopes and one-way code hashes rather than readable codes', /code_hash/.test(server) && /wrapped_master_password/.test(server) && /wrap_salt/.test(server) && /wrap_iv/.test(server) && !/backup_code_plaintext|plain_code|readable_code/.test(sql));
+check('Backup-code API is scoped to validated customer sessions and CSRF-protected writes', /validateCustomerSession/.test(server) && /assertBrowserAction\(event, \{ session, kind: 'customer', csrf: true \}\)/.test(server));
+check('Replacing a set removes older recovery envelopes', /batch_id=\$\{neq\(batchId\)\}/.test(server) && /deleteRow\('emergency_backup_codes'/.test(server));
+check('Used recovery envelope is deleted after successful unlock', /consumeEmergencyBackupCodeAfterUnlock/.test(main) && /Delete the used encrypted recovery envelope/.test(server) && /deleteRow\('emergency_backup_codes', `id=/.test(server));
+check('Emailing codes is explicit and limited to the active generated set', /Email codes/.test(main) && /action === 'email_codes'/.test(server) && /activeHashes/.test(server) && /backup_codes_email/.test(server));
+check('Automatic reminders never contain backup codes', /This reminder never contains your backup codes/.test(server) && /Email me a reminder every 90 days/.test(main));
+check('Emergency Backup Code reminders run on a daily scheduled processor', /emergency-backup-code-reminder-process/.test(toml) && /schedule = "45 7 \* \* \*"/.test(toml) && /REMINDER_MS = 90/.test(reminders));
+check('Manual reminder action is available without sending codes', /Send reminder now/.test(main) && /action: 'send_reminder'/.test(main) && /Backup-code reminder email sent/.test(server));
+check('Locked vault offers Emergency Backup Code recovery', /Use Emergency Backup Code/.test(main) && /openEmergencyBackupRecovery/.test(main) && /afterVerify: 'backup-code'/.test(main));
+check('Recovery requires account email verification before envelopes are loaded', /First verify your account email/.test(main) && /afterVerify === 'backup-code'/.test(main) && /loadEmergencyBackupRecovery\(\{ force: true \}\)/.test(main));
+check('Server enforces verified email before generating or returning recovery envelopes', (server.match(/EMAIL_VERIFICATION_REQUIRED/g) || []).length >= 2 && /email_verified !== true/.test(server));
+check('Successful use sends a security notice without exposing the code', /Security notice: Emergency Backup Code used/.test(server) && /The email does not contain the code that was used/.test(server));
+check('New SQL table is service-role only with RLS enabled', /create table if not exists public\.emergency_backup_codes/.test(sql) && /enable row level security/.test(sql) && /revoke all on table public\.emergency_backup_codes from anon, authenticated/.test(sql) && /grant select, insert, update, delete on public\.emergency_backup_codes to service_role/.test(sql));
+check('Legal copy discloses encrypted recovery envelopes and optional email delivery', /Emergency Backup Code data/.test(legal) && /encrypted recovery envelopes/.test(legal) && /email-delivery provider/.test(legal));
+check('Legal version reflects the recovery feature disclosure', /LEGAL_VERSION = '2026-08-26'/.test(legal) && /LEGAL_VERSION = '2026-08-26'/.test(bootstrap));
+check('Ver-1.020 User Settings remain present', /Never Force Password Again/.test(main) && /User Data Format/.test(main) && /secureDeviceUnlockCount/.test(main));
+check('Ver-1.020.01 SMS defer and popup accent fixes remain present', /silentDefer: true/.test(main) && /popup accent temporarily removed globally/.test(styles) && /content: none !important/.test(styles));
+
+if (failures) { console.error(`\n${failures} Ver-1.021 check(s) failed.`); process.exit(1); }
+console.log(`\n${checks}/${checks} Ver-1.021 Emergency Backup Codes checks passed.`);

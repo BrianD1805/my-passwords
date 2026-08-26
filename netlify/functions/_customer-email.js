@@ -98,7 +98,7 @@ function emailDefinition(type, context = {}) {
         accountPhone ? `Mobile number: <strong>${accountPhone}</strong>` : '',
         `Vault name: <strong>${accountName}</strong>`,
         `Plan: <strong>${planName}</strong>`,
-        'Your account verification is complete. Your master password remains private to you, is never included in email and cannot be recovered or reset by Password-Encrypt.',
+        'Your account verification is complete. Your master password remains private and is never included in routine email. Support cannot recover or reset it; if you want an emergency fallback, generate Emergency Backup Codes from Settings after opening your vault.',
         'Your mobile number and email address were verified during onboarding. Keep this welcome email as a record of the contact details linked to your account.',
         'No credit card details were taken for your free trial. A paid subscription begins only if you deliberately purchase a subscription later.'
       ].filter(Boolean),
@@ -115,7 +115,7 @@ function emailDefinition(type, context = {}) {
         accountPhone ? `Mobile number: <strong>${accountPhone}</strong>` : '',
         `Vault name: <strong>${accountName}</strong>`,
         `Plan: <strong>${planName}</strong>`,
-        'Your account verification is complete. Your master password remains private to you, is never included in email and cannot be recovered or reset by Password-Encrypt.',
+        'Your account verification is complete. Your master password remains private and is never included in routine email. Support cannot recover or reset it; if you want an emergency fallback, generate Emergency Backup Codes from Settings after opening your vault.',
         'Your verified contact details are linked to your account. Keep this welcome email as a record of the account information you registered.'
       ].filter(Boolean),
       button: { label: 'Password-Encrypt website', url: baseUrl() }

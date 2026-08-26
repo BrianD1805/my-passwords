@@ -52,6 +52,9 @@
 [functions."trusted-person-reminder-process"]
   schedule = "15 7 * * *"
 
+[functions."emergency-backup-code-reminder-process"]
+  schedule = "45 7 * * *"
+
 # Ver-0.053B retains the reliability monitoring schedules introduced in Ver-0.051.
 [functions."operations-health-check"]
   schedule = "*/15 * * * *"
