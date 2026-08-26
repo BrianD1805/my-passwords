@@ -20097,3 +20097,110 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     grid-template-columns: 1fr;
   }
 }
+
+/* Password-Encrypt Ver-1.022 — simplify locked-vault recovery choices. */
+.lock-account-access-actions .vault-access-recovery-link {
+  margin-top: 4px;
+}
+
+.vault-access-recovery-modal-card {
+  width: min(640px, 100%);
+}
+
+.vault-access-recovery-intro {
+  margin: 0 0 14px;
+  color: var(--mp-text-soft, #536579);
+}
+
+.vault-access-recovery-options {
+  display: grid;
+  gap: 10px;
+}
+
+.vault-access-recovery-options > button {
+  width: 100%;
+  min-height: 70px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 15px;
+  border: 1px solid var(--mp-border, #d7e2ec);
+  border-radius: 15px;
+  background: var(--mp-surface, #fff);
+  color: var(--mp-text, #243140);
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vault-access-recovery-options > button:hover,
+.vault-access-recovery-options > button:focus-visible {
+  border-color: #8eabc2;
+  background: #f7fafc;
+  outline: none;
+}
+
+.vault-access-recovery-options > button > svg:first-child {
+  color: #336699;
+}
+
+.vault-access-recovery-options span {
+  display: grid;
+  gap: 4px;
+}
+
+.vault-access-recovery-options strong {
+  font-size: 0.98rem;
+}
+
+.vault-access-recovery-options small {
+  color: var(--mp-text-soft, #637486);
+  line-height: 1.4;
+}
+
+.vault-access-recovery-options > button > svg:last-child {
+  color: #8294a5;
+}
+
+.vault-access-recovery-detail {
+  display: grid;
+  gap: 14px;
+}
+
+.vault-access-recovery-detail > p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.vault-access-recovery-warning {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid #ead8b7;
+  border-radius: 14px;
+  background: #fffaf0;
+  color: #725b33;
+  line-height: 1.45;
+}
+
+.vault-access-recovery-warning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.vault-access-recovery-modal-footer {
+  justify-content: space-between;
+}
+
+@media (max-width: 680px) {
+  .vault-access-recovery-options > button {
+    min-height: 66px;
+    padding: 13px 12px;
+  }
+
+  .vault-access-recovery-modal-footer {
+    display: flex;
+  }
+}

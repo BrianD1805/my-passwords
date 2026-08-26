@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.021';
+const VERSION = 'Password-Encrypt Ver-1.022';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3065,6 +3065,83 @@ function AccountSecurityModal({ state, setState, onClose, onRequestCode, onConfi
   );
 }
 
+function VaultAccessRecoveryModal({ state, setState, onClose, onClearLocal, onRecoverAccount, onBackupCode, hasLocalVault, cloudBackupIncluded, syncPending }) {
+  if (!state?.visible) return null;
+  const view = state.view || 'menu';
+  const detail = view === 'clear'
+    ? {
+        icon: <Database size={21} />,
+        title: 'Clear local vault',
+        body: cloudBackupIncluded
+          ? 'Remove the encrypted vault copy stored on this device. Your Password-Encrypt account and secured cloud backup are not deleted.'
+          : 'Remove the encrypted vault copy stored on this device. Cloud backup is not included in the current plan, so make sure this is not your only copy.',
+        warning: syncPending ? 'This device currently has changes that may not have been backed up yet.' : '',
+        actionLabel: 'Review clear vault',
+        action: onClearLocal
+      }
+    : view === 'account'
+      ? {
+          icon: <UserRoundCheck size={21} />,
+          title: 'Recover account access',
+          body: 'Verify your account email to restore account, subscription and secure cloud-service access on this device. This does not reset your master password.',
+          warning: '',
+          actionLabel: 'Continue',
+          action: onRecoverAccount
+        }
+      : view === 'backup-code'
+        ? {
+            icon: <KeyRound size={21} />,
+            title: 'Use Emergency Backup Code',
+            body: 'If you generated Emergency Backup Codes before losing your master password, one unused code can recover vault access after your account email is verified.',
+            warning: 'Each backup code can only be used once.',
+            actionLabel: 'Continue',
+            action: onBackupCode
+          }
+        : null;
+
+  function choose(viewName) {
+    setState((current) => ({ ...current, view: viewName }));
+  }
+
+  function continueAction() {
+    onClose();
+    window.setTimeout(() => detail?.action?.(), 0);
+  }
+
+  return (
+    <div className="item-popup-layer vault-access-recovery-modal-layer" role="dialog" aria-modal="true" aria-labelledby="vault-access-recovery-title">
+      <button type="button" className="item-popup-backdrop" onClick={onClose} aria-label="Close vault access and recovery" />
+      <section className="item-popup-card vault-access-recovery-modal-card">
+        <header className="item-popup-header">
+          <h2 id="vault-access-recovery-title">{detail ? detail.icon : <ShieldCheck size={21} />} {detail ? detail.title : 'Vault access & recovery'}</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
+        </header>
+        <div className="item-popup-body vault-access-recovery-modal-body">
+          {!detail ? (
+            <>
+              <p className="vault-access-recovery-intro">Choose what you need.</p>
+              <div className="vault-access-recovery-options">
+                {hasLocalVault && <button type="button" onClick={() => choose('clear')}><Database size={21} /><span><strong>Clear local vault</strong><small>Remove the encrypted vault copy from this device.</small></span><ChevronRight size={19} /></button>}
+                <button type="button" onClick={() => choose('account')}><UserRoundCheck size={21} /><span><strong>Recover account access</strong><small>Restore access to your Password-Encrypt account on this device.</small></span><ChevronRight size={19} /></button>
+                <button type="button" onClick={() => choose('backup-code')}><KeyRound size={21} /><span><strong>Use Emergency Backup Code</strong><small>Recover vault access with a backup code you saved earlier.</small></span><ChevronRight size={19} /></button>
+              </div>
+            </>
+          ) : (
+            <div className="vault-access-recovery-detail">
+              <p>{detail.body}</p>
+              {detail.warning && <div className="vault-access-recovery-warning"><AlertTriangle size={19} /><span>{detail.warning}</span></div>}
+            </div>
+          )}
+        </div>
+        <footer className="item-popup-footer vault-access-recovery-modal-footer">
+          {detail ? <button type="button" className="secondary-button" onClick={() => choose('menu')}><ArrowLeft size={17} /> Back</button> : <span />}
+          {detail ? <button type="button" className="primary-button" onClick={continueAction}>{detail.actionLabel}</button> : <button type="button" className="secondary-button" onClick={onClose}>Close</button>}
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function AccountRecoveryModal({ state, setState, onClose, onRequest, onVerify }) {
   if (!state?.visible) return null;
   return (
@@ -3271,6 +3348,7 @@ function App() {
   const [accountSecurity, setAccountSecurity] = useState({ loaded: false, loading: false, message: '', user: null, devices: [], sessions: [], deletion: null, currentDeviceId: '', currentSessionId: '', sessionExpiresAt: '' });
   const [accountSecurityModal, setAccountSecurityModal] = useState({ visible: false, mode: '', title: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false, newEmail: '', phoneCountryCode: '+254', phoneCountryIso: 'ke', phoneNumber: '', reason: '' });
   const [accountRecoveryModal, setAccountRecoveryModal] = useState({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false, afterVerify: '' });
+  const [vaultAccessRecoveryModal, setVaultAccessRecoveryModal] = useState({ visible: false, view: 'menu' });
   const [entitlements, setEntitlements] = useState(() => readCachedEntitlements());
   const [entitlementModal, setEntitlementModal] = useState({ visible: false, feature: '', title: '', message: '' });
   const [publicPlans, setPublicPlans] = useState(FALLBACK_SAAS_PLANS);
@@ -3973,6 +4051,14 @@ function App() {
     } catch (error) {
       showMessage(error.message || 'The account export could not be downloaded.', 'error');
     }
+  }
+
+  function openVaultAccessRecovery() {
+    setVaultAccessRecoveryModal({ visible: true, view: 'menu' });
+  }
+
+  function closeVaultAccessRecovery() {
+    setVaultAccessRecoveryModal({ visible: false, view: 'menu' });
   }
 
   function openAccountRecovery() {
@@ -5096,7 +5182,7 @@ function App() {
   }, [locked, isOnline, customerSession.authenticated]);
 
   useEffect(() => {
-    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || homeFolderPrompt.visible || contactVerificationReminder.visible || guidedTourPromptOpen || isCreateAccountPopupOpen || onboardingResetModal.visible || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || actionProgress.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || emergencyBackupCodesModal.visible || emergencyBackupRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
+    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || homeFolderPrompt.visible || contactVerificationReminder.visible || guidedTourPromptOpen || isCreateAccountPopupOpen || onboardingResetModal.visible || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || actionProgress.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || vaultAccessRecoveryModal.visible || emergencyBackupCodesModal.visible || emergencyBackupRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
     document.body.classList.toggle('app-popup-open', popupOpen);
     if (popupOpen) {
       window.requestAnimationFrame(() => {
@@ -5106,7 +5192,7 @@ function App() {
       });
     }
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, homeFolderPrompt.visible, contactVerificationReminder.visible, guidedTourPromptOpen, isCreateAccountPopupOpen, onboardingResetModal.visible, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, actionProgress.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, emergencyBackupCodesModal.visible, emergencyBackupRecoveryModal.visible, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, homeFolderPrompt.visible, contactVerificationReminder.visible, guidedTourPromptOpen, isCreateAccountPopupOpen, onboardingResetModal.visible, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, actionProgress.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, vaultAccessRecoveryModal.visible, emergencyBackupCodesModal.visible, emergencyBackupRecoveryModal.visible, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
 
   // Ver-1.006: Vault Status is the single repair entry point.
   // Routine sync problems no longer open an automatic delayed warning popup.
@@ -7182,6 +7268,7 @@ function App() {
     || accountSecurityModal.visible
     || contactVerificationReminder.visible
     || accountRecoveryModal.visible
+    || vaultAccessRecoveryModal.visible
     || emergencyBackupCodesModal.visible
     || emergencyBackupRecoveryModal.visible
     || entitlementModal.visible
@@ -7216,6 +7303,7 @@ function App() {
     accountSecurityModalVisible: accountSecurityModal.visible,
     contactVerificationReminderVisible: contactVerificationReminder.visible,
     accountRecoveryModalVisible: accountRecoveryModal.visible,
+    vaultAccessRecoveryModalVisible: vaultAccessRecoveryModal.visible,
     emergencyBackupCodesModalVisible: emergencyBackupCodesModal.visible,
     emergencyBackupRecoveryModalVisible: emergencyBackupRecoveryModal.visible,
     entitlementModalVisible: entitlementModal.visible,
@@ -7252,6 +7340,7 @@ function App() {
     if (state.accountSecurityModalVisible) { backNavigationStateRef.current.accountSecurityModalVisible = false; closeAccountSecurityModal(); return true; }
     if (state.contactVerificationReminderVisible) { backNavigationStateRef.current.contactVerificationReminderVisible = false; dismissContactVerificationReminder(); return true; }
     if (state.accountRecoveryModalVisible) { backNavigationStateRef.current.accountRecoveryModalVisible = false; setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false, afterVerify: '' }); return true; }
+    if (state.vaultAccessRecoveryModalVisible) { backNavigationStateRef.current.vaultAccessRecoveryModalVisible = false; closeVaultAccessRecovery(); return true; }
     if (state.emergencyBackupCodesModalVisible) { backNavigationStateRef.current.emergencyBackupCodesModalVisible = false; setEmergencyBackupCodesModal({ visible: false, busy: false, codes: [], message: '' }); return true; }
     if (state.emergencyBackupRecoveryModalVisible) { backNavigationStateRef.current.emergencyBackupRecoveryModalVisible = false; setEmergencyBackupRecoveryModal({ visible: false, busy: false, code: '', message: '', envelopes: [] }); return true; }
     if (state.entitlementModalVisible) { backNavigationStateRef.current.entitlementModalVisible = false; setEntitlementModal({ visible: false, feature: '', title: '', message: '' }); return true; }
@@ -10673,12 +10762,10 @@ function App() {
             </>
           )}
           <div className="lock-account-access-actions">
-            {hasLocalVault && <button type="button" className="clear-local-vault-link" onClick={resetLocalVaultOnDevice}>Clear local vault on this device</button>}
-            <button type="button" className="account-recovery-link" onClick={openAccountRecovery}><UserRoundCheck size={17} /> Recover account access</button>
-            <button type="button" className="account-recovery-link emergency-backup-recovery-link" onClick={openEmergencyBackupRecovery}><KeyRound size={17} /> Use Emergency Backup Code</button>
+            <button type="button" className="account-recovery-link vault-access-recovery-link" onClick={openVaultAccessRecovery}><ShieldCheck size={17} /> Vault access &amp; recovery</button>
           </div>
           {message && <p className="message">{message}</p>}
-          <div className="security-note"><ShieldCheck size={18} /> Your master password is the primary vault secret. Secure device unlock can unwrap it on a device you set up, and a previously generated Emergency Backup Code can provide an emergency recovery path after account verification.</div>
+          <div className="security-note"><ShieldCheck size={18} /> Your master password protects your encrypted vault. Keep it safe.</div>
           <p className="version">{VERSION}</p>
         </section>
 
@@ -10744,6 +10831,7 @@ function App() {
             </section>
           </div>
         )}
+        <VaultAccessRecoveryModal state={vaultAccessRecoveryModal} setState={setVaultAccessRecoveryModal} onClose={closeVaultAccessRecovery} onClearLocal={resetLocalVaultOnDevice} onRecoverAccount={openAccountRecovery} onBackupCode={openEmergencyBackupRecovery} hasLocalVault={hasLocalVault} cloudBackupIncluded={featureIncluded('cloudBackupSync')} syncPending={Boolean(syncSafety.pending)} />
         <AccountRecoveryModal state={accountRecoveryModal} setState={setAccountRecoveryModal} onClose={() => setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false, afterVerify: '' })} onRequest={requestAccountRecoveryCode} onVerify={verifyAccountRecoveryCode} />
         <EmergencyBackupRecoveryModal state={emergencyBackupRecoveryModal} setState={setEmergencyBackupRecoveryModal} onClose={() => setEmergencyBackupRecoveryModal({ visible: false, busy: false, code: '', message: '', envelopes: [] })} onRecover={recoverVaultWithEmergencyBackupCode} />
         <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={focusMasterPassword} />
