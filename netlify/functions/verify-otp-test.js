@@ -3,8 +3,6 @@ import { createVerifiedCustomerSession } from './_account-session.js';
 import { evaluateTenantAccess, isFounderTenant, recordLifecycleEvent, upsertTrialSubscription } from './_trial.js';
 import { resolveTenantEntitlements } from './_entitlements.js';
 import { verifyAccountOtp } from './_account-otp.js';
-import { sendCustomerLifecycleEmail } from './_customer-email.js';
-import { sendAdminNotification } from './_admin-notification.js';
 import { assertBrowserAction, consumeRateLimit, csrfTokenForSession, resetRateLimit, requestIpHash, securityErrorResponseHeaders } from './_security.js';
 
 function eq(value) {
@@ -121,29 +119,9 @@ export async function handler(event) {
     if (!firstActivation) delete verifiedUserPatch.onboarding_completed_at;
     await updateRow('users', `id=${eq(user.id)}&tenant_id=${eq(tenant.id)}`, verifiedUserPatch);
 
-    let welcomeEmail = { sent: false, skipped: true };
-    if (firstActivation && user.email && (isEmail || user.email_verified) && !user.welcome_email_sent_at) {
-      welcomeEmail = await sendCustomerLifecycleEmail({
-        tenantId: tenant.id,
-        userId: user.id,
-        to: user.email,
-        type: trialDays ? 'welcome_trial_started' : 'welcome_account_activated',
-        idempotencyKey: `welcome:${tenant.id}`,
-        context: {
-          displayName: user.display_name,
-          accountEmail: user.email || '',
-          accountPhone: user.phone_e164 || '',
-          accountName: tenant.account_name || tenant.name || 'My Private Vault',
-          planName,
-          trialEndsAt
-        },
-        metadata: { source: 'account_activation', trial_days: trialDays }
-      }).catch((error) => ({ sent: false, reason: error.message || 'Welcome email could not be queued.' }));
-      if (welcomeEmail.sent) {
-        await updateRow('users', `id=${eq(user.id)}&tenant_id=${eq(tenant.id)}`, { welcome_email_sent_at: now, updated_at: now }).catch(() => null);
-      }
-    }
-
+    // Ver-1.024 keeps OTP verification on the critical path only. Welcome and
+    // Admin notification emails are dispatched by the authenticated follow-up
+    // function after this response, so a slow mail provider cannot trap onboarding.
     await insertRow('audit_log', {
       id: publicId('audit'),
       tenant_id: tenant.id,
@@ -156,29 +134,11 @@ export async function handler(event) {
         plan_status: planStatus,
         trial_started_at: trialStartedAt,
         trial_ends_at: trialEndsAt,
-        welcome_email_sent: Boolean(welcomeEmail.sent),
+        post_verification_notifications_pending: true,
+        verification_retry_idempotent: Boolean(challenge.idempotent),
         pending_verification_channel: pendingVerificationChannel || null
       }
     }).catch(() => null);
-
-    if (firstActivation) {
-      await sendAdminNotification({
-        type: 'new_client_onboarded',
-        tenantId: tenant.id,
-        userId: user.id,
-        idempotencyKey: `new_client_onboarded:${tenant.id}`,
-        context: {
-          source: 'onboarding',
-          displayName: user.display_name || '',
-          email: user.email || '',
-          phone: user.phone_e164 || '',
-          planName,
-          emailVerified: emailVerifiedAfter,
-          phoneVerified: phoneVerifiedAfter,
-          verificationMethod: isEmail && user.phone_verified ? 'SMS OTP + Email OTP' : (isEmail ? 'Email OTP' : 'SMS OTP')
-        }
-      }).catch(() => null);
-    }
 
     const verifiedSession = await createVerifiedCustomerSession(event, {
       tenantId: tenant.id,
@@ -245,7 +205,9 @@ export async function handler(event) {
       cloudAccess,
       accessCode,
       onboardingCompleted: firstActivation,
-      welcomeEmailSent: Boolean(welcomeEmail.sent),
+      welcomeEmailSent: Boolean(user.welcome_email_sent_at),
+      postVerificationNotificationsRequired: true,
+      verificationRetry: Boolean(challenge.idempotent),
       verifiedChannel: isEmail ? 'email' : 'sms',
       emailVerified: emailVerifiedAfter,
       phoneVerified: phoneVerifiedAfter,

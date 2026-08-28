@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.023';
+const VERSION = 'Password-Encrypt Ver-1.024';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -37,6 +37,7 @@ const DEFAULT_TRIAL_PLAN_CODE = 'personal';
 const ONBOARDING_FLOW_VERSION = 2;
 const ONBOARDING_TOTAL_STEPS = 14;
 const ONBOARDING_NETWORK_TIMEOUT_MS = 20000;
+const ONBOARDING_VERIFY_TIMEOUT_MS = 15000;
 const CONTACT_VERIFICATION_REMINDER_KEY = 'password-encrypt-contact-verification-reminder-v1';
 const GUIDED_TOUR_VERSION = 1;
 const GUIDED_TOUR_FALLBACK_KEY = 'password-encrypt-guided-tour-v1';
@@ -108,6 +109,16 @@ function sanitiseOnboardingSignupState(value = {}) {
 
 function sanitiseOnboardingOtpState(value = {}) {
   const state = value && typeof value === 'object' ? value : {};
+  if (state.status === 'verifying') {
+    return {
+      ...state,
+      status: state.challengeId ? 'sent' : 'error',
+      input: '',
+      message: state.challengeId
+        ? 'The previous verification check was interrupted. Re-enter the code and tap Verify again.'
+        : 'The previous verification check was interrupted. Request a fresh code and try again.'
+    };
+  }
   if (state.status !== 'sending') return state;
   return {
     ...state,
@@ -1854,13 +1865,23 @@ async function postJson(url, payload, options = {}) {
       ...(csrfToken ? { 'x-mp-csrf': csrfToken } : {})
     },
     signal: options.signal,
+    keepalive: Boolean(options.keepalive),
     body: JSON.stringify(payload)
   });
+  const raw = await response.text();
   let data = {};
-  try {
-    data = await response.json();
-  } catch (error) {
-    data = { ok: false, message: 'Function returned a non-JSON response.' };
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = {
+        ok: false,
+        code: 'NON_JSON_RESPONSE',
+        message: response.status >= 500
+          ? 'The verification service was temporarily unavailable. Please try again.'
+          : 'Password-Encrypt received an unexpected server response. Please try again.'
+      };
+    }
   }
   if (data?.csrfToken) sessionStorage.setItem('mp_customer_csrf', data.csrfToken);
   if (response.status === 401) sessionStorage.removeItem('mp_customer_csrf');
@@ -1869,7 +1890,7 @@ async function postJson(url, payload, options = {}) {
       ...data,
       ok: false,
       httpStatus: response.status,
-      message: data.message || `Function failed with HTTP ${response.status}.`
+      message: data.message || `Password-Encrypt could not complete the request (HTTP ${response.status}).`
     };
   }
   return data;
@@ -7925,7 +7946,40 @@ function App() {
   }
 
   function pauseCreateAccountFlow() {
+    // Pausing must also stop any in-flight verification request. A browser/network
+    // request cannot be resumed later, so persist a clean retry state instead of
+    // reopening onboarding on a permanent Sending/Verifying spinner.
+    const wasSending = landingOtp.status === 'sending';
+    const wasVerifying = landingOtp.status === 'verifying';
+    try { onboardingNetworkAbortRef.current?.abort?.('paused'); } catch { /* no-op */ }
+    clearOnboardingNetworkRequest();
     stopOnboardingSmsWebOtpCapture();
+
+    const pausedOtp = wasVerifying
+      ? { ...landingOtp, status: landingOtp.challengeId ? 'sent' : 'error', input: '', message: landingOtp.challengeId ? 'Verification paused. Re-enter the code and tap Verify when you are ready.' : 'Verification paused. Request a fresh code when you are ready.' }
+      : wasSending
+        ? { ...landingOtp, status: 'error', challengeId: '', input: '', message: `${landingOtp.channel === 'email' ? 'Email' : 'SMS'} sending was paused. Retry when you are ready.` }
+        : { ...landingOtp, input: '' };
+    const pausedSignup = landingSignup.status === 'preparing'
+      ? { ...landingSignup, status: landingSignup.tenantId && landingSignup.userId ? 'ready-for-otp' : 'error', message: 'Account setup was paused. Continue when you are ready.' }
+      : landingSignup;
+
+    setLandingOtp(pausedOtp);
+    setLandingSignup(pausedSignup);
+    saveOnboardingFlowState({
+      active: true,
+      flowVersion: ONBOARDING_FLOW_VERSION,
+      step: landingOnboardingStep,
+      draft: {
+        displayName: landingAccountDraft.displayName || '', email: landingAccountDraft.email || '',
+        phoneCountryCode: landingAccountDraft.phoneCountryCode || '+254', phoneCountryIso: landingAccountDraft.phoneCountryIso || 'ke',
+        phoneNumber: landingAccountDraft.phoneNumber || '', phoneE164: landingAccountDraft.phoneE164 || '',
+        accountName: landingAccountDraft.accountName || '', planCode: landingAccountDraft.planCode || DEFAULT_TRIAL_PLAN_CODE,
+        planSelectionSource: landingAccountDraft.planSelectionSource || 'default_trial', legalAccepted: Boolean(landingAccountDraft.legalAccepted)
+      },
+      signup: pausedSignup,
+      otp: { ...pausedOtp, input: '', testCode: '' }
+    });
     setSignupLegalModal({ visible: false, page: 'terms' });
     setIsCreateAccountPopupOpen(false);
   }
@@ -8140,6 +8194,21 @@ function App() {
     setLandingOnboardingStep(6);
   }
 
+
+  function cancelOnboardingVerification() {
+    const controller = onboardingNetworkAbortRef.current;
+    try { controller?.abort?.('cancelled'); } catch { /* no-op */ }
+    clearOnboardingNetworkRequest(controller);
+    onboardingOtpAutoVerifyRef.current = '';
+    setLandingOtp((current) => ({
+      ...current,
+      status: current.challengeId ? 'sent' : 'error',
+      message: current.challengeId
+        ? 'Verification stopped. It is safe to tap Verify again.'
+        : 'Verification stopped. Request a fresh code and try again.'
+    }));
+  }
+
   async function deferOnboardingSms() {
     stopOnboardingSmsWebOtpCapture();
     clearOnboardingNetworkRequest();
@@ -8263,10 +8332,19 @@ function App() {
       setLandingOtp((current) => ({ ...current, status: 'error', message: 'Enter the six-digit code.' }));
       return;
     }
+    const verifyingChannel = landingOtp.channel;
+    const challengeId = landingOtp.challengeId;
     setLandingOtp((current) => ({ ...current, status: 'verifying', message: `Checking your ${current.channel === 'sms' ? 'mobile' : 'email'} code...` }));
+    const controller = beginOnboardingNetworkRequest(ONBOARDING_VERIFY_TIMEOUT_MS);
     try {
-      const result = await postJson('/.netlify/functions/verify-otp-test', { challengeId: landingOtp.challengeId, code, ...accountDeviceMetadata() });
-      if (!result.ok) throw new Error(result.message || 'The code could not be verified.');
+      const result = await postJson('/.netlify/functions/verify-otp-test', { challengeId, code, ...accountDeviceMetadata() }, { signal: controller.signal });
+      clearOnboardingNetworkRequest(controller);
+      if (!result.ok) {
+        const failure = new Error(result.message || 'The code could not be verified.');
+        failure.code = result.code || '';
+        failure.httpStatus = Number(result.httpStatus || 0);
+        throw failure;
+      }
 
       const nextAccount = {
         ...bootstrap,
@@ -8308,10 +8386,11 @@ function App() {
       setLandingOtp((current) => ({ ...current, status: 'verified', input: '', emailVerified: Boolean(result.emailVerified), smsVerified: Boolean(result.phoneVerified), message: result.message || `${result.verifiedChannel === 'sms' ? 'Mobile' : 'Email'} verified.` }));
       try { sessionStorage.setItem(`${CONTACT_VERIFICATION_REMINDER_KEY}:${result.tenantId || nextAccount.tenantId}:${result.userId || nextAccount.userId}`, 'shown'); } catch { /* no-op */ }
 
-      // Ver-1.016 keeps the email-verification cards in sequence after a successful
-      // mobile verification. Mobile verification is enough to activate the account,
-      // but the customer should still be offered email verification before master-password setup.
-      if (landingOtp.channel === 'sms' && !result.emailVerified && !landingSignup.existingAccount) {
+      // Verification success must never wait for welcome/admin email delivery.
+      // The authenticated follow-up is intentionally non-blocking and idempotent.
+      void postJson('/.netlify/functions/post-verification-notifications', { source: 'onboarding_verification' }, { keepalive: true }).catch(() => null);
+
+      if (verifyingChannel === 'sms' && !result.emailVerified && !landingSignup.existingAccount) {
         stopOnboardingSmsWebOtpCapture();
         setLandingOtp({ status: 'idle', channel: 'email', challengeId: '', input: '', message: 'Mobile verified. You can verify your email now or do it later.', testCode: '', expiresAt: '', smsVerified: true, emailVerified: false, smsDeferred: false });
         setLandingSignup((current) => ({ ...current, status: 'mobile-verified', message: result.message || 'Mobile verified. You can verify your email now or do it later.' }));
@@ -8322,8 +8401,23 @@ function App() {
       clearOnboardingFlowState();
       window.setTimeout(() => finishLandingOnboarding({ account: nextAccount, existingAccount: Boolean(landingSignup.existingAccount) }), 0);
     } catch (error) {
+      const abortReason = controller.signal?.reason;
+      clearOnboardingNetworkRequest(controller);
       onboardingOtpAutoVerifyRef.current = '';
-      setLandingOtp((current) => ({ ...current, status: 'error', message: error.message || 'The code could not be verified.' }));
+      const timedOut = controller.signal?.aborted && abortReason === 'timeout';
+      const deliberatelyStopped = controller.signal?.aborted && abortReason === 'cancelled';
+      const paused = controller.signal?.aborted && abortReason === 'paused';
+      const transientResponse = error?.code === 'NON_JSON_RESPONSE' || [502, 503, 504].includes(Number(error?.httpStatus || 0));
+      const message = timedOut
+        ? `Verification stopped after ${Math.round(ONBOARDING_VERIFY_TIMEOUT_MS / 1000)} seconds. Your code may still have been accepted. Tap Verify again — it is safe to retry.`
+        : deliberatelyStopped
+          ? 'Verification stopped. It is safe to tap Verify again.'
+          : paused
+            ? 'Verification paused. Re-enter the code and tap Verify when you are ready.'
+            : transientResponse
+              ? 'The verification service did not return cleanly. Your code may still have been accepted. Tap Verify again — it is safe to retry.'
+              : (error.message || 'The code could not be verified.');
+      setLandingOtp((current) => ({ ...current, status: current.challengeId ? 'sent' : 'error', message }));
     }
   }
 
@@ -10396,6 +10490,7 @@ function App() {
                   {landingOtp.status === 'verifying' ? <RefreshCw size={18} className="spin-icon" /> : <ShieldCheck size={18} />}
                   {landingOtp.status === 'verifying' ? 'Verifying...' : 'Verify mobile number'}
                 </button>
+                {landingOtp.status === 'verifying' && <button type="button" className="onboarding-text-action" onClick={cancelOnboardingVerification}><X size={15} /> Stop checking</button>}
                 <button type="button" className="onboarding-text-action" onClick={() => sendLandingOnboardingOtp('sms')} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><RefreshCw size={15} /> Resend SMS code</button>
                 <button type="button" className="onboarding-text-action" onClick={deferOnboardingSms} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><Mail size={15} /> Do this later — verify email instead</button>
               </div>
@@ -10436,6 +10531,7 @@ function App() {
                   {landingOtp.status === 'verifying' ? <RefreshCw size={18} className="spin-icon" /> : <Mail size={18} />}
                   {landingOtp.status === 'verifying' ? 'Verifying...' : 'Verify email address'}
                 </button>
+                {landingOtp.status === 'verifying' && <button type="button" className="onboarding-text-action" onClick={cancelOnboardingVerification}><X size={15} /> Stop checking</button>}
                 <button type="button" className="onboarding-text-action" onClick={() => sendLandingOnboardingOtp('email')} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><RefreshCw size={15} /> Resend email code</button>
                 {!landingSignup.existingAccount && (landingOtp.smsVerified || bootstrap.phoneVerified) && <button type="button" className="onboarding-text-action" onClick={deferOnboardingEmail} disabled={landingOtp.status === 'sending' || landingOtp.status === 'verifying'}><ChevronRight size={15} /> Do this later — continue setup</button>}
               </div>

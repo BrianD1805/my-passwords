@@ -1,4 +1,4 @@
-export const APP_VERSION = 'Password-Encrypt Ver-1.023';
+export const APP_VERSION = 'Password-Encrypt Ver-1.024';
 
 export function jsonResponse(statusCode, body, extraHeaders = {}) {
   if (Number(statusCode) >= 500) queueFunctionFailureResponse(statusCode, body);
@@ -94,26 +94,43 @@ export async function supabaseRequest(path, options = {}) {
     throw error;
   }
 
-  const response = await fetch(`${url}/rest/v1/${path}`, {
-    ...options,
-    headers: supabaseHeaders(options.headers || {})
-  });
+  const controller = new AbortController();
+  const timeoutMs = Math.max(1000, Number(options.timeoutMs || 10000));
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const { timeoutMs: _ignoredTimeoutMs, signal: _ignoredSignal, ...fetchOptions } = options;
+  try {
+    const response = await fetch(`${url}/rest/v1/${path}`, {
+      ...fetchOptions,
+      signal: controller.signal,
+      headers: supabaseHeaders(options.headers || {})
+    });
 
-  const text = await response.text();
-  let data = null;
-  if (text) {
-    try { data = JSON.parse(text); }
-    catch { data = text; }
-  }
+    const text = await response.text();
+    let data = null;
+    if (text) {
+      try { data = JSON.parse(text); }
+      catch { data = text; }
+    }
 
-  if (!response.ok) {
-    const error = new Error(data?.message || data?.hint || `Supabase REST request failed with HTTP ${response.status}.`);
-    error.status = response.status;
-    error.details = data;
+    if (!response.ok) {
+      const error = new Error(data?.message || data?.hint || `Supabase REST request failed with HTTP ${response.status}.`);
+      error.status = response.status;
+      error.details = data;
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      const timedOut = new Error('The secure cloud service took too long to respond. Please try again.');
+      timedOut.status = 503;
+      timedOut.code = 'SUPABASE_TIMEOUT';
+      throw timedOut;
+    }
     throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return data;
 }
 
 export async function selectRows(table, query = 'select=*') {

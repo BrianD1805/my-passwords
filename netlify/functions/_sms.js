@@ -37,23 +37,38 @@ function smsCopy(purpose, code) {
 
 async function twilioRequest(url, params) {
   const config = twilioCredentials();
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      authorization: basicAuthHeader(config.accountSid, config.authToken),
-      'content-type': 'application/x-www-form-urlencoded'
-    },
-    body: new URLSearchParams(params)
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(data?.message || `Twilio returned HTTP ${response.status}.`);
-    error.status = response.status >= 500 ? 503 : response.status;
-    error.providerCode = data?.code ? String(data.code) : '';
-    error.details = data;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        authorization: basicAuthHeader(config.accountSid, config.authToken),
+        'content-type': 'application/x-www-form-urlencoded'
+      },
+      signal: controller.signal,
+      body: new URLSearchParams(params)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(data?.message || `Twilio returned HTTP ${response.status}.`);
+      error.status = response.status >= 500 ? 503 : response.status;
+      error.providerCode = data?.code ? String(data.code) : '';
+      error.details = data;
+      throw error;
+    }
+    return data;
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      const timedOut = new Error('The SMS provider took too long to respond. Please try again.');
+      timedOut.status = 503;
+      timedOut.providerCode = 'TWILIO_TIMEOUT';
+      throw timedOut;
+    }
     throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return data;
 }
 
 export async function startSmsVerification({ to, purpose, code }) {

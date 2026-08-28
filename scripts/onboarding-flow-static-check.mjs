@@ -22,7 +22,7 @@ function check(label, condition) {
   else { console.error(`FAIL  ${label}`); failures += 1; }
 }
 
-check('Ver-1.023 app/package/service-worker versions align', pkg.version === '1.23.0' && /Password-Encrypt Ver-1\.023/.test(main) && /my-passwords-v1\.023/.test(sw));
+check('Ver-1.024 app/package/service-worker versions align', pkg.version === '1.24.0' && /Password-Encrypt Ver-1\.024/.test(main) && /my-passwords-v1\.024/.test(sw));
 check('Onboarding has fourteen explicit progress steps', /ONBOARDING_TOTAL_STEPS = 14/.test(main) && /step === 14/.test(main));
 check('Public signup uses a dedicated card screen rather than rendering the landing page behind it', /isPublicLandingRoute && isCreateAccountPopupOpen/.test(main) && /onboarding-card-screen/.test(main));
 check('Dedicated onboarding card is not marked as a dialog', !/onboarding-card-screen[^\n]{0,300}role="dialog"/.test(main));
@@ -51,7 +51,7 @@ check('SMS request keeps the customer informed while delivery is pending', /Your
 check('SMS can be deferred so email verification can continue', /Do this later — verify email instead/.test(main) && /smsDeferred/.test(main) && /setLandingOnboardingStep\(8\)/.test(main));
 check('Onboarding email request no longer requires prior mobile verification', !/MOBILE_VERIFICATION_REQUIRED/.test(requestEmail));
 check('Either verified onboarding channel can activate the account', !/partialOnboarding: true/.test(verifyOtp) && /pendingVerificationChannel/.test(verifyOtp) && /createVerifiedCustomerSession\(event/.test(verifyOtp));
-check('Successful mobile verification still presents email verification before master-password setup', /landingOtp\.channel === 'sms' && !result\.emailVerified/.test(main) && /setLandingOnboardingStep\(8\)/.test(main) && /Do this later — continue setup/.test(main));
+check('Successful mobile verification still presents email verification before master-password setup', /verifyingChannel === 'sms' && !result\.emailVerified/.test(main) && /setLandingOnboardingStep\(8\)/.test(main) && /Do this later — continue setup/.test(main));
 check('Incomplete contact verification is recorded without blocking account activation', /email_verification_required/.test(verifyOtp) && /phone_verification_required/.test(verifyOtp));
 check('Future authenticated sign-ins can show the missing-contact reminder', /Complete account verification/.test(main) && /CONTACT_VERIFICATION_REMINDER_KEY/.test(main) && /We will remind you again on a future sign-in/.test(main));
 check('Existing account discovered during signup remains routed to existing vault access', /const target = isExistingAccount \? '\/vault\?entry=existing' : '\/vault\?entry=onboarding'/.test(main));
@@ -95,4 +95,4 @@ if (failures) {
   console.error(`\n${failures} onboarding static check(s) failed.`);
   process.exit(1);
 }
-console.log(`\nAll Ver-1.023 onboarding static checks passed.`);
+console.log(`\nAll Ver-1.024 onboarding static checks passed.`);

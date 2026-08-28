@@ -187,7 +187,19 @@ export async function verifyAccountOtp({ challengeId, code, purpose, tenantId = 
   if (purpose && challenge.purpose !== purpose) { const error = new Error('This verification code is for a different action.'); error.status = 409; throw error; }
   if (tenantId && challenge.tenant_id !== tenantId) { const error = new Error('This verification code is not linked to this account.'); error.status = 403; throw error; }
   if (userId && challenge.user_id !== userId) { const error = new Error('This verification code is not linked to this account.'); error.status = 403; throw error; }
-  if (!String(challenge.status || '').startsWith('pending')) { const error = new Error('This verification code has already been used.'); error.status = 409; throw error; }
+  const challengeStatus = String(challenge.status || '');
+  const existingMetadata = parseMetadata(challenge.metadata);
+  if (challengeStatus.startsWith('verified_')) {
+    const suppliedHash = hashOtp(challengeId, String(code || '').replace(/\D/g, ''));
+    if (!existingMetadata.verified_code_hash_stored || suppliedHash !== challenge.otp_hash) {
+      const error = new Error('This verification code has already been used.'); error.status = 409; throw error;
+    }
+    // Ver-1.024 makes verification retries idempotent. If the browser lost the
+    // first successful response, the same challenge + same code can safely finish
+    // session/account setup instead of trapping onboarding on an already-used code.
+    return { ...challenge, idempotent: true };
+  }
+  if (!challengeStatus.startsWith('pending')) { const error = new Error('This verification code has already been used.'); error.status = 409; throw error; }
   if (new Date(challenge.expires_at).getTime() <= Date.now()) {
     await updateRow('otp_challenges', `id=${eq(challengeId)}`, { status: 'expired', updated_at: new Date().toISOString() });
     await updateSmsDelivery(challengeId, { status: 'expired' });
@@ -230,7 +242,15 @@ export async function verifyAccountOtp({ challengeId, code, purpose, tenantId = 
 
   const now = new Date().toISOString();
   const verifiedStatus = challenge.delivery_channel === 'sms' ? 'verified_sms' : 'verified_email';
-  await updateRow('otp_challenges', `id=${eq(challengeId)}`, { attempts, status: verifiedStatus, verified_at: now, updated_at: now });
+  const verifiedMetadata = { ...metadata, verified_code_hash_stored: true, verified_code_hash_version: 1 };
+  await updateRow('otp_challenges', `id=${eq(challengeId)}`, {
+    attempts,
+    status: verifiedStatus,
+    verified_at: now,
+    otp_hash: hashOtp(challengeId, String(code || '').replace(/\D/g, '')),
+    metadata: verifiedMetadata,
+    updated_at: now
+  });
   if (challenge.delivery_channel === 'sms') await updateSmsDelivery(challengeId, { status: 'approved', delivered_at: now });
-  return { ...challenge, status: verifiedStatus, verified_at: now, attempts };
+  return { ...challenge, status: verifiedStatus, verified_at: now, attempts, metadata: verifiedMetadata };
 }

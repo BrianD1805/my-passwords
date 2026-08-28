@@ -66,20 +66,30 @@ async function sendWithResend({ to, code, maskedEmail, purpose }) {
   const apiKey = process.env.RESEND_API_KEY || '';
   const from = process.env.OTP_EMAIL_FROM || '';
   if (!apiKey || !from) return { sent: false, provider: 'resend', reason: 'Email delivery is not configured.' };
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to,
-      subject: otpEmailCopy(purpose).subject,
-      html: buildEmailHtml(code, maskedEmail, purpose),
-      text: `${otpEmailCopy(purpose).text} Your code is ${code}. It expires in 10 minutes. Your master password is never sent by email.`
-    })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) return { sent: false, provider: 'resend', reason: data?.message || `Resend returned HTTP ${response.status}.`, details: data };
-  return { sent: true, provider: 'resend', providerId: data?.id || '' };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        from,
+        to,
+        subject: otpEmailCopy(purpose).subject,
+        html: buildEmailHtml(code, maskedEmail, purpose),
+        text: `${otpEmailCopy(purpose).text} Your code is ${code}. It expires in 10 minutes. Your master password is never sent by email.`
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { sent: false, provider: 'resend', reason: data?.message || `Resend returned HTTP ${response.status}.`, details: data };
+    return { sent: true, provider: 'resend', providerId: data?.id || '' };
+  } catch (error) {
+    if (error?.name === 'AbortError') return { sent: false, provider: 'resend', reason: 'Email delivery took too long to respond. Please try again.' };
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function handler(event) {
