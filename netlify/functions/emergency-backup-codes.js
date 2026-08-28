@@ -161,6 +161,13 @@ export async function handler(event) {
       return jsonResponse(200, { ok: true, version: APP_VERSION, activeCount: CODE_COUNT, batchId, generatedAt: now, remindersEnabled: body.remindersEnabled !== false, reminderDays: REMINDER_DAYS, message: `${CODE_COUNT} new Emergency Backup Codes are ready. Older codes have been revoked.` });
     }
 
+    if (action === 'revoke_all') {
+      const rows = await activeRows(session);
+      if (rows.length) await deleteRow('emergency_backup_codes', `tenant_id=${eq(session.tenantId)}&user_id=${eq(session.userId)}&status=${eq('active')}`);
+      await insertRow('audit_log', { id: publicId('audit'), tenant_id: session.tenantId, user_id: session.userId, action: 'emergency_backup_codes_revoked', metadata: { version: APP_VERSION, count: rows.length, reason: safeText(body.reason, 80) || 'customer_action' } }).catch(() => null);
+      return jsonResponse(200, { ok: true, version: APP_VERSION, activeCount: 0, configured: false, message: rows.length ? 'Previous Emergency Backup Codes were invalidated.' : 'There were no active Emergency Backup Codes to invalidate.' });
+    }
+
     if (action === 'set_reminders') {
       const enabled = body.enabled !== false;
       const rows = await activeRows(session);
@@ -231,7 +238,7 @@ export async function handler(event) {
           paragraphs: [
             `Hello ${escapeHtml(user.display_name || 'there')},`,
             'One of your Password-Encrypt Emergency Backup Codes was used to recover vault access after account verification.',
-            `You now have <strong>${remaining.length} unused code${remaining.length === 1 ? '' : 's'}</strong> remaining.`,
+            `The recovered code was removed immediately. The other ${remaining.length} code${remaining.length === 1 ? '' : 's'} in that old set will be replaced when you finish setting a new master password.`,
             'If this was not you, end other sessions from Settings → My Account and contact Password-Encrypt support immediately. The email does not contain the code that was used.'
           ]
         }).catch(() => null);

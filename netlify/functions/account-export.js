@@ -43,7 +43,7 @@ export async function handler(event) {
       encryptedVaultMetadata: { snapshots: snapshots || [], documents: documents || [] },
       accountActivity: audit || [],
       smsVerificationHistory: smsDeliveries || [],
-      securityNotice: 'Password-Encrypt does not store a readable server-side copy of the master password, so it cannot be exported from the account service or reset by support. Account recovery restores account services only. If Emergency Backup Codes were generated beforehand, one unused code can recover the separately encrypted master-password copy after account verification; Secure device unlock may also provide local access on a configured device.'
+      securityNotice: 'Password-Encrypt does not store a readable server-side copy of the master password, so it cannot be exported from the account service or reset by support. Account recovery restores account services only. If Emergency Backup Codes were generated beforehand, one unused code can recover the separately encrypted master-password copy after account verification; the app then requires a new master password and refreshes the recovery-code set. Secure device unlock may also provide local access on a configured device.'
     };
     const date = new Date().toISOString().slice(0, 10);
     return {

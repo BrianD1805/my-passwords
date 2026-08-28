@@ -20204,3 +20204,210 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     display: flex;
   }
 }
+
+/* Password-Encrypt Ver-1.023 — Emergency Backup Codes UX and recovered-password reset. */
+.emergency-backup-codes-modal-footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px 20px 20px !important;
+}
+
+.emergency-backup-codes-modal-footer button {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  justify-content: center;
+}
+
+.emergency-backup-compact-card,
+.emergency-backup-setup-card {
+  display: grid;
+  gap: 16px;
+}
+
+.emergency-backup-compact-status {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.emergency-backup-compact-status > span {
+  display: grid;
+  gap: 4px;
+  min-height: 58px;
+  align-content: center;
+  padding: 11px 13px;
+  border: 1px solid var(--mp-border);
+  border-radius: 13px;
+  background: var(--mp-surface);
+  color: var(--mp-muted);
+}
+
+.emergency-backup-compact-status strong {
+  color: var(--mp-text);
+  font-size: .84rem;
+}
+
+.emergency-backup-compact-reminder {
+  margin: 0;
+}
+
+.emergency-backup-actions.compact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.emergency-backup-actions.compact button {
+  width: 100%;
+}
+
+.emergency-master-password-reset-card {
+  width: min(640px, 100%);
+}
+
+.emergency-master-password-reset-body {
+  display: grid;
+  gap: 16px;
+}
+
+.emergency-master-password-reset-body > p {
+  margin: 0;
+  color: var(--mp-text-soft, #536579);
+  line-height: 1.55;
+}
+
+.emergency-master-password-reset-body > label {
+  display: grid;
+  gap: 8px;
+  color: var(--mp-text);
+  font-weight: 700;
+}
+
+.emergency-master-password-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  border: 1px solid var(--mp-border-strong, #b8cad8);
+  border-radius: 13px;
+  background: var(--mp-surface);
+  overflow: hidden;
+}
+
+.emergency-master-password-field:focus-within {
+  border-color: #6f93b3;
+  box-shadow: 0 0 0 3px rgba(51, 102, 153, .10);
+}
+
+.emergency-master-password-field input {
+  min-width: 0;
+  min-height: 52px;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  padding: 12px 10px 12px 14px;
+  background: transparent;
+  color: var(--mp-text);
+  font: inherit;
+}
+
+.emergency-master-password-field button {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--mp-primary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.emergency-master-password-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  border: 1px solid var(--mp-border);
+  border-radius: 14px;
+  background: var(--mp-background);
+}
+
+.emergency-master-password-note > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--mp-primary);
+}
+
+.emergency-master-password-note > span {
+  display: grid;
+  gap: 4px;
+}
+
+.emergency-master-password-note small {
+  color: var(--mp-muted);
+  line-height: 1.45;
+}
+
+@media (max-width: 680px) {
+  .emergency-backup-codes-modal-footer {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px;
+    padding: 14px 14px 18px !important;
+  }
+
+  .emergency-backup-codes-modal-footer button {
+    width: 100% !important;
+    font-size: .9rem;
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+
+  .emergency-backup-compact-status,
+  .emergency-backup-actions.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .emergency-master-password-reset-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .emergency-master-password-reset-footer button {
+    width: 100%;
+  }
+}
+
+.emergency-backup-code-save-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  border: 1px solid var(--mp-border);
+  border-radius: 14px;
+  background: var(--mp-background);
+}
+
+.emergency-backup-code-save-note > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--mp-primary);
+}
+
+.emergency-backup-code-save-note > span {
+  display: grid;
+  gap: 4px;
+}
+
+.emergency-backup-code-save-note small,
+.emergency-backup-code-private-note {
+  color: var(--mp-muted);
+  line-height: 1.5;
+}
+
+.emergency-backup-code-private-note {
+  margin: 0;
+  font-size: .92rem;
+}

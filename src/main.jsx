@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.022';
+const VERSION = 'Password-Encrypt Ver-1.023';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -1276,13 +1276,10 @@ function persistCurrentVaultOwnerBinding(account = {}) {
   return next;
 }
 
-async function encryptVault(items, masterPassword, account = {}) {
+async function encryptVault(items, masterPassword, account = {}, options = {}) {
   const previousEnvelope = getLocalEnvelope();
-  let salt = localStorage.getItem(SALT_KEY) || localStorage.getItem(LEGACY_SALT_KEY);
-  if (!salt) {
-    salt = arrayBufferToBase64(crypto.getRandomValues(new Uint8Array(16)));
-    localStorage.setItem(SALT_KEY, salt);
-  }
+  let salt = String(options.saltOverride || '').trim() || localStorage.getItem(SALT_KEY) || localStorage.getItem(LEGACY_SALT_KEY);
+  if (!salt) salt = arrayBufferToBase64(crypto.getRandomValues(new Uint8Array(16)));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(masterPassword, salt);
   const encoded = new TextEncoder().encode(JSON.stringify(items));
@@ -2635,11 +2632,11 @@ function readFileAsDataUrl(file) {
 }
 
 
-async function encryptDocumentData(dataUrl, masterPassword) {
-  let salt = localStorage.getItem(SALT_KEY) || localStorage.getItem(LEGACY_SALT_KEY);
+async function encryptDocumentData(dataUrl, masterPassword, saltOverride = '') {
+  let salt = String(saltOverride || '').trim() || localStorage.getItem(SALT_KEY) || localStorage.getItem(LEGACY_SALT_KEY);
   if (!salt) {
     salt = arrayBufferToBase64(crypto.getRandomValues(new Uint8Array(16)));
-    localStorage.setItem(SALT_KEY, salt);
+    if (!saltOverride) localStorage.setItem(SALT_KEY, salt);
   }
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(masterPassword, salt);
@@ -3170,19 +3167,18 @@ function EmergencyBackupCodesModal({ state, onClose, onCopy, onDownload, onEmail
       <section className="item-popup-card emergency-backup-codes-modal-card">
         <header className="item-popup-header"><h2 id="emergency-backup-codes-title"><KeyRound size={21} /> Emergency Backup Codes</h2><button type="button" className="icon-button" onClick={onClose} disabled={state.busy} aria-label="Close"><X size={19} /></button></header>
         <div className="item-popup-body emergency-backup-codes-modal-body">
-          <div className="account-deletion-warning"><AlertTriangle size={21} /><span><strong>Save these codes now</strong><small>Password-Encrypt does not keep a readable copy of these codes. They are shown only for this newly generated set. Generating another set revokes these codes.</small></span></div>
-          <p>Each code can be used once after your account email has been verified. A valid code can recover the protected master-password copy in your browser and open your encrypted vault.</p>
+          <div className="emergency-backup-code-save-note"><ShieldCheck size={19} /><span><strong>Save this set now</strong><small>Each code works once. Password-Encrypt cannot show this same readable set again later.</small></span></div>
           <div className="emergency-backup-code-grid" aria-label="Emergency Backup Codes">
             {codes.map((code, index) => <code key={code}><span>{String(index + 1).padStart(2, '0')}</span>{code}</code>)}
           </div>
-          <div className="emergency-backup-code-warning"><ShieldCheck size={18} /><span><strong>Keep them separate from your vault device</strong><small>Anyone who gets one of these codes and can verify your account email may be able to recover vault access. Never send a code to support.</small></span></div>
+          <p className="emergency-backup-code-private-note">Keep the codes somewhere private and separate from your vault device. Never send a code to support.</p>
           {state.message && <div className="account-modal-message">{state.message}</div>}
         </div>
         <footer className="item-popup-footer emergency-backup-codes-modal-footer">
           <button type="button" className="secondary-button" onClick={onCopy} disabled={state.busy || !codes.length}><Copy size={17} /> Copy all</button>
           <button type="button" className="secondary-button" onClick={onDownload} disabled={state.busy || !codes.length}><Download size={17} /> Download</button>
           <button type="button" className="secondary-button" onClick={onEmail} disabled={state.busy || !codes.length}><Mail size={17} /> {state.busy ? 'Emailing...' : 'Email codes'}</button>
-          <button type="button" className="primary-button" onClick={onClose} disabled={state.busy}>I have saved them</button>
+          <button type="button" className="primary-button" onClick={onClose} disabled={state.busy}>Done</button>
         </footer>
       </section>
     </div>
@@ -3203,6 +3199,29 @@ function EmergencyBackupRecoveryModal({ state, setState, onClose, onRecover }) {
           {state.message && <div className="account-modal-message">{state.message}</div>}
         </div>
         <footer className="item-popup-footer"><button type="button" className="secondary-button" onClick={onClose} disabled={state.busy}>Cancel</button><button type="button" className="primary-button" onClick={onRecover} disabled={state.busy}>{state.busy ? 'Recovering...' : 'Recover and open vault'}</button></footer>
+      </section>
+    </div>
+  );
+}
+
+
+function EmergencyMasterPasswordResetModal({ state, setState, onSubmit, onLock }) {
+  if (!state?.visible) return null;
+  const mismatch = Boolean(state.confirmPassword && state.newPassword !== state.confirmPassword);
+  return (
+    <div className="item-popup-layer emergency-master-password-reset-layer" role="dialog" aria-modal="true" aria-labelledby="emergency-master-password-reset-title">
+      <button type="button" className="item-popup-backdrop" onClick={undefined} aria-hidden="true" tabIndex="-1" />
+      <section className="item-popup-card emergency-master-password-reset-card">
+        <header className="item-popup-header"><h2 id="emergency-master-password-reset-title"><ShieldCheck size={21} /> Set a new master password</h2></header>
+        <div className="item-popup-body emergency-master-password-reset-body">
+          <p>Your Emergency Backup Code has restored access. Before you continue using the vault, replace the master password you could no longer remember.</p>
+          <label>New master password<div className="emergency-master-password-field"><input type={state.showNew ? 'text' : 'password'} autoComplete="new-password" spellCheck="false" value={state.newPassword || ''} onChange={(event) => setState((current) => ({ ...current, newPassword: event.target.value, message: '' }))} placeholder="Create a new master password" /><button type="button" onClick={() => setState((current) => ({ ...current, showNew: !current.showNew }))} aria-label={state.showNew ? 'Hide new master password' : 'Show new master password'}>{state.showNew ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
+          <label>Confirm new master password<div className="emergency-master-password-field"><input type={state.showConfirm ? 'text' : 'password'} autoComplete="new-password" spellCheck="false" value={state.confirmPassword || ''} onChange={(event) => setState((current) => ({ ...current, confirmPassword: event.target.value, message: '' }))} placeholder="Type the new password again" /><button type="button" onClick={() => setState((current) => ({ ...current, showConfirm: !current.showConfirm }))} aria-label={state.showConfirm ? 'Hide master password confirmation' : 'Show master password confirmation'}>{state.showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
+          {mismatch && <div className="onboarding-password-mismatch" role="alert"><AlertTriangle size={21} /><span><strong>Passwords do not match</strong><small>Re-enter the confirmation so it exactly matches your new master password.</small></span></div>}
+          <div className="emergency-master-password-note"><KeyRound size={19} /><span><strong>Your old backup-code set will be replaced</strong><small>After the new password is secured, Password-Encrypt will create a fresh set of Emergency Backup Codes for the new password.</small></span></div>
+          {state.message && <div className="account-modal-message">{state.message}</div>}
+        </div>
+        <footer className="item-popup-footer emergency-master-password-reset-footer"><button type="button" className="secondary-button" onClick={onLock} disabled={state.busy}>Lock vault</button><button type="button" className="primary-button" onClick={onSubmit} disabled={state.busy || (state.newPassword || '').length < 8 || state.newPassword !== state.confirmPassword}>{state.busy ? 'Securing new password...' : 'Set new master password'}</button></footer>
       </section>
     </div>
   );
@@ -3393,6 +3412,8 @@ function App() {
   const [emergencyBackupCodes, setEmergencyBackupCodes] = useState({ loaded: false, loading: false, configured: false, activeCount: 0, batchId: '', generatedAt: '', remindersEnabled: true, lastReminderAt: '', emailedAt: '', reminderDays: 90, message: '' });
   const [emergencyBackupCodesModal, setEmergencyBackupCodesModal] = useState({ visible: false, busy: false, codes: [], message: '' });
   const [emergencyBackupRecoveryModal, setEmergencyBackupRecoveryModal] = useState({ visible: false, busy: false, code: '', message: '', envelopes: [] });
+  const [emergencyMasterPasswordResetModal, setEmergencyMasterPasswordResetModal] = useState({ visible: false, busy: false, newPassword: '', confirmPassword: '', showNew: false, showConfirm: false, message: '' });
+  const emergencyRecoveredPasswordRef = useRef('');
   const [pushNotifications, setPushNotifications] = useState(() => ({
     loaded: false,
     loading: false,
@@ -3604,7 +3625,7 @@ function App() {
       const response = await fetch(`/.netlify/functions/emergency-backup-codes${include ? '?include=1' : ''}`, { credentials: 'same-origin', cache: 'no-store' });
       const result = await response.json().catch(() => ({ ok: false, message: 'Emergency Backup Code status returned an invalid response.' }));
       if (!response.ok || !result.ok) throw new Error(result.message || 'Emergency Backup Code status could not be loaded.');
-      setEmergencyBackupCodes((current) => ({ ...current, ...result, loaded: true, loading: false, message: result.configured ? `${result.activeCount} unused Emergency Backup Code${result.activeCount === 1 ? '' : 's'} available.` : 'No Emergency Backup Codes have been generated yet.' }));
+      setEmergencyBackupCodes((current) => ({ ...current, ...result, loaded: true, loading: false, message: '' }));
       return result;
     } catch (error) {
       setEmergencyBackupCodes((current) => ({ ...current, loaded: true, loading: false, message: error.message || 'Emergency Backup Code status could not be loaded.' }));
@@ -3629,18 +3650,7 @@ function App() {
     }
     setEmergencyBackupCodes((current) => ({ ...current, loading: true, message: 'Generating a new protected set...' }));
     try {
-      const codes = [];
-      while (codes.length < EMERGENCY_BACKUP_CODE_COUNT) {
-        const code = generateEmergencyBackupCode();
-        if (!codes.includes(code)) codes.push(code);
-      }
-      const envelopes = [];
-      for (const code of codes) envelopes.push(await wrapMasterPasswordWithEmergencyBackupCode(masterPassword, code));
-      const result = await postJson('/.netlify/functions/emergency-backup-codes', { action: 'replace', codes: envelopes, remindersEnabled: emergencyBackupCodes.remindersEnabled !== false });
-      if (!result.ok) throw new Error(result.message || 'Emergency Backup Codes could not be generated.');
-      setEmergencyBackupCodes((current) => ({ ...current, ...result, configured: true, loaded: true, loading: false, message: result.message || `${codes.length} Emergency Backup Codes generated.` }));
-      setEmergencyBackupCodesModal({ visible: true, busy: false, codes, message: '' });
-      showMessage('New Emergency Backup Codes generated. Save them now.', 'success');
+      await createEmergencyBackupCodeSetForPassword(masterPassword);
     } catch (error) {
       setEmergencyBackupCodes((current) => ({ ...current, loading: false, message: error.message || 'Emergency Backup Codes could not be generated.' }));
       showMessage(error.message || 'Emergency Backup Codes could not be generated.', 'error');
@@ -3743,6 +3753,153 @@ function App() {
     }
     showMessage('Vault opened, but Password-Encrypt could not mark the Emergency Backup Code as used. Review Emergency Backup Codes in Settings.', 'warning');
     return result;
+  }
+
+
+  function beginEmergencyMasterPasswordReset(recoveredPassword) {
+    hideVerifyOverlay();
+    emergencyRecoveredPasswordRef.current = String(recoveredPassword || '');
+    setEmergencyMasterPasswordResetModal({ visible: true, busy: false, newPassword: '', confirmPassword: '', showNew: false, showConfirm: false, message: '' });
+  }
+
+  function lockAfterEmergencyRecovery() {
+    emergencyRecoveredPasswordRef.current = '';
+    setEmergencyMasterPasswordResetModal({ visible: false, busy: false, newPassword: '', confirmPassword: '', showNew: false, showConfirm: false, message: '' });
+    lockVault('Vault locked. Use an unused Emergency Backup Code again if you still need to replace the forgotten master password.', { force: true });
+  }
+
+  async function createEmergencyBackupCodeSetForPassword(password, { announce = true, openModal = true } = {}) {
+    const codes = [];
+    while (codes.length < EMERGENCY_BACKUP_CODE_COUNT) {
+      const code = generateEmergencyBackupCode();
+      if (!codes.includes(code)) codes.push(code);
+    }
+    const envelopes = [];
+    for (const code of codes) envelopes.push(await wrapMasterPasswordWithEmergencyBackupCode(password, code));
+    const result = await postJson('/.netlify/functions/emergency-backup-codes', { action: 'replace', codes: envelopes, remindersEnabled: emergencyBackupCodes.remindersEnabled !== false });
+    if (!result.ok) throw new Error(result.message || 'Fresh Emergency Backup Codes could not be generated.');
+    setEmergencyBackupCodes((current) => ({ ...current, ...result, configured: true, loaded: true, loading: false, message: '' }));
+    if (openModal) setEmergencyBackupCodesModal({ visible: true, busy: false, codes, message: '' });
+    if (announce) showMessage('New Emergency Backup Codes generated. Save them now.', 'success');
+    return { result, codes };
+  }
+
+  async function setNewMasterPasswordAfterEmergencyRecovery() {
+    const oldPassword = String(emergencyRecoveredPasswordRef.current || '');
+    const newPassword = String(emergencyMasterPasswordResetModal.newPassword || '');
+    const confirmPassword = String(emergencyMasterPasswordResetModal.confirmPassword || '');
+    if (!oldPassword) return setEmergencyMasterPasswordResetModal((current) => ({ ...current, message: 'The recovery session has expired. Lock the vault and use an unused Emergency Backup Code again.' }));
+    if (newPassword.length < 8) return setEmergencyMasterPasswordResetModal((current) => ({ ...current, message: 'Use at least 8 characters for the new master password.' }));
+    if (newPassword !== confirmPassword) return setEmergencyMasterPasswordResetModal((current) => ({ ...current, message: 'The two new master password entries do not match.' }));
+    if (newPassword === oldPassword) return setEmergencyMasterPasswordResetModal((current) => ({ ...current, message: 'Choose a new password that is different from the recovered password.' }));
+    if (!customerSession.authenticated || (typeof navigator !== 'undefined' && navigator.onLine === false)) return setEmergencyMasterPasswordResetModal((current) => ({ ...current, message: 'Stay online while Password-Encrypt secures the vault under the new master password.' }));
+
+    setEmergencyMasterPasswordResetModal((current) => ({ ...current, busy: true, message: 'Securing your vault with the new master password...' }));
+    const originalEnvelope = getLocalEnvelope();
+    const originalSalt = localStorage.getItem(SALT_KEY) || '';
+    const uploadedNewBlobIds = [];
+    const oldBlobEntries = [];
+    let localChanged = false;
+    let passwordChangeCommitted = false;
+    try {
+      const currentItems = await decryptVault(oldPassword);
+      if (!Array.isArray(currentItems)) throw new Error('The recovered vault could not be prepared for the password change.');
+      const newSalt = arrayBufferToBase64(crypto.getRandomValues(new Uint8Array(16)));
+      const rekeyedItems = JSON.parse(JSON.stringify(currentItems));
+      const storedIndexes = [];
+      for (let index = 0; index < currentItems.length; index += 1) {
+        const file = currentItems[index]?.payload?.file;
+        if (file?.storedExternally && (file.externalDocumentId || currentItems[index]?.id)) storedIndexes.push(index);
+      }
+
+      for (let position = 0; position < storedIndexes.length; position += 1) {
+        const index = storedIndexes[position];
+        const sourceItem = currentItems[index];
+        const sourceFile = sourceItem?.payload?.file || {};
+        const oldDocumentId = sourceFile.externalDocumentId || sourceItem.id;
+        setEmergencyMasterPasswordResetModal((current) => ({ ...current, message: `Re-securing encrypted file ${position + 1} of ${storedIndexes.length}...` }));
+        const dataUrl = await loadStoredDocumentDataUrl(sourceItem, oldPassword);
+        const newDocumentId = `${sourceItem.id}_rekey_${crypto.randomUUID()}`;
+        const blobKind = sourceFile.blobKind === 'picture' || effectiveVaultItemType(sourceItem) === PICTURES_CATEGORY ? 'picture' : 'document';
+        const replacementFile = await uploadEncryptedDocumentBlob({
+          name: sourceFile.name || `${sourceItem.title || blobKind}`,
+          type: sourceFile.type || 'application/octet-stream',
+          size: sourceFile.size || 0,
+          extension: sourceFile.extension || getFileExtension(sourceFile.name || ''),
+          dataUrl
+        }, newDocumentId, blobKind, newPassword, newSalt);
+        uploadedNewBlobIds.push(newDocumentId);
+        oldBlobEntries.push({ documentId: oldDocumentId, tenantId: bootstrap.tenantId, userId: bootstrap.userId });
+        rekeyedItems[index] = { ...rekeyedItems[index], payload: { ...(rekeyedItems[index].payload || {}), file: replacementFile } };
+      }
+
+      setEmergencyMasterPasswordResetModal((current) => ({ ...current, message: 'Re-encrypting the vault and creating a new secure recovery point...' }));
+      const newEnvelope = await encryptVault(rekeyedItems, newPassword, bootstrap, { saltOverride: newSalt });
+      localChanged = true;
+      let syncResult = { ok: true, localOnly: true, snapshotId: '' };
+      if (featureIncluded('cloudBackupSync')) {
+        syncResult = await syncEncryptedVault({ envelope: newEnvelope, nextItems: rekeyedItems, silent: true, suppressFailureModal: true, suppressConflictModal: true });
+        if (!syncResult?.ok) throw new Error(syncResult?.message || 'The new encrypted cloud backup could not be confirmed. Your password was not changed.');
+      }
+      // From this point the new local vault (and, when enabled, the new cloud snapshot) is authoritative.
+      // Later cleanup/reminder work must never roll the customer back to the forgotten password.
+      passwordChangeCommitted = true;
+
+      setMasterPassword(newPassword);
+      setItems(rekeyedItems);
+      localStorage.setItem(SALT_KEY, newSalt);
+
+      // Secure-device unlock contains a local wrapped copy of the previous password. Remove it so it cannot keep returning the old secret.
+      localStorage.removeItem(BIOMETRIC_UNLOCK_KEY);
+      await deleteBiometricDeviceKey();
+      setBiometricUnlock(null);
+      setBiometricStatus((current) => ({ ...current, state: current.supported ? 'available' : 'unsupported' }));
+
+      let freshCodeSet = null;
+      try {
+        freshCodeSet = await createEmergencyBackupCodeSetForPassword(newPassword, { announce: false, openModal: false });
+      } catch (codeError) {
+        const revokeResult = await postJson('/.netlify/functions/emergency-backup-codes', { action: 'revoke_all', reason: 'master_password_changed' }).catch(() => ({ ok: false }));
+        setEmergencyBackupCodes((current) => ({ ...current, configured: false, activeCount: 0, batchId: '', generatedAt: '', loaded: true, loading: false, message: codeError.message || 'Generate a fresh Emergency Backup Code set now.' }));
+        if (!revokeResult?.ok) showMessage('Your master password changed, but Password-Encrypt could not confirm cleanup of the previous backup-code set. Please reconnect and open Emergency Backup Codes.', 'warning');
+      }
+
+      if (featureIncluded('cloudBackupSync')) {
+        const keepSnapshotId = String(syncResult.snapshotId || syncResult?.verified?.snapshot?.id || getLocalEnvelope()?.cloudSnapshotId || '');
+        if (keepSnapshotId) {
+          const historyReset = await postJson('/.netlify/functions/sync-vault', { action: 'reset_snapshot_history', keepSnapshotId }).catch(() => ({ ok: false }));
+          if (!historyReset.ok) showMessage('Your master password changed, but older encrypted recovery points still need cleanup. Open Vault Safety and run Check recovery points.', 'warning');
+        }
+      }
+
+      for (const entry of oldBlobEntries) {
+        const removed = await removeStoredDocumentBlob(entry, { silent: true });
+        if (!removed.ok) queuePendingDocumentDeletion(entry);
+      }
+
+      emergencyRecoveredPasswordRef.current = '';
+      setEmergencyMasterPasswordResetModal({ visible: false, busy: false, newPassword: '', confirmPassword: '', showNew: false, showConfirm: false, message: '' });
+      if (freshCodeSet?.codes?.length) {
+        setEmergencyBackupCodesModal({ visible: true, busy: false, codes: freshCodeSet.codes, message: 'Your master password is updated. Save this fresh recovery-code set now.' });
+        showMessage('Master password updated. A fresh Emergency Backup Code set is ready to save.', 'success');
+      } else {
+        openSettingsSection('backup-codes');
+        showMessage('Master password updated. Generate a fresh Emergency Backup Code set in Settings.', 'warning');
+      }
+    } catch (error) {
+      if (!passwordChangeCommitted) {
+        if (localChanged && originalEnvelope) localStorage.setItem(STORAGE_KEY, JSON.stringify(originalEnvelope));
+        if (originalSalt) localStorage.setItem(SALT_KEY, originalSalt);
+        else localStorage.removeItem(SALT_KEY);
+        for (const documentId of uploadedNewBlobIds) await removeStoredDocumentBlob({ documentId, tenantId: bootstrap.tenantId, userId: bootstrap.userId }, { silent: true }).catch(() => null);
+        setMasterPassword(oldPassword);
+        setEmergencyMasterPasswordResetModal((current) => ({ ...current, busy: false, message: error.message || 'The master password could not be changed safely. Nothing was intentionally removed.' }));
+        return;
+      }
+      emergencyRecoveredPasswordRef.current = '';
+      setEmergencyMasterPasswordResetModal({ visible: false, busy: false, newPassword: '', confirmPassword: '', showNew: false, showConfirm: false, message: '' });
+      showMessage('Your master password was changed successfully, but one follow-up cleanup step needs attention. Open Emergency Backup Codes and Vault Safety in Settings.', 'warning');
+    }
   }
 
   async function recoverVaultWithEmergencyBackupCode() {
@@ -4143,10 +4300,11 @@ function App() {
 
 
   useEffect(() => {
-    if (activeSettingsSection !== 'backup-codes' || !customerSession.authenticated || emergencyBackupCodes.loading) return;
+    if (!customerSession.authenticated || emergencyBackupCodes.loading || emergencyBackupCodes.loaded) return;
     loadEmergencyBackupCodes({ silent: true });
+    // Preload once per verified session so Settings never briefly labels an existing code set as "Set up".
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSettingsSection, customerSession.authenticated]);
+  }, [customerSession.authenticated, emergencyBackupCodes.loaded, emergencyBackupCodes.loading]);
 
   function applySubscriptionResult(result, options = {}) {
     const account = result?.account || {};
@@ -5182,7 +5340,7 @@ function App() {
   }, [locked, isOnline, customerSession.authenticated]);
 
   useEffect(() => {
-    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || homeFolderPrompt.visible || contactVerificationReminder.visible || guidedTourPromptOpen || isCreateAccountPopupOpen || onboardingResetModal.visible || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || actionProgress.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || vaultAccessRecoveryModal.visible || emergencyBackupCodesModal.visible || emergencyBackupRecoveryModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
+    const popupOpen = isItemPopupOpen || Boolean(viewItemId) || Boolean(pendingDeleteItemId) || isFolderPopupOpen || isFolderListPopupOpen || folderManager.visible || homeFolderPrompt.visible || contactVerificationReminder.visible || guidedTourPromptOpen || isCreateAccountPopupOpen || onboardingResetModal.visible || isOpenVaultChoicePopupOpen || isCreateVaultPopupOpen || syncSafetyModal.visible || deviceVerificationModal.visible || actionProgress.visible || subscriptionActionModal.visible || entitlementModal.visible || accountSecurityModal.visible || accountRecoveryModal.visible || vaultAccessRecoveryModal.visible || emergencyBackupCodesModal.visible || emergencyBackupRecoveryModal.visible || emergencyMasterPasswordResetModal.visible || trustedPersonHelpOpen || emergencyImportState.visible || exitAppConfirmationOpen;
     document.body.classList.toggle('app-popup-open', popupOpen);
     if (popupOpen) {
       window.requestAnimationFrame(() => {
@@ -5192,7 +5350,7 @@ function App() {
       });
     }
     return () => document.body.classList.remove('app-popup-open');
-  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, homeFolderPrompt.visible, contactVerificationReminder.visible, guidedTourPromptOpen, isCreateAccountPopupOpen, onboardingResetModal.visible, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, actionProgress.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, vaultAccessRecoveryModal.visible, emergencyBackupCodesModal.visible, emergencyBackupRecoveryModal.visible, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
+  }, [isItemPopupOpen, viewItemId, pendingDeleteItemId, isFolderPopupOpen, isFolderListPopupOpen, folderManager.visible, homeFolderPrompt.visible, contactVerificationReminder.visible, guidedTourPromptOpen, isCreateAccountPopupOpen, onboardingResetModal.visible, isOpenVaultChoicePopupOpen, isCreateVaultPopupOpen, syncSafetyModal.visible, deviceVerificationModal.visible, actionProgress.visible, subscriptionActionModal.visible, entitlementModal.visible, accountSecurityModal.visible, accountSecurityModal.challengeId, accountRecoveryModal.visible, accountRecoveryModal.step, vaultAccessRecoveryModal.visible, emergencyBackupCodesModal.visible, emergencyBackupRecoveryModal.visible, emergencyMasterPasswordResetModal.visible, landingOnboardingStep, otpTest.challengeId, trustedPersonHelpOpen, emergencyImportState.visible, exitAppConfirmationOpen]);
 
   // Ver-1.006: Vault Status is the single repair entry point.
   // Routine sync problems no longer open an automatic delayed warning popup.
@@ -5719,6 +5877,7 @@ function App() {
             if (!fromBiometric) confirmSecureDevicePasswordCheck();
             showVerifyOverlay('success', 'Vault updated', 'The latest protected vault copy has been loaded on this device.');
             showMessage(`Latest cloud changes loaded. ${cloudCheckResult.items.length} item(s) are now available on this device.`, 'success');
+            if (options.fromEmergencyBackupCode) beginEmergencyMasterPasswordReset(password);
             if (options.recoveryCodeHash) await consumeEmergencyBackupCodeAfterUnlock(options.recoveryCodeHash);
             if (options.setupBiometricAfterPassword) await setupBiometricUnlockForPassword(password, { fromLoginIcon: true });
             return;
@@ -5790,6 +5949,7 @@ function App() {
           showMessage(fromBiometric ? 'Vault opened with secure device unlock.' : (canCheckCloud ? 'Vault unlocked locally. Your cloud backup was checked safely.' : 'Vault unlocked locally. Save your account details to enable cloud restore.'));
         }
         if (!cloudCheckResult?.conflict) showVerifyOverlay('success', 'Vault unlocked', fromBiometric ? 'Your device verified you and checked for newer secure changes.' : 'Your vault is open on this device.');
+        if (options.fromEmergencyBackupCode) beginEmergencyMasterPasswordReset(password);
         if (options.recoveryCodeHash) await consumeEmergencyBackupCodeAfterUnlock(options.recoveryCodeHash);
         if (options.setupBiometricAfterPassword && !fromBiometric) await setupBiometricUnlockForPassword(password, { fromLoginIcon: true });
         return;
@@ -6288,7 +6448,7 @@ function App() {
     }
   }
 
-  async function uploadEncryptedDocumentBlob(fileInfo, documentId, blobKind = 'document') {
+  async function uploadEncryptedDocumentBlob(fileInfo, documentId, blobKind = 'document', encryptionPassword = masterPassword, saltOverride = '') {
     if (!fileInfo?.dataUrl) return fileInfo;
     const isPicture = blobKind === 'picture';
     const featureKey = isPicture ? 'pictures' : 'documents';
@@ -6296,7 +6456,7 @@ function App() {
     if (!bootstrap.tenantId || !bootstrap.userId) {
       throw new Error(`Save your account details before storing ${isPicture ? 'pictures' : 'documents'}.`);
     }
-    const encryptedFile = await encryptDocumentData(fileInfo.dataUrl, masterPassword);
+    const encryptedFile = await encryptDocumentData(fileInfo.dataUrl, encryptionPassword, saltOverride);
     const chunks = [];
     for (let index = 0; index < encryptedFile.encryptedBlob.length; index += ENCRYPTED_FILE_CHUNK_CHARACTERS) {
       chunks.push(encryptedFile.encryptedBlob.slice(index, index + ENCRYPTED_FILE_CHUNK_CHARACTERS));
@@ -6356,7 +6516,7 @@ function App() {
     };
   }
 
-  async function loadStoredDocumentDataUrl(item) {
+  async function loadStoredDocumentDataUrl(item, decryptionPassword = masterPassword) {
     const file = item?.payload?.file;
     const itemType = effectiveVaultItemType(item);
     const isPicture = itemType === PICTURES_CATEGORY || file?.blobKind === 'picture';
@@ -6382,7 +6542,7 @@ function App() {
       }
       record.encrypted_blob = chunks.join('');
     }
-    return decryptDocumentData(record, masterPassword);
+    return decryptDocumentData(record, decryptionPassword);
   }
 
   async function downloadStoredDocument(item) {
@@ -7271,6 +7431,7 @@ function App() {
     || vaultAccessRecoveryModal.visible
     || emergencyBackupCodesModal.visible
     || emergencyBackupRecoveryModal.visible
+    || emergencyMasterPasswordResetModal.visible
     || entitlementModal.visible
     || deviceVerificationModal.visible
     || syncSafetyModal.visible
@@ -7306,6 +7467,7 @@ function App() {
     vaultAccessRecoveryModalVisible: vaultAccessRecoveryModal.visible,
     emergencyBackupCodesModalVisible: emergencyBackupCodesModal.visible,
     emergencyBackupRecoveryModalVisible: emergencyBackupRecoveryModal.visible,
+    emergencyMasterPasswordResetModalVisible: emergencyMasterPasswordResetModal.visible,
     entitlementModalVisible: entitlementModal.visible,
     deviceVerificationModalVisible: deviceVerificationModal.visible,
     syncSafetyModalVisible: syncSafetyModal.visible,
@@ -7343,6 +7505,7 @@ function App() {
     if (state.vaultAccessRecoveryModalVisible) { backNavigationStateRef.current.vaultAccessRecoveryModalVisible = false; closeVaultAccessRecovery(); return true; }
     if (state.emergencyBackupCodesModalVisible) { backNavigationStateRef.current.emergencyBackupCodesModalVisible = false; setEmergencyBackupCodesModal({ visible: false, busy: false, codes: [], message: '' }); return true; }
     if (state.emergencyBackupRecoveryModalVisible) { backNavigationStateRef.current.emergencyBackupRecoveryModalVisible = false; setEmergencyBackupRecoveryModal({ visible: false, busy: false, code: '', message: '', envelopes: [] }); return true; }
+    if (state.emergencyMasterPasswordResetModalVisible) { lockAfterEmergencyRecovery(); return true; }
     if (state.entitlementModalVisible) { backNavigationStateRef.current.entitlementModalVisible = false; setEntitlementModal({ visible: false, feature: '', title: '', message: '' }); return true; }
     if (state.deviceVerificationModalVisible) { backNavigationStateRef.current.deviceVerificationModalVisible = false; setDeviceVerificationModal({ visible: false, purpose: '' }); return true; }
     if (state.syncSafetyModalVisible) { backNavigationStateRef.current.syncSafetyModalVisible = false; closeSyncSafetyModal(); return true; }
@@ -11481,7 +11644,7 @@ function App() {
                   <button type="button" className="settings-directory-row" onClick={openEmergencyBackupCodesSettings}>
                     <span className="settings-directory-icon"><KeyRound size={22} /></span>
                     <span className="settings-directory-copy"><strong>Emergency Backup Codes</strong><small>Generate one-time recovery codes for a forgotten master password.</small></span>
-                    <span className={`settings-directory-state ${emergencyBackupCodes.configured ? 'safe' : 'attention'}`}>{emergencyBackupCodes.configured ? `${emergencyBackupCodes.activeCount} unused` : 'Set up'}</span>
+                    <span className={`settings-directory-state ${!emergencyBackupCodes.loaded ? '' : emergencyBackupCodes.configured ? 'safe' : 'attention'}`}>{!emergencyBackupCodes.loaded ? 'Checking…' : emergencyBackupCodes.configured ? `${emergencyBackupCodes.activeCount} unused` : 'Set up'}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
                   <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('emergency-nominate')}>
@@ -11974,37 +12137,36 @@ function App() {
             <section className="settings-section-panel emergency-backup-codes-settings-panel" aria-label="Emergency Backup Codes">
               <div className="settings-section-heading">
                 <p className="eyebrow">Emergency Backup Codes</p>
-                <h3><KeyRound size={20} /> A safe fallback if you forget your master password</h3>
-                <p>Generate one-time codes while your vault is unlocked. A code can recover the protected master-password copy in your browser after your account email has been verified.</p>
+                <h3><KeyRound size={20} /> {emergencyBackupCodes.loaded && emergencyBackupCodes.configured ? `${emergencyBackupCodes.activeCount} unused code${emergencyBackupCodes.activeCount === 1 ? '' : 's'}` : 'Recovery if you forget your master password'}</h3>
+                <p>{emergencyBackupCodes.loaded && emergencyBackupCodes.configured ? 'Your recovery codes are ready. Keep a saved copy somewhere private.' : 'Generate a one-time set now so you have a safe recovery option if the master password is ever forgotten.'}</p>
               </div>
 
-              <section className="settings-inner-card emergency-backup-status-card">
-                <div className="user-settings-card-heading"><ShieldCheck size={20} /><div><strong>{emergencyBackupCodes.configured ? `${emergencyBackupCodes.activeCount} unused code${emergencyBackupCodes.activeCount === 1 ? '' : 's'} available` : 'Emergency Backup Codes are not set up'}</strong><small>{emergencyBackupCodes.generatedAt ? `Current set generated ${formatAppDate(emergencyBackupCodes.generatedAt, true, '—', userSettings.dateFormat)}.` : 'Generate a set before you need it.'}</small></div></div>
-                <div className="emergency-backup-status-grid">
-                  <span><strong>Status</strong>{emergencyBackupCodes.configured ? 'Ready for emergency recovery' : 'Not configured'}</span>
-                  <span><strong>Unused codes</strong>{emergencyBackupCodes.activeCount || 0}</span>
-                  <span><strong>Email reminders</strong>{emergencyBackupCodes.configured ? (emergencyBackupCodes.remindersEnabled ? `Every ${emergencyBackupCodes.reminderDays || 90} days` : 'Off') : 'Starts after setup'}</span>
-                  <span><strong>Last reminder</strong>{emergencyBackupCodes.lastReminderAt ? formatAppDate(emergencyBackupCodes.lastReminderAt, true, '—', userSettings.dateFormat) : 'Not sent yet'}</span>
-                </div>
-                {emergencyBackupCodes.message && <p className="emergency-backup-status-message">{emergencyBackupCodes.message}</p>}
-                <div className="emergency-backup-actions">
-                  <button type="button" className="primary-button" onClick={generateEmergencyBackupCodes} disabled={emergencyBackupCodes.loading}>{emergencyBackupCodes.loading ? <RefreshCw size={17} className="spin-icon" /> : <KeyRound size={17} />} {emergencyBackupCodes.configured ? 'Generate new set' : 'Generate backup codes'}</button>
-                  {emergencyBackupCodes.configured && <button type="button" className="secondary-button" onClick={sendEmergencyBackupCodeReminderNow} disabled={emergencyBackupCodes.loading}><Mail size={17} /> Send reminder now</button>}
-                  <button type="button" className="secondary-button" onClick={() => loadEmergencyBackupCodes()} disabled={emergencyBackupCodes.loading}><RefreshCw size={17} className={emergencyBackupCodes.loading ? 'spin-icon' : ''} /> Refresh status</button>
-                </div>
-              </section>
-
-              {emergencyBackupCodes.configured && (
-                <section className="settings-inner-card emergency-backup-reminder-card">
-                  <label className="user-settings-check-row">
+              {!emergencyBackupCodes.loaded || emergencyBackupCodes.loading ? (
+                <section className="settings-inner-card emergency-backup-compact-card"><div className="user-settings-card-heading"><RefreshCw size={20} className="spin-icon" /><div><strong>Checking your recovery status</strong><small>This should only take a moment.</small></div></div></section>
+              ) : emergencyBackupCodes.configured ? (
+                <section className="settings-inner-card emergency-backup-compact-card">
+                  <div className="emergency-backup-compact-status">
+                    <span><strong>Current set</strong>{emergencyBackupCodes.generatedAt ? formatAppDate(emergencyBackupCodes.generatedAt, true, '—', userSettings.dateFormat) : 'Ready'}</span>
+                    <span><strong>Reminder emails</strong>{emergencyBackupCodes.remindersEnabled ? `Every ${emergencyBackupCodes.reminderDays || 90} days` : 'Off'}</span>
+                  </div>
+                  <label className="user-settings-check-row emergency-backup-compact-reminder">
                     <input type="checkbox" checked={emergencyBackupCodes.remindersEnabled !== false} onChange={(event) => setEmergencyBackupCodeReminders(event.target.checked)} />
-                    <span><strong>Email me a reminder every 90 days</strong><small>The reminder never contains the codes. It only asks you to confirm that you still have them stored safely. If you have lost them, generate a new set.</small></span>
+                    <span><strong>Email me a reminder every 90 days</strong><small>The reminder confirms how many unused codes remain. It never includes the codes themselves.</small></span>
                   </label>
+                  <div className="emergency-backup-actions compact">
+                    <button type="button" className="primary-button" onClick={generateEmergencyBackupCodes} disabled={emergencyBackupCodes.loading}><KeyRound size={17} /> Generate new set</button>
+                    <button type="button" className="secondary-button" onClick={sendEmergencyBackupCodeReminderNow} disabled={emergencyBackupCodes.loading}><Mail size={17} /> Send reminder now</button>
+                  </div>
+                  {emergencyBackupCodes.message && <p className="emergency-backup-status-message">{emergencyBackupCodes.message}</p>}
+                </section>
+              ) : (
+                <section className="settings-inner-card emergency-backup-setup-card">
+                  <div className="user-settings-card-heading"><ShieldCheck size={20} /><div><strong>Create 10 one-time recovery codes</strong><small>Save them outside Password-Encrypt. A code can recover access after your verified email is confirmed.</small></div></div>
+                  <div className="emergency-backup-code-warning"><AlertTriangle size={18} /><span><strong>Keep the codes private</strong><small>Password-Encrypt cannot show the same readable set again later. If you lose them, generate a new set while your vault is open.</small></span></div>
+                  <button type="button" className="primary-button" onClick={generateEmergencyBackupCodes} disabled={emergencyBackupCodes.loading}>{emergencyBackupCodes.loading ? <RefreshCw size={17} className="spin-icon" /> : <KeyRound size={17} />} Generate backup codes</button>
+                  {emergencyBackupCodes.message && <p className="emergency-backup-status-message">{emergencyBackupCodes.message}</p>}
                 </section>
               )}
-
-              <div className="master-password-boundary-note"><Lock size={20} /><span><strong>Password-Encrypt still does not hold a readable master password</strong><small>Each backup code protects a separate encrypted recovery envelope created in your browser. The server stores the encrypted envelope and a one-way code fingerprint. Support cannot use it without one of your codes.</small></span></div>
-              <div className="account-deletion-warning emergency-backup-email-warning"><AlertTriangle size={21} /><span><strong>Emailing the actual codes is optional</strong><small>When you generate a new set, Password-Encrypt can email that set only if you explicitly request it. Emailing codes is less private than downloading or printing them because anyone who controls that mailbox could obtain the codes.</small></span></div>
             </section>
           )}
 
@@ -12692,6 +12854,7 @@ function App() {
       <AccountSecurityModal state={accountSecurityModal} setState={setAccountSecurityModal} onClose={closeAccountSecurityModal} onRequestCode={requestAccountSecurityOtp} onConfirmCode={confirmAccountSecurityOtp} onRemoveDevice={confirmRemoveVerifiedDevice} onEndAllSessions={confirmEndAllSessions} />
       <EmergencyBackupCodesModal state={emergencyBackupCodesModal} onClose={() => setEmergencyBackupCodesModal({ visible: false, busy: false, codes: [], message: '' })} onCopy={copyEmergencyBackupCodes} onDownload={downloadEmergencyBackupCodes} onEmail={emailEmergencyBackupCodes} />
       <EmergencyBackupRecoveryModal state={emergencyBackupRecoveryModal} setState={setEmergencyBackupRecoveryModal} onClose={() => setEmergencyBackupRecoveryModal({ visible: false, busy: false, code: '', message: '', envelopes: [] })} onRecover={recoverVaultWithEmergencyBackupCode} />
+      <EmergencyMasterPasswordResetModal state={emergencyMasterPasswordResetModal} setState={setEmergencyMasterPasswordResetModal} onSubmit={setNewMasterPasswordAfterEmergencyRecovery} onLock={lockAfterEmergencyRecovery} />
       <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} phone={bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)} channel={otpChannel} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onChannelChange={chooseOtpChannel} onSend={() => requestSelectedOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
       <ActionProgressModal state={actionProgress} onClose={closeActionProgress} />

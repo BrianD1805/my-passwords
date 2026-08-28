@@ -101,6 +101,30 @@ export async function handler(event) {
       return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Recovery-point cleanup could not be completed.', error: error.message });
     }
   }
+  if (String(body.action || '') === 'reset_snapshot_history') {
+    const keepSnapshotId = String(body.keepSnapshotId || '').trim().slice(0, 160);
+    if (!keepSnapshotId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'The new secure recovery point could not be identified.' });
+    try {
+      const keepRows = await selectRows('vault_sync_snapshots', `select=id&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=${eq(keepSnapshotId)}&limit=1`);
+      if (!keepRows?.length) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The new secure recovery point was not found for this account.' });
+      const oldRows = await selectRows('vault_sync_snapshots', `select=id&tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=neq.${encodeURIComponent(keepSnapshotId)}&limit=1000`);
+      let removed = 0;
+      for (let offset = 0; offset < oldRows.length; offset += 100) {
+        const batch = oldRows.slice(offset, offset + 100).map((row) => String(row.id || '').trim()).filter(Boolean);
+        if (!batch.length) continue;
+        const filter = batch.map((id) => encodeURIComponent(id)).join(',');
+        const deleted = await supabaseRequest(`vault_sync_snapshots?tenant_id=${eq(tenantId)}&user_id=${eq(userId)}&id=in.(${filter})&select=id`, { method: 'DELETE', headers: { Prefer: 'return=representation' } });
+        removed += Array.isArray(deleted) ? deleted.length : 0;
+      }
+      await insertRow('audit_log', { id: publicId('audit'), tenant_id: tenantId, user_id: userId, action: 'vault_snapshot_history_reset_after_password_change', metadata: { version: APP_VERSION, kept_snapshot_id: keepSnapshotId, removed } }).catch(() => null);
+      await recordSyncEvent({ tenantId, userId, eventType: 'password_change_recovery_history_reset', status: 'success', message: 'Older encrypted recovery points were removed after a master-password change.', metadata: { keptSnapshotId: keepSnapshotId, removed } });
+      return jsonResponse(200, { ok: true, version: APP_VERSION, keptSnapshotId: keepSnapshotId, removed, message: 'Older encrypted recovery points were removed after the master password changed.' });
+    } catch (error) {
+      await recordFunctionFailure('sync-vault', error, { tenantId, userId, action: 'reset_snapshot_history' });
+      return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Older encrypted recovery points could not be removed.', error: error.message });
+    }
+  }
+
   const encryptedBlob = String(body.encryptedBlob || '').trim();
   const localSalt = String(body.localSalt || '').trim();
   const localIv = String(body.localIv || '').trim();
