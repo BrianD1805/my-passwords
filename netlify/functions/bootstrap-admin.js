@@ -34,13 +34,13 @@ function requestedPlan(value) {
 
 async function findByEmail(email) {
   if (!email) return null;
-  const rows = await selectRows('users', `select=id,tenant_id,email,display_name,role,status,phone_e164,phone_country_code,phone_number,email_verified,phone_verified&email=${eq(email)}&limit=1`);
+  const rows = await selectRows('users', `select=id,tenant_id,email,display_name,role,status,phone_e164,phone_country_code,phone_number,email_verified,phone_verified,onboarding_status,last_onboarding_step,onboarding_completed_at&email=${eq(email)}&limit=1`);
   return rows?.[0] || null;
 }
 
 async function findByPhone(phoneE164) {
   if (!phoneE164) return null;
-  const rows = await selectRows('users', `select=id,tenant_id,email,display_name,role,status,phone_e164,phone_country_code,phone_number,email_verified,phone_verified&phone_e164=${eq(phoneE164)}&limit=1`);
+  const rows = await selectRows('users', `select=id,tenant_id,email,display_name,role,status,phone_e164,phone_country_code,phone_number,email_verified,phone_verified,onboarding_status,last_onboarding_step,onboarding_completed_at&phone_e164=${eq(phoneE164)}&limit=1`);
   return rows?.[0] || null;
 }
 
@@ -131,7 +131,8 @@ export async function handler(event) {
       const tenant = tenants?.[0];
       if (!tenant?.id) return jsonResponse(409, { ok: false, version: APP_VERSION, message: 'The existing account is incomplete. Please contact support.' });
 
-      const pendingSignup = tenant.account_status === 'pending_verification' || tenant.plan_status === 'signup_pending' || existingUser.status === 'pending_verification';
+      const setupStatuses = new Set(['mobile_verification_required', 'email_verification_required', 'phone_verification_required', 'master_password_setup_required']);
+      const pendingSignup = tenant.account_status === 'pending_verification' || tenant.plan_status === 'signup_pending' || existingUser.status === 'pending_verification' || setupStatuses.has(String(existingUser.onboarding_status || ''));
       if (pendingSignup) {
         if (!legalAccepted || legalVersion !== LEGAL_VERSION) {
           return jsonResponse(409, {
@@ -190,8 +191,10 @@ export async function handler(event) {
           planCode: selectedPlanCode,
           planName: plan.display_name || selectedPlanCode,
           trialDays: Number(plan.trial_days || 0),
-          planStatus: 'signup_pending',
-          accountStatus: 'pending_verification',
+          trialStartedAt: tenant.trial_started_at || null,
+          trialEndsAt: tenant.trial_ends_at || null,
+          planStatus: tenant.plan_status || 'signup_pending',
+          accountStatus: tenant.account_status || 'pending_verification',
           tenantRole: tenant.tenant_role || 'primary_owner',
           reusedExistingTenant: true,
           reusedExistingUser: true,

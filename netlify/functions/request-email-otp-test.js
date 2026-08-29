@@ -21,7 +21,7 @@ function hashOtp(challengeId, code) {
 
 async function findUser(email) {
   if (!email) return null;
-  const rows = await selectRows('users', `select=id,tenant_id,email,phone_e164,status,phone_verified&email=${eq(email)}&limit=1`);
+  const rows = await selectRows('users', `select=id,tenant_id,email,phone_e164,status,phone_verified,email_verified,onboarding_status,last_onboarding_step&email=${eq(email)}&limit=1`);
   return rows?.[0] || null;
 }
 
@@ -99,6 +99,7 @@ export async function handler(event) {
   const email = String(body.email || '').trim().toLowerCase();
   const purpose = String(body.purpose || 'secure_customer_session').trim();
   const testMode = process.env.OTP_TEST_MODE === 'true' || process.env.CONTEXT === 'dev';
+  const requestedOnboardingMode = body.onboardingMode === 'new_signup' ? 'new_signup' : body.onboardingMode === 'existing_account' ? 'existing_account' : '';
 
   if (!email || !email.includes('@')) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'Enter a valid backup email before requesting an email OTP.' });
 
@@ -107,6 +108,13 @@ export async function handler(event) {
     await consumeRateLimit(event, { scope: 'otp_request_destination', identifier: email, limit: 4, windowSeconds: 15 * 60, blockSeconds: 30 * 60 });
     const user = await findUser(email);
     if (!user?.id || !user?.tenant_id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'No account was found for that email. Create the account first or check the address.' });
+    const setupStatuses = new Set(['mobile_verification_required', 'email_verification_required', 'phone_verification_required', 'master_password_setup_required']);
+    const onboardingMode = purpose === 'production_onboarding'
+      ? (requestedOnboardingMode || (setupStatuses.has(String(user.onboarding_status || '')) || String(user.status || '') === 'pending_verification' ? 'new_signup' : 'existing_account'))
+      : '';
+    if (purpose === 'production_onboarding' && onboardingMode === 'new_signup' && !setupStatuses.has(String(user.onboarding_status || '')) && String(user.status || '') !== 'pending_verification') {
+      return jsonResponse(409, { ok: false, version: APP_VERSION, code: 'ACCOUNT_ALREADY_ACTIVE', message: 'This account has already completed account setup. Use Open My Vault instead of starting a new signup.' });
+    }
     if (await checkRateLimit(user.id)) return jsonResponse(429, { ok: false, version: APP_VERSION, message: 'Too many codes were requested. Wait 15 minutes before trying again.' });
 
     const challengeId = publicId('otpemail');
@@ -127,7 +135,7 @@ export async function handler(event) {
       status: delivery.sent ? 'pending_email' : 'pending_email_delivery_failed',
       attempts: 0,
       expires_at: expiresAt,
-      metadata: { version: APP_VERSION, email_sent: delivery.sent, provider: delivery.provider, provider_id: delivery.providerId || null, delivery_reason: delivery.reason || null }
+      metadata: { version: APP_VERSION, email_sent: delivery.sent, provider: delivery.provider, provider_id: delivery.providerId || null, delivery_reason: delivery.reason || null, onboarding_mode: onboardingMode }
     });
 
     const recentOnboardingEmailSends = String(purpose || '') === 'production_onboarding'

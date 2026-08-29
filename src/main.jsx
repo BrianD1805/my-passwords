@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.024';
+const VERSION = 'Password-Encrypt Ver-1.024.01';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -5998,7 +5998,14 @@ function App() {
       setCreateMode(false);
       setConfirmMasterPassword('');
       setItems(starterItems);
-      clearPendingOnboardingAccount();
+      if (options.afterCreateOnboardingInstall) {
+        const onboardingMarkedComplete = await markNewAccountOnboardingComplete();
+        if (!onboardingMarkedComplete) {
+          savePendingOnboardingAccount(activeAccount);
+        }
+      } else {
+        clearPendingOnboardingAccount();
+      }
       onboardingSessionIsolationRef.current = false;
       setOnboardingSecurityWarning('');
       const cloudBackupAvailable = featureIncluded('cloudBackupSync');
@@ -8294,9 +8301,13 @@ function App() {
             phoneE164,
             email,
             purpose: 'production_onboarding',
-            onboardingMode: 'primary_sms'
+            onboardingMode: 'new_signup'
           }, { signal: controller.signal })
-        : await postJson('/.netlify/functions/request-email-otp-test', { email, purpose: 'production_onboarding' }, { signal: controller.signal });
+        : await postJson('/.netlify/functions/request-email-otp-test', {
+            email,
+            purpose: 'production_onboarding',
+            onboardingMode: landingSignup.existingAccount ? 'existing_account' : 'new_signup'
+          }, { signal: controller.signal });
       if (!result.ok) throw new Error(result.message || `The ${channel === 'sms' ? 'SMS' : 'email'} code could not be sent.`);
       setLandingOtp((current) => ({
         ...current,
@@ -8386,11 +8397,17 @@ function App() {
       setLandingOtp((current) => ({ ...current, status: 'verified', input: '', emailVerified: Boolean(result.emailVerified), smsVerified: Boolean(result.phoneVerified), message: result.message || `${result.verifiedChannel === 'sms' ? 'Mobile' : 'Email'} verified.` }));
       try { sessionStorage.setItem(`${CONTACT_VERIFICATION_REMINDER_KEY}:${result.tenantId || nextAccount.tenantId}:${result.userId || nextAccount.userId}`, 'shown'); } catch { /* no-op */ }
 
+      // Ver-1.024.01: new-account onboarding identity is confirmed by the OTP
+      // challenge itself. Never let a refreshed/stale UI flag convert a new signup
+      // into the existing-vault route after contact verification.
+      const verifiedNewSignup = result.onboardingMode === 'new_signup'
+        || (result.onboardingMode !== 'existing_account' && !landingSignup.existingAccount);
+
       // Verification success must never wait for welcome/admin email delivery.
       // The authenticated follow-up is intentionally non-blocking and idempotent.
       void postJson('/.netlify/functions/post-verification-notifications', { source: 'onboarding_verification' }, { keepalive: true }).catch(() => null);
 
-      if (verifyingChannel === 'sms' && !result.emailVerified && !landingSignup.existingAccount) {
+      if (verifyingChannel === 'sms' && !result.emailVerified && verifiedNewSignup) {
         stopOnboardingSmsWebOtpCapture();
         setLandingOtp({ status: 'idle', channel: 'email', challengeId: '', input: '', message: 'Mobile verified. You can verify your email now or do it later.', testCode: '', expiresAt: '', smsVerified: true, emailVerified: false, smsDeferred: false });
         setLandingSignup((current) => ({ ...current, status: 'mobile-verified', message: result.message || 'Mobile verified. You can verify your email now or do it later.' }));
@@ -8399,7 +8416,7 @@ function App() {
       }
 
       clearOnboardingFlowState();
-      window.setTimeout(() => finishLandingOnboarding({ account: nextAccount, existingAccount: Boolean(landingSignup.existingAccount) }), 0);
+      window.setTimeout(() => finishLandingOnboarding({ account: nextAccount, existingAccount: !verifiedNewSignup }), 0);
     } catch (error) {
       const abortReason = controller.signal?.reason;
       clearOnboardingNetworkRequest(controller);
@@ -8419,6 +8436,17 @@ function App() {
               : (error.message || 'The code could not be verified.');
       setLandingOtp((current) => ({ ...current, status: current.challengeId ? 'sent' : 'error', message }));
     }
+  }
+
+  async function markNewAccountOnboardingComplete() {
+    try {
+      const result = await postJson('/.netlify/functions/onboarding-complete', { stage: 'vault_created' });
+      if (result?.ok) {
+        clearPendingOnboardingAccount();
+        return true;
+      }
+    } catch { /* keep the pending marker so this can be retried */ }
+    return false;
   }
 
   function finishLandingOnboarding(options = {}) {
@@ -8594,6 +8622,7 @@ function App() {
   }
 
   function openVaultAfterFinalOnboarding({ startTour = false } = {}) {
+    if (readPendingOnboardingAccount()) void markNewAccountOnboardingComplete();
     setOnboardingPushGate(false);
     setPushActivationPromptOpen(false);
     setGuidedTourPromptOpen(false);

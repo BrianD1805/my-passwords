@@ -9,6 +9,12 @@ function eq(value) {
   return `eq.${encodeURIComponent(value)}`;
 }
 
+function parseMetadata(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return {}; }
+}
+
 export async function handler(event) {
   if (!requirePost(event)) return jsonResponse(405, { ok: false, message: 'POST required.' });
 
@@ -25,8 +31,11 @@ export async function handler(event) {
     const challenge = await verifyAccountOtp({ challengeId, code });
     const now = challenge.verified_at || new Date().toISOString();
     const isEmail = String(challenge.delivery_channel || '').includes('email');
+    const challengeMetadata = parseMetadata(challenge.metadata);
+    const onboardingMode = String(challengeMetadata.onboarding_mode || '').trim();
+    const newSignupVerification = challenge.purpose === 'production_onboarding' && onboardingMode === 'new_signup';
 
-    const users = await selectRows('users', `select=id,tenant_id,role,status,email,phone_e164,display_name,email_verified,phone_verified,welcome_email_sent_at&id=${eq(challenge.user_id)}&tenant_id=${eq(challenge.tenant_id)}&limit=1`);
+    const users = await selectRows('users', `select=id,tenant_id,role,status,email,phone_e164,display_name,email_verified,phone_verified,welcome_email_sent_at,onboarding_status,last_onboarding_step,onboarding_completed_at&id=${eq(challenge.user_id)}&tenant_id=${eq(challenge.tenant_id)}&limit=1`);
     const tenants = await selectRows('tenants', `select=id,account_name,name,plan_code,plan_status,account_status,tenant_role,trial_started_at,trial_ends_at,onboarding_completed_at&id=${eq(challenge.tenant_id)}&limit=1`);
     const user = users?.[0];
     const tenant = tenants?.[0];
@@ -64,7 +73,6 @@ export async function handler(event) {
         plan_status: planStatus,
         trial_started_at: trialStartedAt,
         trial_ends_at: trialEndsAt,
-        onboarding_completed_at: now,
         updated_at: now
       });
       subscription = await upsertTrialSubscription({
@@ -90,7 +98,6 @@ export async function handler(event) {
         plan_status: 'founder_active',
         trial_started_at: null,
         trial_ends_at: null,
-        onboarding_completed_at: now,
         updated_at: now
       });
     }
@@ -105,15 +112,13 @@ export async function handler(event) {
       otp_test_last_verified_at: now,
       otp_test_status: isEmail ? 'verified_email' : 'verified_sms',
       last_login_at: now,
-      onboarding_status: !emailVerifiedAfter
-        ? 'email_verification_required'
-        : !phoneVerifiedAfter
-          ? 'phone_verification_required'
-          : (firstActivation ? 'onboarding_complete' : 'active_account_verified'),
-      last_onboarding_step: firstActivation
-        ? (pendingVerificationChannel ? `${isEmail ? 'email' : 'mobile'}_verified_${pendingVerificationChannel}_pending` : `${isEmail ? 'email' : 'mobile'}_verified_trial_started`)
-        : 'device_verified',
-      onboarding_completed_at: firstActivation ? now : undefined,
+      onboarding_status: newSignupVerification
+        ? (!emailVerifiedAfter ? 'email_verification_required' : !phoneVerifiedAfter ? 'phone_verification_required' : 'master_password_setup_required')
+        : (!emailVerifiedAfter ? 'email_verification_required' : !phoneVerifiedAfter ? 'phone_verification_required' : (firstActivation ? 'onboarding_complete' : 'active_account_verified')),
+      last_onboarding_step: newSignupVerification
+        ? (pendingVerificationChannel ? `${isEmail ? 'email' : 'mobile'}_verified_${pendingVerificationChannel}_pending` : 'contact_verification_complete_master_password_pending')
+        : (firstActivation ? (pendingVerificationChannel ? `${isEmail ? 'email' : 'mobile'}_verified_${pendingVerificationChannel}_pending` : `${isEmail ? 'email' : 'mobile'}_verified_trial_started`) : 'device_verified'),
+      onboarding_completed_at: (!newSignupVerification && firstActivation) ? now : undefined,
       updated_at: now
     };
     if (!firstActivation) delete verifiedUserPatch.onboarding_completed_at;
@@ -126,7 +131,7 @@ export async function handler(event) {
       id: publicId('audit'),
       tenant_id: tenant.id,
       user_id: user.id,
-      action: firstActivation ? 'production_onboarding_completed' : 'secure_customer_session_issued',
+      action: newSignupVerification ? 'production_onboarding_contact_verified' : (firstActivation ? 'production_onboarding_completed' : 'secure_customer_session_issued'),
       metadata: {
         version: APP_VERSION,
         delivery_channel: challenge.delivery_channel,
@@ -136,6 +141,8 @@ export async function handler(event) {
         trial_ends_at: trialEndsAt,
         post_verification_notifications_pending: true,
         verification_retry_idempotent: Boolean(challenge.idempotent),
+        onboarding_mode: onboardingMode || null,
+        onboarding_setup_pending: Boolean(newSignupVerification),
         pending_verification_channel: pendingVerificationChannel || null
       }
     }).catch(() => null);
@@ -204,7 +211,9 @@ export async function handler(event) {
       csrfToken: csrfTokenForSession({ sessionId: verifiedSession.session.id }, 'customer'),
       cloudAccess,
       accessCode,
-      onboardingCompleted: firstActivation,
+      onboardingCompleted: Boolean(firstActivation && !newSignupVerification),
+      onboardingSetupPending: Boolean(newSignupVerification),
+      onboardingMode: onboardingMode || (newSignupVerification ? 'new_signup' : ''),
       welcomeEmailSent: Boolean(user.welcome_email_sent_at),
       postVerificationNotificationsRequired: true,
       verificationRetry: Boolean(challenge.idempotent),

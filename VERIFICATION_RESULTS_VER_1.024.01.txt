@@ -1,0 +1,22 @@
+Password-Encrypt Ver-1.024.01 — Onboarding State Regression Fix
+
+PASS 14/14 Ver-1.024.01 feature checks
+PASS onboarding static checks
+PASS 13/13 security static checks
+PASS 20/20 reliability static checks
+PASS 35/35 legal/commercial readiness checks
+PASS 36/36 landing/plan UX checks
+PASS 6/6 mobile restoration checks
+PASS 75/75 Trusted Person / Emergency Access checks
+PASS 32/32 push notification checks
+PASS changed Netlify Function JavaScript syntax checks
+
+Key regression assertions:
+- SMS request cannot intentionally advance beyond Step 7 without verified/deferred transition.
+- OTP challenges carry new_signup/existing_account route identity.
+- Contact verification is not onboarding completion.
+- New signup remains setup-pending through master-password creation.
+- Vault creation finalises onboarding server-side.
+- Ver-1.024 timeout/cancel/non-JSON retry protections remain in place.
+
+Production Vite build not executed in packaging environment because node_modules is intentionally excluded/not present.

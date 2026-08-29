@@ -56,7 +56,7 @@ export async function handler(event) {
       purpose,
       channel: 'sms',
       destination: phoneE164,
-      metadata: { verification_flow: purpose, onboarding_primary_sms: purpose === 'production_onboarding', sms_fallback: false }
+      metadata: { verification_flow: purpose, onboarding_mode: purpose === 'production_onboarding' ? 'new_signup' : '', onboarding_primary_sms: purpose === 'production_onboarding', sms_fallback: false }
     });
     return jsonResponse(200, {
       ok: true,

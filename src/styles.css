@@ -20205,7 +20205,7 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   }
 }
 
-/* Password-Encrypt Ver-1.024 — Onboarding verification reliability hardening. */
+/* Password-Encrypt Ver-1.024.01 — Onboarding state regression fix. */
 .emergency-backup-codes-modal-footer {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
