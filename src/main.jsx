@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.024.01';
+const VERSION = 'Password-Encrypt Ver-1.024.02';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3585,9 +3585,16 @@ function App() {
   }, [customerSession.authenticated, customerSession.tenantId, customerSession.userId]);
 
   function scrollSettingsToTop() {
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
-    });
+    // Ver-1.024.02: Settings drill-downs always open at the top immediately.
+    // Do this before and after React swaps the directory for the selected section
+    // so mobile browsers cannot preserve/clamp the old deep scroll position.
+    const reset = () => {
+      try { window.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch { window.scrollTo(0, 0); }
+      if (document?.documentElement) document.documentElement.scrollTop = 0;
+      if (document?.body) document.body.scrollTop = 0;
+    };
+    reset();
+    window.requestAnimationFrame(() => window.requestAnimationFrame(reset));
   }
 
   function openSettingsHome() {
@@ -8403,9 +8410,14 @@ function App() {
       const verifiedNewSignup = result.onboardingMode === 'new_signup'
         || (result.onboardingMode !== 'existing_account' && !landingSignup.existingAccount);
 
-      // Verification success must never wait for welcome/admin email delivery.
-      // The authenticated follow-up is intentionally non-blocking and idempotent.
-      void postJson('/.netlify/functions/post-verification-notifications', { source: 'onboarding_verification' }, { keepalive: true }).catch(() => null);
+      // Ver-1.024.02: do not send the Welcome email until the email OTP itself
+      // has succeeded. Admin follow-up remains non-blocking after either verified
+      // contact channel; this does not change any onboarding navigation/state.
+      void postJson('/.netlify/functions/post-verification-notifications', {
+        source: verifyingChannel === 'email' ? 'onboarding_email_verified' : 'onboarding_contact_verified',
+        sendWelcome: verifyingChannel === 'email' && Boolean(result.emailVerified),
+        sendAdmin: true
+      }, { keepalive: true }).catch(() => null);
 
       if (verifyingChannel === 'sms' && !result.emailVerified && verifiedNewSignup) {
         stopOnboardingSmsWebOtpCapture();
@@ -11774,12 +11786,12 @@ function App() {
                   </button>
                   <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('emergency-nominate')}>
                     <span className="settings-directory-icon"><UsersRound size={22} /></span>
-                    <span className="settings-directory-copy"><strong>Emergency Access</strong><small>Nominate a trusted person to receive your prepared Emergency Package.</small></span>
+                    <span className="settings-directory-copy"><strong>Nominate a Trusted Person</strong><small>Set up Emergency Access for someone you trust.</small></span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
                   <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('emergency-receive')}>
                     <span className="settings-directory-icon"><KeyRound size={22} /></span>
-                    <span className="settings-directory-copy"><strong>Emergency Access</strong><small>Receive an Emergency Package released to you.</small></span>
+                    <span className="settings-directory-copy"><strong>Receive an Emergency Package</strong><small>Open Emergency Access information released to you.</small></span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
                 </section>

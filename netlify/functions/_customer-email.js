@@ -439,6 +439,12 @@ export async function sendCustomerLifecycleEmail({
   }
 
   const loaded = tenantId ? await loadCustomerEmailContext(tenantId, { userId }) : { tenant: null, user: null, subscription: null, plan: null };
+  const welcomeType = type === 'welcome_trial_started' || type === 'welcome_account_activated';
+  // Ver-1.024.02: Welcome mail is never permitted before the account email has
+  // actually been OTP-verified, regardless of which caller reaches this helper.
+  if (welcomeType && !loaded?.user?.email_verified) {
+    return { sent: false, skipped: true, reason: 'email_not_verified' };
+  }
   const recipient = String(to || loaded?.user?.email || '').trim().toLowerCase();
   if (!recipient || !recipient.includes('@')) return { sent: false, skipped: true, reason: 'no_verified_email' };
   const finalContext = mergedContext(loaded, context);

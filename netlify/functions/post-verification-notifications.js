@@ -24,8 +24,10 @@ export async function handler(event) {
     const tenant = tenantRows?.[0];
     if (!user?.id || !tenant?.id) return jsonResponse(404, { ok: false, version: APP_VERSION, message: 'Verified account details could not be loaded.' });
 
+    const sendWelcome = body.sendWelcome === true;
+    const sendAdmin = body.sendAdmin !== false;
     let welcome = { sent: false, skipped: true };
-    if (user.email_verified && user.email && !user.welcome_email_sent_at) {
+    if (sendWelcome && user.email_verified && user.email && !user.welcome_email_sent_at) {
       const trialActive = String(tenant.plan_status || '').toLowerCase().includes('trial');
       welcome = await sendCustomerLifecycleEmail({
         tenantId: tenant.id,
@@ -50,21 +52,23 @@ export async function handler(event) {
     const verificationMethod = user.email_verified && user.phone_verified
       ? 'SMS OTP + Email OTP'
       : user.email_verified ? 'Email OTP' : user.phone_verified ? 'SMS OTP' : 'Verified session';
-    const admin = await sendAdminNotification({
-      type: 'new_client_onboarded',
-      tenantId: tenant.id,
-      userId: user.id,
-      idempotencyKey: `new_client_onboarded:${tenant.id}`,
-      context: {
-        source: String(body.source || 'post_verification').slice(0, 80),
-        displayName: user.display_name || '',
-        email: user.email || '',
-        phone: user.phone_e164 || '',
-        emailVerified: Boolean(user.email_verified),
-        phoneVerified: Boolean(user.phone_verified),
-        verificationMethod
-      }
-    }).catch((error) => ({ sent: false, reason: error.message || 'Admin notification could not be sent.' }));
+    const admin = sendAdmin
+      ? await sendAdminNotification({
+          type: 'new_client_onboarded',
+          tenantId: tenant.id,
+          userId: user.id,
+          idempotencyKey: `new_client_onboarded:${tenant.id}`,
+          context: {
+            source: String(body.source || 'post_verification').slice(0, 80),
+            displayName: user.display_name || '',
+            email: user.email || '',
+            phone: user.phone_e164 || '',
+            emailVerified: Boolean(user.email_verified),
+            phoneVerified: Boolean(user.phone_verified),
+            verificationMethod
+          }
+        }).catch((error) => ({ sent: false, reason: error.message || 'Admin notification could not be sent.' }))
+      : { sent: false, skipped: true };
 
     return jsonResponse(200, {
       ok: true,
