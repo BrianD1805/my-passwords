@@ -1,0 +1,141 @@
+Password-Encrypt Ver-1.025 verification results
+Generated: 2026-09-14
+
+PASS  version aligned
+PASS  secure device unlock has hard browser timeout
+PASS  secure device prompt is abortable
+PASS  secure device unlock offers password escape
+PASS  missing local secure key is detected before device prompt
+PASS  secure key store has bounded wait
+PASS  cloud freshness check is bounded
+PASS  offline unlock can fall back to local vault
+PASS  telemetry cannot block vault opening
+PASS  device setup is also abortable
+PASS  operations health retries once before alerting
+PASS  health failure email says it failed after retry
+PASS  health alert exposes only a sanitised diagnostic code
+PASS  onboarding flow code remains present and unchanged in structure
+
+14/14 Ver-1.025 checks passed.
+
+
+> my-passwords@1.25.0 security:check
+> node scripts/security-static-check.mjs
+
+PASS  Vault server identity comes from validated session
+PASS  Documents are scoped to session tenant and user
+PASS  Account profile is scoped to session tenant and user
+PASS  Billing context is derived from validated customer session
+PASS  Emergency Access owner identity is overwritten from session
+PASS  Production cookies use __Host prefix and SameSite Strict
+PASS  Production session signing requires dedicated secrets
+PASS  Security HMAC controls require dedicated production session secret
+PASS  Stripe webhook has atomic replay ledger claim
+PASS  Browser no longer sends identity in sync/document URLs
+PASS  Browser sensitive POST helper sends request marker and CSRF
+PASS  Signup plan is validated against server-side published plan data
+PASS  Stripe checkout uses server-loaded plan and validated billing session
+
+All 13 security static checks passed.
+
+
+> my-passwords@1.25.0 reliability:check
+> node scripts/reliability-static-check.mjs
+
+PASS  Ver-1.025 version and cache are aligned
+PASS  Operational monitoring tables use RLS and service-role-only grants
+PASS  Operational metadata has a sensitive-key denylist and text redaction
+PASS  Failed functions create sanitised operational events
+PASS  Stripe webhook failures create critical operational alerts
+PASS  Resend failures are tracked without storing recipient addresses in operational events
+PASS  Vault backup failures and sync conflicts feed operational monitoring
+PASS  Account/trial and Emergency Access checks have scheduled run history
+PASS  Database backup verification uses the Supabase Management API and never returns the access token
+PASS  Backup verification treats unavailable managed backups as non-failing and recognises physical backup dates
+PASS  Backup verification detects the Supabase organization Free plan before judging backup rows
+PASS  Health dashboard is admin-session protected and mutating actions require CSRF
+PASS  Stripe reconciliation is preview-first, expires, and refreshes only the existing linked subscription
+PASS  Stripe reconciliation compares CurrentPeriodEnd as an instant, not raw timestamp text
+PASS  Customer support diagnostics query metadata only
+PASS  Browser error reporting excludes exception messages and stacks
+PASS  Monitoring and cleanup schedules are configured
+PASS  Operational retention rules do not delete customer vault data
+PASS  Resolved sync-conflict alerts create an acknowledgement checkpoint and are not reopened by the same historical rows
+PASS  Operations health covers database, Stripe, email, backup, sync, functions and scheduled processors
+
+All 20 reliability static checks passed.
+
+
+> my-passwords@1.25.0 onboarding:check
+> node scripts/onboarding-flow-static-check.mjs
+
+PASS  Ver-1.025 app/package/service-worker versions align
+PASS  Onboarding has fourteen explicit progress steps
+PASS  Public signup uses a dedicated card screen rather than rendering the landing page behind it
+PASS  Dedicated onboarding card is not marked as a dialog
+PASS  Onboarding has a visible progress track
+PASS  Desktop onboarding card uses the reduced half-screen footprint
+PASS  Mobile onboarding card uses most of the viewport
+PASS  Mobile onboarding supports left-swipe advancement on safe steps
+PASS  Name is isolated on step 1
+PASS  Email address is isolated on step 2
+PASS  Vault name is isolated on step 3
+PASS  Normal onboarding has no plan-choice card
+PASS  Legal acceptance is isolated on step 4
+PASS  Mobile number is isolated on step 5
+PASS  SMS request is isolated on step 6
+PASS  SMS OTP entry is isolated on step 7
+PASS  Email request is isolated on step 8
+PASS  Email OTP entry is isolated on step 9
+PASS  Master password creation is isolated on step 10
+PASS  Master password confirmation is isolated on step 11
+PASS  Install app remains step 12 before final choices
+PASS  Mobile step advances to a separate SMS request screen before spending an SMS
+PASS  Onboarding SMS is now a primary verification channel, not an email-failure fallback
+PASS  Paid onboarding SMS has a strict two-per-ten-minute limiter
+PASS  Onboarding network requests have a hard twenty-second timeout and manual cancel path
+PASS  SMS request keeps the customer informed while delivery is pending
+PASS  SMS can be deferred so email verification can continue
+PASS  Onboarding email request no longer requires prior mobile verification
+PASS  Either verified onboarding channel can activate the account
+PASS  Successful mobile verification still presents email verification before master-password setup
+PASS  Incomplete contact verification is recorded without blocking account activation
+PASS  Future authenticated sign-ins can show the missing-contact reminder
+PASS  Existing account discovered during signup remains routed to existing vault access
+PASS  Existing activated account uses email verification rather than creating a new vault
+PASS  Pending signup can be safely resumed rather than being misclassified as an activated existing account
+PASS  Changing a pending unverified mobile number resets mobile verification before another SMS
+PASS  Onboarding state is mirrored to session and local recovery storage with an expiry
+PASS  Onboarding recovery state deliberately excludes OTP input and master password
+PASS  Saved onboarding flow resumes only when its flow version is current
+PASS  Firefox-style tab recreation can recover onboarding from local storage
+PASS  Pending onboarding identity can recover when the flow checkpoint is missing
+PASS  OTP code itself is cleared when restoring saved onboarding state
+PASS  SMS OTP field exposes the browser one-time-code autofill hint
+PASS  Email OTP field also exposes one-time-code autofill
+PASS  WebOTP is requested for SMS where the browser supports it
+PASS  WebOTP capture is armed before the SMS send request to avoid fast-message races
+PASS  Netlify explicitly permits same-origin otp-credentials for WebOTP
+PASS  Six-digit OTPs can be autofilled but require explicit verification
+PASS  OTP errors require a changed/re-entered code instead of entering an automatic retry loop
+PASS  Twilio Verify supports an optional custom template SID for domain-bound WebOTP SMS
+PASS  Messaging fallback SMS includes the Password-Encrypt origin-bound WebOTP line
+PASS  Master password is never persisted as onboarding recovery state
+PASS  Master password fields retain password-manager suppression hints
+PASS  Master password onboarding fields have vault-style show and hide controls
+PASS  Master password mismatch is a prominent alert panel
+PASS  Vault creation requires a live verified customer session matching the onboarded account
+PASS  New onboarding refuses to overwrite an existing local encrypted vault
+PASS  Creating the vault routes to install onboarding before vault home
+PASS  PWA install prompt is captured and invoked where supported
+PASS  PWA install opportunity is captured before the React module loads
+PASS  Manifest retains stable standalone vault identity
+PASS  Install onboarding still provides a continue-without-installing fallback
+PASS  Push activation is suppressed during install onboarding
+PASS  Completing install advances to push notifications inside onboarding
+PASS  Push notifications are onboarding step 13
+PASS  Guided tour choice is the final onboarding step 14
+PASS  Final onboarding no longer uses push or guided-tour welcome popups
+PASS  Landing-page setup explanation reflects mobile, email, master password and install stages
+
+All Ver-1.025 onboarding static checks passed.

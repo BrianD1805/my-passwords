@@ -27,7 +27,7 @@ function check(label, condition) {
   else { failed += 1; console.error(`FAIL  ${label}`); }
 }
 
-check('Ver-1.024.02 app/server/package/service-worker versions align', pkg.version === '1.24.2' && /Password-Encrypt Ver-1\.024/.test(main) && /Password-Encrypt Ver-1\.024/.test(db) && /my-passwords-v1\.024/.test(sw));
+check('Ver-1.025 app/server/package/service-worker versions align', pkg.version === '1.25.0' && /Password-Encrypt Ver-1\.025/.test(main) && /Password-Encrypt Ver-1\.025/.test(db) && /my-passwords-v1\.025/.test(sw));
 check('Push subscriptions are bound to validated customer sessions', /validateCustomerSession/.test(subscription) && /session\.tenantId/.test(subscription) && /session\.userId/.test(subscription) && /assertBrowserAction/.test(subscription));
 check('Push subscription writes require CSRF browser action protection', /kind: 'customer', csrf: true/.test(subscription));
 check('VAPID private key remains server-side', /PUSH_VAPID_PRIVATE_KEY/.test(helper) && !/PUSH_VAPID_PRIVATE_KEY/.test(main));

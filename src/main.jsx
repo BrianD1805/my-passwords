@@ -8,7 +8,7 @@ import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 
-const VERSION = 'Password-Encrypt Ver-1.024.02';
+const VERSION = 'Password-Encrypt Ver-1.025';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -38,6 +38,11 @@ const ONBOARDING_FLOW_VERSION = 2;
 const ONBOARDING_TOTAL_STEPS = 14;
 const ONBOARDING_NETWORK_TIMEOUT_MS = 20000;
 const ONBOARDING_VERIFY_TIMEOUT_MS = 15000;
+const SECURE_DEVICE_UNLOCK_TIMEOUT_MS = 20000;
+const SECURE_DEVICE_SETUP_TIMEOUT_MS = 30000;
+const SECURE_DEVICE_KEY_CHECK_TIMEOUT_MS = 4000;
+const SECURE_DEVICE_CLOUD_CHECK_TIMEOUT_MS = 8000;
+const SYNC_TELEMETRY_TIMEOUT_MS = 3000;
 const CONTACT_VERIFICATION_REMINDER_KEY = 'password-encrypt-contact-verification-reminder-v1';
 const GUIDED_TOUR_VERSION = 1;
 const GUIDED_TOUR_FALLBACK_KEY = 'password-encrypt-guided-tour-v1';
@@ -1141,8 +1146,8 @@ async function wrapMasterPasswordForBiometric(masterPassword) {
   };
 }
 
-async function unwrapMasterPasswordForBiometric(record) {
-  const deviceKey = await readBiometricDeviceKey();
+async function unwrapMasterPasswordForBiometric(record, deviceKeyOverride = null) {
+  const deviceKey = deviceKeyOverride || await readBiometricDeviceKey();
   if (!deviceKey) throw new Error('This device no longer has the secure device unlock key.');
   const decrypted = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: base64ToArrayBuffer(record.iv) },
@@ -2746,7 +2751,7 @@ function safeDownloadFileName(value, fallback = 'document') {
 }
 
 
-function VerificationOverlay({ state, onClose, onFocusMasterPassword }) {
+function VerificationOverlay({ state, onClose, onFocusMasterPassword, onCancel }) {
   if (!state?.visible) return null;
   const isWorking = state.status === 'working';
   const isSuccess = state.status === 'success';
@@ -2762,7 +2767,16 @@ function VerificationOverlay({ state, onClose, onFocusMasterPassword }) {
         <h3>{state.title}</h3>
         <p>{state.message}</p>
         {isWorking ? (
-          <div className="verify-progress-line" aria-hidden="true" />
+          <>
+            <div className="verify-progress-line" aria-hidden="true" />
+            {state.cancelAction && (
+              <div className="verify-modal-actions">
+                <button type="button" className="secondary-button" onClick={() => onCancel?.(state.cancelAction)}>
+                  {state.cancelLabel || 'Cancel'}
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="verify-modal-actions">
             {state.focusMasterPassword && (
@@ -3405,6 +3419,9 @@ function App() {
   const offlineSaveNoticeShownRef = useRef(false);
   const syncRetryRef = useRef(false);
   const syncOperationRef = useRef(false);
+  const secureDeviceCredentialAbortRef = useRef(null);
+  const secureDeviceCredentialTimeoutRef = useRef(null);
+  const secureDeviceCancelReasonRef = useRef('');
   const [snapshotHistory, setSnapshotHistory] = useState({ loaded: false, loading: false, total: 0, snapshots: [], message: 'Recovery history has not been checked yet.' });
   const [cloudChangeCheckBusy, setCloudChangeCheckBusy] = useState(false);
   const [deviceStatus, setDeviceStatus] = useState({
@@ -3420,7 +3437,7 @@ function App() {
   const [actionProgress, setActionProgress] = useState({ visible: false, status: 'idle', title: '', workingLabel: '', message: '' });
   const [otpTest, setOtpTest] = useState({ status: 'not-requested', challengeId: '', code: '', input: '', message: 'Email verification has not been requested yet.', verified: false, expiresAt: '' });
   const [otpChannel, setOtpChannel] = useState('email');
-  const [verifyOverlay, setVerifyOverlay] = useState({ visible: false, status: 'idle', title: '', message: '', focusMasterPassword: false });
+  const [verifyOverlay, setVerifyOverlay] = useState({ visible: false, status: 'idle', title: '', message: '', focusMasterPassword: false, cancelAction: '', cancelLabel: '' });
   const [deviceVerificationModal, setDeviceVerificationModal] = useState({ visible: false, purpose: '' });
   const [suppressUnlockAutofocus, setSuppressUnlockAutofocus] = useState(false);
   const [biometricUnlock, setBiometricUnlock] = useState(() => readBiometricUnlockRecord());
@@ -4664,6 +4681,8 @@ function App() {
   }
 
   async function recordSyncEvent(eventType, status, details = {}) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), SYNC_TELEMETRY_TIMEOUT_MS);
     try {
       await postJson('/.netlify/functions/sync-vault', {
         action: 'record_event',
@@ -4673,9 +4692,11 @@ function App() {
         message: String(details.message || '').slice(0, 500),
         deviceId: getSyncDeviceId(),
         metadata: { deviceType: friendlyDeviceType(), source: details.source || 'vault-app', ...details.metadata }
-      });
+      }, { signal: controller.signal });
     } catch {
       // Diagnostics must never block the encrypted vault.
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 
@@ -4868,11 +4889,42 @@ function App() {
   }
 
   function showVerifyOverlay(status, title, message, options = {}) {
-    setVerifyOverlay({ visible: true, status, title, message, focusMasterPassword: !!options.focusMasterPassword });
+    setVerifyOverlay({
+      visible: true,
+      status,
+      title,
+      message,
+      focusMasterPassword: !!options.focusMasterPassword,
+      cancelAction: options.cancelAction || '',
+      cancelLabel: options.cancelLabel || ''
+    });
   }
 
   function hideVerifyOverlay() {
-    setVerifyOverlay((current) => ({ ...current, visible: false }));
+    setVerifyOverlay((current) => ({ ...current, visible: false, cancelAction: '', cancelLabel: '' }));
+  }
+
+  function cancelVerifyOverlay(action) {
+    if (action === 'secure-device-unlock' || action === 'secure-device-setup') {
+      secureDeviceCancelReasonRef.current = 'manual';
+      try { secureDeviceCredentialAbortRef.current?.abort(); } catch {}
+      secureDeviceCredentialAbortRef.current = null;
+      if (secureDeviceCredentialTimeoutRef.current) {
+        window.clearTimeout(secureDeviceCredentialTimeoutRef.current);
+        secureDeviceCredentialTimeoutRef.current = null;
+      }
+      hideVerifyOverlay();
+      setSuppressUnlockAutofocus(false);
+      if (action === 'secure-device-unlock') {
+        showMessage('Secure device unlock cancelled. Use your master password instead.', 'warning');
+        window.setTimeout(() => focusMasterPassword(), 80);
+      } else {
+        setBiometricStatus((current) => ({ ...current, state: biometricUnlock ? 'enabled' : 'available' }));
+        showMessage('Secure device unlock setup cancelled.', 'warning');
+      }
+      return;
+    }
+    hideVerifyOverlay();
   }
 
   function focusMasterPassword() {
@@ -5454,9 +5506,23 @@ function App() {
   async function fetchLatestCloudSnapshot(account = bootstrap) {
     if (!featureIncluded('cloudBackupSync')) return { ok: false, code: 'PLAN_FEATURE_REQUIRED', feature: 'cloudBackupSync', upgradeRequired: true, entitlements, hasSnapshot: false, message: 'Cloud backup and sync are not included in the current plan.' };
     if (!account.tenantId || !account.userId) return { ok: false, hasSnapshot: false, message: 'Account identity is not verified on this device yet.' };
-    const response = await fetch('/.netlify/functions/sync-vault');
-    const result = await response.json().catch(() => ({ ok: false, message: 'Secure backup returned an invalid response.' }));
-    return response.ok ? result : { ...result, ok: false, httpStatus: response.status };
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return { ok: false, code: 'OFFLINE', hasSnapshot: false, message: 'This device is offline. Password-Encrypt will open the local vault and check secure backup when the connection returns.' };
+    }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), SECURE_DEVICE_CLOUD_CHECK_TIMEOUT_MS);
+    try {
+      const response = await fetch('/.netlify/functions/sync-vault', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+      const result = await response.json().catch(() => ({ ok: false, code: 'NON_JSON_RESPONSE', message: 'Secure backup returned an invalid response.' }));
+      return response.ok ? result : { ...result, ok: false, httpStatus: response.status };
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        return { ok: false, code: 'CLOUD_CHECK_TIMEOUT', hasSnapshot: false, message: 'Secure backup is taking too long to respond. Password-Encrypt will open the local vault and retry the backup check later.' };
+      }
+      return { ok: false, code: 'CLOUD_CHECK_FAILED', hasSnapshot: false, message: 'Secure backup could not be checked right now. Password-Encrypt will open the local vault and retry later.' };
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
   async function restoreLatestCloudVault(passwordToUse, { showSuccess = true, reason = 'manual', account = bootstrap, forceCloud = false, latestOverride = null, suppressConflictModal = false } = {}) {
@@ -5855,7 +5921,7 @@ function App() {
 
   async function openVaultWithPassword(password, options = {}) {
     const fromBiometric = options.fromBiometric === true;
-    showVerifyOverlay('working', fromBiometric ? 'Checking secure device unlock' : 'Opening your vault', fromBiometric ? 'Use the device method your browser offers, such as PIN, fingerprint, face unlock, passkey or device lock. If you do not trust the method shown, cancel and use your password.' : 'Please wait while we verify your account and unlock this device.');
+    showVerifyOverlay('working', 'Opening your vault', fromBiometric ? 'Device check completed. Password-Encrypt is checking for newer secure changes before opening your local vault.' : 'Please wait while we verify your account and unlock this device.');
     try {
       const localVault = readStoredVault();
       let activeAccount = bootstrap;
@@ -6163,9 +6229,23 @@ function App() {
       focusMasterPassword();
       return false;
     }
+
+    let controller = null;
     try {
       setBiometricStatus((current) => ({ ...current, state: 'setting-up' }));
-      showVerifyOverlay('working', 'Setting up secure device unlock', 'Your browser will ask for a local device check, such as PIN, fingerprint, face unlock, passkey or device lock. If you do not trust the method shown, cancel and keep using your password.');
+      secureDeviceCancelReasonRef.current = '';
+      controller = new AbortController();
+      secureDeviceCredentialAbortRef.current = controller;
+      secureDeviceCredentialTimeoutRef.current = window.setTimeout(() => {
+        secureDeviceCancelReasonRef.current = 'timeout';
+        try { controller.abort(); } catch {}
+      }, SECURE_DEVICE_SETUP_TIMEOUT_MS);
+      showVerifyOverlay(
+        'working',
+        'Setting up secure device unlock',
+        'Your browser will ask for a local device check, such as PIN, fingerprint, face unlock, passkey or device lock.',
+        { cancelAction: 'secure-device-setup', cancelLabel: 'Cancel setup' }
+      );
       const userLabel = bootstrap.email || bootstrap.displayName || 'Password-Encrypt user';
       const credential = await navigator.credentials.create({
         publicKey: {
@@ -6186,8 +6266,9 @@ function App() {
             residentKey: 'preferred'
           },
           attestation: 'none',
-          timeout: 60000
-        }
+          timeout: SECURE_DEVICE_SETUP_TIMEOUT_MS
+        },
+        signal: controller.signal
       });
       if (!credential?.rawId) throw new Error('Your device did not return a local credential.');
       const wrapped = await wrapMasterPasswordForBiometric(password);
@@ -6207,10 +6288,22 @@ function App() {
       showMessage('Secure device unlock enabled on this device.', 'success');
       return true;
     } catch (error) {
+      const cancelReason = secureDeviceCancelReasonRef.current;
       setBiometricStatus((current) => ({ ...current, state: biometricUnlock ? 'enabled' : 'available' }));
+      if (cancelReason === 'manual') return false;
+      if (cancelReason === 'timeout' || error?.name === 'AbortError') {
+        showVerifyOverlay('error', 'Secure device setup timed out', 'Your device did not finish the security check in time. Nothing was changed. You can try again or keep using your master password.');
+        showMessage('Secure device unlock setup timed out. Nothing was changed.', 'warning');
+        return false;
+      }
       showVerifyOverlay('error', 'Secure device setup not saved', 'The device verification was cancelled or could not be completed. Your password still opens the vault.');
       showMessage('Secure device unlock was not enabled on this device.', 'warning');
       return false;
+    } finally {
+      if (secureDeviceCredentialTimeoutRef.current) window.clearTimeout(secureDeviceCredentialTimeoutRef.current);
+      if (secureDeviceCredentialAbortRef.current === controller) secureDeviceCredentialAbortRef.current = null;
+      secureDeviceCredentialTimeoutRef.current = null;
+      if (secureDeviceCancelReasonRef.current !== 'manual') secureDeviceCancelReasonRef.current = '';
     }
   }
 
@@ -6268,26 +6361,100 @@ function App() {
       showMessage('Password check required.', 'warning');
       return;
     }
+
+    let controller = null;
     try {
       setSuppressUnlockAutofocus(true);
-      showVerifyOverlay('working', 'Checking secure device unlock', 'Use the device method your browser offers to continue. If you do not trust the method shown, cancel and use your password instead.');
+
+      // The local wrapped password is essential to Secure Device Unlock. Check it
+      // before invoking the device prompt so a cleared/private IndexedDB store
+      // cannot leave a customer staring at an endless spinner.
+      let keyTimer = null;
+      const keyTimeout = new Promise((_, reject) => {
+        keyTimer = window.setTimeout(() => {
+          const timeoutError = new Error('The local Secure Device key store did not respond in time.');
+          timeoutError.code = 'SECURE_DEVICE_KEY_TIMEOUT';
+          reject(timeoutError);
+        }, SECURE_DEVICE_KEY_CHECK_TIMEOUT_MS);
+      });
+      let deviceKey;
+      try {
+        deviceKey = await Promise.race([readBiometricDeviceKey(), keyTimeout]);
+      } finally {
+        if (keyTimer) window.clearTimeout(keyTimer);
+      }
+      if (!deviceKey) {
+        localStorage.removeItem(BIOMETRIC_UNLOCK_KEY);
+        setBiometricUnlock(null);
+        setBiometricStatus((current) => ({ ...current, state: current.supported ? 'available' : 'unsupported' }));
+        showVerifyOverlay('error', 'Secure device unlock needs setting up again', 'The protected key for this device is no longer available. Your vault is safe. Use your master password, then enable Secure Device Unlock again in Settings.');
+        showMessage('Secure device unlock needs setting up again on this device.', 'warning');
+        return;
+      }
+
+      secureDeviceCancelReasonRef.current = '';
+      controller = new AbortController();
+      secureDeviceCredentialAbortRef.current = controller;
+      secureDeviceCredentialTimeoutRef.current = window.setTimeout(() => {
+        secureDeviceCancelReasonRef.current = 'timeout';
+        try { controller.abort(); } catch {}
+      }, SECURE_DEVICE_UNLOCK_TIMEOUT_MS);
+
+      showVerifyOverlay(
+        'working',
+        'Checking secure device unlock',
+        'Use the device method your browser offers to continue.',
+        { cancelAction: 'secure-device-unlock', cancelLabel: 'Cancel and use password' }
+      );
       const assertion = await navigator.credentials.get({
         publicKey: {
           challenge: crypto.getRandomValues(new Uint8Array(32)),
           allowCredentials: [{ type: 'public-key', id: base64UrlToArrayBuffer(record.credentialId) }],
           userVerification: 'required',
-          timeout: 60000
-        }
+          timeout: SECURE_DEVICE_UNLOCK_TIMEOUT_MS
+        },
+        signal: controller.signal
       });
       if (!assertion?.rawId) throw new Error('Secure device verification was not completed.');
-      const unlockedMasterPassword = await unwrapMasterPasswordForBiometric(record);
+
+      if (secureDeviceCredentialTimeoutRef.current) window.clearTimeout(secureDeviceCredentialTimeoutRef.current);
+      secureDeviceCredentialTimeoutRef.current = null;
+      secureDeviceCredentialAbortRef.current = null;
+      secureDeviceCancelReasonRef.current = '';
+
+      const unlockedMasterPassword = await unwrapMasterPasswordForBiometric(record, deviceKey);
       setMasterPassword(unlockedMasterPassword);
+      showVerifyOverlay('working', 'Opening your vault', 'Device verification completed. Password-Encrypt is checking briefly for newer secure changes.');
       await openVaultWithPassword(unlockedMasterPassword, { fromBiometric: true });
       const usedRecord = markSecureDeviceQuickUnlockUsed(record);
       if (usedRecord) setBiometricUnlock(usedRecord);
     } catch (error) {
-      showVerifyOverlay('error', 'Secure device unlock failed', 'Use your master password or try secure device unlock again.', { focusMasterPassword: false });
-      showMessage('Secure device unlock failed. Use your master password or try again.', 'warning');
+      const cancelReason = secureDeviceCancelReasonRef.current;
+      if (cancelReason === 'manual') return;
+      if (cancelReason === 'timeout' || error?.name === 'AbortError') {
+        showVerifyOverlay('error', 'Secure device unlock timed out', 'Your device did not finish the security check in time. Use your master password or try Secure Device Unlock again.');
+        showMessage('Secure device unlock timed out. Use your master password or try again.', 'warning');
+        return;
+      }
+      if (error?.code === 'SECURE_DEVICE_KEY_TIMEOUT') {
+        showVerifyOverlay('error', 'Secure device unlock could not start', 'The protected key store on this device is not responding. Use your master password now, then restart the browser before trying Secure Device Unlock again.');
+        showMessage('Secure device unlock could not read the protected key store. Use your master password.', 'warning');
+        return;
+      }
+      const nativeCancelled = ['NotAllowedError', 'SecurityError'].includes(String(error?.name || ''));
+      showVerifyOverlay(
+        'error',
+        nativeCancelled ? 'Secure device unlock cancelled' : 'Secure device unlock failed',
+        nativeCancelled ? 'The device security prompt was cancelled. Use your master password or try again.' : 'Use your master password or try Secure Device Unlock again.',
+        { focusMasterPassword: false }
+      );
+      showMessage(nativeCancelled ? 'Secure device unlock was cancelled.' : 'Secure device unlock failed. Use your master password or try again.', 'warning');
+    } finally {
+      if (secureDeviceCredentialTimeoutRef.current) window.clearTimeout(secureDeviceCredentialTimeoutRef.current);
+      if (secureDeviceCredentialAbortRef.current === controller) secureDeviceCredentialAbortRef.current = null;
+      secureDeviceCredentialTimeoutRef.current = null;
+      if (secureDeviceCancelReasonRef.current !== 'manual') secureDeviceCancelReasonRef.current = '';
+      setSuppressUnlockAutofocus(false);
     }
   }
 
@@ -10930,7 +11097,7 @@ function App() {
 
           <footer className="onboarding-card-footer"><span>Master password stays private</span><small>Never stored in onboarding recovery state.</small></footer>
         </section>
-        <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={() => document.getElementById('onboarding-master-password')?.focus()} />
+        <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={() => document.getElementById('onboarding-master-password')?.focus()} onCancel={cancelVerifyOverlay} />
         <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
     );
@@ -11134,7 +11301,7 @@ function App() {
         <VaultAccessRecoveryModal state={vaultAccessRecoveryModal} setState={setVaultAccessRecoveryModal} onClose={closeVaultAccessRecovery} onClearLocal={resetLocalVaultOnDevice} onRecoverAccount={openAccountRecovery} onBackupCode={openEmergencyBackupRecovery} hasLocalVault={hasLocalVault} cloudBackupIncluded={featureIncluded('cloudBackupSync')} syncPending={Boolean(syncSafety.pending)} />
         <AccountRecoveryModal state={accountRecoveryModal} setState={setAccountRecoveryModal} onClose={() => setAccountRecoveryModal({ visible: false, step: 'contact', channel: 'email', contact: '', challengeId: '', code: '', testOtpCode: '', message: '', busy: false, afterVerify: '' })} onRequest={requestAccountRecoveryCode} onVerify={verifyAccountRecoveryCode} />
         <EmergencyBackupRecoveryModal state={emergencyBackupRecoveryModal} setState={setEmergencyBackupRecoveryModal} onClose={() => setEmergencyBackupRecoveryModal({ visible: false, busy: false, code: '', message: '', envelopes: [] })} onRecover={recoverVaultWithEmergencyBackupCode} />
-        <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={focusMasterPassword} />
+        <VerificationOverlay state={verifyOverlay} onClose={hideVerifyOverlay} onFocusMasterPassword={focusMasterPassword} onCancel={cancelVerifyOverlay} />
         <PlanEntitlementModal state={entitlementModal} entitlements={entitlements} onClose={() => setEntitlementModal({ visible: false, feature: '', title: '', message: '' })} onOpenSubscription={openSubscriptionFromEntitlement} />
       <DeviceVerificationModal state={deviceVerificationModal} email={bootstrap.email} phone={bootstrap.phoneE164 || buildPhoneE164(bootstrap.phoneCountryCode, bootstrap.phoneNumber)} channel={otpChannel} otp={otpTest} onClose={() => setDeviceVerificationModal({ visible: false, purpose: '' })} onChannelChange={chooseOtpChannel} onSend={() => requestSelectedOtp({ popupFlow: true })} onChange={(value) => setOtpTest((current) => ({ ...current, input: value.replace(/\D/g, '').slice(0, 6) }))} onVerify={verifyTestOtp} />
         <SyncSafetyModal state={syncSafetyModal} onClose={closeSyncSafetyModal} onRetry={retryPendingBackup} onVerify={openDeviceVerification} onOpenSafety={() => { closeSyncSafetyModal(); openVaultSafetySettings(); }} onKeepDevice={keepThisDeviceCopy} onUseCloud={useSecureBackupCopy} onConfirmDanger={confirmDangerAction} onCheck={handleVaultStatusCheck} />

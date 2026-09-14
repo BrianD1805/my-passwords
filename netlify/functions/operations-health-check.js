@@ -13,7 +13,7 @@ export function latestSyncConflictWindowStart(since24h, resolvedAt = '') {
   return new Date(sinceMs).toISOString();
 }
 
-export async function runOperationsHealthCheck({ triggerSource = 'scheduled' } = {}) {
+export async function runOperationsHealthCheck({ triggerSource = 'scheduled', suppressFailureAlert = false } = {}) {
   const run = await startScheduledCheck('operations_health', triggerSource);
   const since24h = new Date(Date.now() - 24 * 3600000).toISOString();
   try {
@@ -110,11 +110,14 @@ export async function runOperationsHealthCheck({ triggerSource = 'scheduled' } =
   } catch (error) {
     await finishScheduledCheck(run, { status: 'failed', errorCode: error?.code || 'OPERATIONS_HEALTH_FAILED', errorMessage: error?.message || 'Operations health check failed.' });
     await recordFunctionFailure('operations-health-check', error, { triggerSource });
-    if (process.env.OPS_ALERT_EMAIL) {
+    if (!suppressFailureAlert && process.env.OPS_ALERT_EMAIL) {
+      const safeCode = String(error?.code || error?.name || 'OPERATIONS_HEALTH_FAILED')
+        .replace(/[^A-Za-z0-9_.-]/g, '_')
+        .slice(0, 80) || 'OPERATIONS_HEALTH_FAILED';
       await sendOperationalAlert({
         subject: 'Password-Encrypt: operational health check failed',
-        heading: 'Operational health check failed',
-        message: 'The scheduled Password-Encrypt health check could not complete. Open Admin > Health and check Netlify/Supabase service status.',
+        heading: 'Operational health check failed after retry',
+        message: `The scheduled Password-Encrypt health check failed twice. Diagnostic code: ${safeCode}. Open Admin > Health and check Netlify/Supabase service status.`,
         idempotencyKey: `ops-health-failed/${new Date().toISOString().slice(0, 13)}`
       }).catch(() => null);
     }
@@ -122,11 +125,29 @@ export async function runOperationsHealthCheck({ triggerSource = 'scheduled' } =
   }
 }
 
+function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+export async function runOperationsHealthCheckWithRetry({ triggerSource = 'scheduled', retryDelayMs = 1500 } = {}) {
+  try {
+    return await runOperationsHealthCheck({ triggerSource, suppressFailureAlert: true });
+  } catch (firstError) {
+    // A single transient Netlify/Supabase/provider failure should not alarm the
+    // owner. Retry once; only the second failure is eligible for email alerting.
+    if (retryDelayMs > 0) await delay(retryDelayMs);
+    try {
+      return await runOperationsHealthCheck({ triggerSource, suppressFailureAlert: false });
+    } catch (secondError) {
+      secondError.firstAttemptCode = String(firstError?.code || firstError?.name || 'OPERATIONS_HEALTH_FAILED').slice(0, 80);
+      throw secondError;
+    }
+  }
+}
+
 export async function handler() {
   try {
-    const result = await runOperationsHealthCheck({ triggerSource: 'scheduled' });
+    const result = await runOperationsHealthCheckWithRetry({ triggerSource: 'scheduled' });
     return { statusCode: result.ok ? 200 : 503, body: JSON.stringify(result) };
   } catch {
-    return { statusCode: 500, body: JSON.stringify({ ok: false, version: APP_VERSION, message: 'Operations health check failed.' }) };
+    return { statusCode: 500, body: JSON.stringify({ ok: false, version: APP_VERSION, message: 'Operations health check failed after retry.' }) };
   }
 }
