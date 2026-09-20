@@ -27,7 +27,7 @@ export async function runOperationsHealthCheck({ triggerSource = 'scheduled', su
     const latestResolvedSyncConflictAt = resolvedSyncConflictAlerts?.[0]?.resolved_at || '';
     const syncConflictWindowStart = latestSyncConflictWindowStart(since24h, latestResolvedSyncConflictAt);
 
-    const [dbProbe, failedWebhooks, failedCustomerEmails, failedAdminEmails, backupFailures, syncConflicts, functionFailures, processorRuns] = await Promise.all([
+    const [dbProbe, failedWebhooks, failedCustomerEmails, failedAdminEmails, backupFailures, syncConflicts, functionFailures, processorRuns, emergencyCheckRuns, openHealthEvents] = await Promise.all([
       selectRows('tenants', 'select=id&limit=1').then(() => true).catch(() => false),
       selectRows('stripe_webhook_events', 'select=id,event_id,event_type,attempts,error_message,updated_at&status=eq.failed&order=updated_at.desc&limit=100'),
       selectRows('customer_email_log', `select=id,status,email_type,last_attempt_at&status=eq.failed&last_attempt_at=${gte(since24h)}&limit=500`),
@@ -35,14 +35,17 @@ export async function runOperationsHealthCheck({ triggerSource = 'scheduled', su
       selectRows('vault_sync_events', `select=id,event_type,status,created_at&status=eq.error&created_at=${gte(since24h)}&limit=500`),
       selectRows('vault_sync_events', `select=id,event_type,status,created_at&event_type=eq.backup_conflict_blocked&created_at=${gt(syncConflictWindowStart)}&limit=500`),
       selectRows('operational_events', `select=id,source,event_type,severity,last_seen_at&event_type=eq.function_failure&status=eq.open&last_seen_at=${gte(since24h)}&limit=500`),
-      selectRows('email_processor_runs', 'select=processor_type,status,finished_at,started_at&order=started_at.desc&limit=50')
+      selectRows('email_processor_runs', 'select=processor_type,status,finished_at,started_at&processor_type=eq.customer_lifecycle&order=started_at.desc&limit=10'),
+      selectRows('scheduled_check_runs', 'select=check_type,status,finished_at,started_at&check_type=eq.emergency_access_release&order=started_at.desc&limit=10'),
+      selectRows('operational_events', 'select=id,source,event_type&status=eq.open&source=in.(operations_health,stripe_webhook,resend,vault_backup,vault_sync,scheduled_checks)&event_type=in.(database_unreachable,stripe_webhook_failure_alert,stripe_webhook_processing_failure,resend_delivery_failures,backup_failures,sync_conflicts,lifecycle_processor_stale,emergency_processor_stale)&limit=100')
     ]);
 
     const lifecycleSuccess = processorRuns.find((row) => row.processor_type === 'customer_lifecycle' && row.status === 'success');
-    const emergencySuccess = processorRuns.find((row) => row.processor_type === 'emergency_access_release' && row.status === 'success');
+    const emergencySuccess = emergencyCheckRuns.find((row) => row.check_type === 'emergency_access_release' && row.status === 'success');
     const lifecycleStale = !lifecycleSuccess?.finished_at || Date.now() - new Date(lifecycleSuccess.finished_at).getTime() > 2 * 3600000;
-    const emergencyStale = !emergencySuccess?.finished_at || Date.now() - new Date(emergencySuccess.finished_at).getTime() > 20 * 60000;
+    const emergencyStale = !emergencySuccess?.finished_at || Date.now() - new Date(emergencySuccess.finished_at).getTime() > 45 * 60000;
     const emailFailures = failedCustomerEmails.length + failedAdminEmails.length;
+    const openHealthEventKeys = new Set((openHealthEvents || []).map((row) => `${row.source}|${row.event_type}`));
 
     const alerts = [
       { condition: !dbProbe, source: 'operations_health', type: 'database_unreachable', severity: 'critical', code: 'DATABASE_UNREACHABLE', message: 'The operational health check could not read the Supabase database.' },
@@ -51,7 +54,7 @@ export async function runOperationsHealthCheck({ triggerSource = 'scheduled', su
       { condition: backupFailures.length > 0, source: 'vault_backup', type: 'backup_failures', severity: 'error', code: 'VAULT_BACKUP_FAILED', message: `${backupFailures.length} vault backup failure(s) were recorded in the last 24 hours.` },
       { condition: syncConflicts.length > 0, source: 'vault_sync', type: 'sync_conflicts', severity: 'warning', code: 'SYNC_CONFLICT', message: `${syncConflicts.length} blocked sync conflict(s) were recorded in the last 24 hours.` },
       { condition: lifecycleStale, source: 'scheduled_checks', type: 'lifecycle_processor_stale', severity: 'error', code: 'LIFECYCLE_PROCESSOR_STALE', message: 'The customer lifecycle processor has no successful run within the expected two-hour window.' },
-      { condition: emergencyStale, source: 'scheduled_checks', type: 'emergency_processor_stale', severity: 'critical', code: 'EMERGENCY_PROCESSOR_STALE', message: 'The Emergency Access processor has no successful run within the expected twenty-minute window.' }
+      { condition: emergencyStale, source: 'scheduled_checks', type: 'emergency_processor_stale', severity: 'critical', code: 'EMERGENCY_PROCESSOR_STALE', message: 'The Emergency Access processor has no successful heartbeat within the expected forty-five-minute window.' }
     ];
 
     for (const alert of alerts) {
@@ -83,9 +86,13 @@ export async function runOperationsHealthCheck({ triggerSource = 'scheduled', su
             }
           }
         }
-      } else {
+      } else if (openHealthEventKeys.has(`${alert.source}|${alert.type}`)) {
         await resolveOperationalEventsByType(alert.source, alert.type);
-        if (alert.type === 'stripe_webhook_failure_alert') await resolveOperationalEventsByType('stripe_webhook', 'stripe_webhook_processing_failure');
+        openHealthEventKeys.delete(`${alert.source}|${alert.type}`);
+      }
+      if (!alert.condition && alert.type === 'stripe_webhook_failure_alert' && openHealthEventKeys.has('stripe_webhook|stripe_webhook_processing_failure')) {
+        await resolveOperationalEventsByType('stripe_webhook', 'stripe_webhook_processing_failure');
+        openHealthEventKeys.delete('stripe_webhook|stripe_webhook_processing_failure');
       }
     }
 

@@ -37,10 +37,11 @@ async function audit(session, action, metadata = {}) {
 }
 
 async function loadEmailAdminData() {
-  const [logs, tenants, processorRuns, adminNotificationLogs, trialExtensionRequests] = await Promise.all([
+  const [logs, tenants, processorRuns, emergencyCheckRuns, adminNotificationLogs, trialExtensionRequests] = await Promise.all([
     selectRows('customer_email_log', 'select=id,tenant_id,user_id,email_type,recipient_masked,subject,provider,status,attempts,error_message,last_attempt_at,sent_at,metadata,created_at,updated_at&order=created_at.desc&limit=2000'),
     selectRows('tenants', 'select=id,name,account_name&order=account_name.asc&limit=2000'),
     selectRows('email_processor_runs', 'select=id,processor_type,trigger_source,status,started_at,finished_at,items_checked,email_actions,result_summary,error_message,created_at&order=started_at.desc&limit=200'),
+    selectRows('scheduled_check_runs', 'select=id,check_type,trigger_source,status,started_at,finished_at,items_checked,issues_found,result_summary,error_message&check_type=eq.emergency_access_release&order=started_at.desc&limit=20'),
     selectRows('admin_notification_log', 'select=id,tenant_id,user_id,event_type,recipient_masked,subject,status,error_message,sent_at,created_at,updated_at&order=created_at.desc&limit=200').catch(() => []),
     selectRows('trial_extension_requests', 'select=id,tenant_id,user_id,status,reason,trial_ends_at,requested_at,reviewed_at,created_at&order=created_at.desc&limit=200').catch(() => [])
   ]);
@@ -87,7 +88,20 @@ async function loadEmailAdminData() {
     errorMessage: row.error_message || ''
   }));
   const lastLifecycleSuccess = runs.find((row) => row.processorType === 'customer_lifecycle' && row.status === 'success') || null;
-  const lastEmergencySuccess = runs.find((row) => row.processorType === 'emergency_access_release' && row.status === 'success') || null;
+  const lastEmergencyCheck = (emergencyCheckRuns || []).find((row) => row.status === 'success');
+  const lastEmergencySummary = parseJson(lastEmergencyCheck?.result_summary);
+  const lastEmergencySuccess = lastEmergencyCheck ? {
+    id: lastEmergencyCheck.id,
+    processorType: 'emergency_access_release',
+    triggerSource: lastEmergencyCheck.trigger_source,
+    status: lastEmergencyCheck.status,
+    startedAt: lastEmergencyCheck.started_at,
+    finishedAt: lastEmergencyCheck.finished_at,
+    itemsChecked: Number(lastEmergencyCheck.items_checked || 0),
+    emailActions: Number(lastEmergencySummary.processed || 0),
+    resultSummary: lastEmergencySummary,
+    errorMessage: lastEmergencyCheck.error_message || ''
+  } : null;
   const emailTypes = [...new Set(emailRows.map((row) => row.emailType).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const customerOptions = (tenants || []).map((tenant) => ({ value: tenant.id, label: tenant.account_name || tenant.name || tenant.id }));
   const adminNotificationRows = (adminNotificationLogs || []).map((row) => ({
@@ -130,7 +144,7 @@ async function loadEmailAdminData() {
     resendConfigured: Boolean(process.env.RESEND_API_KEY && process.env.OTP_EMAIL_FROM),
     schedules: {
       lifecycle: { label: 'Customer lifecycle', schedule: 'Hourly', cron: '0 * * * *' },
-      emergency: { label: 'Emergency Access release', schedule: 'Every 5 minutes', cron: '*/5 * * * *' }
+      emergency: { label: 'Emergency Access release', schedule: 'Every 15 minutes', cron: '*/15 * * * *' }
     }
   };
 }

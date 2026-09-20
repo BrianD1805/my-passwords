@@ -1,0 +1,36 @@
+Password-Encrypt Ver-1.026 verification results
+Generated: 2026-09-20
+
+PASS  Production build completed successfully.
+PASS  13/13 security static checks.
+PASS  20/20 reliability static checks.
+PASS  35/35 legal/commercial readiness checks.
+PASS  36/36 landing/plan UX static checks.
+PASS  6/6 mobile restoration checks.
+PASS  75/75 Trusted Person / Emergency Access checks.
+PASS  68/68 onboarding checks.
+PASS  32/32 push notification checks.
+PASS  14/14 Ver-1.026 optimisation checks.
+PASS  Modified JavaScript files pass Node syntax validation.
+PASS  Git whitespace validation passed.
+
+299/299 regression and feature checks passed.
+
+Ver-1.026 scheduled invocation target (30-day month)
+
+- Previous: 461 per day / 13,830 per month.
+- Ver-1.026: 179 per day / 5,370 per month.
+- Saving: 282 per day / 8,460 per month (approximately 61%).
+
+Scope confirmation
+
+- Emergency Access release processor: every 15 minutes.
+- Operations health check: every 30 minutes.
+- Account trial watchdog: every 4 hours.
+- Customer lifecycle processor: remains hourly.
+- Five daily scheduled jobs: unchanged.
+- Emergency Access no-work runs retain a lightweight health heartbeat.
+- Heavy Emergency Access email-processor records are only created when work is due.
+- Onboarding flow logic is unchanged.
+- No Supabase SQL migration is required.
+- No GitHub commit or push was performed.

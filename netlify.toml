@@ -47,7 +47,7 @@
   schedule = "0 * * * *"
 
 [functions."emergency-access-release-process"]
-  schedule = "*/5 * * * *"
+  schedule = "*/15 * * * *"
 
 [functions."trusted-person-reminder-process"]
   schedule = "15 7 * * *"
@@ -55,12 +55,12 @@
 [functions."emergency-backup-code-reminder-process"]
   schedule = "45 7 * * *"
 
-# Ver-0.053B retains the reliability monitoring schedules introduced in Ver-0.051.
+# Ver-1.026 reduces unattended monitoring traffic while retaining timely alerts.
 [functions."operations-health-check"]
-  schedule = "*/15 * * * *"
+  schedule = "*/30 * * * *"
 
 [functions."account-trial-check"]
-  schedule = "*/30 * * * *"
+  schedule = "0 */4 * * *"
 
 [functions."operational-retention-cleanup"]
   schedule = "10 4 * * *"

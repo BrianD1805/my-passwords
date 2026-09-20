@@ -201,10 +201,18 @@ async function finishProcessorRun(run, values) {
 
 export async function runEmergencyAccessReleaseProcessor({ triggerSource = 'scheduled' } = {}) {
   const checkedAt = new Date().toISOString();
-  const run = await startProcessorRun('emergency_access_release', triggerSource);
   const checkRun = await startScheduledCheck('emergency_access_release', triggerSource);
+  let run = null;
   try {
     const due = await selectRows('emergency_access_requests', `select=*&status=in.(requested,waiting,owner_notified,release_ready)&waiting_ends_at=${lte(checkedAt)}&order=waiting_ends_at.asc&limit=100`);
+    if (!due?.length) {
+      const payload = { ok: true, version: APP_VERSION, checkedAt, triggerSource, due: 0, processed: 0, sent: 0, failed: 0, results: [] };
+      await finishScheduledCheck(checkRun, { status: 'success', itemsChecked: 0, issuesFound: 0, summary: { due: 0, processed: 0, sent: 0, failed: 0 } });
+      console.log(JSON.stringify(payload));
+      return payload;
+    }
+
+    run = await startProcessorRun('emergency_access_release', triggerSource);
     const results = [];
     for (const request of due || []) results.push(await processRequest(request));
     const sent = results.filter((row) => row.email === 'sent').length;

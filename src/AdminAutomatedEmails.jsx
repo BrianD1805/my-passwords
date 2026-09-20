@@ -240,7 +240,7 @@ export default function AdminAutomatedEmails({ onSessionExpired, setGlobalNotice
             <button type="button" className="primary-button" onClick={() => runAction('run_lifecycle_processor', {}, 'lifecycle')} disabled={Boolean(busyAction)}><Play size={17} /> {busyAction === 'lifecycle' ? 'Running...' : 'Run lifecycle email check now'}</button>
           </article>
           <article>
-            <div className="admin-email-processor-title"><CalendarClock size={20} /><div><strong>Emergency Access release</strong><span>{data.schedules?.emergency?.schedule || 'Every 5 minutes'}</span></div></div>
+            <div className="admin-email-processor-title"><CalendarClock size={20} /><div><strong>Emergency Access release</strong><span>{data.schedules?.emergency?.schedule || 'Every 15 minutes'}</span></div></div>
             <p>Last successful run: <strong>{dateLabel(data.lastEmergencySuccess?.finishedAt)}</strong></p>
             {data.lastEmergencySuccess && <small>{data.lastEmergencySuccess.itemsChecked || 0} due request(s) checked · {data.lastEmergencySuccess.emailActions || 0} action(s)</small>}
             <button type="button" className="primary-button" onClick={() => runAction('run_emergency_processor', {}, 'emergency')} disabled={Boolean(busyAction)}><Play size={17} /> {busyAction === 'emergency' ? 'Running...' : 'Run Emergency Access release check now'}</button>

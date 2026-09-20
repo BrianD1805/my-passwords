@@ -28,7 +28,7 @@ function check(name, condition) {
   else { console.error(`FAIL  ${name}`); failed += 1; }
 }
 
-check('Ver-1.025 version is aligned', pkg.version === '1.25.0' && /Password-Encrypt Ver-1\.025/.test(main) && /my-passwords-v1\.025/.test(read('public/sw.js')));
+check('Ver-1.026 version is aligned', pkg.version === '1.26.0' && /Password-Encrypt Ver-1\.026/.test(main) && /my-passwords-v1\.026/.test(read('public/sw.js')));
 check('Nominate a Trusted Person heading has a same-line Help and FAQ control', /Nominate a Trusted Person<\/h4>/.test(main) && /trusted-person-help-button/.test(main) && /Open Trusted Person help and FAQs/.test(main));
 check('Current progress is setup-only and explicitly shows Stage X of 4', /emergencySetupStageNumber/.test(main) && /Stage \{emergencySetupStageNumber\} of 4 setup/.test(main) && /emergencySetupCompleteCount/.test(main));
 check('Current progress panel jumps directly to its setup stage', /goToEmergencySetupStage/.test(main) && /onClick=\{\(\) => goToEmergencySetupStage\(emergencySetupStageNumber\)\}/.test(main) && /scrollIntoView/.test(main));
@@ -38,7 +38,7 @@ check('Editable stage details are visually separate from the wrapped stage heade
 check('Owner Trusted Person stage auto-checks every 30 seconds while the page is open', /setInterval\(checkCurrentEmergencyStage, 30000\)/.test(main) && /visibilitychange/.test(main) && /automatic: true/.test(main));
 check('Automatic status checks only save encrypted plan metadata when the server state changed', /const statusChanged = statusFields\.some/.test(main) && /if \(statusChanged\) \{[\s\S]*?saveItems\(next/.test(main));
 check('Stage 4 tells the owner acceptance is checked automatically', /This page checks automatically while open/.test(main));
-check('Final package release remains on the scheduled five-minute processor', /runEmergencyAccessReleaseProcessor/.test(release) && /release_ready_email/.test(release) && /\[functions\."emergency-access-release-process"\][\s\S]*?schedule = "\*\/5 \* \* \* \*"/.test(netlify));
+check('Final package release remains on the scheduled fifteen-minute processor', /runEmergencyAccessReleaseProcessor/.test(release) && /release_ready_email/.test(release) && /\[functions\."emergency-access-release-process"\][\s\S]*?schedule = "\*\/15 \* \* \* \*"/.test(netlify));
 check('Trusted Person reminder processor runs daily and sends only when three calendar months are due', /trusted-person-reminder-process/.test(netlify) && /schedule = "15 7 \* \* \*"/.test(netlify) && /addCalendarMonths\(anchor, 3\)/.test(reminderProcess) && /status=eq.accepted/.test(reminderProcess));
 check('Quarterly reminder email is searchable and asks for confirmation', /Password-Encrypt Trusted Person reminder — Please confirm/.test(reminderProcess) && /Yes, I’m still the trusted person/.test(reminderProcess) && /three-month reminder/.test(reminderProcess));
 check('Trusted Person help explains the quarterly reminder without implying access', /routine reminder every three months/.test(main) && /does not start Emergency Access/.test(reminderProcess) && /does not reveal any vault information/.test(reminderProcess));
