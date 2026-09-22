@@ -55,7 +55,7 @@
 [functions."emergency-backup-code-reminder-process"]
   schedule = "45 7 * * *"
 
-# Ver-1.026 reduces unattended monitoring traffic while retaining timely alerts.
+# Ver-1.027 retains the Ver-1.026 scheduled-usage reductions and adds bounded backup retries.
 [functions."operations-health-check"]
   schedule = "*/30 * * * *"
 

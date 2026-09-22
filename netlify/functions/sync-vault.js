@@ -1,6 +1,6 @@
 import { APP_VERSION, insertRow, jsonResponse, parseBody, publicId, selectRows, supabaseRequest } from './_db.js';
 import { getCustomerAccess } from './_session.js';
-import { assertBrowserAction } from './_security.js';
+import { assertBrowserAction, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
 import { recordFunctionFailure, recordOperationalEvent } from './_operations.js';
 import { base64StorageBytes, serialiseEntitlements } from './_entitlements.js';
 
@@ -88,11 +88,33 @@ export async function handler(event) {
   if (event.httpMethod !== 'POST') return jsonResponse(405, { ok: false, version: APP_VERSION, message: 'GET or POST required.' });
   try { assertBrowserAction(event, { session: access.session, kind: 'customer', csrf: true }); } catch (error) { return jsonResponse(error.status || 403, { ok: false, version: APP_VERSION, code: error.code, message: error.message }); }
   const body = parseBody(event);
-  if (String(body.action || '') === 'record_event') {
+  const action = String(body.action || 'save_backup');
+  const rateLimit = action === 'record_event'
+    ? { scope: 'vault_sync_record_event', limit: 30 }
+    : ['prune_snapshot_history', 'reset_snapshot_history'].includes(action)
+      ? { scope: 'vault_sync_maintenance', limit: 12 }
+      : { scope: 'vault_sync_backup', limit: 60 };
+  try {
+    await consumeRateLimit(event, {
+      ...rateLimit,
+      identifier: access.session.sessionId || userId,
+      windowSeconds: 15 * 60,
+      blockSeconds: 15 * 60
+    });
+  } catch (error) {
+    return jsonResponse(error.status || 500, {
+      ok: false,
+      version: APP_VERSION,
+      code: error.code || 'SYNC_RATE_LIMIT_FAILED',
+      message: error.status ? error.message : 'Secure backup protection could not be checked.',
+      error: error.status ? undefined : error.message
+    }, securityErrorResponseHeaders(error));
+  }
+  if (action === 'record_event') {
     await recordSyncEvent({ tenantId, userId, eventType: body.eventType, status: body.status, itemCount: body.itemCount, message: body.message, deviceId: body.deviceId, metadata: body.metadata || {} });
     return jsonResponse(200, { ok: true, version: APP_VERSION, message: 'Sync diagnostic recorded.' });
   }
-  if (String(body.action || '') === 'prune_snapshot_history') {
+  if (action === 'prune_snapshot_history') {
     try {
       const retention = await pruneVaultRecoveryPoints(tenantId, userId);
       return jsonResponse(200, { ok: true, version: APP_VERSION, retention, message: `Recovery history is limited to the latest ${MAX_RECOVERY_POINTS} encrypted recovery points.` });
@@ -101,7 +123,7 @@ export async function handler(event) {
       return jsonResponse(500, { ok: false, version: APP_VERSION, message: 'Recovery-point cleanup could not be completed.', error: error.message });
     }
   }
-  if (String(body.action || '') === 'reset_snapshot_history') {
+  if (action === 'reset_snapshot_history') {
     const keepSnapshotId = String(body.keepSnapshotId || '').trim().slice(0, 160);
     if (!keepSnapshotId) return jsonResponse(400, { ok: false, version: APP_VERSION, message: 'The new secure recovery point could not be identified.' });
     try {

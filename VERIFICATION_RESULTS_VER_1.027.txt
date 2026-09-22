@@ -1,0 +1,28 @@
+Password-Encrypt Ver-1.027 verification
+Date: 2026-09-20 UTC
+
+PASS  npm run build
+PASS  npm run sync-retry:check (10/10)
+PASS  npm run security:check (13/13)
+PASS  npm run reliability:check (20/20)
+PASS  npm run legal:check (35/35)
+PASS  npm run ux:check (36/36)
+PASS  npm run mobile:check (6/6)
+PASS  npm run emergency:check (75/75)
+PASS  npm run onboarding:check (68/68)
+PASS  npm run push:check (32/32)
+PASS  npm run feature:check (15/15)
+PASS  node syntax checks for sync-vault, client-error-report, retry policy and regression test
+PASS  git diff --check
+
+Total scripted checks: 310 passed, 0 failed.
+
+The sync retry regression suite simulates 10,000 consecutive failures and
+asserts that the automatic policy schedules exactly three requests before
+returning no further retry plan.
+
+Build notes:
+- Vite reported the existing advisory that the main minified JavaScript chunk
+  is larger than 500 kB. The production build completed successfully.
+- No Supabase SQL migration is required for Ver-1.027.
+- No Git commit or push was performed.

@@ -7,8 +7,9 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
+import { automaticSyncRetryEligible, nextAutomaticSyncRetry } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.026';
+const VERSION = 'Password-Encrypt Ver-1.027';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3417,13 +3418,37 @@ function App() {
   const [syncSafetyModal, setSyncSafetyModal] = useState({ visible: false, mode: '', title: '', message: '', details: null });
   const [syncPromptShown, setSyncPromptShown] = useState(false);
   const offlineSaveNoticeShownRef = useRef(false);
-  const syncRetryRef = useRef(false);
+  const automaticSyncRetryRef = useRef({ timerId: null, attemptsCompleted: 0, inFlight: false, exhausted: false, generation: 0 });
+  const automaticSyncRetryContextRef = useRef({});
+  const automaticSyncRetryRunnerRef = useRef(null);
+  const automaticSyncWasOnlineRef = useRef(isOnline);
+  const syncFailureStateRef = useRef({ generation: 0, reportedGeneration: -1 });
+  const latestSyncItemsRef = useRef(items);
   const syncOperationRef = useRef(false);
   const secureDeviceCredentialAbortRef = useRef(null);
   const secureDeviceCredentialTimeoutRef = useRef(null);
   const secureDeviceCancelReasonRef = useRef('');
   const [snapshotHistory, setSnapshotHistory] = useState({ loaded: false, loading: false, total: 0, snapshots: [], message: 'Recovery history has not been checked yet.' });
   const [cloudChangeCheckBusy, setCloudChangeCheckBusy] = useState(false);
+
+  latestSyncItemsRef.current = items;
+  automaticSyncRetryContextRef.current = {
+    locked,
+    cloudBackupIncluded: featureIncluded('cloudBackupSync'),
+    pending: Boolean(syncSafety.pending),
+    conflict: Boolean(syncSafety.conflict),
+    authenticated: Boolean(customerSession.authenticated),
+    cloudAccess: customerSession.cloudAccess,
+    online: isOnline
+  };
+  automaticSyncRetryRunnerRef.current = () => syncEncryptedVault({
+    envelope: getLocalEnvelope(),
+    nextItems: latestSyncItemsRef.current,
+    silent: true,
+    retry: true,
+    automaticRetry: true,
+    suppressFailureModal: true
+  });
   const [deviceStatus, setDeviceStatus] = useState({
     state: 'not-checked',
     label: 'This device has not checked your cloud backup yet.',
@@ -4700,6 +4725,108 @@ function App() {
     }
   }
 
+  function beginNewSyncFailureState() {
+    syncFailureStateRef.current = {
+      generation: Number(syncFailureStateRef.current.generation || 0) + 1,
+      reportedGeneration: -1
+    };
+  }
+
+  function clearSyncFailureState() {
+    beginNewSyncFailureState();
+  }
+
+  async function recordBackupFailureOnce(status, { itemCount = 0, message = '' } = {}) {
+    const failureState = syncFailureStateRef.current;
+    if (failureState.reportedGeneration === failureState.generation) return false;
+    failureState.reportedGeneration = failureState.generation;
+    await recordSyncEvent('backup_failed', status, { itemCount, message });
+    return true;
+  }
+
+  function clearAutomaticSyncRetryTimer() {
+    const retryState = automaticSyncRetryRef.current;
+    if (retryState.timerId != null) window.clearTimeout(retryState.timerId);
+    retryState.timerId = null;
+  }
+
+  function resetAutomaticSyncRetryState({ clearFailureReport = false } = {}) {
+    clearAutomaticSyncRetryTimer();
+    const retryState = automaticSyncRetryRef.current;
+    retryState.attemptsCompleted = 0;
+    retryState.inFlight = false;
+    retryState.exhausted = false;
+    retryState.generation = Number(retryState.generation || 0) + 1;
+    if (clearFailureReport) clearSyncFailureState();
+  }
+
+  function pauseAutomaticSyncRetries() {
+    const retryState = automaticSyncRetryRef.current;
+    clearAutomaticSyncRetryTimer();
+    retryState.exhausted = true;
+    const note = 'Automatic backup retries have paused. Your encrypted changes remain safe on this device. Use Back up changes now when you are ready to try again.';
+    setSyncStatus((current) => ({ ...current, state: 'warning', message: note }));
+    saveSyncSafety({ state: 'backup-pending', pending: true, conflict: false, sessionRequired: false, message: note });
+  }
+
+  function scheduleAutomaticSyncRetry({ immediate = false, resetAttempts = false } = {}) {
+    const retryState = automaticSyncRetryRef.current;
+    if (resetAttempts) {
+      clearAutomaticSyncRetryTimer();
+      retryState.attemptsCompleted = 0;
+      retryState.exhausted = false;
+      retryState.generation = Number(retryState.generation || 0) + 1;
+    }
+    if (retryState.timerId != null || retryState.inFlight || retryState.exhausted) return false;
+    if (!automaticSyncRetryEligible(automaticSyncRetryContextRef.current)) return false;
+    const plan = nextAutomaticSyncRetry(retryState.attemptsCompleted, { immediate });
+    if (!plan) {
+      pauseAutomaticSyncRetries();
+      return false;
+    }
+
+    const scheduledGeneration = retryState.generation;
+    retryState.timerId = window.setTimeout(async () => {
+      retryState.timerId = null;
+      if (retryState.generation !== scheduledGeneration) return;
+      if (!automaticSyncRetryEligible(automaticSyncRetryContextRef.current)) return;
+      if (syncOperationRef.current || retryState.inFlight) {
+        scheduleAutomaticSyncRetry();
+        return;
+      }
+
+      retryState.inFlight = true;
+      retryState.attemptsCompleted = plan.attemptNumber;
+      let result = null;
+      try {
+        result = await automaticSyncRetryRunnerRef.current?.();
+      } catch {
+        result = { ok: false };
+      } finally {
+        retryState.inFlight = false;
+      }
+
+      if (retryState.generation !== scheduledGeneration) return;
+
+      if (result?.ok) {
+        resetAutomaticSyncRetryState({ clearFailureReport: true });
+        return;
+      }
+      if (result?.terminal || result?.conflict || result?.sessionRequired || result?.planLimited || result?.accountMismatch || result?.localOnly) {
+        retryState.exhausted = true;
+        clearAutomaticSyncRetryTimer();
+        return;
+      }
+      if (!automaticSyncRetryEligible(automaticSyncRetryContextRef.current)) return;
+      if (!nextAutomaticSyncRetry(retryState.attemptsCompleted)) {
+        pauseAutomaticSyncRetries();
+        return;
+      }
+      scheduleAutomaticSyncRetry();
+    }, plan.delayMs);
+    return true;
+  }
+
   async function retryPendingBackup(options = {}) {
     closeSyncSafetyModal();
     if (!featureIncluded('cloudBackupSync')) {
@@ -5437,23 +5564,23 @@ function App() {
 
 
   useEffect(() => {
-    async function tryAutomaticRetry() {
-      if (locked || !featureIncluded('cloudBackupSync') || !syncSafety.pending || syncSafety.conflict || !customerSession.authenticated || customerSession.cloudAccess === false || syncing || syncOperationRef.current || syncRetryRef.current || !navigator.onLine) return;
-      syncRetryRef.current = true;
-      try {
-        await syncEncryptedVault({ envelope: getLocalEnvelope(), nextItems: items, silent: true, retry: true, suppressFailureModal: true });
-      } finally {
-        syncRetryRef.current = false;
-      }
+    const wasOnline = automaticSyncWasOnlineRef.current;
+    const reconnected = wasOnline === false && isOnline === true;
+    automaticSyncWasOnlineRef.current = isOnline;
+
+    if (!automaticSyncRetryEligible(automaticSyncRetryContextRef.current)) {
+      clearAutomaticSyncRetryTimer();
+      if (!syncSafety.pending) resetAutomaticSyncRetryState();
+      return;
     }
-    const onlineHandler = () => tryAutomaticRetry();
-    window.addEventListener('online', onlineHandler);
-    const timer = window.setTimeout(tryAutomaticRetry, 2600);
-    return () => {
-      window.removeEventListener('online', onlineHandler);
-      window.clearTimeout(timer);
-    };
-  }, [locked, syncSafety.pending, syncSafety.conflict, customerSession.authenticated, customerSession.cloudAccess, syncing, items]);
+    if (reconnected) {
+      scheduleAutomaticSyncRetry({ immediate: true, resetAttempts: true });
+      return;
+    }
+    scheduleAutomaticSyncRetry();
+  }, [locked, isOnline, syncSafety.pending, syncSafety.conflict, customerSession.authenticated, customerSession.cloudAccess]);
+
+  useEffect(() => () => clearAutomaticSyncRetryTimer(), []);
 
   useEffect(() => {
     const runCleanup = () => processPendingDocumentDeletions();
@@ -6461,6 +6588,8 @@ function App() {
   async function saveItems(nextItems, options = {}) {
     setItems(nextItems);
     const envelope = await encryptVault(nextItems, masterPassword, bootstrap);
+    resetAutomaticSyncRetryState();
+    beginNewSyncFailureState();
     const itemCount = getVisibleVaultItems(nextItems).length;
     if (options.refreshEmergencyPackage !== false) {
       scheduleEmergencyPackageMaintenance(nextItems, options.emergencyRefreshReason || 'vault_change');
@@ -7174,7 +7303,7 @@ function App() {
       setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount, snapshotCount: snapshotHistory.total });
       if (!options.suppressFailureModal) showBackupFailurePopup(note, { itemCount, items: effectiveItems });
       if (!silent) showMessage(note, 'error');
-      return { ok: false, message: note };
+      return { ok: false, terminal: true, message: note };
     }
     if (!activeAccount.tenantId || !activeAccount.userId || !hasVerifiedSession) {
       const note = 'Verify this device to back up your latest vault changes.';
@@ -7247,6 +7376,7 @@ function App() {
             saveSyncSafety({ state: 'up-to-date', pending: false, conflict: false, sessionRequired: false, message: 'Your vault is up to date.', itemCount: Number(latest.snapshot.item_count ?? itemCount), lastSuccessAt: lastSyncAt, lastSnapshotId: latest.snapshot.id || '', acknowledgedAt: '' });
             closeSyncSafetyModal();
             setSyncPromptShown(false);
+            resetAutomaticSyncRetryState({ clearFailureReport: true });
             return { ok: true, reusedExistingBackup: true, snapshotId: latest.snapshot.id || '', verified: latest };
           }
           setSyncStatus({ state: 'warning', message: 'Different vault changes were found. Nothing was replaced.', lastSyncAt: '', lastSnapshotId: latest?.snapshot?.id || '', itemCount, snapshotCount: snapshotHistory.total });
@@ -7276,7 +7406,17 @@ function App() {
         }
         if (!options.suppressFailureModal) showBackupFailurePopup(note, { sessionRequired, itemCount, items: effectiveItems });
         if (!silent) showMessage('Your changes are safe on this device, but secure backup needs attention.', sessionRequired ? 'warning' : 'error');
-        await recordSyncEvent('backup_failed', sessionRequired ? 'warning' : 'error', { itemCount, message: note });
+        saveSyncSafety({
+          state: sessionRequired ? 'verification-required' : 'backup-pending',
+          pending: true,
+          conflict: false,
+          sessionRequired,
+          message: note,
+          itemCount,
+          lastFailureAt: new Date().toISOString(),
+          acknowledgedAt: ''
+        });
+        await recordBackupFailureOnce(sessionRequired ? 'warning' : 'error', { itemCount, message: note });
         return { ...result, sessionRequired, message: note };
       }
       if (result.entitlements) updateEntitlements(result.entitlements);
@@ -7302,6 +7442,7 @@ function App() {
       saveSyncSafety({ state: 'up-to-date', pending: false, conflict: false, sessionRequired: false, message: 'Your vault is up to date.', itemCount: Number(verifiedSnapshot?.item_count ?? itemCount), lastSuccessAt: lastSyncAt, lastSnapshotId: verifiedSnapshot?.id || result.snapshotId || '', acknowledgedAt: '' });
       if (syncSafetyModal.mode === 'backup-failed' || syncSafetyModal.mode === 'verification-required') closeSyncSafetyModal();
       setSyncPromptShown(false);
+      resetAutomaticSyncRetryState({ clearFailureReport: true });
       if (!silent) showMessage(note, 'success');
       return { ...result, verified };
     } catch (error) {
@@ -7309,7 +7450,17 @@ function App() {
       setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount, snapshotCount: snapshotHistory.total });
       if (!options.suppressFailureModal) showBackupFailurePopup(note, { itemCount, items: effectiveItems });
       if (!silent) showMessage('Your changes are safe on this device, but secure backup needs attention.', 'error');
-      await recordSyncEvent('backup_failed', 'error', { itemCount, message: note });
+      saveSyncSafety({
+        state: 'backup-pending',
+        pending: true,
+        conflict: false,
+        sessionRequired: false,
+        message: note,
+        itemCount,
+        lastFailureAt: new Date().toISOString(),
+        acknowledgedAt: ''
+      });
+      await recordBackupFailureOnce('error', { itemCount, message: note });
       return { ok: false, message: note };
     } finally {
       syncOperationRef.current = false;

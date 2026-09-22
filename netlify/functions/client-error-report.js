@@ -1,6 +1,6 @@
 import { APP_VERSION, jsonResponse, parseBody } from './_db.js';
 import { getCustomerAccess } from './_session.js';
-import { assertBrowserAction } from './_security.js';
+import { assertBrowserAction, consumeRateLimit, securityErrorResponseHeaders } from './_security.js';
 import { recordOperationalEvent, sanitiseOperationalText } from './_operations.js';
 
 function safeScript(value) {
@@ -20,6 +20,22 @@ export async function handler(event) {
   if (!access?.ok) return jsonResponse(204, { ok: true, version: APP_VERSION });
   try { assertBrowserAction(event, { session: access.session, kind: 'customer', csrf: true }); }
   catch { return jsonResponse(204, { ok: true, version: APP_VERSION }); }
+  try {
+    await consumeRateLimit(event, {
+      scope: 'client_error_report',
+      identifier: access.session.sessionId || access.session.userId,
+      limit: 20,
+      windowSeconds: 15 * 60,
+      blockSeconds: 15 * 60
+    });
+  } catch (error) {
+    return jsonResponse(error.status || 500, {
+      ok: false,
+      version: APP_VERSION,
+      code: error.code || 'CLIENT_ERROR_RATE_LIMIT_FAILED',
+      message: error.status ? error.message : 'Client error reporting protection could not be checked.'
+    }, securityErrorResponseHeaders(error));
+  }
 
   const body = parseBody(event);
   const kind = ['window_error', 'unhandled_rejection'].includes(String(body.kind || '')) ? String(body.kind) : 'client_runtime_error';
