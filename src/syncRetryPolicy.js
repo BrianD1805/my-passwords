@@ -32,3 +32,21 @@ export function automaticSyncRetryEligible({
     && cloudAccess !== false
     && online;
 }
+
+export function normalisePersistedSyncSafetyState(value = {}) {
+  const staleBackingUp = value.state === 'backing-up';
+  return {
+    state: staleBackingUp ? 'backup-pending' : (value.state || 'unknown'),
+    pending: staleBackingUp ? true : Boolean(value.pending),
+    conflict: Boolean(value.conflict),
+    sessionRequired: Boolean(value.sessionRequired),
+    message: staleBackingUp
+      ? 'The previous backup did not finish confirming. Your encrypted vault is safe on this device; use Vault Status to check it again.'
+      : (value.message || ''),
+    itemCount: Number(value.itemCount || 0),
+    lastFailureAt: value.lastFailureAt || '',
+    lastSuccessAt: value.lastSuccessAt || '',
+    lastSnapshotId: value.lastSnapshotId || '',
+    acknowledgedAt: value.acknowledgedAt || ''
+  };
+}

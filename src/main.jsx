@@ -7,9 +7,9 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
-import { automaticSyncRetryEligible, nextAutomaticSyncRetry } from './syncRetryPolicy.js';
+import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.027';
+const VERSION = 'Password-Encrypt Ver-1.028';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -44,6 +44,8 @@ const SECURE_DEVICE_SETUP_TIMEOUT_MS = 30000;
 const SECURE_DEVICE_KEY_CHECK_TIMEOUT_MS = 4000;
 const SECURE_DEVICE_CLOUD_CHECK_TIMEOUT_MS = 8000;
 const SYNC_TELEMETRY_TIMEOUT_MS = 3000;
+const SYNC_BACKUP_TIMEOUT_MS = 30000;
+const SYNC_HISTORY_TIMEOUT_MS = 15000;
 const CONTACT_VERIFICATION_REMINDER_KEY = 'password-encrypt-contact-verification-reminder-v1';
 const GUIDED_TOUR_VERSION = 1;
 const GUIDED_TOUR_FALLBACK_KEY = 'password-encrypt-guided-tour-v1';
@@ -507,20 +509,9 @@ const FALLBACK_SAAS_PLANS = [];
 function readSyncSafetyState() {
   try {
     const parsed = JSON.parse(localStorage.getItem(SYNC_SAFETY_KEY) || '{}');
-    return {
-      state: parsed.state || 'unknown',
-      pending: Boolean(parsed.pending),
-      conflict: Boolean(parsed.conflict),
-      sessionRequired: Boolean(parsed.sessionRequired),
-      message: parsed.message || '',
-      itemCount: Number(parsed.itemCount || 0),
-      lastFailureAt: parsed.lastFailureAt || '',
-      lastSuccessAt: parsed.lastSuccessAt || '',
-      lastSnapshotId: parsed.lastSnapshotId || '',
-      acknowledgedAt: parsed.acknowledgedAt || ''
-    };
+    return normalisePersistedSyncSafetyState(parsed);
   } catch {
-    return { state: 'unknown', pending: false, conflict: false, sessionRequired: false, message: '', itemCount: 0, lastFailureAt: '', lastSuccessAt: '', lastSnapshotId: '', acknowledgedAt: '' };
+    return normalisePersistedSyncSafetyState();
   }
 }
 
@@ -4838,7 +4829,7 @@ function App() {
       return { ok: false, sessionRequired: true };
     }
     setSyncPromptShown(false);
-    saveSyncSafety({ state: 'backing-up', pending: false, conflict: false, sessionRequired: false, message: 'Protecting your latest changes...' });
+    saveSyncSafety({ state: 'backup-pending', pending: true, conflict: false, sessionRequired: false, message: 'Protecting your latest changes...' });
     const result = await syncEncryptedVault({ envelope: getLocalEnvelope(), nextItems: items, silent: true, retry: true, suppressFailureModal: Boolean(options.suppressFailureModal), suppressConflictModal: Boolean(options.suppressConflictModal) });
     if (result?.ok && !options.suppressToast) showMessage('Your latest vault changes are now backed up and available on your devices.', 'success');
     return result;
@@ -6643,8 +6634,8 @@ function App() {
     if (options.autoSync) {
       setSyncPromptShown(false);
       saveSyncSafety({
-        state: 'backing-up',
-        pending: false,
+        state: 'backup-pending',
+        pending: true,
         conflict: false,
         sessionRequired: false,
         message: 'Protecting your latest changes...',
@@ -7239,12 +7230,14 @@ function App() {
       return null;
     }
     setSnapshotHistory((current) => ({ ...current, loading: true, message: 'Checking secured cloud backup...' }));
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), SYNC_HISTORY_TIMEOUT_MS);
     try {
       if (options.pruneBeforeLoad) {
-        const retentionResult = await postJson('/.netlify/functions/sync-vault', { action: 'prune_snapshot_history' });
+        const retentionResult = await postJson('/.netlify/functions/sync-vault', { action: 'prune_snapshot_history' }, { signal: controller.signal });
         if (!retentionResult.ok) throw new Error(retentionResult.message || 'Recovery-point cleanup could not be completed.');
       }
-      const result = await fetch('/.netlify/functions/sync-vault?history=1').then((res) => res.json());
+      const result = await fetch('/.netlify/functions/sync-vault?history=1', { signal: controller.signal }).then((res) => res.json());
       if (!result.ok) throw new Error(result.message || result.error || 'Could not load backup history.');
       const snapshots = result.snapshots || [];
       const latestSnapshot = snapshots[0] || result.latest || null;
@@ -7262,10 +7255,14 @@ function App() {
       if (shouldShowMessage) showMessage(next.message);
       return next;
     } catch (error) {
-      const note = `Could not load backup history. ${error.message || ''}`.trim();
+      const note = error?.name === 'AbortError'
+        ? 'Backup history took too long to respond. The vault backup itself may still be complete; use Vault Status to check again.'
+        : `Could not load backup history. ${error.message || ''}`.trim();
       setSnapshotHistory((current) => ({ ...current, loaded: true, loading: false, message: note }));
       if (shouldShowMessage) showMessage(note);
       return null;
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 
@@ -7331,6 +7328,8 @@ function App() {
     syncOperationRef.current = true;
     setSyncing(true);
     setSyncStatus({ state: 'syncing', message: 'Protecting your latest vault changes...', lastSyncAt: syncStatus.lastSyncAt, lastSnapshotId: syncStatus.lastSnapshotId, itemCount, snapshotCount: snapshotHistory.total });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), SYNC_BACKUP_TIMEOUT_MS);
     try {
       const result = await postJson('/.netlify/functions/sync-vault', {
         encryptedBlob: envelope.encrypted,
@@ -7342,7 +7341,7 @@ function App() {
         deviceId: getSyncDeviceId(),
         deviceType: friendlyDeviceType(),
         explicitConflictChoice: Boolean(options.explicitConflictChoice)
-      });
+      }, { signal: controller.signal });
       if (!result.ok) {
         if (handleEntitlementError(result, 'cloudBackupSync')) {
           const note = result.message || 'The current plan limit has been reached.';
@@ -7446,7 +7445,9 @@ function App() {
       if (!silent) showMessage(note, 'success');
       return { ...result, verified };
     } catch (error) {
-      const note = `Secure backup did not complete. ${error.message || 'Please try again.'}`;
+      const note = error?.name === 'AbortError'
+        ? 'Secure backup took too long to confirm. Your encrypted changes remain safe on this device; use Vault Status to check again.'
+        : `Secure backup did not complete. ${error.message || 'Please try again.'}`;
       setSyncStatus({ state: 'error', message: note, lastSyncAt: '', lastSnapshotId: '', itemCount, snapshotCount: snapshotHistory.total });
       if (!options.suppressFailureModal) showBackupFailurePopup(note, { itemCount, items: effectiveItems });
       if (!silent) showMessage('Your changes are safe on this device, but secure backup needs attention.', 'error');
@@ -7463,6 +7464,7 @@ function App() {
       await recordBackupFailureOnce('error', { itemCount, message: note });
       return { ok: false, message: note };
     } finally {
+      window.clearTimeout(timeout);
       syncOperationRef.current = false;
       setSyncing(false);
     }
@@ -11594,7 +11596,7 @@ function App() {
             ? 'Verify device'
             : vaultCloudAccessPaused
               ? 'Cloud paused'
-              : syncing || syncSafety.state === 'backing-up'
+              : syncing
                 ? 'Saving...'
                 : syncSafety.conflict
                   ? 'Review vault'
@@ -11615,7 +11617,7 @@ function App() {
             ? 'verification'
             : vaultCloudAccessPaused
               ? 'pending'
-              : syncing || syncSafety.state === 'backing-up'
+              : syncing
                 ? 'syncing'
                 : syncSafety.conflict
                   ? 'conflict'
@@ -11628,7 +11630,7 @@ function App() {
     ? <Cloud size={22} />
     : !cloudBackupIncluded
       ? <Database size={22} />
-      : vaultSessionChecking || syncing || syncSafety.state === 'backing-up'
+      : vaultSessionChecking || syncing
         ? <RefreshCw size={22} className="sync-button-spinner" />
         : vaultSessionCheckFailed || vaultVerificationRequired || vaultCloudAccessPaused || syncSafety.conflict || syncSafety.pending
           ? <AlertTriangle size={22} />
@@ -11677,7 +11679,7 @@ function App() {
                     title: 'Cloud backup is paused',
                     message: customerSession.message || 'This device is verified, but cloud backup and syncing are currently paused for the account.'
                   }
-                : syncing || syncSafety.state === 'backing-up'
+                : syncing
                   ? {
                       mode: 'status-info',
                       title: 'Vault backup is in progress',
