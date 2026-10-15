@@ -1,7 +1,7 @@
 {
   "name": "my-passwords",
   "private": true,
-  "version": "1.29.2",
+  "version": "1.29.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,7 +19,7 @@
     "sync-retry:check": "node scripts/sync-retry-regression-check.mjs",
     "device-refresh:check": "node scripts/device-refresh-regression-check.mjs",
     "settings-tour:check": "node scripts/settings-guided-tour-regression-check.mjs",
-    "feature:check": "node scripts/ver-1.029.02-static-check.mjs"
+    "feature:check": "node scripts/ver-1.029.03-static-check.mjs"
   },
   "dependencies": {
     "lucide-react": "1.16.0",
