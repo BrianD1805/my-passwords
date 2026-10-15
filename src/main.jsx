@@ -9,7 +9,7 @@ import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.028';
+const VERSION = 'Password-Encrypt Ver-1.029';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -93,6 +93,272 @@ const GUIDED_TOUR_STEPS = [
     selectors: ['.settings-nav-pill', '.mobile-top-menu-button']
   }
 ];
+const SETTINGS_GUIDED_TOUR_STEPS = [
+  {
+    chapter: 'Settings overview',
+    title: 'Your Settings guide',
+    body: 'This tour explains every Settings section in everyday language. It will then open each section and show what the controls inside are for. Nothing is changed while you take the tour.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="overview"]']
+  },
+  {
+    chapter: 'Settings overview',
+    title: 'My Account',
+    body: 'This is where you check your account and plan, update contact details, review verified devices, manage active sessions, change profile names, set up quick device unlock or request account deletion.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="directory-account"]']
+  },
+  {
+    chapter: 'Settings overview',
+    title: 'User Settings',
+    body: 'Use this section to choose when this device asks for the master password again after quick unlocks, and to choose how dates are displayed.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="directory-user-settings"]']
+  },
+  {
+    chapter: 'Settings overview',
+    title: 'My Subscription',
+    body: 'See your current plan and usage, choose billing options, open Stripe payment records and manage renewal or cancellation.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="directory-subscription"]']
+  },
+  {
+    chapter: 'Settings overview',
+    title: 'Vault Safety',
+    body: 'Check whether your newest changes are protected, manually back up or refresh the vault, review recovery points and manage the encrypted copy stored on this device.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="directory-safety"]']
+  },
+  {
+    chapter: 'Settings overview',
+    title: 'Push Notifications',
+    body: 'Turn important alerts on or off for this device. These alerts warn you about Emergency Access activity and important service updates without showing private vault contents.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="directory-notifications"]']
+  },
+  {
+    chapter: 'Settings overview',
+    title: 'Install Password-Encrypt',
+    body: 'Add Password-Encrypt to this phone or computer like an app, or see simple manual install instructions when the browser cannot show an install button.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="directory-install"]']
+  },
+  {
+    chapter: 'Settings overview',
+    title: 'Emergency Backup Codes',
+    body: 'Create one-time recovery codes to help you regain vault access if you forget the master password. Save the codes somewhere private outside the vault.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="directory-backup-codes"]']
+  },
+  {
+    chapter: 'Settings overview',
+    title: 'Nominate a Trusted Person',
+    body: 'Prepare an Emergency Package for someone you trust. You choose the person, what is included and the waiting period before anything can be released.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="directory-emergency-nominate"]']
+  },
+  {
+    chapter: 'Settings overview',
+    title: 'Receive an Emergency Package',
+    body: 'If somebody releases an Emergency Package to you, this is where you enter its Import Code and add a separate protected copy to your own vault.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="directory-emergency-receive"]']
+  },
+  {
+    chapter: 'Settings overview',
+    title: 'Guided tours',
+    body: 'You can start this Settings tour again here. The original guided tour remains available beside it whenever you want a reminder about the main vault screen.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="directory-settings-tour"]']
+  },
+  {
+    chapter: 'Settings overview',
+    title: 'Help & FAQs',
+    body: 'Find short answers about vault access, backups, devices, documents, billing and Emergency Access, plus the support email and legal pages.',
+    section: 'overview',
+    selectors: ['[data-settings-tour="directory-faq"]']
+  },
+  {
+    chapter: 'My Account',
+    title: 'Account overview',
+    body: 'This shows which account and plan you are using, whether the account is active and which email or phone number can be used for verification.',
+    section: 'account',
+    disclosure: 'account-overview',
+    selectors: ['[data-settings-tour-disclosure="account-overview"] > summary']
+  },
+  {
+    chapter: 'My Account',
+    title: 'Contact details and recovery',
+    body: 'Change or verify the email address and mobile number attached to the account. A one-time code confirms a new contact detail before it is saved.',
+    section: 'account',
+    disclosure: 'account-contacts',
+    selectors: ['[data-settings-tour-disclosure="account-contacts"] > summary']
+  },
+  {
+    chapter: 'My Account',
+    title: 'Devices and sessions',
+    body: 'See verified phones, computers and browsers. You can verify this device, end its session or remove a lost or old device from the account.',
+    section: 'account',
+    disclosure: 'account-devices',
+    selectors: ['[data-settings-tour-disclosure="account-devices"] > summary']
+  },
+  {
+    chapter: 'My Account',
+    title: 'Profile and personal information',
+    body: 'Update the names shown on the account, download a copy of your personal account information or end every signed-in account session.',
+    section: 'account',
+    disclosure: 'account-profile',
+    selectors: ['[data-settings-tour-disclosure="account-profile"] > summary']
+  },
+  {
+    chapter: 'My Account',
+    title: 'Delete account',
+    body: 'This protected area starts or cancels permanent account deletion. It requires verification and includes a waiting period so an accidental request can be stopped.',
+    section: 'account',
+    disclosure: 'account-delete',
+    selectors: ['[data-settings-tour-disclosure="account-delete"] > summary']
+  },
+  {
+    chapter: 'My Account',
+    title: 'Secure device unlock',
+    body: 'Set up quick unlock on this device using its own security prompt, such as a PIN, fingerprint or face check. Your master password still protects the vault and may be requested again.',
+    section: 'account',
+    disclosure: 'account-secure-unlock',
+    selectors: ['[data-settings-tour-disclosure="account-secure-unlock"] > summary']
+  },
+  {
+    chapter: 'User Settings',
+    title: 'Master password reminder',
+    body: 'Choose how many quick unlocks are allowed before the master password is requested again. Turning off automatic reminders is convenient, but should only be used on a device you fully trust.',
+    section: 'user-settings',
+    selectors: ['[data-settings-tour="user-password-reminder"]']
+  },
+  {
+    chapter: 'User Settings',
+    title: 'Date format and saving',
+    body: 'Choose the date style that is easiest for you to read, then use Save settings. These preferences follow your verified account where supported.',
+    section: 'user-settings',
+    selectors: ['[data-settings-tour="user-date-format"]']
+  },
+  {
+    chapter: 'My Subscription',
+    title: 'Subscription overview',
+    body: 'See your plan, payment state, renewal or end date and any scheduled change. Founder accounts see their permanent access summary here instead.',
+    section: 'subscription',
+    disclosure: 'subscription-overview',
+    selectors: ['[data-settings-tour-disclosure="subscription-overview"] > summary']
+  },
+  {
+    chapter: 'My Subscription',
+    title: 'Plan usage',
+    body: 'See how many vault items, documents and pictures you are using, along with the total encrypted storage used by the account.',
+    section: 'subscription',
+    disclosure: 'subscription-usage',
+    selectors: ['[data-settings-tour-disclosure="subscription-usage"] > summary']
+  },
+  {
+    chapter: 'My Subscription',
+    title: 'Plan and billing options',
+    body: 'Choose a plan and payment period, or review how a change will take effect. The screen explains the price before you continue to payment.',
+    section: 'subscription',
+    disclosure: 'subscription-options',
+    selectors: ['[data-settings-tour-disclosure="subscription-options"] > summary']
+  },
+  {
+    chapter: 'My Subscription',
+    title: 'Payments, invoices and cancellation',
+    body: 'Open Stripe to update a payment method, view official invoices, or schedule a cancellation. You can also read the billing and refund terms here.',
+    section: 'subscription',
+    disclosure: 'subscription-payments',
+    selectors: ['[data-settings-tour-disclosure="subscription-payments"] > summary']
+  },
+  {
+    chapter: 'Vault Safety',
+    title: 'Current protection status',
+    body: 'This gives a plain-language answer about whether the latest vault copy is safe, waiting for backup, needs device verification or needs your attention.',
+    section: 'safety',
+    disclosure: 'safety-status',
+    selectors: ['[data-settings-tour-disclosure="safety-status"] > summary']
+  },
+  {
+    chapter: 'Vault Safety',
+    title: 'Backup and sync',
+    body: 'Back up changes from this device or check whether another verified device has a newer copy. Password-Encrypt will ask before replacing different changes.',
+    section: 'safety',
+    disclosure: 'safety-backup',
+    selectors: ['[data-settings-tour-disclosure="safety-backup"] > summary']
+  },
+  {
+    chapter: 'Vault Safety',
+    title: 'Recovery tools',
+    body: 'Check protected recovery points or clear only the encrypted local vault from this device. Clearing the local copy is an advanced action and does not delete the whole account.',
+    section: 'safety',
+    disclosure: 'safety-recovery',
+    selectors: ['[data-settings-tour-disclosure="safety-recovery"] > summary']
+  },
+  {
+    chapter: 'Push Notifications',
+    title: 'Alerts on this device',
+    body: 'Enable, disable or refresh notification status for this device. The list explains which Emergency Access and service events can produce an alert; private vault details are never included.',
+    section: 'notifications',
+    selectors: ['[data-settings-tour="notifications-content"]']
+  },
+  {
+    chapter: 'Install Password-Encrypt',
+    title: 'Install the app',
+    body: 'Use the install button when it is available. If your browser handles installation differently, the manual instructions explain where to find its Add to Home Screen or Install option.',
+    section: 'install',
+    selectors: ['[data-settings-tour="install-content"]']
+  },
+  {
+    chapter: 'Emergency Backup Codes',
+    title: 'Your one-time recovery codes',
+    body: 'Generate a set, keep it somewhere private outside the vault and replace the set if it is lost. Each code works once, and reminder emails never contain the actual codes.',
+    section: 'backup-codes',
+    selectors: ['[data-settings-tour="backup-codes-content"]']
+  },
+  {
+    chapter: 'Nominate a Trusted Person',
+    title: 'The six-stage Emergency Access flow',
+    body: 'Work through the numbered stages: choose the person, prepare what they may receive and send the invitation. The final stages stay locked until that person requests access and the waiting period finishes.',
+    section: 'emergency-nominate',
+    selectors: ['[data-settings-tour="emergency-flow"]']
+  },
+  {
+    chapter: 'Nominate a Trusted Person',
+    title: 'Event history',
+    body: 'Open this optional record to see important events in the Trusted Person flow, including their dates and times. It is useful when you need to check what happened.',
+    section: 'emergency-nominate',
+    disclosure: 'emergency-history',
+    selectors: ['[data-settings-tour-disclosure="emergency-history"] > summary']
+  },
+  {
+    chapter: 'Nominate a Trusted Person',
+    title: 'Manage or reset the flow',
+    body: 'Use these maintenance actions only when you need to resend, cancel or return the Trusted Person setup to the beginning. The available choices depend on the current stage.',
+    section: 'emergency-nominate',
+    disclosure: 'emergency-manage',
+    selectors: ['[data-settings-tour-disclosure="emergency-manage"] > summary']
+  },
+  {
+    chapter: 'Receive an Emergency Package',
+    title: 'Import a released package',
+    body: 'Enter the Import Code shown on a released package. Password-Encrypt checks that it belongs to your verified account, then stores it in a separate Emergency Package folder.',
+    section: 'emergency-receive',
+    selectors: ['[data-settings-tour="emergency-receive-content"]']
+  },
+  {
+    chapter: 'Help and support',
+    title: 'Answers whenever you need them',
+    body: 'Open a question to read the answer, use the support email if you still need help, and never send your master password or readable vault contents to anybody.',
+    section: 'faq',
+    selectors: ['[data-settings-tour="faq-content"]']
+  }
+];
+
+function guidedTourSteps(kind = 'vault') {
+  return kind === 'settings' ? SETTINGS_GUIDED_TOUR_STEPS : GUIDED_TOUR_STEPS;
+}
 function sanitiseOnboardingSignupState(value = {}) {
   const state = value && typeof value === 'object' ? value : {};
   const message = String(state.message || '').trim();
@@ -3292,10 +3558,11 @@ function ExitAppConfirmationModal({ visible, onStay, onExit }) {
   );
 }
 
-function GuidedTourOverlay({ active, stepIndex, targetFound, targetRect, onBack, onNext, onSkip }) {
+function GuidedTourOverlay({ active, kind, stepIndex, targetFound, targetRect, onBack, onNext, onSkip }) {
   if (!active) return null;
-  const step = GUIDED_TOUR_STEPS[stepIndex] || GUIDED_TOUR_STEPS[0];
-  const last = stepIndex >= GUIDED_TOUR_STEPS.length - 1;
+  const steps = guidedTourSteps(kind);
+  const step = steps[stepIndex] || steps[0];
+  const last = stepIndex >= steps.length - 1;
   const targetLow = Boolean(targetRect && typeof window !== 'undefined' && targetRect.top > window.innerHeight * 0.55);
   return createPortal(
     <div className={`guided-tour-layer ${targetLow ? 'guided-tour-card-top' : ''}`} role="dialog" aria-modal="true" aria-labelledby="guided-tour-step-title">
@@ -3303,7 +3570,7 @@ function GuidedTourOverlay({ active, stepIndex, targetFound, targetRect, onBack,
         ? <div className="guided-tour-spotlight" aria-hidden="true" style={{ top: `${targetRect.top}px`, left: `${targetRect.left}px`, width: `${targetRect.width}px`, height: `${targetRect.height}px` }} />
         : <div className="guided-tour-shade" aria-hidden="true" />}
       <section className="guided-tour-card">
-        <div className="guided-tour-progress"><span>Step {stepIndex + 1} of {GUIDED_TOUR_STEPS.length}</span><button type="button" onClick={onSkip}>Skip tour</button></div>
+        <div className="guided-tour-progress"><span>{step.chapter ? `${step.chapter} · ` : ''}Step {stepIndex + 1} of {steps.length}</span><button type="button" onClick={onSkip}>Skip tour</button></div>
         <h2 id="guided-tour-step-title">{step.title}</h2>
         <p>{step.body}</p>
         {!targetFound && <small className="guided-tour-target-note">This control is not visible at this screen size, so the guide is explaining it here instead.</small>}
@@ -3524,7 +3791,7 @@ function App() {
   const [contactVerificationReminder, setContactVerificationReminder] = useState({ visible: false, missingChannel: '' });
   const [guidedTourState, setGuidedTourState] = useState({ loaded: false, status: '', tourVersion: GUIDED_TOUR_VERSION, updatedAt: '', busy: false });
   const [guidedTourPromptOpen, setGuidedTourPromptOpen] = useState(false);
-  const [guidedTour, setGuidedTour] = useState({ active: false, stepIndex: 0, targetFound: false, targetRect: null });
+  const [guidedTour, setGuidedTour] = useState({ active: false, kind: 'vault', stepIndex: 0, targetFound: false, targetRect: null });
   const guidedTourStartupRef = useRef('');
   const guidedTourTargetRef = useRef(null);
   const [showOnboardingDetails, setShowOnboardingDetails] = useState(() => !Boolean(readStoredVault()));
@@ -7711,11 +7978,25 @@ function App() {
   }, [locked, customerSession.authenticated, customerSession.tenantId, customerSession.userId, showInstallOnboarding, onboardingInstallEntry, onboardingPushGate]);
 
   useEffect(() => {
+    if (!guidedTour.active || guidedTour.kind !== 'settings') return undefined;
+    const step = SETTINGS_GUIDED_TOUR_STEPS[guidedTour.stepIndex] || SETTINGS_GUIDED_TOUR_STEPS[0];
+    if (activePage !== 'settings') setActivePage('settings');
+    if (activeSettingsSection !== step.section) setActiveSettingsSection(step.section);
+    const timer = window.setTimeout(() => {
+      document.querySelectorAll('[data-settings-tour-disclosure]').forEach((node) => {
+        if (node instanceof HTMLDetailsElement) node.open = Boolean(step.disclosure && node.dataset.settingsTourDisclosure === step.disclosure);
+      });
+    }, 40);
+    return () => window.clearTimeout(timer);
+  }, [guidedTour.active, guidedTour.kind, guidedTour.stepIndex, activePage, activeSettingsSection]);
+
+  useEffect(() => {
     if (!guidedTour.active) {
       clearGuidedTourTarget();
       return undefined;
     }
-    const step = GUIDED_TOUR_STEPS[guidedTour.stepIndex] || GUIDED_TOUR_STEPS[0];
+    const steps = guidedTourSteps(guidedTour.kind);
+    const step = steps[guidedTour.stepIndex] || steps[0];
     let cancelled = false;
     let attempt = 0;
     let timer = null;
@@ -7734,6 +8015,7 @@ function App() {
       }
       if (target) {
         guidedTourTargetRef.current = target;
+        target.classList.add('guided-tour-target');
         const rect = target.getBoundingClientRect();
         if ((rect.top < 80 || rect.bottom > window.innerHeight - 250) && attempt < 3) {
           attempt += 1;
@@ -7766,7 +8048,7 @@ function App() {
       if (timer) window.clearTimeout(timer);
       clearGuidedTourTarget();
     };
-  }, [guidedTour.active, guidedTour.stepIndex]);
+  }, [guidedTour.active, guidedTour.kind, guidedTour.stepIndex, activePage, activeSettingsSection]);
 
   const hasActiveVaultFilter = Boolean(query.trim() || category);
   const viewedItem = viewItemId ? visibleItems.find((item) => item.id === viewItemId) : null;
@@ -9022,21 +9304,42 @@ function App() {
     setQuery('');
     setCategory('');
     setShowAllHomeFolders(false);
-    setGuidedTour({ active: true, stepIndex: 0, targetFound: false, targetRect: null });
+    setGuidedTour({ active: true, kind: 'vault', stepIndex: 0, targetFound: false, targetRect: null });
     if (manual) writeGuidedTourFallback(customerSession, { status: guidedTourState.status || 'completed', tourVersion: GUIDED_TOUR_VERSION, updatedAt: guidedTourState.updatedAt || new Date().toISOString() });
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }));
   }
 
-  async function finishGuidedTour(status = 'completed') {
+  function startSettingsGuidedTour() {
     clearGuidedTourTarget();
-    setGuidedTour({ active: false, stepIndex: 0, targetFound: false, targetRect: null });
     setGuidedTourPromptOpen(false);
+    setPushActivationPromptOpen(false);
+    setMobileHeaderMenuOpen(false);
+    setIsFolderListPopupOpen(false);
+    setHomeFolderPrompt((current) => ({ ...current, visible: false }));
+    setActivePage('settings');
+    setActiveSettingsSection('overview');
+    setGuidedTour({ active: true, kind: 'settings', stepIndex: 0, targetFound: false, targetRect: null });
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }));
+  }
+
+  async function finishGuidedTour(status = 'completed') {
+    const finishedKind = guidedTour.kind;
+    clearGuidedTourTarget();
+    setGuidedTour({ active: false, kind: finishedKind, stepIndex: 0, targetFound: false, targetRect: null });
+    setGuidedTourPromptOpen(false);
+    if (finishedKind === 'settings') {
+      setActivePage('settings');
+      setActiveSettingsSection('overview');
+      window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }));
+      if (status === 'completed') showMessage('Settings tour complete. You can run it again from Settings at any time.', 'success');
+      return;
+    }
     await saveGuidedTourStatus(status);
     if (status === 'completed') showMessage('Guided tour complete. You can run it again from Settings at any time.', 'success');
   }
 
   function nextGuidedTourStep() {
-    if (guidedTour.stepIndex >= GUIDED_TOUR_STEPS.length - 1) {
+    if (guidedTour.stepIndex >= guidedTourSteps(guidedTour.kind).length - 1) {
       finishGuidedTour('completed');
       return;
     }
@@ -12049,7 +12352,7 @@ function App() {
         <section className="settings-page settings-page-v040">
           {activeSettingsSection === 'overview' && (
             <>
-              <div className="settings-header-card settings-directory-header">
+              <div className="settings-header-card settings-directory-header" data-settings-tour="overview">
                 <p className="eyebrow">Settings</p>
                 <h2><Settings size={22} /> Your vault settings</h2>
                 <p>Choose a section to manage your account, protection, Emergency Access or help.</p>
@@ -12058,37 +12361,37 @@ function App() {
               <nav className="settings-directory" aria-label="Settings sections">
                 <section className="settings-directory-group" aria-labelledby="settings-account-group">
                   <p className="settings-directory-label" id="settings-account-group">Account and device</p>
-                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('account')}>
+                  <button type="button" className="settings-directory-row" data-settings-tour="directory-account" onClick={() => openSettingsSection('account')}>
                     <span className="settings-directory-icon"><UserRoundCheck size={22} /></span>
                     <span className="settings-directory-copy"><strong>My Account</strong><small>Contact details, plan and device verification.</small></span>
                     <span className="settings-directory-meta">{planDisplayName(bootstrap.planCode)}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
-                  <button type="button" className="settings-directory-row" onClick={openUserSettings}>
+                  <button type="button" className="settings-directory-row" data-settings-tour="directory-user-settings" onClick={openUserSettings}>
                     <span className="settings-directory-icon"><Settings size={22} /></span>
                     <span className="settings-directory-copy"><strong>User Settings</strong><small>Password reminder frequency and how dates are displayed.</small></span>
                     <span className="settings-directory-meta">{userSettings.neverForcePasswordAgain ? 'Password reminder off' : `${userSettings.secureDeviceUnlockCount} opens`}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
-                  <button type="button" className="settings-directory-row" onClick={openSubscriptionSettings}>
+                  <button type="button" className="settings-directory-row" data-settings-tour="directory-subscription" onClick={openSubscriptionSettings}>
                     <span className="settings-directory-icon"><CreditCard size={22} /></span>
                     <span className="settings-directory-copy"><strong>My Subscription</strong><small>Choose billing, manage payments and view renewal status.</small></span>
                     <span className={`settings-directory-state ${['past_due', 'unpaid'].includes(String(billing.subscription?.status || '').toLowerCase()) ? 'attention' : 'safe'}`}>{isFounderPlan(bootstrap) ? 'Founder' : subscriptionLifecycleLabel(billing.subscription || customerSession.subscription, bootstrap)}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
-                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('safety')}>
+                  <button type="button" className="settings-directory-row" data-settings-tour="directory-safety" onClick={() => openSettingsSection('safety')}>
                     <span className="settings-directory-icon"><ShieldCheck size={22} /></span>
                     <span className="settings-directory-copy"><strong>Vault Safety</strong><small>Backup, syncing, device protection and recovery.</small></span>
                     <span className={`settings-directory-state ${!featureIncluded('cloudBackupSync') ? '' : vaultVerificationRequired || vaultSessionCheckFailed || vaultCloudAccessPaused || syncSafety.conflict || syncSafety.pending ? 'attention' : 'safe'}`}>{!featureIncluded('cloudBackupSync') ? 'Local only' : vaultSessionCheckFailed ? 'Check needed' : vaultVerificationRequired ? 'Verify device' : vaultCloudAccessPaused ? 'Cloud paused' : syncSafety.conflict ? 'Review' : syncSafety.pending ? 'Action needed' : syncSafety.state === 'unknown' ? 'Check' : 'Up to date'}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
-                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('notifications')}>
+                  <button type="button" className="settings-directory-row" data-settings-tour="directory-notifications" onClick={() => openSettingsSection('notifications')}>
                     <span className="settings-directory-icon"><Bell size={22} /></span>
                     <span className="settings-directory-copy"><strong>Push Notifications</strong><small>Emergency Access alerts and important Password-Encrypt updates.</small></span>
                     <span className={`settings-directory-state ${pushNotifications.enabledThisDevice ? 'safe' : pushNotifications.permission === 'denied' ? 'attention' : ''}`}>{pushNotifications.enabledThisDevice ? 'Active' : pushNotifications.permission === 'denied' ? 'Blocked' : 'Off'}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
-                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('install')}>
+                  <button type="button" className="settings-directory-row" data-settings-tour="directory-install" onClick={() => openSettingsSection('install')}>
                     <span className="settings-directory-icon"><MonitorSmartphone size={22} /></span>
                     <span className="settings-directory-copy"><strong>Install Password-Encrypt</strong><small>Install or retry adding Password-Encrypt as an app on this device.</small></span>
                     <span className={`settings-directory-state ${isPasswordEncryptInstalled() ? 'safe' : installPromptReady ? 'safe' : ''}`}>{isPasswordEncryptInstalled() ? 'Installed' : installPromptReady ? 'Ready' : 'Available'}</span>
@@ -12098,18 +12401,18 @@ function App() {
 
                 <section className="settings-directory-group" aria-labelledby="settings-protection-group">
                   <p className="settings-directory-label" id="settings-protection-group">Protection and recovery</p>
-                  <button type="button" className="settings-directory-row" onClick={openEmergencyBackupCodesSettings}>
+                  <button type="button" className="settings-directory-row" data-settings-tour="directory-backup-codes" onClick={openEmergencyBackupCodesSettings}>
                     <span className="settings-directory-icon"><KeyRound size={22} /></span>
                     <span className="settings-directory-copy"><strong>Emergency Backup Codes</strong><small>Generate one-time recovery codes for a forgotten master password.</small></span>
                     <span className={`settings-directory-state ${!emergencyBackupCodes.loaded ? '' : emergencyBackupCodes.configured ? 'safe' : 'attention'}`}>{!emergencyBackupCodes.loaded ? 'Checking…' : emergencyBackupCodes.configured ? `${emergencyBackupCodes.activeCount} unused` : 'Set up'}</span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
-                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('emergency-nominate')}>
+                  <button type="button" className="settings-directory-row" data-settings-tour="directory-emergency-nominate" onClick={() => openSettingsSection('emergency-nominate')}>
                     <span className="settings-directory-icon"><UsersRound size={22} /></span>
                     <span className="settings-directory-copy"><strong>Nominate a Trusted Person</strong><small>Set up Emergency Access for someone you trust.</small></span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
-                  <button type="button" className="settings-directory-row" onClick={() => openSettingsSection('emergency-receive')}>
+                  <button type="button" className="settings-directory-row" data-settings-tour="directory-emergency-receive" onClick={() => openSettingsSection('emergency-receive')}>
                     <span className="settings-directory-icon"><KeyRound size={22} /></span>
                     <span className="settings-directory-copy"><strong>Receive an Emergency Package</strong><small>Open Emergency Access information released to you.</small></span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
@@ -12118,12 +12421,17 @@ function App() {
 
                 <section className="settings-directory-group" aria-labelledby="settings-help-group">
                   <p className="settings-directory-label" id="settings-help-group">Help and support</p>
+                  <button type="button" className="settings-directory-row" data-settings-tour="directory-settings-tour" onClick={startSettingsGuidedTour}>
+                    <span className="settings-directory-icon"><Settings size={22} /></span>
+                    <span className="settings-directory-copy"><strong>Take the Settings tour</strong><small>Learn what every Settings section and its controls are for.</small></span>
+                    <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
+                  </button>
                   <button type="button" className="settings-directory-row" onClick={() => startGuidedTour({ manual: true })}>
                     <span className="settings-directory-icon"><Sparkles size={22} /></span>
                     <span className="settings-directory-copy"><strong>Take the guided tour</strong><small>Walk through Home folders, the folder three-dot button, adding items, Vault Status and Settings.</small></span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
                   </button>
-                  <button type="button" className="settings-directory-row" onClick={openFaqSettings}>
+                  <button type="button" className="settings-directory-row" data-settings-tour="directory-faq" onClick={openFaqSettings}>
                     <span className="settings-directory-icon"><CircleHelp size={22} /></span>
                     <span className="settings-directory-copy"><strong>Help & FAQs</strong><small>Guidance for vault access, backups, devices and support.</small></span>
                     <ChevronRight size={21} className="settings-directory-chevron" aria-hidden="true" />
@@ -12147,7 +12455,7 @@ function App() {
                 <p>Choose how often this device asks for your master password and how dates are shown inside your vault.</p>
               </div>
 
-              <section className="settings-inner-card user-settings-card">
+              <section className="settings-inner-card user-settings-card" data-settings-tour="user-password-reminder">
                 <div className="user-settings-card-heading"><KeyRound size={20} /><div><strong>Master password reminder</strong><small>These controls apply to Secure device unlock on this device.</small></div></div>
                 <label className="user-settings-number-field">
                   <span><strong>Vault opens before password is required</strong><small>Default: 10 secure-device opens.</small></span>
@@ -12159,7 +12467,7 @@ function App() {
                 </label>
               </section>
 
-              <section className="settings-inner-card user-settings-card">
+              <section className="settings-inner-card user-settings-card" data-settings-tour="user-date-format">
                 <div className="user-settings-card-heading"><CalendarClock size={20} /><div><strong>User Data Format</strong><small>Reference date: 5th June 2026</small></div></div>
                 <div className="user-date-format-options" role="radiogroup" aria-label="Date format">
                   {[
@@ -12188,7 +12496,7 @@ function App() {
               </div>
 
               <div className="settings-drilldown-stack">
-                <details className="settings-drilldown">
+                <details className="settings-drilldown" data-settings-tour-disclosure="account-overview">
                   <summary><span className="settings-directory-icon"><UsersRound size={21} /></span><span className="settings-directory-copy"><strong>Account overview</strong><small>Plan, account status and verification summary.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <section className="saas-account-card settings-inner-card">
@@ -12219,7 +12527,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown">
+                <details className="settings-drilldown" data-settings-tour-disclosure="account-contacts">
                   <summary><span className="settings-directory-icon"><Mail size={21} /></span><span className="settings-directory-copy"><strong>Contact details & recovery</strong><small>Email recovery plus the mobile contact number saved on your account.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <section className="account-contact-card settings-inner-card">
@@ -12234,7 +12542,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown">
+                <details className="settings-drilldown" data-settings-tour-disclosure="account-devices">
                   <summary><span className="settings-directory-icon"><MonitorSmartphone size={21} /></span><span className="settings-directory-copy"><strong>Devices & sessions</strong><small>Verify this device, review active devices and manage sessions.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <div className={`secure-session-card ${customerSession.authenticated ? 'active' : 'inactive'}`}>
@@ -12260,7 +12568,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown">
+                <details className="settings-drilldown" data-settings-tour-disclosure="account-profile">
                   <summary><span className="settings-directory-icon"><UserRoundCheck size={21} /></span><span className="settings-directory-copy"><strong>Profile & personal information</strong><small>Update names, download account information and manage account-wide sessions.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <form className="bootstrap-grid settings-inner-card account-name-form" onSubmit={bootstrapAdmin}>
@@ -12279,7 +12587,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown settings-drilldown-danger">
+                <details className="settings-drilldown settings-drilldown-danger" data-settings-tour-disclosure="account-delete">
                   <summary><span className="settings-directory-icon"><Trash2 size={21} /></span><span className="settings-directory-copy"><strong>Delete account</strong><small>Request or cancel permanent account deletion.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <section className={`account-deletion-card settings-inner-card ${accountSecurity.deletion?.status === 'pending' ? 'pending' : ''}`}>
@@ -12296,7 +12604,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown">
+                <details className="settings-drilldown" data-settings-tour-disclosure="account-secure-unlock">
                   <summary><span className="settings-directory-icon"><KeyRound size={21} /></span><span className="settings-directory-copy"><strong>Secure device unlock</strong><small>Manage quick unlock on this device and understand the master-password boundary.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <div className="master-password-boundary-note"><Lock size={20} /><span><strong>Account recovery does not reset the master password</strong><small>It restores the account, subscription and verified-device access only. Support cannot supply or reset the vault encryption secret. If you generated Emergency Backup Codes beforehand, use one from the locked screen; Secure device unlock may also provide local access on a configured device.</small></span></div>
@@ -12330,7 +12638,7 @@ function App() {
                 <h3><MonitorSmartphone size={20} /> Install Password-Encrypt</h3>
                 <p>Install or retry adding Password-Encrypt to this device for quicker everyday access.</p>
               </div>
-              <section className="settings-inner-card install-app-settings-card">
+              <section className="settings-inner-card install-app-settings-card" data-settings-tour="install-content">
                 <div className={`onboarding-info-panel ${isPasswordEncryptInstalled() ? 'success' : ''}`}>
                   {isPasswordEncryptInstalled() ? <Check size={19} /> : installStatus === 'prompting' ? <RefreshCw size={19} className="spin-icon" /> : <Download size={19} />}
                   <span>{installMessage || passwordEncryptInstallInstructions()}</span>
@@ -12349,7 +12657,7 @@ function App() {
                 <p>Receive timely Password-Encrypt alerts even when the app is not open. Email alerts continue to work alongside push notifications.</p>
               </div>
 
-              <section className={`push-status-card ${pushNotifications.enabledThisDevice ? 'active' : pushNotifications.permission === 'denied' ? 'blocked' : ''}`}>
+              <section className={`push-status-card ${pushNotifications.enabledThisDevice ? 'active' : pushNotifications.permission === 'denied' ? 'blocked' : ''}`} data-settings-tour="notifications-content">
                 <div className="push-status-main">
                   <span className="push-status-icon"><Bell size={22} /></span>
                   <div>
@@ -12403,7 +12711,7 @@ function App() {
                 const usedPictures = Number(entitlements?.usage?.pictures || 0);
                 const usedStorageMb = Number(entitlements?.usage?.storageMb || 0);
                 return <div className="settings-drilldown-stack">
-                  <details className="settings-drilldown" open>
+                  <details className="settings-drilldown" data-settings-tour-disclosure="subscription-overview" open>
                     <summary><span className="settings-directory-icon"><ShieldCheck size={21} /></span><span className="settings-directory-copy"><strong>Subscription overview</strong><small>Founder access and current account usage.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                       <section className="subscription-founder-card settings-inner-card founder-subscription-overview">
@@ -12445,7 +12753,7 @@ function App() {
                 const hasTrialHistory = Boolean(bootstrap.trialStartedAt || bootstrap.trialEndsAt || currentSubscription?.trialStartedAt || currentSubscription?.trialEndsAt || String(currentSubscription?.status || bootstrap.planStatus || '').toLowerCase().includes('trial'));
                 const canRequestTrialExtension = hasTrialHistory && !['subscription_active', 'cancellation_scheduled'].includes(lifecycleState);
                 return <div className="settings-drilldown-stack">
-                  <details className="settings-drilldown">
+                  <details className="settings-drilldown" data-settings-tour-disclosure="subscription-overview">
                     <summary><span className="settings-directory-icon"><ShieldCheck size={21} /></span><span className="settings-directory-copy"><strong>Subscription overview</strong><small>Current plan, renewal date and payment status.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                   <section className={`subscription-status-card subscription-lifecycle-card settings-inner-card state-${lifecycleState}`}>
@@ -12480,7 +12788,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className="settings-drilldown">
+                  <details className="settings-drilldown" data-settings-tour-disclosure="subscription-usage">
                     <summary><span className="settings-directory-icon"><Database size={21} /></span><span className="settings-directory-copy"><strong>Plan usage</strong><small>Vault items, encrypted documents, pictures and total account storage.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                   <section className="plan-usage-card settings-inner-card" aria-label="Plan usage">
@@ -12511,7 +12819,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className="settings-drilldown">
+                  <details className="settings-drilldown" data-settings-tour-disclosure="subscription-options">
                     <summary><span className="settings-directory-icon"><CreditCard size={21} /></span><span className="settings-directory-copy"><strong>Plan & billing options</strong><small>Choose a plan, billing period or review a subscription change.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                   <section className="subscription-chooser subscription-change-card settings-inner-card">
@@ -12545,7 +12853,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className="settings-drilldown">
+                  <details className="settings-drilldown" data-settings-tour-disclosure="subscription-payments">
                     <summary><span className="settings-directory-icon"><FileText size={21} /></span><span className="settings-directory-copy"><strong>Payments, invoices & cancellation</strong><small>Stripe portal, invoice history, billing terms and cancellation controls.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                   {stripeSubscriptionExists && <details className="subscription-disclosure subscription-management-disclosure settings-inner-card">
@@ -12599,9 +12907,9 @@ function App() {
               </div>
 
               {!emergencyBackupCodes.loaded || emergencyBackupCodes.loading ? (
-                <section className="settings-inner-card emergency-backup-compact-card"><div className="user-settings-card-heading"><RefreshCw size={20} className="spin-icon" /><div><strong>Checking your recovery status</strong><small>This should only take a moment.</small></div></div></section>
+                <section className="settings-inner-card emergency-backup-compact-card" data-settings-tour="backup-codes-content"><div className="user-settings-card-heading"><RefreshCw size={20} className="spin-icon" /><div><strong>Checking your recovery status</strong><small>This should only take a moment.</small></div></div></section>
               ) : emergencyBackupCodes.configured ? (
-                <section className="settings-inner-card emergency-backup-compact-card">
+                <section className="settings-inner-card emergency-backup-compact-card" data-settings-tour="backup-codes-content">
                   <div className="emergency-backup-compact-status">
                     <span><strong>Current set</strong>{emergencyBackupCodes.generatedAt ? formatAppDate(emergencyBackupCodes.generatedAt, true, '—', userSettings.dateFormat) : 'Ready'}</span>
                     <span><strong>Reminder emails</strong>{emergencyBackupCodes.remindersEnabled ? `Every ${emergencyBackupCodes.reminderDays || 90} days` : 'Off'}</span>
@@ -12617,7 +12925,7 @@ function App() {
                   {emergencyBackupCodes.message && <p className="emergency-backup-status-message">{emergencyBackupCodes.message}</p>}
                 </section>
               ) : (
-                <section className="settings-inner-card emergency-backup-setup-card">
+                <section className="settings-inner-card emergency-backup-setup-card" data-settings-tour="backup-codes-content">
                   <div className="user-settings-card-heading"><ShieldCheck size={20} /><div><strong>Create 10 one-time recovery codes</strong><small>Save them outside Password-Encrypt. A code can recover access after your verified email is confirmed.</small></div></div>
                   <div className="emergency-backup-code-warning"><AlertTriangle size={18} /><span><strong>Keep the codes private</strong><small>Password-Encrypt cannot show the same readable set again later. If you lose them, generate a new set while your vault is open.</small></span></div>
                   <button type="button" className="primary-button" onClick={generateEmergencyBackupCodes} disabled={emergencyBackupCodes.loading}>{emergencyBackupCodes.loading ? <RefreshCw size={17} className="spin-icon" /> : <KeyRound size={17} />} Generate backup codes</button>
@@ -12663,7 +12971,7 @@ function App() {
                 </div>
               )}
 
-              <button type="button" className={`emergency-current-stage-card emergency-current-stage-glance emergency-current-stage-button ${emergencyInvitationAccepted ? 'ready' : ''}`} aria-label={`Current setup progress. Stage ${emergencySetupStageNumber} of 4. ${emergencySetupProgress.title}. Tap to go to this stage.`} onClick={() => goToEmergencySetupStage(emergencySetupStageNumber)}>
+              <button type="button" className={`emergency-current-stage-card emergency-current-stage-glance emergency-current-stage-button ${emergencyInvitationAccepted ? 'ready' : ''}`} data-settings-tour="emergency-flow" aria-label={`Current setup progress. Stage ${emergencySetupStageNumber} of 4. ${emergencySetupProgress.title}. Tap to go to this stage.`} onClick={() => goToEmergencySetupStage(emergencySetupStageNumber)}>
                 <div className="emergency-current-progress-meta">
                   <span className="emergency-current-progress-label">Current progress</span>
                   <span className="emergency-current-stage-step">Stage {emergencySetupStageNumber} of 4 setup</span>
@@ -12804,7 +13112,7 @@ function App() {
                 {emergencyInviteState.message && <div className="emergency-flow-latest-message"><strong>Latest update</strong><span>{emergencyInviteState.message}</span></div>}
 
                 <div className="settings-drilldown-stack emergency-flow-secondary-tools">
-                  <details className="settings-drilldown" onToggle={(event) => { if (event.currentTarget.open && emergencyDraft.invitationId) checkEmergencyInvitationStatus({ silent: true }); }}>
+                  <details className="settings-drilldown" data-settings-tour-disclosure="emergency-history" onToggle={(event) => { if (event.currentTarget.open && emergencyDraft.invitationId) checkEmergencyInvitationStatus({ silent: true }); }}>
                     <summary><span className="settings-directory-icon"><FileText size={21} /></span><span className="settings-directory-copy"><strong>Event history</strong><small>Optional audit of this Trusted Person flow with dates and times.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                       <div className="emergency-flow-audit-list">
@@ -12814,7 +13122,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className="settings-drilldown emergency-flow-manage">
+                  <details className="settings-drilldown emergency-flow-manage" data-settings-tour-disclosure="emergency-manage">
                     <summary><span className="settings-directory-icon"><Settings size={21} /></span><span className="settings-directory-copy"><strong>Manage or reset this flow</strong><small>Use this only for maintenance actions such as returning the entire Trusted Person flow to zero.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                     <div className="settings-drilldown-content">
                       {emergencyManagementOptions.length ? <div className="emergency-action-select-row"><CustomSelect value="" placeholder="Manage flow" ariaLabel="Manage Trusted Person flow" className="emergency-flow-action-select" menuClassName="emergency-flow-action-menu" options={emergencyManagementOptions} onChange={runEmergencyFlowAction} disabled={emergencyInviteState.status === 'resetting'} /></div> : <p className="emergency-flow-audit-empty">There are no flow maintenance actions available yet.</p>}
@@ -12837,7 +13145,7 @@ function App() {
                   </div>
                 </div>
 
-                <section className="settings-inner-card emergency-received-settings-card" aria-label="Import Emergency Package">
+                <section className="settings-inner-card emergency-received-settings-card" aria-label="Import Emergency Package" data-settings-tour="emergency-receive-content">
                   <div className="emergency-received-settings-header">
                     <span className="emergency-received-settings-icon"><KeyRound size={21} /></span>
                     <div><strong>Import Emergency Package</strong><small>Enter the Import Code from a released Emergency Package to add it securely to this vault.</small></div>
@@ -12869,7 +13177,7 @@ function App() {
               {!featureIncluded('cloudBackupSync') && <div className="plan-feature-unavailable"><Cloud size={21} /><span><strong>Cloud backup and sync are not included</strong><small>Your encrypted vault remains available on this device. Cross-device refresh, cloud recovery points and automatic backup require an upgrade or Admin override.</small></span><button type="button" className="secondary-button" onClick={() => showEntitlementUpgrade('cloudBackupSync')}>Review plan</button></div>}
 
               <div className="settings-drilldown-stack">
-                <details className="settings-drilldown">
+                <details className="settings-drilldown" data-settings-tour-disclosure="safety-status">
                   <summary><span className="settings-directory-icon"><ShieldCheck size={21} /></span><span className="settings-directory-copy"><strong>Current protection status</strong><small>See whether the latest vault copy is protected and up to date.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <div className={`vault-safety-status-card ${!featureIncluded('cloudBackupSync') ? 'plan-local-only' : vaultVerificationRequired || vaultSessionCheckFailed || vaultCloudAccessPaused ? 'pending' : syncSafety.conflict ? 'conflict' : syncSafety.pending ? 'pending' : syncSafety.state === 'unknown' ? 'unknown' : 'safe'}`}>
@@ -12884,7 +13192,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown">
+                <details className="settings-drilldown" data-settings-tour-disclosure="safety-backup">
                   <summary><span className="settings-directory-icon"><Cloud size={21} /></span><span className="settings-directory-copy"><strong>Backup & sync</strong><small>Protect local changes and check for changes from another verified device.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <div className="vault-safety-action-grid">
@@ -12900,7 +13208,7 @@ function App() {
                   </div>
                 </details>
 
-                <details className="settings-drilldown">
+                <details className="settings-drilldown" data-settings-tour-disclosure="safety-recovery">
                   <summary><span className="settings-directory-icon"><Database size={21} /></span><span className="settings-directory-copy"><strong>Recovery tools</strong><small>Review recovery points or clear the encrypted local vault on this device.</small></span><ChevronRight size={21} className="settings-directory-chevron" /></summary>
                   <div className="settings-drilldown-content">
               <div className="advanced-recovery-card settings-inner-card">
@@ -12917,7 +13225,7 @@ function App() {
 
           {activeSettingsSection === 'faq' && (
             <section className="settings-section-panel settings-faq-panel" aria-label="Frequently asked questions">
-              <div className="settings-faq-hero">
+              <div className="settings-faq-hero" data-settings-tour="faq-content">
                 <div className="settings-faq-hero-icon"><CircleHelp size={28} /></div>
                 <div>
                   <p className="eyebrow">Help centre</p>
@@ -13325,6 +13633,7 @@ function App() {
 
       <GuidedTourOverlay
         active={guidedTour.active}
+        kind={guidedTour.kind}
         stepIndex={guidedTour.stepIndex}
         targetFound={guidedTour.targetFound}
         targetRect={guidedTour.targetRect}
