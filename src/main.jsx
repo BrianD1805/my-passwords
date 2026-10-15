@@ -9,7 +9,7 @@ import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.029.01';
+const VERSION = 'Password-Encrypt Ver-1.029.02';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3563,13 +3563,15 @@ function GuidedTourOverlay({ active, kind, stepIndex, targetFound, targetRect, o
   const steps = guidedTourSteps(kind);
   const step = steps[stepIndex] || steps[0];
   const last = stepIndex >= steps.length - 1;
-  const targetLow = Boolean(targetRect && typeof window !== 'undefined' && targetRect.top > window.innerHeight * 0.55);
+  const hasPositionedTarget = Boolean(targetFound && targetRect && typeof window !== 'undefined');
+  const cardGap = typeof window !== 'undefined' && window.innerWidth <= 860 ? 18 : 24;
+  const cardTop = hasPositionedTarget ? Math.round(targetRect.top + targetRect.height + cardGap) : null;
   return createPortal(
-    <div className={`guided-tour-layer ${targetLow ? 'guided-tour-card-top' : ''}`} role="dialog" aria-modal="true" aria-labelledby="guided-tour-step-title">
+    <div className={`guided-tour-layer ${hasPositionedTarget ? 'guided-tour-target-layout' : ''}`} role="dialog" aria-modal="true" aria-labelledby="guided-tour-step-title">
       {targetFound && targetRect
         ? <div className="guided-tour-spotlight" aria-hidden="true" style={{ top: `${targetRect.top}px`, left: `${targetRect.left}px`, width: `${targetRect.width}px`, height: `${targetRect.height}px` }} />
         : <div className="guided-tour-shade" aria-hidden="true" />}
-      <section className="guided-tour-card">
+      <section className="guided-tour-card" style={hasPositionedTarget ? { '--guided-tour-card-top': `${cardTop}px` } : undefined}>
         <div className="guided-tour-progress"><span>{step.chapter ? `${step.chapter} · ` : ''}Step {stepIndex + 1} of {steps.length}</span><button type="button" onClick={onSkip}>Skip tour</button></div>
         <h2 id="guided-tour-step-title">{step.title}</h2>
         <p>{step.body}</p>
@@ -7995,6 +7997,7 @@ function App() {
       clearGuidedTourTarget();
       return undefined;
     }
+    document.body.classList.add('guided-tour-active');
     const steps = guidedTourSteps(guidedTour.kind);
     const step = steps[guidedTour.stepIndex] || steps[0];
     let cancelled = false;
@@ -8016,10 +8019,14 @@ function App() {
       if (target) {
         guidedTourTargetRef.current = target;
         const rect = target.getBoundingClientRect();
-        if ((rect.top < 80 || rect.bottom > window.innerHeight - 250) && attempt < 3) {
+        const preferredTargetTop = window.innerWidth <= 860 ? 70 : 88;
+        const targetNeedsPositioning = rect.top < preferredTargetTop - 12
+          || rect.top > preferredTargetTop + 36
+          || rect.bottom > window.innerHeight * 0.48;
+        if (targetNeedsPositioning && attempt < 4) {
           attempt += 1;
-          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          timer = window.setTimeout(locate, 220);
+          window.scrollBy({ top: rect.top - preferredTargetTop, left: 0, behavior: 'smooth' });
+          timer = window.setTimeout(locate, 260);
           return;
         }
         setGuidedTour((current) => current.active && current.stepIndex === guidedTour.stepIndex ? {
@@ -8045,6 +8052,7 @@ function App() {
     return () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
+      document.body.classList.remove('guided-tour-active');
       clearGuidedTourTarget();
     };
   }, [guidedTour.active, guidedTour.kind, guidedTour.stepIndex, activePage, activeSettingsSection]);

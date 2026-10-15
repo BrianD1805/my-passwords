@@ -19233,6 +19233,23 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   gap: 11px;
 }
 
+.guided-tour-layer.guided-tour-target-layout {
+  align-items: flex-start;
+  padding: 0;
+}
+
+.guided-tour-target-layout .guided-tour-card {
+  position: fixed;
+  top: var(--guided-tour-card-top);
+  max-height: calc(100dvh - var(--guided-tour-card-top) - 18px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+body.guided-tour-active #root {
+  padding-bottom: min(55vh, 520px);
+}
+
 .guided-tour-card h2,
 .guided-tour-card p,
 .guided-tour-card small {
@@ -19345,6 +19362,11 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
     padding: 16px;
   }
 
+  .guided-tour-target-layout .guided-tour-card {
+    width: calc(100vw - 28px);
+    max-height: calc(100dvh - var(--guided-tour-card-top) - 12px);
+  }
+
   .guided-tour-welcome-footer .secondary-button,
   .guided-tour-welcome-footer .primary-button {
     flex: 1 1 140px;
@@ -19359,10 +19381,6 @@ details.emergency-flow-stage-editor.completed > .emergency-flow-stage-content {
   box-shadow: 0 0 0 9999px rgba(11,24,38,0.5), 0 0 0 6px rgba(49,93,126,0.58);
   pointer-events: none;
   transition: top 180ms ease, left 180ms ease, width 180ms ease, height 180ms ease;
-}
-
-.guided-tour-layer.guided-tour-card-top {
-  align-items: flex-start;
 }
 
 .guided-tour-target {

@@ -1,0 +1,35 @@
+Password-Encrypt Ver-1.029.02 verification
+Date: 2026-10-15 (Africa/Nairobi)
+
+PASS  npm run build
+PASS  npm run security:check (13/13)
+PASS  npm run reliability:check (20/20)
+PASS  npm run legal:check (35/35)
+PASS  npm run ux:check (36/36)
+PASS  npm run mobile:check (6/6)
+PASS  npm run emergency:check (75/75)
+PASS  npm run onboarding:check (68/68)
+PASS  npm run push:check (32/32)
+PASS  npm run sync-retry:check (10/10)
+PASS  npm run device-refresh:check (7/7)
+PASS  npm run settings-tour:check (13/13)
+PASS  npm run feature:check (19/19)
+PASS  node syntax checks
+PASS  git diff --check
+
+Total scripted checks: 334 passed, 0 failed.
+
+Ver-1.029.02 regression coverage confirms:
+- highlighted controls are moved into the upper viewport instead of centred;
+- the explanation card begins below the measured highlight with a responsive gap;
+- the explanation card remains usable within short desktop and mobile viewports;
+- temporary tour-only scrolling room is removed when the tour closes;
+- the Ver-1.029.01 spotlight and English introduction corrections remain intact;
+- the full Ver-1.029 Settings tour remains intact;
+- Ver-1.027 retry protection and Ver-1.028 secure-device refresh handling remain intact.
+
+Build notes:
+- Vite reported the existing advisory that the main minified JavaScript chunk
+  is larger than 500 kB. The production build completed successfully.
+- No Supabase SQL migration is required for Ver-1.029.02.
+- No Git commit or push was performed.

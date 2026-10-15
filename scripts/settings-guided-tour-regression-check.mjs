@@ -126,6 +126,23 @@ check('Settings introduction describes the English tour without language claims'
   assert.equal(/everyday language|all languages/i.test(settingsSteps.slice(0, settingsSteps.indexOf("title: 'My Account'"))), false);
 });
 
+check('highlighted target is deliberately moved into the upper viewport', () => {
+  const locatorStart = main.indexOf('const preferredTargetTop = window.innerWidth <= 860 ? 70 : 88');
+  const locator = main.slice(locatorStart - 500, locatorStart + 900);
+  assert.match(main, /const preferredTargetTop = window\.innerWidth <= 860 \? 70 : 88/);
+  assert.match(main, /window\.scrollBy\(\{ top: rect\.top - preferredTargetTop, left: 0, behavior: 'smooth' \}\)/);
+  assert.equal(locator.includes("block: 'center'"), false);
+  assert.match(styles, /body\.guided-tour-active #root\s*\{[\s\S]*?padding-bottom:/);
+});
+
+check('explanation card is measured below the highlight on desktop and mobile', () => {
+  assert.match(main, /targetRect\.top \+ targetRect\.height \+ cardGap/);
+  assert.match(main, /cardGap = typeof window !== 'undefined' && window\.innerWidth <= 860 \? 18 : 24/);
+  assert.match(styles, /\.guided-tour-target-layout \.guided-tour-card\s*\{[\s\S]*?top: var\(--guided-tour-card-top\)/);
+  assert.match(styles, /max-height: calc\(100dvh - var\(--guided-tour-card-top\) - 12px\)/);
+  assert.equal(styles.includes('.guided-tour-layer.guided-tour-card-top'), false);
+});
+
 const failed = checks.filter((item) => !item.pass);
 for (const item of checks) {
   console.log(`${item.pass ? 'PASS' : 'FAIL'}  ${item.name}`);
