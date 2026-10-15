@@ -115,6 +115,17 @@ check('existing guided-tour look, navigation and mobile fallback are reused', ()
   assert.match(styles, /\.guided-tour-spotlight\s*\{/);
 });
 
+check('highlight uses one even outline instead of overlapping target rings', () => {
+  assert.equal(main.includes("target.classList.add('guided-tour-target')"), false);
+  assert.match(styles, /\.guided-tour-spotlight\s*\{[\s\S]*?border:\s*2px solid rgba\(255,255,255,0\.94\)/);
+  assert.match(styles, /0 0 0 6px rgba\(49,93,126,0\.58\)/);
+});
+
+check('Settings introduction describes the English tour without language claims', () => {
+  assert.match(settingsSteps, /This tour clearly explains every Settings section\./);
+  assert.equal(/everyday language|all languages/i.test(settingsSteps.slice(0, settingsSteps.indexOf("title: 'My Account'"))), false);
+});
+
 const failed = checks.filter((item) => !item.pass);
 for (const item of checks) {
   console.log(`${item.pass ? 'PASS' : 'FAIL'}  ${item.name}`);

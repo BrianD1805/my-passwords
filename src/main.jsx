@@ -9,7 +9,7 @@ import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.029';
+const VERSION = 'Password-Encrypt Ver-1.029.01';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -97,7 +97,7 @@ const SETTINGS_GUIDED_TOUR_STEPS = [
   {
     chapter: 'Settings overview',
     title: 'Your Settings guide',
-    body: 'This tour explains every Settings section in everyday language. It will then open each section and show what the controls inside are for. Nothing is changed while you take the tour.',
+    body: 'This tour clearly explains every Settings section. It will then open each section and show what the controls inside are for. Nothing is changed while you take the tour.',
     section: 'overview',
     selectors: ['[data-settings-tour="overview"]']
   },
@@ -8015,7 +8015,6 @@ function App() {
       }
       if (target) {
         guidedTourTargetRef.current = target;
-        target.classList.add('guided-tour-target');
         const rect = target.getBoundingClientRect();
         if ((rect.top < 80 || rect.bottom > window.innerHeight - 250) && attempt < 3) {
           attempt += 1;

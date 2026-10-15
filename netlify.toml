@@ -55,7 +55,7 @@
 [functions."emergency-backup-code-reminder-process"]
   schedule = "45 7 * * *"
 
-# Ver-1.029 retains the scheduled-usage reductions and bounded backup retries.
+# Ver-1.029.01 retains the scheduled-usage reductions and bounded backup retries.
 [functions."operations-health-check"]
   schedule = "*/30 * * * *"
 
