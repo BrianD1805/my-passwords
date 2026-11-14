@@ -20817,9 +20817,8 @@ body.guided-tour-active #root {
 
 /* Password-Encrypt Ver-1.024.02 — Welcome-email gating, deterministic Settings drill-down top, differentiated Emergency Access directory headers. */
 
-/* Password-Encrypt Ver-1.030.08 — keep the card itself fixed. Its body and the
-   checklist list are the intentional scroll areas; allowing the card to scroll
-   created a third competing mobile scroll container. */
+/* Password-Encrypt Ver-1.030.09 — the popup body is the only scroll surface.
+   Checklist rows are normal body content instead of a nested data panel. */
 .item-popup-card,
 .item-form.item-popup-card {
   overflow-x: hidden !important;
@@ -20827,19 +20826,17 @@ body.guided-tour-active #root {
   overscroll-behavior: contain;
 }
 
-/* Password-Encrypt Ver-1.030.06 — the checklist rows, not the surrounding
-   popup, are the dedicated data-panel scroll area. */
-.checklist-lines-scroll {
-  min-height: 0;
-  max-height: min(46vh, 430px);
-  display: grid;
-  gap: 6px;
-  overflow-x: hidden;
+.view-item-popup-card .view-item-popup-body {
   overflow-y: auto;
-  overscroll-behavior-y: contain;
-  scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
-  padding-right: 4px;
+  touch-action: pan-y;
+}
+
+.view-item-popup-card .checklist-display {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .checklist-display.is-readonly .checklist-line {
@@ -20847,22 +20844,17 @@ body.guided-tour-active #root {
 }
 
 @media (max-width: 860px) {
-  .checklist-lines-scroll {
-    max-height: min(52dvh, 440px);
-    padding-right: 2px;
-  }
-
-  /* Ver-1.030.08 — unselected rows are entirely native scroll surfaces.
-     Only a row already selected by long press becomes a drag surface. */
-  .checklist-lines-scroll,
-  .checklist-lines-scroll .checklist-line,
-  .checklist-lines-scroll .checklist-line-toggle {
+  /* Override the older mobile row rule: a swipe beginning anywhere on an
+     unselected checklist row scrolls the single popup body normally. */
+  .view-item-popup-card .checklist-display,
+  .view-item-popup-card .checklist-line,
+  .view-item-popup-card .checklist-line-toggle {
     touch-action: pan-y !important;
   }
 
-  .checklist-lines-scroll .checklist-line.is-selected,
-  .checklist-lines-scroll .checklist-line.is-selected .checklist-line-toggle,
-  .checklist-lines-scroll .checklist-line.is-selected .checklist-line-delete {
+  .view-item-popup-card .checklist-line.is-selected,
+  .view-item-popup-card .checklist-line.is-selected .checklist-line-toggle,
+  .view-item-popup-card .checklist-line.is-selected .checklist-line-delete {
     touch-action: none !important;
   }
 }

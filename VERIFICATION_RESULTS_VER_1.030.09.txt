@@ -1,0 +1,46 @@
+Password-Encrypt Ver-1.030.09 verification
+==========================================
+
+Production build: PASS
+
+Automated checks:
+- Security: 13/13 PASS
+- Reliability: 20/20 PASS
+- Legal/commercial readiness: 35/35 PASS
+- Landing/plan UX: 36/36 PASS
+- Mobile restoration: 6/6 PASS
+- Trusted Person / emergency flow: 75/75 PASS
+- Onboarding: 68/68 PASS
+- Push notifications: 32/32 PASS
+- Sync retry: 10/10 PASS
+- Secure-device refresh: 7/7 PASS
+- Settings guided tour: 13/13 PASS
+- Ver-1.030.09 feature regression: 62/62 PASS
+
+Total: 377/377 PASS
+
+Checklist scrolling architecture:
+- The checklist-lines-scroll element is absent from the view markup.
+- Dedicated checklist max-height and overflow rules are absent.
+- The checklist's visual data panel is removed.
+- The view popup body is the sole vertical scrolling surface.
+- Unselected checklist rows and their toggle buttons compute from an explicit pan-y rule on mobile.
+- Only a selected reorder row disables native panning.
+- No document-level touchmove interception is present.
+- No onTouchStart listener is attached to view rows.
+
+Version alignment:
+- App: Password-Encrypt Ver-1.030.09
+- Package: 1.30.9
+- Service worker cache: my-passwords-v1.030.09
+- Server APP_VERSION: Password-Encrypt Ver-1.030.09
+
+Deployment requirements:
+- No Supabase SQL migration.
+- No Netlify environment-variable change.
+- Close and reopen the installed PWA once after deployment to activate the new cache.
+
+Repository status:
+- No Git commit created by Codex.
+- No Git push performed by Codex.
+

@@ -10,7 +10,7 @@ import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateF
 import { checklistDragStepCount, reorderChecklistLines } from './checklistReorder.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.030.08';
+const VERSION = 'Password-Encrypt Ver-1.030.09';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -13702,7 +13702,7 @@ function App() {
               <h2><ShieldCheck size={20} /> {viewedItem.title}</h2>
               <button type="button" className="icon-button" onClick={closeViewItem} aria-label="Close"><X size={18} /></button>
             </div>
-            <div className="item-popup-body">
+            <div className="item-popup-body view-item-popup-body">
               <div className="view-item-meta">
                 <span className="category-pill">{viewedItem.category}</span>
                 {isEmergencyImportedItem(viewedItem) && <span className="category-pill emergency-import-source-pill">From {effectiveVaultItemType(viewedItem)}</span>}
@@ -13859,29 +13859,25 @@ function App() {
                               <span style={{ width: `${checklistProgress}%` }} />
                             </div>
                           </div>
-                          {checklistRows.length ? (
-                            <div className="checklist-lines-scroll" data-checklist-scroll-area="true">
-                              {checklistRows.map((row, displayIndex) => (
-                                <div
-                                  key={`${viewedItem.id}-${row.identity}`}
-                                  className={`checklist-line ${row.done ? 'done' : ''} ${checklistViewSelection.itemId === viewedItem.id && checklistViewSelection.displayIndex === displayIndex ? 'is-selected' : ''}`}
-                                  data-checklist-view-row={displayIndex}
-                                  onPointerDown={(event) => { if (!importedItem) startChecklistViewLongPress(event, viewedItem, displayIndex); }}
-                                  onContextMenu={(event) => { if (!importedItem) event.preventDefault(); }}
-                                >
-                                  <button type="button" className="checklist-line-toggle" onClick={() => {
-                                    if (Date.now() < checklistViewSuppressClickUntilRef.current) return;
-                                    setChecklistViewSelection({ itemId: '', displayIndex: -1 });
-                                    if (!importedItem) toggleChecklistLine(viewedItem, row.index);
-                                  }} disabled={importedItem}>
-                                    <span className="check-box">{row.done ? '✓' : ''}</span>
-                                    <span>{row.text}</span>
-                                  </button>
-                                  {!importedItem && <button type="button" className="checklist-line-delete" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); deleteChecklistLine(viewedItem, row.index); }} aria-label={`Delete ${row.text}`} title="Delete checklist item"><X size={20} /></button>}
-                                </div>
-                              ))}
+                          {checklistRows.length ? checklistRows.map((row, displayIndex) => (
+                            <div
+                              key={`${viewedItem.id}-${row.identity}`}
+                              className={`checklist-line ${row.done ? 'done' : ''} ${checklistViewSelection.itemId === viewedItem.id && checklistViewSelection.displayIndex === displayIndex ? 'is-selected' : ''}`}
+                              data-checklist-view-row={displayIndex}
+                              onPointerDown={(event) => { if (!importedItem) startChecklistViewLongPress(event, viewedItem, displayIndex); }}
+                              onContextMenu={(event) => { if (!importedItem) event.preventDefault(); }}
+                            >
+                              <button type="button" className="checklist-line-toggle" onClick={() => {
+                                if (Date.now() < checklistViewSuppressClickUntilRef.current) return;
+                                setChecklistViewSelection({ itemId: '', displayIndex: -1 });
+                                if (!importedItem) toggleChecklistLine(viewedItem, row.index);
+                              }} disabled={importedItem}>
+                                <span className="check-box">{row.done ? '✓' : ''}</span>
+                                <span>{row.text}</span>
+                              </button>
+                              {!importedItem && <button type="button" className="checklist-line-delete" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); deleteChecklistLine(viewedItem, row.index); }} aria-label={`Delete ${row.text}`} title="Delete checklist item"><X size={20} /></button>}
                             </div>
-                          ) : <span className="app-field-value">No checklist items yet.</span>}
+                          )) : <span className="app-field-value">No checklist items yet.</span>}
                         </div>
                       </div>
                     ) : viewedItem.payload?.notes && (
