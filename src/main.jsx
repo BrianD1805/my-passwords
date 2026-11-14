@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, ArrowLeft, ArrowUp, Bell, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, Image as ImageIcon, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Save, Settings, Share2, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Bell, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, GripVertical, Heart, Home, Image as ImageIcon, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Save, Settings, Share2, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
@@ -9,7 +9,7 @@ import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.030';
+const VERSION = 'Password-Encrypt Ver-1.030.01';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3654,7 +3654,10 @@ function App() {
   const [showSecrets, setShowSecrets] = useState({});
   const [showFormSecret, setShowFormSecret] = useState(false);
   const [itemCredentialFieldsArmed, setItemCredentialFieldsArmed] = useState({ username: false, password: false });
-  const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistCompletedPosition: 'stay', checklistStrikeThrough: true });
+  const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistItems: [], checklistCompletedPosition: 'stay', checklistStrikeThrough: true });
+  const [checklistDraggingId, setChecklistDraggingId] = useState('');
+  const checklistDragRef = useRef({ timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, lastTargetId: '' });
+  const checklistNativeDragRef = useRef({ rowId: '', lastTargetId: '' });
   const [editingItemId, setEditingItemId] = useState('');
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
@@ -6979,7 +6982,8 @@ function App() {
   }
 
   function emptyForm(categoryToKeep = form.category) {
-    return { title: '', category: categoryToKeep || 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistCompletedPosition: 'stay', checklistStrikeThrough: true };
+    const nextCategory = categoryToKeep || 'Passwords';
+    return { title: '', category: nextCategory, url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistItems: nextCategory === 'Checklists' ? [createChecklistEditorRow()] : [], checklistCompletedPosition: 'stay', checklistStrikeThrough: true };
   }
 
   function storedDocumentDeletionEntry(item) {
@@ -7261,7 +7265,11 @@ function App() {
         ? crypto.randomUUID()
         : (form.file?.externalDocumentId || itemIdForSave);
       const storedDocumentFile = isFileUpload ? await uploadEncryptedDocumentBlob(form.file, fileBlobIdForSave, isPicture ? 'picture' : 'document') : null;
-      const notesValue = form.category === 'Checklists' ? normaliseChecklistNotes(form.notes) : form.notes.trim();
+      const notesValue = form.category === 'Checklists' ? serialiseChecklistEditorRows(form.checklistItems) : form.notes.trim();
+      if (form.category === 'Checklists' && !notesValue) {
+        showMessage('Add at least one checklist item before saving.', 'warning');
+        return;
+      }
       const itemPayload = {
         title: isCard ? form.cardNickname.trim() : form.title.trim(),
         category: form.category,
@@ -7369,6 +7377,7 @@ function App() {
       cardNumber: item.payload?.cardNumber || '',
       cardExpiry: item.payload?.cardExpiry || '',
       cardCcv: item.payload?.cardCcv || '',
+      checklistItems: parseChecklistEditorRows(item.payload?.notes),
       checklistCompletedPosition: item.payload?.checklistCompletedPosition === 'stay' ? 'stay' : 'bottom',
       checklistStrikeThrough: item.payload?.checklistStrikeThrough !== false
     });
@@ -10722,6 +10731,141 @@ function App() {
       .join('\n');
   }
 
+  function createChecklistEditorRow(text = '', done = false) {
+    const randomId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `checklist-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return { id: randomId, text: String(text || ''), done: Boolean(done) };
+  }
+
+  function parseChecklistEditorRows(notes) {
+    return String(notes || '')
+      .split(/\r?\n/)
+      .map((line) => {
+        const trimmed = line.trim();
+        const match = trimmed.match(/^\[(x|X| )\]\s*(.*)$/);
+        const text = match ? match[2] : trimmed;
+        return text ? createChecklistEditorRow(text, match ? match[1].toLowerCase() === 'x' : false) : null;
+      })
+      .filter(Boolean);
+  }
+
+  function serialiseChecklistEditorRows(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => ({ text: String(row?.text || '').trim(), done: Boolean(row?.done) }))
+      .filter((row) => row.text)
+      .map((row) => `${row.done ? '[x]' : '[ ]'} ${row.text}`)
+      .join('\n');
+  }
+
+  function updateChecklistEditorRow(rowId, changes) {
+    setForm((current) => ({
+      ...current,
+      checklistItems: (current.checklistItems || []).map((row) => row.id === rowId ? { ...row, ...changes } : row)
+    }));
+  }
+
+  function addChecklistEditorRow(afterRowId = '') {
+    const row = createChecklistEditorRow();
+    setForm((current) => {
+      const rows = [...(current.checklistItems || [])];
+      const afterIndex = rows.findIndex((item) => item.id === afterRowId);
+      rows.splice(afterIndex >= 0 ? afterIndex + 1 : rows.length, 0, row);
+      return { ...current, checklistItems: rows };
+    });
+    window.requestAnimationFrame(() => document.querySelector(`[data-checklist-input-id="${row.id}"]`)?.focus());
+  }
+
+  function removeChecklistEditorRow(rowId) {
+    setForm((current) => ({ ...current, checklistItems: (current.checklistItems || []).filter((row) => row.id !== rowId) }));
+  }
+
+  function moveChecklistEditorRowToIndex(rowId, nextIndex) {
+    setForm((current) => {
+      const rows = [...(current.checklistItems || [])];
+      const currentIndex = rows.findIndex((row) => row.id === rowId);
+      if (currentIndex < 0) return current;
+      const boundedIndex = Math.max(0, Math.min(rows.length - 1, nextIndex));
+      if (currentIndex === boundedIndex) return current;
+      const [moving] = rows.splice(currentIndex, 1);
+      rows.splice(boundedIndex, 0, moving);
+      return { ...current, checklistItems: rows };
+    });
+  }
+
+  function moveChecklistEditorRowOver(rowId, targetId) {
+    if (!rowId || !targetId || rowId === targetId) return;
+    setForm((current) => {
+      const rows = [...(current.checklistItems || [])];
+      const fromIndex = rows.findIndex((row) => row.id === rowId);
+      const targetIndex = rows.findIndex((row) => row.id === targetId);
+      if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) return current;
+      const [moving] = rows.splice(fromIndex, 1);
+      rows.splice(targetIndex, 0, moving);
+      return { ...current, checklistItems: rows };
+    });
+  }
+
+  function resetChecklistPointerDrag() {
+    const state = checklistDragRef.current;
+    if (state.timer) window.clearTimeout(state.timer);
+    checklistDragRef.current = { timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, lastTargetId: '' };
+    checklistNativeDragRef.current = { rowId: '', lastTargetId: '' };
+    setChecklistDraggingId('');
+  }
+
+  function startChecklistLongPress(event, rowId) {
+    if (event.pointerType === 'mouse') return;
+    resetChecklistPointerDrag();
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
+    checklistDragRef.current = {
+      timer: window.setTimeout(() => {
+        checklistDragRef.current.active = true;
+        setChecklistDraggingId(rowId);
+        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+      }, 420),
+      rowId,
+      active: false,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastTargetId: ''
+    };
+  }
+
+  function moveChecklistLongPress(event) {
+    const state = checklistDragRef.current;
+    if (!state.rowId) return;
+    const movedBeforeActivation = Math.hypot(event.clientX - state.startX, event.clientY - state.startY) > 10;
+    if (!state.active && movedBeforeActivation) {
+      resetChecklistPointerDrag();
+      return;
+    }
+    if (!state.active) return;
+    event.preventDefault();
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-checklist-editor-id]');
+    const targetId = target?.dataset?.checklistEditorId || '';
+    if (targetId && targetId !== state.lastTargetId) {
+      state.lastTargetId = targetId;
+      moveChecklistEditorRowOver(state.rowId, targetId);
+    }
+  }
+
+  function startChecklistNativeDrag(event, rowId) {
+    checklistNativeDragRef.current = { rowId, lastTargetId: '' };
+    setChecklistDraggingId(rowId);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', rowId);
+  }
+
+  function moveChecklistNativeDrag(event, targetId) {
+    event.preventDefault();
+    const dragState = checklistNativeDragRef.current;
+    if (!dragState.rowId || dragState.lastTargetId === targetId) return;
+    dragState.lastTargetId = targetId;
+    moveChecklistEditorRowOver(dragState.rowId, targetId);
+  }
+
   function checklistDisplayOptions(item) {
     return {
       completedPosition: item?.payload?.checklistCompletedPosition === 'stay' ? 'stay' : 'bottom',
@@ -12254,7 +12398,7 @@ function App() {
                 <div className="item-popup-body">
                   <p className="form-helper">{editingItemId ? 'Update the saved details, then save your changes.' : 'Save a new secure item in your vault.'}</p>
                   {editingItemId && <div className="edit-banner"><Pencil size={16} /><span>Editing existing item. Save updates or cancel without changing the vault.</span></div>}
-                <label>Folder<CustomSelect value={form.category} ariaLabel="Choose a vault folder" options={selectableFolders.map((cat) => ({ value: cat, label: cat }))} onChange={(nextCategory) => setForm({ ...form, category: nextCategory, username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY, CARDS_CATEGORY].includes(nextCategory) ? '' : form.username, password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY, CARDS_CATEGORY].includes(nextCategory) ? '' : form.password })} /></label>
+                <label>Folder<CustomSelect value={form.category} ariaLabel="Choose a vault folder" options={selectableFolders.map((cat) => ({ value: cat, label: cat }))} onChange={(nextCategory) => setForm({ ...form, category: nextCategory, username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY, CARDS_CATEGORY].includes(nextCategory) ? '' : form.username, password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY, CARDS_CATEGORY].includes(nextCategory) ? '' : form.password, checklistItems: nextCategory === 'Checklists' && !(form.checklistItems || []).length ? [createChecklistEditorRow()] : (form.checklistItems || []) })} /></label>
                 {form.category === CARDS_CATEGORY ? (
                   <div className="card-entry-grid">
                     <label>Name on card<input value={form.cardName} onChange={(e) => setForm({ ...form, cardName: e.target.value })} placeholder="e.g. B Hallam" /></label>
@@ -12305,7 +12449,53 @@ function App() {
                     {form.file && <div className="document-selected picture-selected"><ImageIcon size={18} /><span>{form.file.name}</span><small>{formatFileSize(form.file.size)}</small>{form.file.dataUrl && <img src={form.file.dataUrl} alt="Selected encrypted picture preview" />}</div>}
                   </div>
                 )}
-                <label>{form.category === 'Checklists' ? 'Checklist items' : form.category === DOCUMENTS_CATEGORY ? 'Document notes' : form.category === PICTURES_CATEGORY ? 'Picture notes' : form.category === CARDS_CATEGORY ? 'Card notes' : 'Notes'}<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
+                {form.category === 'Checklists' ? (
+                  <section className="checklist-editor" aria-labelledby="checklist-editor-title">
+                    <div className="checklist-editor-heading">
+                      <span id="checklist-editor-title">Checklist items</span>
+                      <small>Type normally. Hold the grip and drag to reorder on a phone.</small>
+                    </div>
+                    <div className="checklist-editor-list">
+                      {(form.checklistItems || []).map((row, index, rows) => (
+                        <div
+                          className={`checklist-editor-row ${checklistDraggingId === row.id ? 'is-dragging' : ''}`}
+                          key={row.id}
+                          data-checklist-editor-id={row.id}
+                          onDragOver={(event) => moveChecklistNativeDrag(event, row.id)}
+                        >
+                          <button
+                            type="button"
+                            className="checklist-editor-grip"
+                            draggable={true}
+                            onDragStart={(event) => startChecklistNativeDrag(event, row.id)}
+                            onDragEnd={resetChecklistPointerDrag}
+                            onPointerDown={(event) => startChecklistLongPress(event, row.id)}
+                            onPointerMove={moveChecklistLongPress}
+                            onPointerUp={resetChecklistPointerDrag}
+                            onPointerCancel={resetChecklistPointerDrag}
+                            onKeyDown={(event) => {
+                              if (event.key === 'ArrowUp') { event.preventDefault(); moveChecklistEditorRowToIndex(row.id, index - 1); }
+                              if (event.key === 'ArrowDown') { event.preventDefault(); moveChecklistEditorRowToIndex(row.id, index + 1); }
+                            }}
+                            aria-label={`Reorder ${row.text || `checklist item ${index + 1}`}. Hold and drag, or use the arrow keys.`}
+                            title="Hold and drag to reorder"
+                          ><GripVertical size={20} /></button>
+                          <button type="button" className={`checklist-editor-check ${row.done ? 'done' : ''}`} onClick={() => updateChecklistEditorRow(row.id, { done: !row.done })} aria-label={row.done ? 'Mark item as not completed' : 'Mark item as completed'}>{row.done ? <Check size={17} /> : null}</button>
+                          <input data-checklist-input-id={row.id} value={row.text} onChange={(event) => updateChecklistEditorRow(row.id, { text: event.target.value })} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addChecklistEditorRow(row.id); } }} placeholder={`Checklist item ${index + 1}`} />
+                          <div className="checklist-editor-step-buttons" aria-label="Move checklist item">
+                            <button type="button" onClick={() => moveChecklistEditorRowToIndex(row.id, index - 1)} disabled={index === 0} aria-label="Move item up" title="Move up"><ArrowUp size={14} /></button>
+                            <button type="button" onClick={() => moveChecklistEditorRowToIndex(row.id, index + 1)} disabled={index === rows.length - 1} aria-label="Move item down" title="Move down"><ArrowDown size={14} /></button>
+                          </div>
+                          <button type="button" className="checklist-editor-delete" onClick={() => removeChecklistEditorRow(row.id)} aria-label="Remove checklist item" title="Remove item"><Trash2 size={17} /></button>
+                        </div>
+                      ))}
+                      {!(form.checklistItems || []).length && <div className="checklist-editor-empty">No checklist items yet.</div>}
+                    </div>
+                    <button type="button" className="secondary-button checklist-editor-add" onClick={() => addChecklistEditorRow()}><Plus size={16} /> Add checklist item</button>
+                  </section>
+                ) : (
+                  <label>{form.category === DOCUMENTS_CATEGORY ? 'Document notes' : form.category === PICTURES_CATEGORY ? 'Picture notes' : form.category === CARDS_CATEGORY ? 'Card notes' : 'Notes'}<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
+                )}
                 {form.category === 'Checklists' && (
                   <section className="checklist-options-card" aria-labelledby="checklist-options-title">
                     <div className="checklist-options-heading">
