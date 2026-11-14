@@ -7,9 +7,10 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
+import { reorderChecklistLines } from './checklistReorder.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.030.02';
+const VERSION = 'Password-Encrypt Ver-1.030.03';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3656,7 +3657,11 @@ function App() {
   const [itemCredentialFieldsArmed, setItemCredentialFieldsArmed] = useState({ username: false, password: false });
   const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistItems: [], checklistCompletedPosition: 'stay', checklistStrikeThrough: true });
   const [checklistDraggingId, setChecklistDraggingId] = useState('');
-  const checklistDragRef = useRef({ timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, lastTargetId: '' });
+  const checklistDragRef = useRef({ timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, lastMoveY: 0, stepSize: 44 });
+  const [checklistViewSelection, setChecklistViewSelection] = useState({ itemId: '', displayIndex: -1 });
+  const checklistViewDragRef = useRef({ timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, lastMoveY: 0, stepSize: 44, displayIndex: -1 });
+  const checklistViewWorkingItemsRef = useRef(null);
+  const checklistViewSuppressClickUntilRef = useRef(0);
   const [editingItemId, setEditingItemId] = useState('');
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
@@ -10712,6 +10717,7 @@ function App() {
   }
 
   function closeViewItem() {
+    resetChecklistViewDrag(null, { clearSelection: true });
     setViewItemId('');
     setPicturePreview({ itemId: '', dataUrl: '', busy: false });
   }
@@ -10792,15 +10798,14 @@ function App() {
     });
   }
 
-  function moveChecklistEditorRowOver(rowId, targetId) {
-    if (!rowId || !targetId || rowId === targetId) return;
+  function moveChecklistEditorRowBy(rowId, direction) {
     setForm((current) => {
       const rows = [...(current.checklistItems || [])];
-      const fromIndex = rows.findIndex((row) => row.id === rowId);
-      const targetIndex = rows.findIndex((row) => row.id === targetId);
-      if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) return current;
-      const [moving] = rows.splice(fromIndex, 1);
-      rows.splice(targetIndex, 0, moving);
+      const currentIndex = rows.findIndex((row) => row.id === rowId);
+      const nextIndex = Math.max(0, Math.min(rows.length - 1, currentIndex + direction));
+      if (currentIndex < 0 || currentIndex === nextIndex) return current;
+      const [moving] = rows.splice(currentIndex, 1);
+      rows.splice(nextIndex, 0, moving);
       return { ...current, checklistItems: rows };
     });
   }
@@ -10808,13 +10813,13 @@ function App() {
   function resetChecklistPointerDrag(event) {
     const state = checklistDragRef.current;
     if (state.timer) window.clearTimeout(state.timer);
+    checklistDragRef.current = { timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, lastMoveY: 0, stepSize: 44 };
+    setChecklistDraggingId('');
     if (event?.currentTarget && state.pointerId !== null) {
       try {
         if (event.currentTarget.hasPointerCapture?.(state.pointerId)) event.currentTarget.releasePointerCapture(state.pointerId);
       } catch { /* Pointer capture may already have ended. */ }
     }
-    checklistDragRef.current = { timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, lastTargetId: '' };
-    setChecklistDraggingId('');
   }
 
   function startChecklistLongPress(event, rowId) {
@@ -10822,6 +10827,7 @@ function App() {
     event.preventDefault();
     resetChecklistPointerDrag();
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
+    const rowHeight = event.currentTarget.closest?.('[data-checklist-editor-id]')?.getBoundingClientRect?.().height || 56;
     checklistDragRef.current = {
       timer: window.setTimeout(() => {
         checklistDragRef.current.timer = null;
@@ -10834,7 +10840,8 @@ function App() {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      lastTargetId: ''
+      lastMoveY: event.clientY,
+      stepSize: Math.max(34, rowHeight * 0.7)
     };
   }
 
@@ -10848,12 +10855,12 @@ function App() {
     }
     if (!state.active) return;
     event.preventDefault();
-    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-checklist-editor-id]');
-    const targetId = target?.dataset?.checklistEditorId || '';
-    if (targetId && targetId !== state.lastTargetId) {
-      state.lastTargetId = targetId;
-      moveChecklistEditorRowOver(state.rowId, targetId);
-    }
+    const verticalMovement = event.clientY - state.lastMoveY;
+    if (Math.abs(verticalMovement) < state.stepSize) return;
+    const direction = verticalMovement > 0 ? 1 : -1;
+    state.lastMoveY += direction * state.stepSize;
+    moveChecklistEditorRowBy(state.rowId, direction);
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(8);
   }
 
   function checklistDisplayOptions(item) {
@@ -10872,9 +10879,125 @@ function App() {
         return { index, done: match ? match[1].toLowerCase() === 'x' : false, text: match ? match[2] : trimmed };
       })
       .filter((item) => item.text.trim());
-    return completedPosition === 'bottom'
+    const orderedRows = completedPosition === 'bottom'
       ? rows.sort((a, b) => Number(a.done) - Number(b.done) || a.index - b.index)
       : rows;
+    const identityCounts = new Map();
+    return orderedRows.map((row) => {
+      const identityBase = `${row.done ? 'done' : 'open'}:${row.text}`;
+      const occurrence = identityCounts.get(identityBase) || 0;
+      identityCounts.set(identityBase, occurrence + 1);
+      return { ...row, identity: `${identityBase}:${occurrence}` };
+    });
+  }
+
+  function reorderChecklistViewItem(sourceItems, itemId, displayIndex, direction) {
+    const sourceItem = sourceItems.find((item) => item.id === itemId);
+    if (!sourceItem) return { changed: false, nextItems: sourceItems, displayIndex };
+    const settings = checklistDisplayOptions(sourceItem);
+    const result = reorderChecklistLines(sourceItem.payload?.notes, settings.completedPosition, displayIndex, direction);
+    if (!result.changed) return { changed: false, nextItems: sourceItems, displayIndex };
+    const nextItems = sourceItems.map((item) => item.id === itemId
+      ? { ...item, payload: { ...item.payload, notes: result.notes }, updatedAt: new Date().toISOString() }
+      : item);
+    return { changed: true, nextItems, displayIndex: result.displayIndex };
+  }
+
+  function resetChecklistViewDrag(event, { clearSelection = false } = {}) {
+    const state = checklistViewDragRef.current;
+    if (state.timer) window.clearTimeout(state.timer);
+    checklistViewDragRef.current = { timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, lastMoveY: 0, stepSize: 44, displayIndex: -1 };
+    checklistViewWorkingItemsRef.current = null;
+    if (event?.currentTarget && state.pointerId !== null) {
+      try {
+        if (event.currentTarget.hasPointerCapture?.(state.pointerId)) event.currentTarget.releasePointerCapture(state.pointerId);
+      } catch { /* Pointer capture may already have ended. */ }
+    }
+    if (clearSelection) setChecklistViewSelection({ itemId: '', displayIndex: -1 });
+  }
+
+  function startChecklistViewLongPress(event, item, displayIndex) {
+    if (!event.isPrimary || event.pointerType === 'mouse' || !item?.id) return;
+    resetChecklistViewDrag();
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
+    const rowHeight = event.currentTarget.getBoundingClientRect?.().height || 52;
+    checklistViewWorkingItemsRef.current = items;
+    checklistViewDragRef.current = {
+      timer: window.setTimeout(() => {
+        checklistViewDragRef.current.timer = null;
+        checklistViewDragRef.current.active = true;
+        checklistViewSuppressClickUntilRef.current = Date.now() + 700;
+        setChecklistViewSelection({ itemId: item.id, displayIndex });
+        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+      }, 420),
+      itemId: item.id,
+      active: false,
+      moved: false,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastMoveY: event.clientY,
+      stepSize: Math.max(34, rowHeight * 0.72),
+      displayIndex
+    };
+  }
+
+  function moveChecklistViewLongPress(event) {
+    const state = checklistViewDragRef.current;
+    if (!state.itemId || state.pointerId !== event.pointerId) return;
+    const movedBeforeActivation = Math.hypot(event.clientX - state.startX, event.clientY - state.startY) > 24;
+    if (!state.active && movedBeforeActivation) {
+      resetChecklistViewDrag(event);
+      return;
+    }
+    if (!state.active) return;
+    event.preventDefault();
+    const verticalMovement = event.clientY - state.lastMoveY;
+    if (Math.abs(verticalMovement) < state.stepSize) return;
+    const direction = verticalMovement > 0 ? 1 : -1;
+    const workingItems = checklistViewWorkingItemsRef.current || items;
+    const result = reorderChecklistViewItem(workingItems, state.itemId, state.displayIndex, direction);
+    state.lastMoveY += direction * state.stepSize;
+    if (!result.changed) return;
+    state.moved = true;
+    state.displayIndex = result.displayIndex;
+    checklistViewWorkingItemsRef.current = result.nextItems;
+    setItems(result.nextItems);
+    setChecklistViewSelection({ itemId: state.itemId, displayIndex: result.displayIndex });
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(8);
+  }
+
+  async function finishChecklistViewDrag(event) {
+    const state = checklistViewDragRef.current;
+    if (!state.itemId) return;
+    const shouldSave = state.active && state.moved && Array.isArray(checklistViewWorkingItemsRef.current);
+    const nextItems = checklistViewWorkingItemsRef.current;
+    if (state.active) checklistViewSuppressClickUntilRef.current = Date.now() + 700;
+    if (state.timer) window.clearTimeout(state.timer);
+    checklistViewDragRef.current = { timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, lastMoveY: 0, stepSize: 44, displayIndex: -1 };
+    checklistViewWorkingItemsRef.current = null;
+    if (event?.currentTarget && state.pointerId !== null) {
+      try {
+        if (event.currentTarget.hasPointerCapture?.(state.pointerId)) event.currentTarget.releasePointerCapture(state.pointerId);
+      } catch { /* Pointer capture may already have ended. */ }
+    }
+    if (shouldSave) {
+      await saveItems(nextItems, { autoSync: true, silentAutoSync: true });
+      showMessage('Checklist order updated.');
+    }
+  }
+
+  async function deleteChecklistLine(item, originalIndex) {
+    const lines = normaliseChecklistNotes(item.payload?.notes).split(/\r?\n/).filter(Boolean);
+    if (originalIndex < 0 || originalIndex >= lines.length) return;
+    lines.splice(originalIndex, 1);
+    const updatedNotes = normaliseChecklistNotes(lines.join('\n'));
+    const next = items.map((vaultItem) => vaultItem.id === item.id
+      ? { ...vaultItem, payload: { ...vaultItem.payload, notes: updatedNotes }, updatedAt: new Date().toISOString() }
+      : vaultItem);
+    setChecklistViewSelection({ itemId: '', displayIndex: -1 });
+    await saveItems(next, { autoSync: true, silentAutoSync: true });
+    showMessage('Checklist item deleted.');
   }
 
   async function toggleChecklistLine(item, originalIndex) {
@@ -13697,11 +13820,28 @@ function App() {
                               <span style={{ width: `${checklistProgress}%` }} />
                             </div>
                           </div>
-                          {checklistRows.length ? checklistRows.map((row) => (
-                            <button type="button" key={`${viewedItem.id}-${row.index}-${row.text}`} className={row.done ? 'checklist-line done' : 'checklist-line'} onClick={() => { if (!importedItem) toggleChecklistLine(viewedItem, row.index); }} disabled={importedItem}>
-                              <span className="check-box">{row.done ? '✓' : ''}</span>
-                              <span>{row.text}</span>
-                            </button>
+                          {checklistRows.length ? checklistRows.map((row, displayIndex) => (
+                            <div
+                              key={`${viewedItem.id}-${row.identity}`}
+                              className={`checklist-line ${row.done ? 'done' : ''} ${checklistViewSelection.itemId === viewedItem.id && checklistViewSelection.displayIndex === displayIndex ? 'is-selected' : ''}`}
+                              data-checklist-view-row={displayIndex}
+                              onPointerDown={(event) => { if (!importedItem) startChecklistViewLongPress(event, viewedItem, displayIndex); }}
+                              onPointerMove={moveChecklistViewLongPress}
+                              onPointerUp={finishChecklistViewDrag}
+                              onPointerCancel={finishChecklistViewDrag}
+                              onLostPointerCapture={finishChecklistViewDrag}
+                              onContextMenu={(event) => { if (!importedItem) event.preventDefault(); }}
+                            >
+                              <button type="button" className="checklist-line-toggle" onClick={() => {
+                                if (Date.now() < checklistViewSuppressClickUntilRef.current) return;
+                                setChecklistViewSelection({ itemId: '', displayIndex: -1 });
+                                if (!importedItem) toggleChecklistLine(viewedItem, row.index);
+                              }} disabled={importedItem}>
+                                <span className="check-box">{row.done ? '✓' : ''}</span>
+                                <span>{row.text}</span>
+                              </button>
+                              {!importedItem && <button type="button" className="checklist-line-delete" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); deleteChecklistLine(viewedItem, row.index); }} aria-label={`Delete ${row.text}`} title="Delete checklist item"><X size={20} /></button>}
+                            </div>
                           )) : <span className="app-field-value">No checklist items yet.</span>}
                         </div>
                       </div>

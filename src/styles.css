@@ -2729,17 +2729,32 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
   width: 100%;
   min-height: 48px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
   align-items: center;
-  text-align: left;
   border-radius: 13px;
-  padding: 7px 3px;
+  padding: 0;
   background: transparent;
   border: 1px solid transparent;
   color: #1f2933;
-  font-weight: 400;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.checklist-line-toggle {
+  min-width: 0;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 7px 3px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
   font-size: 1rem;
+  font-weight: 400;
 }
 
 .checklist-line:hover,
@@ -2754,13 +2769,25 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
   background: transparent;
 }
 
-.checklist-line.done span:last-child {
+.checklist-line.done .checklist-line-toggle > span:last-child {
   text-decoration: line-through;
   text-decoration-thickness: 1.5px;
 }
 
-.checklist-display.no-strikethrough .checklist-line.done span:last-child {
+.checklist-display.no-strikethrough .checklist-line.done .checklist-line-toggle > span:last-child {
   text-decoration: none;
+}
+
+.checklist-line-delete {
+  display: none;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #69737d;
 }
 
 .check-box {
@@ -3016,6 +3043,31 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
 }
 
 @media (max-width: 860px) {
+  .checklist-line {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .checklist-line-toggle {
+    gap: 10px;
+  }
+
+  .checklist-line.is-selected {
+    border-color: #5c8fb8;
+    background: #eef6fc;
+    box-shadow: 0 8px 20px rgba(35, 68, 98, .14);
+    transform: scale(1.01);
+  }
+
+  .checklist-line.is-selected .checklist-line-delete {
+    display: grid;
+  }
+
+  .checklist-line-delete:active {
+    background: #dfeaf3;
+  }
+
   .checklist-editor-desktop-help {
     display: none;
   }
