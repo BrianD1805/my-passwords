@@ -1,0 +1,41 @@
+Password-Encrypt Ver-1.030.07 verification
+Date: 2026-11-14 (Europe/London)
+
+PASS  npm run build
+PASS  npm run security:check (13/13)
+PASS  npm run reliability:check (20/20)
+PASS  npm run legal:check (35/35)
+PASS  npm run ux:check (36/36)
+PASS  npm run mobile:check (6/6)
+PASS  npm run emergency:check (75/75)
+PASS  npm run onboarding:check (68/68)
+PASS  npm run push:check (32/32)
+PASS  npm run sync-retry:check (10/10)
+PASS  npm run device-refresh:check (7/7)
+PASS  npm run settings-tour:check (13/13)
+PASS  npm run feature:check (60/60)
+PASS  JavaScript syntax checks
+PASS  git diff --check
+
+Total scripted checks: 375 passed, 0 failed.
+
+Root cause confirmed:
+- an older mobile rule set touch-action:none on every checklist row;
+- Android therefore could not start its native vertical scrolling from a row;
+- JavaScript pointer scrolling was an unreliable workaround on the target phone;
+- the final cascade now overrides the blocker with pan-y!important;
+- Android fingers no longer enter the pointer-capture path.
+
+Ver-1.030.07 feature coverage includes:
+- native Android vertical scrolling from inside checklist rows;
+- a dedicated bounded checklist rows panel;
+- fixed progress information above the scrolling rows;
+- touch reordering only after long-press activation;
+- stable multi-position movement in both directions;
+- no permanent view-screen handles or arrows.
+
+Build notes:
+- Vite reported the existing advisory that the main minified JavaScript chunk
+  is larger than 500 kB. The production build completed successfully.
+- No Supabase SQL migration is required for Ver-1.030.07.
+- No Git commit or push was performed.

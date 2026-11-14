@@ -10,7 +10,7 @@ import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateF
 import { checklistDragStepCount, reorderChecklistLines } from './checklistReorder.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.030.06';
+const VERSION = 'Password-Encrypt Ver-1.030.07';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3662,6 +3662,21 @@ function App() {
   const checklistViewDragRef = useRef({ timer: null, itemId: '', active: false, scrolling: false, moved: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1, scrollElement: null, startScrollTop: 0 });
   const checklistViewWorkingItemsRef = useRef(null);
   const checklistViewSuppressClickUntilRef = useRef(0);
+  const checklistViewTouchCallbacksRef = useRef({ move: null, finish: null });
+  checklistViewTouchCallbacksRef.current.move = moveChecklistViewTouch;
+  checklistViewTouchCallbacksRef.current.finish = finishChecklistViewTouch;
+  useEffect(() => {
+    const move = (event) => checklistViewTouchCallbacksRef.current.move?.(event);
+    const finish = (event) => checklistViewTouchCallbacksRef.current.finish?.(event);
+    document.addEventListener('touchmove', move, { capture: true, passive: false });
+    document.addEventListener('touchend', finish, { capture: true, passive: true });
+    document.addEventListener('touchcancel', finish, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener('touchmove', move, true);
+      document.removeEventListener('touchend', finish, true);
+      document.removeEventListener('touchcancel', finish, true);
+    };
+  }, []);
   const [editingItemId, setEditingItemId] = useState('');
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
@@ -10925,7 +10940,7 @@ function App() {
   }
 
   function startChecklistViewLongPress(event, item, displayIndex) {
-    if (!event.isPrimary || event.pointerType === 'mouse' || !item?.id) return;
+    if (!event.isPrimary || event.pointerType !== 'pen' || !item?.id) return;
     resetChecklistViewDrag();
     const dragSurface = event.currentTarget.closest?.('.checklist-display');
     const scrollElement = event.currentTarget.closest?.('.checklist-lines-scroll');
@@ -10974,7 +10989,13 @@ function App() {
     }
     if (!state.active) return;
     event.preventDefault();
-    const requestedSteps = checklistDragStepCount(state.startY, event.clientY, state.stepSize);
+    moveChecklistViewReorder(event.clientY);
+  }
+
+  function moveChecklistViewReorder(currentY) {
+    const state = checklistViewDragRef.current;
+    if (!state.itemId || !state.active) return;
+    const requestedSteps = checklistDragStepCount(state.startY, currentY, state.stepSize);
     let pendingSteps = requestedSteps - state.appliedSteps;
     if (!pendingSteps) return;
     const direction = pendingSteps > 0 ? 1 : -1;
@@ -10995,6 +11016,60 @@ function App() {
     setItems(workingItems);
     setChecklistViewSelection({ itemId: state.itemId, displayIndex: state.displayIndex });
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(8);
+  }
+
+  function startChecklistViewTouch(event, item, displayIndex) {
+    if (event.touches?.length !== 1 || !item?.id) return;
+    const touch = event.touches[0];
+    resetChecklistViewDrag();
+    const scrollElement = event.currentTarget.closest?.('.checklist-lines-scroll');
+    const rowHeight = event.currentTarget.getBoundingClientRect?.().height || 52;
+    checklistViewWorkingItemsRef.current = items;
+    checklistViewDragRef.current = {
+      timer: window.setTimeout(() => {
+        checklistViewDragRef.current.timer = null;
+        checklistViewDragRef.current.active = true;
+        checklistViewSuppressClickUntilRef.current = Date.now() + 700;
+        setChecklistViewSelection({ itemId: item.id, displayIndex });
+        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+      }, 420),
+      itemId: item.id,
+      active: false,
+      scrolling: false,
+      moved: false,
+      pointerId: `touch:${touch.identifier}`,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      stepSize: Math.max(34, rowHeight * 0.72),
+      appliedSteps: 0,
+      displayIndex,
+      scrollElement,
+      startScrollTop: scrollElement?.scrollTop || 0
+    };
+  }
+
+  function moveChecklistViewTouch(event) {
+    const state = checklistViewDragRef.current;
+    if (!state.itemId || !String(state.pointerId || '').startsWith('touch:')) return;
+    const touchId = Number(String(state.pointerId).slice(6));
+    const touch = Array.from(event.touches || []).find((candidate) => candidate.identifier === touchId);
+    if (!touch) return;
+    const movedBeforeActivation = Math.hypot(touch.clientX - state.startX, touch.clientY - state.startY) > 10;
+    if (!state.active && movedBeforeActivation) {
+      resetChecklistViewDrag();
+      return;
+    }
+    if (!state.active) return;
+    event.preventDefault();
+    moveChecklistViewReorder(touch.clientY);
+  }
+
+  function finishChecklistViewTouch(event) {
+    const state = checklistViewDragRef.current;
+    if (!state.itemId || !String(state.pointerId || '').startsWith('touch:')) return;
+    const touchId = Number(String(state.pointerId).slice(6));
+    const ended = Array.from(event.changedTouches || []).some((touch) => touch.identifier === touchId);
+    if (ended) void finishChecklistViewDrag();
   }
 
   async function finishChecklistViewDrag(event) {
@@ -13854,6 +13929,7 @@ function App() {
                                   className={`checklist-line ${row.done ? 'done' : ''} ${checklistViewSelection.itemId === viewedItem.id && checklistViewSelection.displayIndex === displayIndex ? 'is-selected' : ''}`}
                                   data-checklist-view-row={displayIndex}
                                   onPointerDown={(event) => { if (!importedItem) startChecklistViewLongPress(event, viewedItem, displayIndex); }}
+                                  onTouchStart={(event) => { if (!importedItem) startChecklistViewTouch(event, viewedItem, displayIndex); }}
                                   onContextMenu={(event) => { if (!importedItem) event.preventDefault(); }}
                                 >
                                   <button type="button" className="checklist-line-toggle" onClick={() => {

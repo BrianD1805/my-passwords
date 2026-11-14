@@ -20853,4 +20853,13 @@ body.guided-tour-active #root {
     max-height: min(52dvh, 440px);
     padding-right: 2px;
   }
+
+  /* Ver-1.030.07 — override the older touch-action:none rule. Android now
+     performs ordinary checklist scrolling natively. The non-passive touch
+     handler only prevents that default after a long press enters reorder mode. */
+  .checklist-lines-scroll,
+  .checklist-lines-scroll .checklist-line,
+  .checklist-lines-scroll .checklist-line-toggle {
+    touch-action: pan-y !important;
+  }
 }
