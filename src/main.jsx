@@ -7,10 +7,10 @@ import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
 import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
-import { reorderChecklistLines } from './checklistReorder.js';
+import { checklistDragStepCount, reorderChecklistLines } from './checklistReorder.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.030.03';
+const VERSION = 'Password-Encrypt Ver-1.030.04';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3657,9 +3657,9 @@ function App() {
   const [itemCredentialFieldsArmed, setItemCredentialFieldsArmed] = useState({ username: false, password: false });
   const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistItems: [], checklistCompletedPosition: 'stay', checklistStrikeThrough: true });
   const [checklistDraggingId, setChecklistDraggingId] = useState('');
-  const checklistDragRef = useRef({ timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, lastMoveY: 0, stepSize: 44 });
+  const checklistDragRef = useRef({ timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, initialIndex: -1, itemCount: 0 });
   const [checklistViewSelection, setChecklistViewSelection] = useState({ itemId: '', displayIndex: -1 });
-  const checklistViewDragRef = useRef({ timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, lastMoveY: 0, stepSize: 44, displayIndex: -1 });
+  const checklistViewDragRef = useRef({ timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 });
   const checklistViewWorkingItemsRef = useRef(null);
   const checklistViewSuppressClickUntilRef = useRef(0);
   const [editingItemId, setEditingItemId] = useState('');
@@ -10813,7 +10813,7 @@ function App() {
   function resetChecklistPointerDrag(event) {
     const state = checklistDragRef.current;
     if (state.timer) window.clearTimeout(state.timer);
-    checklistDragRef.current = { timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, lastMoveY: 0, stepSize: 44 };
+    checklistDragRef.current = { timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, initialIndex: -1, itemCount: 0 };
     setChecklistDraggingId('');
     if (event?.currentTarget && state.pointerId !== null) {
       try {
@@ -10828,6 +10828,7 @@ function App() {
     resetChecklistPointerDrag();
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
     const rowHeight = event.currentTarget.closest?.('[data-checklist-editor-id]')?.getBoundingClientRect?.().height || 56;
+    const initialIndex = (form.checklistItems || []).findIndex((row) => row.id === rowId);
     checklistDragRef.current = {
       timer: window.setTimeout(() => {
         checklistDragRef.current.timer = null;
@@ -10840,8 +10841,10 @@ function App() {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      lastMoveY: event.clientY,
-      stepSize: Math.max(34, rowHeight * 0.7)
+      stepSize: Math.max(34, rowHeight * 0.7),
+      appliedSteps: 0,
+      initialIndex,
+      itemCount: (form.checklistItems || []).length
     };
   }
 
@@ -10855,11 +10858,15 @@ function App() {
     }
     if (!state.active) return;
     event.preventDefault();
-    const verticalMovement = event.clientY - state.lastMoveY;
-    if (Math.abs(verticalMovement) < state.stepSize) return;
-    const direction = verticalMovement > 0 ? 1 : -1;
-    state.lastMoveY += direction * state.stepSize;
-    moveChecklistEditorRowBy(state.rowId, direction);
+    const requestedSteps = Math.max(
+      -state.initialIndex,
+      Math.min(state.itemCount - state.initialIndex - 1, checklistDragStepCount(state.startY, event.clientY, state.stepSize))
+    );
+    const pendingSteps = requestedSteps - state.appliedSteps;
+    if (!pendingSteps) return;
+    const direction = pendingSteps > 0 ? 1 : -1;
+    for (let step = 0; step < Math.abs(pendingSteps); step += 1) moveChecklistEditorRowBy(state.rowId, direction);
+    state.appliedSteps = requestedSteps;
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(8);
   }
 
@@ -10906,7 +10913,7 @@ function App() {
   function resetChecklistViewDrag(event, { clearSelection = false } = {}) {
     const state = checklistViewDragRef.current;
     if (state.timer) window.clearTimeout(state.timer);
-    checklistViewDragRef.current = { timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, lastMoveY: 0, stepSize: 44, displayIndex: -1 };
+    checklistViewDragRef.current = { timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 };
     checklistViewWorkingItemsRef.current = null;
     if (event?.currentTarget && state.pointerId !== null) {
       try {
@@ -10936,8 +10943,8 @@ function App() {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      lastMoveY: event.clientY,
       stepSize: Math.max(34, rowHeight * 0.72),
+      appliedSteps: 0,
       displayIndex
     };
   }
@@ -10952,18 +10959,26 @@ function App() {
     }
     if (!state.active) return;
     event.preventDefault();
-    const verticalMovement = event.clientY - state.lastMoveY;
-    if (Math.abs(verticalMovement) < state.stepSize) return;
-    const direction = verticalMovement > 0 ? 1 : -1;
-    const workingItems = checklistViewWorkingItemsRef.current || items;
-    const result = reorderChecklistViewItem(workingItems, state.itemId, state.displayIndex, direction);
-    state.lastMoveY += direction * state.stepSize;
-    if (!result.changed) return;
+    const requestedSteps = checklistDragStepCount(state.startY, event.clientY, state.stepSize);
+    let pendingSteps = requestedSteps - state.appliedSteps;
+    if (!pendingSteps) return;
+    const direction = pendingSteps > 0 ? 1 : -1;
+    let workingItems = checklistViewWorkingItemsRef.current || items;
+    let changed = false;
+    while (pendingSteps) {
+      const result = reorderChecklistViewItem(workingItems, state.itemId, state.displayIndex, direction);
+      if (!result.changed) break;
+      workingItems = result.nextItems;
+      state.displayIndex = result.displayIndex;
+      state.appliedSteps += direction;
+      pendingSteps -= direction;
+      changed = true;
+    }
+    if (!changed) return;
     state.moved = true;
-    state.displayIndex = result.displayIndex;
-    checklistViewWorkingItemsRef.current = result.nextItems;
-    setItems(result.nextItems);
-    setChecklistViewSelection({ itemId: state.itemId, displayIndex: result.displayIndex });
+    checklistViewWorkingItemsRef.current = workingItems;
+    setItems(workingItems);
+    setChecklistViewSelection({ itemId: state.itemId, displayIndex: state.displayIndex });
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(8);
   }
 
@@ -10974,7 +10989,7 @@ function App() {
     const nextItems = checklistViewWorkingItemsRef.current;
     if (state.active) checklistViewSuppressClickUntilRef.current = Date.now() + 700;
     if (state.timer) window.clearTimeout(state.timer);
-    checklistViewDragRef.current = { timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, lastMoveY: 0, stepSize: 44, displayIndex: -1 };
+    checklistViewDragRef.current = { timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 };
     checklistViewWorkingItemsRef.current = null;
     if (event?.currentTarget && state.pointerId !== null) {
       try {

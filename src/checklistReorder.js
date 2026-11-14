@@ -15,6 +15,11 @@ function checklistLineDetails(line, index) {
   };
 }
 
+export function checklistDragStepCount(startY, currentY, stepSize) {
+  const safeStepSize = Math.max(1, Number(stepSize) || 1);
+  return Math.trunc((Number(currentY) - Number(startY)) / safeStepSize);
+}
+
 export function reorderChecklistLines(notes, completedPosition = 'bottom', displayIndex = -1, direction = 0) {
   const lines = normaliseStoredChecklistLines(notes);
   const displayRows = lines.map(checklistLineDetails).filter((row) => row.text);
