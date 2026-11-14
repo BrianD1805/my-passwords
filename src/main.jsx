@@ -10,7 +10,7 @@ import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateF
 import { checklistDragStepCount, reorderChecklistLines } from './checklistReorder.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.030.04';
+const VERSION = 'Password-Encrypt Ver-1.030.05';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3659,7 +3659,7 @@ function App() {
   const [checklistDraggingId, setChecklistDraggingId] = useState('');
   const checklistDragRef = useRef({ timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, initialIndex: -1, itemCount: 0 });
   const [checklistViewSelection, setChecklistViewSelection] = useState({ itemId: '', displayIndex: -1 });
-  const checklistViewDragRef = useRef({ timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 });
+  const checklistViewDragRef = useRef({ timer: null, itemId: '', active: false, scrolling: false, moved: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1, scrollElement: null, startScrollTop: 0 });
   const checklistViewWorkingItemsRef = useRef(null);
   const checklistViewSuppressClickUntilRef = useRef(0);
   const [editingItemId, setEditingItemId] = useState('');
@@ -10826,7 +10826,8 @@ function App() {
     if (!event.isPrimary || event.pointerType === 'mouse') return;
     event.preventDefault();
     resetChecklistPointerDrag();
-    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
+    const dragSurface = event.currentTarget.closest?.('.checklist-editor-list');
+    try { dragSurface?.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
     const rowHeight = event.currentTarget.closest?.('[data-checklist-editor-id]')?.getBoundingClientRect?.().height || 56;
     const initialIndex = (form.checklistItems || []).findIndex((row) => row.id === rowId);
     checklistDragRef.current = {
@@ -10913,7 +10914,7 @@ function App() {
   function resetChecklistViewDrag(event, { clearSelection = false } = {}) {
     const state = checklistViewDragRef.current;
     if (state.timer) window.clearTimeout(state.timer);
-    checklistViewDragRef.current = { timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 };
+    checklistViewDragRef.current = { timer: null, itemId: '', active: false, scrolling: false, moved: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1, scrollElement: null, startScrollTop: 0 };
     checklistViewWorkingItemsRef.current = null;
     if (event?.currentTarget && state.pointerId !== null) {
       try {
@@ -10926,7 +10927,9 @@ function App() {
   function startChecklistViewLongPress(event, item, displayIndex) {
     if (!event.isPrimary || event.pointerType === 'mouse' || !item?.id) return;
     resetChecklistViewDrag();
-    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
+    const dragSurface = event.currentTarget.closest?.('.checklist-display');
+    const scrollElement = event.currentTarget.closest?.('.item-popup-card');
+    try { dragSurface?.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
     const rowHeight = event.currentTarget.getBoundingClientRect?.().height || 52;
     checklistViewWorkingItemsRef.current = items;
     checklistViewDragRef.current = {
@@ -10939,22 +10942,34 @@ function App() {
       }, 420),
       itemId: item.id,
       active: false,
+      scrolling: false,
       moved: false,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       stepSize: Math.max(34, rowHeight * 0.72),
       appliedSteps: 0,
-      displayIndex
+      displayIndex,
+      scrollElement,
+      startScrollTop: scrollElement?.scrollTop || 0
     };
   }
 
   function moveChecklistViewLongPress(event) {
     const state = checklistViewDragRef.current;
     if (!state.itemId || state.pointerId !== event.pointerId) return;
-    const movedBeforeActivation = Math.hypot(event.clientX - state.startX, event.clientY - state.startY) > 24;
-    if (!state.active && movedBeforeActivation) {
-      resetChecklistViewDrag(event);
+    const horizontalMovement = event.clientX - state.startX;
+    const verticalMovement = event.clientY - state.startY;
+    const movedBeforeActivation = Math.hypot(horizontalMovement, verticalMovement) > 10;
+    if (!state.active && !state.scrolling && movedBeforeActivation) {
+      if (state.timer) window.clearTimeout(state.timer);
+      state.timer = null;
+      state.scrolling = true;
+      checklistViewSuppressClickUntilRef.current = Date.now() + 300;
+    }
+    if (state.scrolling) {
+      event.preventDefault();
+      if (state.scrollElement) state.scrollElement.scrollTop = state.startScrollTop - verticalMovement;
       return;
     }
     if (!state.active) return;
@@ -10989,7 +11004,7 @@ function App() {
     const nextItems = checklistViewWorkingItemsRef.current;
     if (state.active) checklistViewSuppressClickUntilRef.current = Date.now() + 700;
     if (state.timer) window.clearTimeout(state.timer);
-    checklistViewDragRef.current = { timer: null, itemId: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 };
+    checklistViewDragRef.current = { timer: null, itemId: '', active: false, scrolling: false, moved: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1, scrollElement: null, startScrollTop: 0 };
     checklistViewWorkingItemsRef.current = null;
     if (event?.currentTarget && state.pointerId !== null) {
       try {
@@ -12584,7 +12599,7 @@ function App() {
                       <small className="checklist-editor-desktop-help">Type normally. Use the arrow controls to change the order.</small>
                       <small className="checklist-editor-mobile-help">Press and hold the dotted handle until the row highlights, then slide it up or down.</small>
                     </div>
-                    <div className="checklist-editor-list">
+                    <div className="checklist-editor-list" onPointerMove={moveChecklistLongPress} onPointerUp={resetChecklistPointerDrag} onPointerCancel={resetChecklistPointerDrag} onLostPointerCapture={resetChecklistPointerDrag}>
                       {(form.checklistItems || []).map((row, index, rows) => (
                         <div
                           className={`checklist-editor-row ${checklistDraggingId === row.id ? 'is-dragging' : ''}`}
@@ -12596,10 +12611,6 @@ function App() {
                             className="checklist-editor-grip"
                             draggable={false}
                             onPointerDown={(event) => startChecklistLongPress(event, row.id)}
-                            onPointerMove={moveChecklistLongPress}
-                            onPointerUp={resetChecklistPointerDrag}
-                            onPointerCancel={resetChecklistPointerDrag}
-                            onLostPointerCapture={resetChecklistPointerDrag}
                             onContextMenu={(event) => event.preventDefault()}
                             aria-label={`Reorder ${row.text || `checklist item ${index + 1}`}. Press and hold, then slide up or down.`}
                             title="Press and hold, then slide to reorder"
@@ -13828,7 +13839,7 @@ function App() {
                     {isChecklist ? (
                       <div className="app-field-block">
                         <span className="app-field-label">Checklist</span>
-                        <div className={`checklist-display ${checklistSettings.strikeThrough ? '' : 'no-strikethrough'}`}>
+                        <div className={`checklist-display ${checklistSettings.strikeThrough ? '' : 'no-strikethrough'}`} onPointerMove={moveChecklistViewLongPress} onPointerUp={finishChecklistViewDrag} onPointerCancel={finishChecklistViewDrag} onLostPointerCapture={finishChecklistViewDrag}>
                           <div className="checklist-progress-summary">
                             <div><strong>Progress</strong><span>{checklistCompletedCount} of {checklistRows.length}</span></div>
                             <div className="checklist-progress-track" role="progressbar" aria-label="Checklist progress" aria-valuemin="0" aria-valuemax={checklistRows.length} aria-valuenow={checklistCompletedCount}>
@@ -13841,10 +13852,6 @@ function App() {
                               className={`checklist-line ${row.done ? 'done' : ''} ${checklistViewSelection.itemId === viewedItem.id && checklistViewSelection.displayIndex === displayIndex ? 'is-selected' : ''}`}
                               data-checklist-view-row={displayIndex}
                               onPointerDown={(event) => { if (!importedItem) startChecklistViewLongPress(event, viewedItem, displayIndex); }}
-                              onPointerMove={moveChecklistViewLongPress}
-                              onPointerUp={finishChecklistViewDrag}
-                              onPointerCancel={finishChecklistViewDrag}
-                              onLostPointerCapture={finishChecklistViewDrag}
                               onContextMenu={(event) => { if (!importedItem) event.preventDefault(); }}
                             >
                               <button type="button" className="checklist-line-toggle" onClick={() => {

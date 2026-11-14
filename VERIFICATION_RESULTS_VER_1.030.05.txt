@@ -1,0 +1,41 @@
+Password-Encrypt Ver-1.030.05 verification
+Date: 2026-11-14 (Europe/London)
+
+PASS  npm run build
+PASS  npm run security:check (13/13)
+PASS  npm run reliability:check (20/20)
+PASS  npm run legal:check (35/35)
+PASS  npm run ux:check (36/36)
+PASS  npm run mobile:check (6/6)
+PASS  npm run emergency:check (75/75)
+PASS  npm run onboarding:check (68/68)
+PASS  npm run push:check (32/32)
+PASS  npm run sync-retry:check (10/10)
+PASS  npm run device-refresh:check (7/7)
+PASS  npm run settings-tour:check (13/13)
+PASS  npm run feature:check (54/54)
+PASS  JavaScript syntax checks
+PASS  git diff --check
+
+Total scripted checks: 369 passed, 0 failed.
+
+Ver-1.030.05 feature coverage includes:
+- stationary-parent pointer capture while React moves checklist rows;
+- continuous downward movement across multiple checklist positions;
+- equivalent upward and downward distance calculations;
+- scrolling from directly inside the checklist rows before long-press activation;
+- restored vertical overflow on the item popup;
+- edit-screen and view-screen mobile reorder support;
+- the uncluttered selected-row delete control remains intact.
+
+Root cause confirmed:
+- the moving row previously owned pointer capture;
+- moving downward could relocate that exact DOM node and end later pointer events;
+- moving upward often relocated its sibling instead, explaining the directional asymmetry;
+- a legacy overflow:hidden!important rule also overrode the popup's intended scrolling.
+
+Build notes:
+- Vite reported the existing advisory that the main minified JavaScript chunk
+  is larger than 500 kB. The production build completed successfully.
+- No Supabase SQL migration is required for Ver-1.030.05.
+- No Git commit or push was performed.

@@ -3138,6 +3138,7 @@ footer { color: #6f8091; text-align: center; padding: 26px 0 8px; }
   }
 }
 
+
 @media (max-width: 520px) {
   .checklist-editor-row {
     grid-template-columns: 32px 32px minmax(0, 1fr) 25px 32px;
@@ -20815,3 +20816,15 @@ body.guided-tour-active #root {
 
 
 /* Password-Encrypt Ver-1.024.02 — Welcome-email gating, deterministic Settings drill-down top, differentiated Emergency Access directory headers. */
+
+/* Password-Encrypt Ver-1.030.05 — the legacy popup accent used overflow:hidden
+   to clip its decoration. The accent no longer exists, so restore the popup as
+   the actual scroll container. Checklist rows provide their own pre-hold
+   scrolling while retaining press-and-hold reordering. */
+.item-popup-card,
+.item-form.item-popup-card {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
