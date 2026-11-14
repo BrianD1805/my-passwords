@@ -9,7 +9,7 @@ import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.029.03';
+const VERSION = 'Password-Encrypt Ver-1.030';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -1182,7 +1182,7 @@ const categoryHints = {
     url: 'Optional link',
     username: 'Owner / context',
     secret: 'Optional protected detail',
-    notes: 'Use one line per checklist item. Example:\n[ ] Renew card\n[ ] Rotate API key\n[x] Backup codes saved'
+    notes: 'Use one line per checklist item.'
   },
   Documents: {
     title: 'e.g. Insurance PDF, policy or certificate',
@@ -3654,7 +3654,7 @@ function App() {
   const [showSecrets, setShowSecrets] = useState({});
   const [showFormSecret, setShowFormSecret] = useState(false);
   const [itemCredentialFieldsArmed, setItemCredentialFieldsArmed] = useState({ username: false, password: false });
-  const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '' });
+  const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistCompletedPosition: 'stay', checklistStrikeThrough: true });
   const [editingItemId, setEditingItemId] = useState('');
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
@@ -6979,7 +6979,7 @@ function App() {
   }
 
   function emptyForm(categoryToKeep = form.category) {
-    return { title: '', category: categoryToKeep || 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '' };
+    return { title: '', category: categoryToKeep || 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistCompletedPosition: 'stay', checklistStrikeThrough: true };
   }
 
   function storedDocumentDeletionEntry(item) {
@@ -7282,7 +7282,11 @@ function App() {
           username: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(form.category) ? '' : form.username.trim(),
           password: ['Notes', 'Checklists', DOCUMENTS_CATEGORY, PICTURES_CATEGORY].includes(form.category) ? '' : form.password,
           notes: notesValue,
-          file: storedDocumentFile
+          file: storedDocumentFile,
+          ...(form.category === 'Checklists' ? {
+            checklistCompletedPosition: form.checklistCompletedPosition === 'bottom' ? 'bottom' : 'stay',
+            checklistStrikeThrough: form.checklistStrikeThrough !== false
+          } : {})
         },
         updatedAt: new Date().toISOString()
       };
@@ -7364,7 +7368,9 @@ function App() {
       cardNickname: item.payload?.cardNickname || item.title || '',
       cardNumber: item.payload?.cardNumber || '',
       cardExpiry: item.payload?.cardExpiry || '',
-      cardCcv: item.payload?.cardCcv || ''
+      cardCcv: item.payload?.cardCcv || '',
+      checklistCompletedPosition: item.payload?.checklistCompletedPosition === 'stay' ? 'stay' : 'bottom',
+      checklistStrikeThrough: item.payload?.checklistStrikeThrough !== false
     });
     setShowFormSecret(false);
     setItemCredentialFieldsArmed({ username: true, password: true });
@@ -10716,16 +10722,25 @@ function App() {
       .join('\n');
   }
 
-  function parseChecklistNotes(notes) {
-    return String(notes || '')
+  function checklistDisplayOptions(item) {
+    return {
+      completedPosition: item?.payload?.checklistCompletedPosition === 'stay' ? 'stay' : 'bottom',
+      strikeThrough: item?.payload?.checklistStrikeThrough !== false
+    };
+  }
+
+  function parseChecklistNotes(notes, completedPosition = 'bottom') {
+    const rows = String(notes || '')
       .split(/\r?\n/)
       .map((line, index) => {
         const trimmed = line.trim();
         const match = trimmed.match(/^\[(x|X| )\]\s*(.*)$/);
         return { index, done: match ? match[1].toLowerCase() === 'x' : false, text: match ? match[2] : trimmed };
       })
-      .filter((item) => item.text.trim())
-      .sort((a, b) => Number(a.done) - Number(b.done));
+      .filter((item) => item.text.trim());
+    return completedPosition === 'bottom'
+      ? rows.sort((a, b) => Number(a.done) - Number(b.done) || a.index - b.index)
+      : rows;
   }
 
   async function toggleChecklistLine(item, originalIndex) {
@@ -10735,17 +10750,8 @@ function App() {
     const text = match ? match[2] : current.trim();
     const isDone = match ? match[1].toLowerCase() === 'x' : false;
     lines[originalIndex] = `${isDone ? '[ ]' : '[x]'} ${text}`;
-    const sorted = lines
-      .map((line) => {
-        const trimmed = line.trim();
-        const m = trimmed.match(/^\[(x|X| )\]\s*(.*)$/);
-        return { done: m ? m[1].toLowerCase() === 'x' : false, text: m ? m[2] : trimmed };
-      })
-      .filter((row) => row.text)
-      .sort((a, b) => Number(a.done) - Number(b.done))
-      .map((row) => `${row.done ? '[x]' : '[ ]'} ${row.text}`)
-      .join('\n');
-    const next = items.map((vaultItem) => vaultItem.id === item.id ? { ...vaultItem, payload: { ...vaultItem.payload, notes: sorted }, updatedAt: new Date().toISOString() } : vaultItem);
+    const updatedNotes = normaliseChecklistNotes(lines.join('\n'));
+    const next = items.map((vaultItem) => vaultItem.id === item.id ? { ...vaultItem, payload: { ...vaultItem.payload, notes: updatedNotes }, updatedAt: new Date().toISOString() } : vaultItem);
     await saveItems(next, { autoSync: true, silentAutoSync: true });
     showMessage('Checklist updated.');
   }
@@ -12300,6 +12306,28 @@ function App() {
                   </div>
                 )}
                 <label>{form.category === 'Checklists' ? 'Checklist items' : form.category === DOCUMENTS_CATEGORY ? 'Document notes' : form.category === PICTURES_CATEGORY ? 'Picture notes' : form.category === CARDS_CATEGORY ? 'Card notes' : 'Notes'}<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
+                {form.category === 'Checklists' && (
+                  <section className="checklist-options-card" aria-labelledby="checklist-options-title">
+                    <div className="checklist-options-heading">
+                      <strong id="checklist-options-title">When an item is completed</strong>
+                      <small>Choose how this checklist should behave.</small>
+                    </div>
+                    <div className="checklist-position-options" role="radiogroup" aria-label="Completed checklist item position">
+                      <label className={form.checklistCompletedPosition !== 'bottom' ? 'selected' : ''}>
+                        <input type="radio" name="checklist-completed-position" value="stay" checked={form.checklistCompletedPosition !== 'bottom'} onChange={() => setForm({ ...form, checklistCompletedPosition: 'stay' })} />
+                        <span><strong>Keep it in place</strong><small>The item stays in its original position.</small></span>
+                      </label>
+                      <label className={form.checklistCompletedPosition === 'bottom' ? 'selected' : ''}>
+                        <input type="radio" name="checklist-completed-position" value="bottom" checked={form.checklistCompletedPosition === 'bottom'} onChange={() => setForm({ ...form, checklistCompletedPosition: 'bottom' })} />
+                        <span><strong>Move it to the bottom</strong><small>Outstanding items remain at the top.</small></span>
+                      </label>
+                    </div>
+                    <label className="checklist-strike-option">
+                      <input type="checkbox" checked={form.checklistStrikeThrough !== false} onChange={(e) => setForm({ ...form, checklistStrikeThrough: e.target.checked })} />
+                      <span><strong>Strike through completed items</strong><small>Turn this off for reusable lists, such as monthly checklists.</small></span>
+                    </label>
+                  </section>
+                )}
                 <label className="favourite-toggle"><input type="checkbox" checked={form.favourite} onChange={(e) => setForm({ ...form, favourite: e.target.checked })} /> Mark as favourite</label>
                 </div>
                 <div className="item-popup-footer form-buttons">
@@ -13382,7 +13410,10 @@ function App() {
                 const isStoredFile = isDocument || isPicture;
                 const isCard = itemType === CARDS_CATEGORY;
                 const storedDocument = viewedItem.payload?.file;
-                const checklistRows = isChecklist ? parseChecklistNotes(viewedItem.payload?.notes) : [];
+                const checklistSettings = isChecklist ? checklistDisplayOptions(viewedItem) : { completedPosition: 'bottom', strikeThrough: true };
+                const checklistRows = isChecklist ? parseChecklistNotes(viewedItem.payload?.notes, checklistSettings.completedPosition) : [];
+                const checklistCompletedCount = checklistRows.filter((row) => row.done).length;
+                const checklistProgress = checklistRows.length ? Math.round((checklistCompletedCount / checklistRows.length) * 100) : 0;
                 return (
                   <>
                     {viewedItem.payload?.url && !isChecklist && !isStoredFile && !isCard && (
@@ -13483,7 +13514,13 @@ function App() {
                     {isChecklist ? (
                       <div className="app-field-block">
                         <span className="app-field-label">Checklist</span>
-                        <div className="checklist-display">
+                        <div className={`checklist-display ${checklistSettings.strikeThrough ? '' : 'no-strikethrough'}`}>
+                          <div className="checklist-progress-summary">
+                            <div><strong>Progress</strong><span>{checklistCompletedCount} of {checklistRows.length}</span></div>
+                            <div className="checklist-progress-track" role="progressbar" aria-label="Checklist progress" aria-valuemin="0" aria-valuemax={checklistRows.length} aria-valuenow={checklistCompletedCount}>
+                              <span style={{ width: `${checklistProgress}%` }} />
+                            </div>
+                          </div>
                           {checklistRows.length ? checklistRows.map((row) => (
                             <button type="button" key={`${viewedItem.id}-${row.index}-${row.text}`} className={row.done ? 'checklist-line done' : 'checklist-line'} onClick={() => { if (!importedItem) toggleChecklistLine(viewedItem, row.index); }} disabled={importedItem}>
                               <span className="check-box">{row.done ? '✓' : ''}</span>
