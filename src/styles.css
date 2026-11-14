@@ -20817,16 +20817,14 @@ body.guided-tour-active #root {
 
 /* Password-Encrypt Ver-1.024.02 — Welcome-email gating, deterministic Settings drill-down top, differentiated Emergency Access directory headers. */
 
-/* Password-Encrypt Ver-1.030.05 — the legacy popup accent used overflow:hidden
-   to clip its decoration. The accent no longer exists, so restore the popup as
-   the actual scroll container. Checklist rows provide their own pre-hold
-   scrolling while retaining press-and-hold reordering. */
+/* Password-Encrypt Ver-1.030.08 — keep the card itself fixed. Its body and the
+   checklist list are the intentional scroll areas; allowing the card to scroll
+   created a third competing mobile scroll container. */
 .item-popup-card,
 .item-form.item-popup-card {
   overflow-x: hidden !important;
-  overflow-y: auto !important;
+  overflow-y: hidden !important;
   overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
 }
 
 /* Password-Encrypt Ver-1.030.06 — the checklist rows, not the surrounding
@@ -20854,12 +20852,17 @@ body.guided-tour-active #root {
     padding-right: 2px;
   }
 
-  /* Ver-1.030.07 — override the older touch-action:none rule. Android now
-     performs ordinary checklist scrolling natively. The non-passive touch
-     handler only prevents that default after a long press enters reorder mode. */
+  /* Ver-1.030.08 — unselected rows are entirely native scroll surfaces.
+     Only a row already selected by long press becomes a drag surface. */
   .checklist-lines-scroll,
   .checklist-lines-scroll .checklist-line,
   .checklist-lines-scroll .checklist-line-toggle {
     touch-action: pan-y !important;
+  }
+
+  .checklist-lines-scroll .checklist-line.is-selected,
+  .checklist-lines-scroll .checklist-line.is-selected .checklist-line-toggle,
+  .checklist-lines-scroll .checklist-line.is-selected .checklist-line-delete {
+    touch-action: none !important;
   }
 }

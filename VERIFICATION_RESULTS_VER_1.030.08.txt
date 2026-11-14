@@ -1,0 +1,39 @@
+Password-Encrypt Ver-1.030.08 verification
+Date: 2026-11-14 (Europe/London)
+
+PASS  npm run build
+PASS  npm run security:check (13/13)
+PASS  npm run reliability:check (20/20)
+PASS  npm run legal:check (35/35)
+PASS  npm run ux:check (36/36)
+PASS  npm run mobile:check (6/6)
+PASS  npm run emergency:check (75/75)
+PASS  npm run onboarding:check (68/68)
+PASS  npm run push:check (32/32)
+PASS  npm run sync-retry:check (10/10)
+PASS  npm run device-refresh:check (7/7)
+PASS  npm run settings-tour:check (13/13)
+PASS  npm run feature:check (60/60)
+PASS  JavaScript syntax checks
+PASS  git diff --check
+
+Total scripted checks: 375 passed, 0 failed.
+
+Live deployment investigation:
+- confirmed Ver-1.030.07 asset filenames were loaded on Netlify;
+- confirmed both the historical touch-action:none rule and later pan-y!important
+  rule were present in the deployed stylesheet;
+- ruled out stale deployment and identified remaining gesture ownership conflict.
+
+Ver-1.030.08 architecture:
+- unselected checklist rows use native Android scrolling with no touch listener;
+- long press selects a row without dragging it during that same touch;
+- a second gesture on the selected row performs reordering;
+- only the selected row enters touch-action:none and pointer capture;
+- the outer card no longer competes as another scroll container.
+
+Build notes:
+- Vite reported the existing advisory that the main minified JavaScript chunk
+  is larger than 500 kB. The production build completed successfully.
+- No Supabase SQL migration is required for Ver-1.030.08.
+- No Git commit or push was performed.
