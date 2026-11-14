@@ -10,7 +10,7 @@ import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateF
 import { checklistDragStepCount, reorderChecklistLines } from './checklistReorder.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.030.05';
+const VERSION = 'Password-Encrypt Ver-1.030.06';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -10928,7 +10928,7 @@ function App() {
     if (!event.isPrimary || event.pointerType === 'mouse' || !item?.id) return;
     resetChecklistViewDrag();
     const dragSurface = event.currentTarget.closest?.('.checklist-display');
-    const scrollElement = event.currentTarget.closest?.('.item-popup-card');
+    const scrollElement = event.currentTarget.closest?.('.checklist-lines-scroll');
     try { dragSurface?.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
     const rowHeight = event.currentTarget.getBoundingClientRect?.().height || 52;
     checklistViewWorkingItemsRef.current = items;
@@ -13839,32 +13839,36 @@ function App() {
                     {isChecklist ? (
                       <div className="app-field-block">
                         <span className="app-field-label">Checklist</span>
-                        <div className={`checklist-display ${checklistSettings.strikeThrough ? '' : 'no-strikethrough'}`} onPointerMove={moveChecklistViewLongPress} onPointerUp={finishChecklistViewDrag} onPointerCancel={finishChecklistViewDrag} onLostPointerCapture={finishChecklistViewDrag}>
+                        <div className={`checklist-display ${checklistSettings.strikeThrough ? '' : 'no-strikethrough'} ${importedItem ? 'is-readonly' : ''}`} onPointerMove={moveChecklistViewLongPress} onPointerUp={finishChecklistViewDrag} onPointerCancel={finishChecklistViewDrag} onLostPointerCapture={finishChecklistViewDrag}>
                           <div className="checklist-progress-summary">
                             <div><strong>Progress</strong><span>{checklistCompletedCount} of {checklistRows.length}</span></div>
                             <div className="checklist-progress-track" role="progressbar" aria-label="Checklist progress" aria-valuemin="0" aria-valuemax={checklistRows.length} aria-valuenow={checklistCompletedCount}>
                               <span style={{ width: `${checklistProgress}%` }} />
                             </div>
                           </div>
-                          {checklistRows.length ? checklistRows.map((row, displayIndex) => (
-                            <div
-                              key={`${viewedItem.id}-${row.identity}`}
-                              className={`checklist-line ${row.done ? 'done' : ''} ${checklistViewSelection.itemId === viewedItem.id && checklistViewSelection.displayIndex === displayIndex ? 'is-selected' : ''}`}
-                              data-checklist-view-row={displayIndex}
-                              onPointerDown={(event) => { if (!importedItem) startChecklistViewLongPress(event, viewedItem, displayIndex); }}
-                              onContextMenu={(event) => { if (!importedItem) event.preventDefault(); }}
-                            >
-                              <button type="button" className="checklist-line-toggle" onClick={() => {
-                                if (Date.now() < checklistViewSuppressClickUntilRef.current) return;
-                                setChecklistViewSelection({ itemId: '', displayIndex: -1 });
-                                if (!importedItem) toggleChecklistLine(viewedItem, row.index);
-                              }} disabled={importedItem}>
-                                <span className="check-box">{row.done ? '✓' : ''}</span>
-                                <span>{row.text}</span>
-                              </button>
-                              {!importedItem && <button type="button" className="checklist-line-delete" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); deleteChecklistLine(viewedItem, row.index); }} aria-label={`Delete ${row.text}`} title="Delete checklist item"><X size={20} /></button>}
+                          {checklistRows.length ? (
+                            <div className="checklist-lines-scroll" data-checklist-scroll-area="true">
+                              {checklistRows.map((row, displayIndex) => (
+                                <div
+                                  key={`${viewedItem.id}-${row.identity}`}
+                                  className={`checklist-line ${row.done ? 'done' : ''} ${checklistViewSelection.itemId === viewedItem.id && checklistViewSelection.displayIndex === displayIndex ? 'is-selected' : ''}`}
+                                  data-checklist-view-row={displayIndex}
+                                  onPointerDown={(event) => { if (!importedItem) startChecklistViewLongPress(event, viewedItem, displayIndex); }}
+                                  onContextMenu={(event) => { if (!importedItem) event.preventDefault(); }}
+                                >
+                                  <button type="button" className="checklist-line-toggle" onClick={() => {
+                                    if (Date.now() < checklistViewSuppressClickUntilRef.current) return;
+                                    setChecklistViewSelection({ itemId: '', displayIndex: -1 });
+                                    if (!importedItem) toggleChecklistLine(viewedItem, row.index);
+                                  }} disabled={importedItem}>
+                                    <span className="check-box">{row.done ? '✓' : ''}</span>
+                                    <span>{row.text}</span>
+                                  </button>
+                                  {!importedItem && <button type="button" className="checklist-line-delete" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); deleteChecklistLine(viewedItem, row.index); }} aria-label={`Delete ${row.text}`} title="Delete checklist item"><X size={20} /></button>}
+                                </div>
+                              ))}
                             </div>
-                          )) : <span className="app-field-value">No checklist items yet.</span>}
+                          ) : <span className="app-field-value">No checklist items yet.</span>}
                         </div>
                       </div>
                     ) : viewedItem.payload?.notes && (

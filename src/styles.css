@@ -20828,3 +20828,29 @@ body.guided-tour-active #root {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
+
+/* Password-Encrypt Ver-1.030.06 — the checklist rows, not the surrounding
+   popup, are the dedicated data-panel scroll area. */
+.checklist-lines-scroll {
+  min-height: 0;
+  max-height: min(46vh, 430px);
+  display: grid;
+  gap: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
+}
+
+.checklist-display.is-readonly .checklist-line {
+  touch-action: pan-y;
+}
+
+@media (max-width: 860px) {
+  .checklist-lines-scroll {
+    max-height: min(52dvh, 440px);
+    padding-right: 2px;
+  }
+}
