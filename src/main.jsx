@@ -9,7 +9,7 @@ import LegalPage, { LEGAL_VERSION, legalPageForPath } from './LegalPages.jsx';
 import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateFormat.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.030.01';
+const VERSION = 'Password-Encrypt Ver-1.030.02';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3657,7 +3657,6 @@ function App() {
   const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistItems: [], checklistCompletedPosition: 'stay', checklistStrikeThrough: true });
   const [checklistDraggingId, setChecklistDraggingId] = useState('');
   const checklistDragRef = useRef({ timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, lastTargetId: '' });
-  const checklistNativeDragRef = useRef({ rowId: '', lastTargetId: '' });
   const [editingItemId, setEditingItemId] = useState('');
   const [dbStatus, setDbStatus] = useState({ checked: false, connected: false, message: 'Not checked yet.' });
   const [bootstrap, setBootstrap] = useState(() => readSavedAccount());
@@ -10806,20 +10805,26 @@ function App() {
     });
   }
 
-  function resetChecklistPointerDrag() {
+  function resetChecklistPointerDrag(event) {
     const state = checklistDragRef.current;
     if (state.timer) window.clearTimeout(state.timer);
+    if (event?.currentTarget && state.pointerId !== null) {
+      try {
+        if (event.currentTarget.hasPointerCapture?.(state.pointerId)) event.currentTarget.releasePointerCapture(state.pointerId);
+      } catch { /* Pointer capture may already have ended. */ }
+    }
     checklistDragRef.current = { timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, lastTargetId: '' };
-    checklistNativeDragRef.current = { rowId: '', lastTargetId: '' };
     setChecklistDraggingId('');
   }
 
   function startChecklistLongPress(event, rowId) {
-    if (event.pointerType === 'mouse') return;
+    if (!event.isPrimary || event.pointerType === 'mouse') return;
+    event.preventDefault();
     resetChecklistPointerDrag();
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
     checklistDragRef.current = {
       timer: window.setTimeout(() => {
+        checklistDragRef.current.timer = null;
         checklistDragRef.current.active = true;
         setChecklistDraggingId(rowId);
         if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
@@ -10835,10 +10840,10 @@ function App() {
 
   function moveChecklistLongPress(event) {
     const state = checklistDragRef.current;
-    if (!state.rowId) return;
-    const movedBeforeActivation = Math.hypot(event.clientX - state.startX, event.clientY - state.startY) > 10;
+    if (!state.rowId || state.pointerId !== event.pointerId) return;
+    const movedBeforeActivation = Math.hypot(event.clientX - state.startX, event.clientY - state.startY) > 24;
     if (!state.active && movedBeforeActivation) {
-      resetChecklistPointerDrag();
+      resetChecklistPointerDrag(event);
       return;
     }
     if (!state.active) return;
@@ -10849,21 +10854,6 @@ function App() {
       state.lastTargetId = targetId;
       moveChecklistEditorRowOver(state.rowId, targetId);
     }
-  }
-
-  function startChecklistNativeDrag(event, rowId) {
-    checklistNativeDragRef.current = { rowId, lastTargetId: '' };
-    setChecklistDraggingId(rowId);
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', rowId);
-  }
-
-  function moveChecklistNativeDrag(event, targetId) {
-    event.preventDefault();
-    const dragState = checklistNativeDragRef.current;
-    if (!dragState.rowId || dragState.lastTargetId === targetId) return;
-    dragState.lastTargetId = targetId;
-    moveChecklistEditorRowOver(dragState.rowId, targetId);
   }
 
   function checklistDisplayOptions(item) {
@@ -12453,7 +12443,8 @@ function App() {
                   <section className="checklist-editor" aria-labelledby="checklist-editor-title">
                     <div className="checklist-editor-heading">
                       <span id="checklist-editor-title">Checklist items</span>
-                      <small>Type normally. Hold the grip and drag to reorder on a phone.</small>
+                      <small className="checklist-editor-desktop-help">Type normally. Use the arrow controls to change the order.</small>
+                      <small className="checklist-editor-mobile-help">Press and hold the dotted handle until the row highlights, then slide it up or down.</small>
                     </div>
                     <div className="checklist-editor-list">
                       {(form.checklistItems || []).map((row, index, rows) => (
@@ -12461,24 +12452,19 @@ function App() {
                           className={`checklist-editor-row ${checklistDraggingId === row.id ? 'is-dragging' : ''}`}
                           key={row.id}
                           data-checklist-editor-id={row.id}
-                          onDragOver={(event) => moveChecklistNativeDrag(event, row.id)}
                         >
                           <button
                             type="button"
                             className="checklist-editor-grip"
-                            draggable={true}
-                            onDragStart={(event) => startChecklistNativeDrag(event, row.id)}
-                            onDragEnd={resetChecklistPointerDrag}
+                            draggable={false}
                             onPointerDown={(event) => startChecklistLongPress(event, row.id)}
                             onPointerMove={moveChecklistLongPress}
                             onPointerUp={resetChecklistPointerDrag}
                             onPointerCancel={resetChecklistPointerDrag}
-                            onKeyDown={(event) => {
-                              if (event.key === 'ArrowUp') { event.preventDefault(); moveChecklistEditorRowToIndex(row.id, index - 1); }
-                              if (event.key === 'ArrowDown') { event.preventDefault(); moveChecklistEditorRowToIndex(row.id, index + 1); }
-                            }}
-                            aria-label={`Reorder ${row.text || `checklist item ${index + 1}`}. Hold and drag, or use the arrow keys.`}
-                            title="Hold and drag to reorder"
+                            onLostPointerCapture={resetChecklistPointerDrag}
+                            onContextMenu={(event) => event.preventDefault()}
+                            aria-label={`Reorder ${row.text || `checklist item ${index + 1}`}. Press and hold, then slide up or down.`}
+                            title="Press and hold, then slide to reorder"
                           ><GripVertical size={20} /></button>
                           <button type="button" className={`checklist-editor-check ${row.done ? 'done' : ''}`} onClick={() => updateChecklistEditorRow(row.id, { done: !row.done })} aria-label={row.done ? 'Mark item as not completed' : 'Mark item as completed'}>{row.done ? <Check size={17} /> : null}</button>
                           <input data-checklist-input-id={row.id} value={row.text} onChange={(event) => updateChecklistEditorRow(row.id, { text: event.target.value })} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addChecklistEditorRow(row.id); } }} placeholder={`Checklist item ${index + 1}`} />
