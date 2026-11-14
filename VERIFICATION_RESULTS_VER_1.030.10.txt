@@ -1,0 +1,41 @@
+Password-Encrypt Ver-1.030.10 verification
+==========================================
+
+Production build: PASS
+
+Automated checks:
+- Security: 13/13 PASS
+- Reliability: 20/20 PASS
+- Legal/commercial readiness: 35/35 PASS
+- Landing/plan UX: 36/36 PASS
+- Mobile restoration: 6/6 PASS
+- Trusted Person / emergency flow: 75/75 PASS
+- Onboarding: 68/68 PASS
+- Push notifications: 32/32 PASS
+- Sync retry: 10/10 PASS
+- Secure-device refresh: 7/7 PASS
+- Settings guided tour: 13/13 PASS
+- Ver-1.030.10 feature regression: 64/64 PASS
+
+Total: 379/379 PASS
+
+Checklist workflow checks:
+- Existing Edit rows contain no tick control.
+- Existing Edit rows contain no six-dot grip.
+- Obsolete editor long-press drag handlers and state are removed.
+- Existing Edit rows retain up, down and delete controls.
+- Add checklist item is available during new-checklist creation but not existing-checklist editing.
+- View screen quick-add appends an unchecked item and saves immediately.
+- Quick-add preserves all existing checklist items and completion state.
+- Progress is outside the scrolling popup body in the fixed header.
+- Progress shows completed count, total count and percentage.
+- View item text has an explicit normal-weight override.
+- View header pills have reduced vertical padding.
+- Ver-1.030.09 single-scroll architecture remains protected.
+
+Version alignment:
+- App: Password-Encrypt Ver-1.030.10
+- Package: 1.30.10
+- Service worker cache: my-passwords-v1.030.10
+- Server APP_VERSION: Password-Encrypt Ver-1.030.10
+

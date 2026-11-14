@@ -20858,3 +20858,162 @@ body.guided-tour-active #root {
     touch-action: none !important;
   }
 }
+
+/* Password-Encrypt Ver-1.030.10 — simpler checklist editing and an always
+   visible progress summary in the view header. */
+.checklist-editor-row {
+  grid-template-columns: minmax(0, 1fr) 28px 34px;
+}
+
+.checklist-editor-item-text {
+  min-width: 0;
+  padding: 9px 10px;
+  color: #26384a;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.view-item-popup-header.has-checklist-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 220px) auto;
+  align-items: center;
+}
+
+.view-item-popup-header.has-checklist-progress > h2 {
+  min-width: 0;
+  grid-column: 1;
+  grid-row: 1;
+  overflow-wrap: anywhere;
+}
+
+.view-item-popup-header.has-checklist-progress > .checklist-header-progress {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.view-item-popup-header.has-checklist-progress > .icon-button {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.view-item-popup-header.has-checklist-progress h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checklist-header-progress {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.checklist-header-progress > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #637487;
+  font-size: .82rem;
+  line-height: 1.2;
+}
+
+.checklist-header-progress > div:first-child strong {
+  color: #25394f;
+  font-size: .86rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.view-item-meta .category-pill {
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
+}
+
+.view-item-popup-card .checklist-line-toggle,
+.view-item-popup-card .checklist-line-toggle > span:last-child {
+  font-weight: 400 !important;
+}
+
+.checklist-quick-add {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 4px 2px;
+  border-top: 1px solid #e3e9ee;
+  color: #587086;
+}
+
+.checklist-quick-add input {
+  min-width: 0;
+  width: 100%;
+  padding: 9px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #1f2933;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.checklist-quick-add input:focus {
+  border: 0;
+  box-shadow: none;
+  outline: none;
+}
+
+.checklist-quick-add button {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid #c9d8e3;
+  border-radius: 10px;
+  background: #f1f6fa;
+  color: #315d7e;
+  font-size: .9rem;
+  font-weight: 500;
+}
+
+.checklist-quick-add button:disabled {
+  opacity: .5;
+}
+
+@media (max-width: 860px) {
+  .checklist-editor-row,
+  .checklist-editor-row:first-child {
+    grid-template-columns: minmax(0, 1fr) 28px 34px;
+  }
+
+  .view-item-popup-header.has-checklist-progress {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 12px;
+  }
+
+  .view-item-popup-header.has-checklist-progress .checklist-header-progress {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .view-item-popup-header.has-checklist-progress > .icon-button {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .checklist-quick-add {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 520px) {
+  .checklist-editor-row,
+  .checklist-editor-row:first-child {
+    grid-template-columns: minmax(0, 1fr) 25px 32px;
+  }
+
+  .checklist-editor-item-text {
+    padding: 8px;
+  }
+}

@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Bell, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, GripVertical, Heart, Home, Image as ImageIcon, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Save, Settings, Share2, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Bell, CalendarClock, Check, ChevronRight, CircleHelp, Cloud, Copy, CreditCard, Database, Download, ExternalLink, Eye, EyeOff, FileText, Heart, Home, Image as ImageIcon, KeyRound, Lock, Mail, MonitorSmartphone, MoreHorizontal, Pencil, Phone, Plus, RefreshCw, Search, Save, Settings, Share2, ShieldCheck, Sparkles, Star, Trash2, Unlock, Upload, UserRoundCheck, UsersRound, X } from 'lucide-react';
 import './styles.css';
 import AdminApp from './AdminApp.jsx';
 import CustomSelect from './CustomSelect.jsx';
@@ -10,7 +10,7 @@ import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateF
 import { checklistDragStepCount, reorderChecklistLines } from './checklistReorder.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.030.09';
+const VERSION = 'Password-Encrypt Ver-1.030.10';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3656,9 +3656,8 @@ function App() {
   const [showFormSecret, setShowFormSecret] = useState(false);
   const [itemCredentialFieldsArmed, setItemCredentialFieldsArmed] = useState({ username: false, password: false });
   const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistItems: [], checklistCompletedPosition: 'stay', checklistStrikeThrough: true });
-  const [checklistDraggingId, setChecklistDraggingId] = useState('');
-  const checklistDragRef = useRef({ timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, initialIndex: -1, itemCount: 0 });
   const [checklistViewSelection, setChecklistViewSelection] = useState({ itemId: '', displayIndex: -1 });
+  const [checklistQuickAdd, setChecklistQuickAdd] = useState({ itemId: '', text: '', saving: false });
   const checklistViewDragRef = useRef({ timer: null, itemId: '', phase: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 });
   const checklistViewWorkingItemsRef = useRef(null);
   const checklistViewSuppressClickUntilRef = useRef(0);
@@ -10713,11 +10712,13 @@ function App() {
 
   function openViewItem(item) {
     setViewItemId(item.id);
+    setChecklistQuickAdd({ itemId: item.id, text: '', saving: false });
     setShowSecrets((current) => ({ ...current, [item.id]: false }));
   }
 
   function closeViewItem() {
     resetChecklistViewDrag(null, { clearSelection: true });
+    setChecklistQuickAdd({ itemId: '', text: '', saving: false });
     setViewItemId('');
     setPicturePreview({ itemId: '', dataUrl: '', busy: false });
   }
@@ -10796,79 +10797,6 @@ function App() {
       rows.splice(boundedIndex, 0, moving);
       return { ...current, checklistItems: rows };
     });
-  }
-
-  function moveChecklistEditorRowBy(rowId, direction) {
-    setForm((current) => {
-      const rows = [...(current.checklistItems || [])];
-      const currentIndex = rows.findIndex((row) => row.id === rowId);
-      const nextIndex = Math.max(0, Math.min(rows.length - 1, currentIndex + direction));
-      if (currentIndex < 0 || currentIndex === nextIndex) return current;
-      const [moving] = rows.splice(currentIndex, 1);
-      rows.splice(nextIndex, 0, moving);
-      return { ...current, checklistItems: rows };
-    });
-  }
-
-  function resetChecklistPointerDrag(event) {
-    const state = checklistDragRef.current;
-    if (state.timer) window.clearTimeout(state.timer);
-    checklistDragRef.current = { timer: null, rowId: '', active: false, pointerId: null, startX: 0, startY: 0, stepSize: 44, appliedSteps: 0, initialIndex: -1, itemCount: 0 };
-    setChecklistDraggingId('');
-    if (event?.currentTarget && state.pointerId !== null) {
-      try {
-        if (event.currentTarget.hasPointerCapture?.(state.pointerId)) event.currentTarget.releasePointerCapture(state.pointerId);
-      } catch { /* Pointer capture may already have ended. */ }
-    }
-  }
-
-  function startChecklistLongPress(event, rowId) {
-    if (!event.isPrimary || event.pointerType === 'mouse') return;
-    event.preventDefault();
-    resetChecklistPointerDrag();
-    const dragSurface = event.currentTarget.closest?.('.checklist-editor-list');
-    try { dragSurface?.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
-    const rowHeight = event.currentTarget.closest?.('[data-checklist-editor-id]')?.getBoundingClientRect?.().height || 56;
-    const initialIndex = (form.checklistItems || []).findIndex((row) => row.id === rowId);
-    checklistDragRef.current = {
-      timer: window.setTimeout(() => {
-        checklistDragRef.current.timer = null;
-        checklistDragRef.current.active = true;
-        setChecklistDraggingId(rowId);
-        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
-      }, 420),
-      rowId,
-      active: false,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      stepSize: Math.max(34, rowHeight * 0.7),
-      appliedSteps: 0,
-      initialIndex,
-      itemCount: (form.checklistItems || []).length
-    };
-  }
-
-  function moveChecklistLongPress(event) {
-    const state = checklistDragRef.current;
-    if (!state.rowId || state.pointerId !== event.pointerId) return;
-    const movedBeforeActivation = Math.hypot(event.clientX - state.startX, event.clientY - state.startY) > 24;
-    if (!state.active && movedBeforeActivation) {
-      resetChecklistPointerDrag(event);
-      return;
-    }
-    if (!state.active) return;
-    event.preventDefault();
-    const requestedSteps = Math.max(
-      -state.initialIndex,
-      Math.min(state.itemCount - state.initialIndex - 1, checklistDragStepCount(state.startY, event.clientY, state.stepSize))
-    );
-    const pendingSteps = requestedSteps - state.appliedSteps;
-    if (!pendingSteps) return;
-    const direction = pendingSteps > 0 ? 1 : -1;
-    for (let step = 0; step < Math.abs(pendingSteps); step += 1) moveChecklistEditorRowBy(state.rowId, direction);
-    state.appliedSteps = requestedSteps;
-    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(8);
   }
 
   function checklistDisplayOptions(item) {
@@ -11041,6 +10969,26 @@ function App() {
     setChecklistViewSelection({ itemId: '', displayIndex: -1 });
     await saveItems(next, { autoSync: true, silentAutoSync: true });
     showMessage('Checklist item deleted.');
+  }
+
+  async function addChecklistLineFromView(event, item) {
+    event.preventDefault();
+    const text = String(checklistQuickAdd.itemId === item?.id ? checklistQuickAdd.text : '').trim();
+    if (!item?.id || !text || checklistQuickAdd.saving) return;
+    setChecklistQuickAdd({ itemId: item.id, text, saving: true });
+    const existingNotes = normaliseChecklistNotes(item.payload?.notes);
+    const updatedNotes = [existingNotes, `[ ] ${text}`].filter(Boolean).join('\n');
+    const next = items.map((vaultItem) => vaultItem.id === item.id
+      ? { ...vaultItem, payload: { ...vaultItem.payload, notes: updatedNotes }, updatedAt: new Date().toISOString() }
+      : vaultItem);
+    try {
+      await saveItems(next, { autoSync: true, silentAutoSync: true });
+      setChecklistQuickAdd({ itemId: item.id, text: '', saving: false });
+      showMessage('Checklist item added.');
+    } catch {
+      setChecklistQuickAdd({ itemId: item.id, text, saving: false });
+      showMessage('The checklist item could not be added. Please try again.', 'error');
+    }
   }
 
   async function toggleChecklistLine(item, originalIndex) {
@@ -12609,27 +12557,18 @@ function App() {
                   <section className="checklist-editor" aria-labelledby="checklist-editor-title">
                     <div className="checklist-editor-heading">
                       <span id="checklist-editor-title">Checklist items</span>
-                      <small className="checklist-editor-desktop-help">Type normally. Use the arrow controls to change the order.</small>
-                      <small className="checklist-editor-mobile-help">Press and hold the dotted handle until the row highlights, then slide it up or down.</small>
+                      <small>{editingItemId ? 'Use the arrows to change the order, or delete an item. Add and tick items from the checklist view.' : 'Add the checklist items, then use the arrows to change their order.'}</small>
                     </div>
-                    <div className="checklist-editor-list" onPointerMove={moveChecklistLongPress} onPointerUp={resetChecklistPointerDrag} onPointerCancel={resetChecklistPointerDrag} onLostPointerCapture={resetChecklistPointerDrag}>
+                    <div className="checklist-editor-list">
                       {(form.checklistItems || []).map((row, index, rows) => (
                         <div
-                          className={`checklist-editor-row ${checklistDraggingId === row.id ? 'is-dragging' : ''}`}
+                          className="checklist-editor-row"
                           key={row.id}
                           data-checklist-editor-id={row.id}
                         >
-                          <button
-                            type="button"
-                            className="checklist-editor-grip"
-                            draggable={false}
-                            onPointerDown={(event) => startChecklistLongPress(event, row.id)}
-                            onContextMenu={(event) => event.preventDefault()}
-                            aria-label={`Reorder ${row.text || `checklist item ${index + 1}`}. Press and hold, then slide up or down.`}
-                            title="Press and hold, then slide to reorder"
-                          ><GripVertical size={20} /></button>
-                          <button type="button" className={`checklist-editor-check ${row.done ? 'done' : ''}`} onClick={() => updateChecklistEditorRow(row.id, { done: !row.done })} aria-label={row.done ? 'Mark item as not completed' : 'Mark item as completed'}>{row.done ? <Check size={17} /> : null}</button>
-                          <input data-checklist-input-id={row.id} value={row.text} onChange={(event) => updateChecklistEditorRow(row.id, { text: event.target.value })} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addChecklistEditorRow(row.id); } }} placeholder={`Checklist item ${index + 1}`} />
+                          {editingItemId
+                            ? <span className="checklist-editor-item-text">{row.text}</span>
+                            : <input data-checklist-input-id={row.id} value={row.text} onChange={(event) => updateChecklistEditorRow(row.id, { text: event.target.value })} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addChecklistEditorRow(row.id); } }} placeholder={`Checklist item ${index + 1}`} />}
                           <div className="checklist-editor-step-buttons" aria-label="Move checklist item">
                             <button type="button" onClick={() => moveChecklistEditorRowToIndex(row.id, index - 1)} disabled={index === 0} aria-label="Move item up" title="Move up"><ArrowUp size={14} /></button>
                             <button type="button" onClick={() => moveChecklistEditorRowToIndex(row.id, index + 1)} disabled={index === rows.length - 1} aria-label="Move item down" title="Move down"><ArrowDown size={14} /></button>
@@ -12639,7 +12578,7 @@ function App() {
                       ))}
                       {!(form.checklistItems || []).length && <div className="checklist-editor-empty">No checklist items yet.</div>}
                     </div>
-                    <button type="button" className="secondary-button checklist-editor-add" onClick={() => addChecklistEditorRow()}><Plus size={16} /> Add checklist item</button>
+                    {!editingItemId && <button type="button" className="secondary-button checklist-editor-add" onClick={() => addChecklistEditorRow()}><Plus size={16} /> Add checklist item</button>}
                   </section>
                 ) : (
                   <label>{form.category === DOCUMENTS_CATEGORY ? 'Document notes' : form.category === PICTURES_CATEGORY ? 'Picture notes' : form.category === CARDS_CATEGORY ? 'Card notes' : 'Notes'}<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={activeHint.notes} rows="6" /></label>
@@ -13698,8 +13637,21 @@ function App() {
         <div className="item-popup-layer" role="dialog" aria-modal="true" aria-label="View vault item">
           <button type="button" className="item-popup-backdrop" onClick={closeViewItem} aria-label="Close item popup" />
           <article className="item-popup-card view-item-popup-card">
-            <div className="item-popup-header">
+            <div className={`item-popup-header view-item-popup-header ${effectiveVaultItemType(viewedItem) === 'Checklists' ? 'has-checklist-progress' : ''}`}>
               <h2><ShieldCheck size={20} /> {viewedItem.title}</h2>
+              {effectiveVaultItemType(viewedItem) === 'Checklists' && (() => {
+                const headerRows = parseChecklistNotes(viewedItem.payload?.notes, checklistDisplayOptions(viewedItem).completedPosition);
+                const completed = headerRows.filter((row) => row.done).length;
+                const percentage = headerRows.length ? Math.round((completed / headerRows.length) * 100) : 0;
+                return (
+                  <div className="checklist-header-progress">
+                    <div><span>Progress</span><strong>{completed} of {headerRows.length} · {percentage}%</strong></div>
+                    <div className="checklist-progress-track" role="progressbar" aria-label="Checklist progress" aria-valuemin="0" aria-valuemax={headerRows.length} aria-valuenow={completed} aria-valuetext={`${percentage}% complete`}>
+                      <span style={{ width: `${percentage}%` }} />
+                    </div>
+                  </div>
+                );
+              })()}
               <button type="button" className="icon-button" onClick={closeViewItem} aria-label="Close"><X size={18} /></button>
             </div>
             <div className="item-popup-body view-item-popup-body">
@@ -13750,8 +13702,6 @@ function App() {
                 const storedDocument = viewedItem.payload?.file;
                 const checklistSettings = isChecklist ? checklistDisplayOptions(viewedItem) : { completedPosition: 'bottom', strikeThrough: true };
                 const checklistRows = isChecklist ? parseChecklistNotes(viewedItem.payload?.notes, checklistSettings.completedPosition) : [];
-                const checklistCompletedCount = checklistRows.filter((row) => row.done).length;
-                const checklistProgress = checklistRows.length ? Math.round((checklistCompletedCount / checklistRows.length) * 100) : 0;
                 return (
                   <>
                     {viewedItem.payload?.url && !isChecklist && !isStoredFile && !isCard && (
@@ -13853,12 +13803,6 @@ function App() {
                       <div className="app-field-block">
                         <span className="app-field-label">Checklist</span>
                         <div className={`checklist-display ${checklistSettings.strikeThrough ? '' : 'no-strikethrough'} ${importedItem ? 'is-readonly' : ''}`} onPointerMove={moveChecklistViewLongPress} onPointerUp={finishChecklistViewDrag} onPointerCancel={finishChecklistViewDrag} onLostPointerCapture={finishChecklistViewDrag}>
-                          <div className="checklist-progress-summary">
-                            <div><strong>Progress</strong><span>{checklistCompletedCount} of {checklistRows.length}</span></div>
-                            <div className="checklist-progress-track" role="progressbar" aria-label="Checklist progress" aria-valuemin="0" aria-valuemax={checklistRows.length} aria-valuenow={checklistCompletedCount}>
-                              <span style={{ width: `${checklistProgress}%` }} />
-                            </div>
-                          </div>
                           {checklistRows.length ? checklistRows.map((row, displayIndex) => (
                             <div
                               key={`${viewedItem.id}-${row.identity}`}
@@ -13878,6 +13822,19 @@ function App() {
                               {!importedItem && <button type="button" className="checklist-line-delete" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); deleteChecklistLine(viewedItem, row.index); }} aria-label={`Delete ${row.text}`} title="Delete checklist item"><X size={20} /></button>}
                             </div>
                           )) : <span className="app-field-value">No checklist items yet.</span>}
+                          {!importedItem && (
+                            <form className="checklist-quick-add" onSubmit={(event) => addChecklistLineFromView(event, viewedItem)}>
+                              <Plus size={20} aria-hidden="true" />
+                              <input
+                                value={checklistQuickAdd.itemId === viewedItem.id ? checklistQuickAdd.text : ''}
+                                onChange={(event) => setChecklistQuickAdd({ itemId: viewedItem.id, text: event.target.value, saving: false })}
+                                placeholder="Add checklist item"
+                                aria-label="New checklist item"
+                                disabled={checklistQuickAdd.saving}
+                              />
+                              <button type="submit" disabled={checklistQuickAdd.saving || !String(checklistQuickAdd.itemId === viewedItem.id ? checklistQuickAdd.text : '').trim()}>{checklistQuickAdd.saving ? 'Adding...' : 'Add'}</button>
+                            </form>
+                          )}
                         </div>
                       </div>
                     ) : viewedItem.payload?.notes && (
