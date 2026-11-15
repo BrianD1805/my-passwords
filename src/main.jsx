@@ -10,7 +10,7 @@ import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateF
 import { checklistDragStepCount } from './checklistReorder.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.031';
+const VERSION = 'Password-Encrypt Ver-1.031.1';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3658,11 +3658,12 @@ function App() {
   const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistItems: [], checklistCompletedPosition: 'stay', checklistStrikeThrough: true });
   const [checklistViewSelection, setChecklistViewSelection] = useState({ itemId: '', displayIndex: -1 });
   const [checklistQuickAdd, setChecklistQuickAdd] = useState({ itemId: '', text: '' });
-  const [checklistDraft, setChecklistDraft] = useState({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, editingRowId: '', editingTitle: false });
+  const [checklistDraft, setChecklistDraft] = useState({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, revision: 0, savedRevision: 0, editingRowId: '', editingTitle: false });
   const checklistDraftRef = useRef(checklistDraft);
   checklistDraftRef.current = checklistDraft;
+  const checklistAutoSaveRef = useRef({ blockedRevision: -1, closeAfter: false, notifyOnClose: false });
   const [checklistMenuOpen, setChecklistMenuOpen] = useState(false);
-  const checklistViewDragRef = useRef({ timer: null, itemId: '', rowId: '', phase: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, startScrollTop: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 });
+  const checklistViewDragRef = useRef({ timer: null, itemId: '', rowId: '', phase: '', active: false, moved: false, inputMode: '', pointerId: null, touchId: null, startX: 0, startY: 0, startScrollTop: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 });
   const checklistViewWorkingRowsRef = useRef(null);
   const checklistViewSurfaceRef = useRef(null);
   const checklistViewSuppressClickUntilRef = useRef(0);
@@ -6876,8 +6877,9 @@ function App() {
 
     if (options.autoSync && typeof navigator !== 'undefined' && navigator.onLine === false) {
       const note = 'Your latest changes are encrypted and saved on this device. They will be backed up automatically when your internet connection returns.';
-      const showOfflinePopup = !offlineSaveNoticeShownRef.current;
-      offlineSaveNoticeShownRef.current = true;
+      const suppressOfflineNotice = options.suppressOfflineNotice === true;
+      const showOfflinePopup = !suppressOfflineNotice && !offlineSaveNoticeShownRef.current;
+      if (!suppressOfflineNotice) offlineSaveNoticeShownRef.current = true;
       setSyncPromptShown(true);
       setSyncStatus({
         state: 'warning',
@@ -6905,7 +6907,7 @@ function App() {
           message: note,
           details: { itemCount }
         });
-      } else {
+      } else if (!suppressOfflineNotice) {
         showMessage('Saved offline. Backup pending.', 'success');
       }
       return { ok: true, localOnly: true, offline: true, offlineNoticeShown: showOfflinePopup, envelope };
@@ -8085,24 +8087,64 @@ function App() {
   useEffect(() => {
     const surface = checklistViewSurfaceRef.current;
     if (!surface || !viewItemId) return undefined;
+    const handleTouchStart = (event) => {
+      if (event.touches?.length !== 1) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target || target.closest('.checklist-line-check, .checklist-line-inline-input, .checklist-line-delete')) return;
+      const rowElement = target.closest('[data-checklist-row-id]');
+      if (!rowElement) return;
+      const rowId = rowElement.getAttribute('data-checklist-row-id') || '';
+      const displayIndex = Number(rowElement.getAttribute('data-checklist-view-row'));
+      const row = checklistDraftRef.current.rows.find((candidate) => candidate.id === rowId);
+      const touch = event.touches[0];
+      if (!row || !Number.isInteger(displayIndex)) return;
+      beginChecklistViewLongPress({
+        itemId: viewItemId,
+        rowId,
+        displayIndex,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        rowHeight: rowElement.getBoundingClientRect?.().height || 52,
+        inputMode: 'touch',
+        touchId: touch.identifier
+      });
+    };
     const handleTouchMove = (event) => {
       const state = checklistViewDragRef.current;
-      if (!state.active || state.phase !== 'dragging' || !event.touches?.length) return;
+      if (state.inputMode !== 'touch' || !state.itemId) return;
+      const touch = Array.from(event.touches || []).find((candidate) => candidate.identifier === state.touchId);
+      if (!touch) return;
+      if (state.phase === 'selecting' && Math.hypot(touch.clientX - state.startX, touch.clientY - state.startY) > 18) {
+        resetChecklistViewDrag();
+        return;
+      }
+      if (!state.active || state.phase !== 'dragging') return;
       if (event.cancelable) event.preventDefault();
-      moveChecklistViewReorder(event.touches[0].clientY);
+      moveChecklistViewReorder(touch.clientY);
     };
-    const handleTouchEnd = () => {
-      if (checklistViewDragRef.current.itemId) finishChecklistViewDrag(null);
+    const handleTouchEnd = (event) => {
+      const state = checklistViewDragRef.current;
+      if (state.inputMode !== 'touch' || !state.itemId) return;
+      const ended = Array.from(event.changedTouches || []).some((touch) => touch.identifier === state.touchId);
+      if (ended || !event.touches?.length) finishChecklistViewDrag(null);
     };
+    surface.addEventListener('touchstart', handleTouchStart, { passive: true });
     surface.addEventListener('touchmove', handleTouchMove, { passive: false });
     surface.addEventListener('touchend', handleTouchEnd, { passive: true });
     surface.addEventListener('touchcancel', handleTouchEnd, { passive: true });
     return () => {
+      surface.removeEventListener('touchstart', handleTouchStart);
       surface.removeEventListener('touchmove', handleTouchMove);
       surface.removeEventListener('touchend', handleTouchEnd);
       surface.removeEventListener('touchcancel', handleTouchEnd);
     };
   }, [viewItemId]);
+  useEffect(() => {
+    if (!viewItemId || checklistDraft.itemId !== viewItemId || !checklistDraft.dirty || checklistDraft.saving) return undefined;
+    if (checklistAutoSaveRef.current.blockedRevision === checklistDraft.revision) return undefined;
+    const timer = window.setTimeout(() => persistChecklistDraft({ background: true }), 1800);
+    return () => window.clearTimeout(timer);
+  }, [viewItemId, checklistDraft.itemId, checklistDraft.revision, checklistDraft.dirty, checklistDraft.saving]);
   useLayoutEffect(() => {
     if (!newCustomerOnboardingEntry && !onboardingInstallEntry) return;
     document.documentElement.scrollTop = 0;
@@ -10740,8 +10782,9 @@ function App() {
     setViewItemId(item.id);
     setChecklistQuickAdd({ itemId: item.id, text: '' });
     setChecklistMenuOpen(false);
+    checklistAutoSaveRef.current = { blockedRevision: -1, closeAfter: false, notifyOnClose: false };
     if (effectiveVaultItemType(item) === 'Checklists') setChecklistDraft(createChecklistViewDraft(item));
-    else setChecklistDraft({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, editingRowId: '', editingTitle: false });
+    else setChecklistDraft({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, revision: 0, savedRevision: 0, editingRowId: '', editingTitle: false });
     setShowSecrets((current) => ({ ...current, [item.id]: false }));
   }
 
@@ -10749,20 +10792,39 @@ function App() {
     resetChecklistViewDrag(null, { clearSelection: true });
     setChecklistQuickAdd({ itemId: '', text: '' });
     setChecklistMenuOpen(false);
-    setChecklistDraft({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, editingRowId: '', editingTitle: false });
+    checklistAutoSaveRef.current = { blockedRevision: -1, closeAfter: false, notifyOnClose: false };
+    setChecklistDraft({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, revision: 0, savedRevision: 0, editingRowId: '', editingTitle: false });
     setViewItemId('');
     setPicturePreview({ itemId: '', dataUrl: '', busy: false });
   }
 
-  async function saveChecklistAndClose() {
-    const draft = checklistDraft;
+  function markChecklistDraftChanged(updater) {
+    const current = checklistDraftRef.current;
+    const updated = updater(current);
+    const next = { ...updated, revision: current.revision + 1, dirty: true };
+    checklistDraftRef.current = next;
+    setChecklistDraft(next);
+  }
+
+  async function persistChecklistDraft({ closeAfter = false, notify = false, background = false } = {}) {
+    const draft = checklistDraftRef.current;
+    if (closeAfter) {
+      checklistAutoSaveRef.current.closeAfter = true;
+      checklistAutoSaveRef.current.notifyOnClose = checklistAutoSaveRef.current.notifyOnClose || notify;
+    }
     if (draft.saving) return;
-    const item = items.find((candidate) => candidate.id === draft.itemId);
+    const item = latestSyncItemsRef.current.find((candidate) => candidate.id === draft.itemId);
     if (!item || effectiveVaultItemType(item) !== 'Checklists') return closeViewItem();
-    if (!draft.dirty) return closeViewItem();
-    setChecklistDraft((current) => ({ ...current, saving: true }));
+    if (!draft.dirty) {
+      if (checklistAutoSaveRef.current.closeAfter) closeViewItem();
+      return;
+    }
+    const savingRevision = draft.revision;
+    const savingDraft = { ...draft, saving: true };
+    checklistDraftRef.current = savingDraft;
+    setChecklistDraft(savingDraft);
     const title = String(draft.title || '').trim() || item.title;
-    const next = items.map((candidate) => candidate.id === item.id
+    const nextItems = latestSyncItemsRef.current.map((candidate) => candidate.id === item.id
       ? {
           ...candidate,
           title,
@@ -10777,18 +10839,39 @@ function App() {
         }
       : candidate);
     try {
-      await saveItems(next, { autoSync: true, silentAutoSync: true });
-      closeViewItem();
-      showMessage('Checklist saved.', 'success');
+      await saveItems(nextItems, { autoSync: true, silentAutoSync: true, suppressOfflineNotice: background });
+      checklistAutoSaveRef.current.blockedRevision = -1;
+      const latestDraft = checklistDraftRef.current;
+      const newerChanges = latestDraft.revision > savingRevision;
+      const savedDraft = { ...latestDraft, saving: false, savedRevision: Math.max(latestDraft.savedRevision, savingRevision), dirty: newerChanges };
+      checklistDraftRef.current = savedDraft;
+      setChecklistDraft(savedDraft);
+      const shouldClose = checklistAutoSaveRef.current.closeAfter;
+      const notifyOnClose = checklistAutoSaveRef.current.notifyOnClose;
+      if (shouldClose && newerChanges) {
+        window.setTimeout(() => persistChecklistDraft({ closeAfter: true, notify: notifyOnClose }), 0);
+      } else if (shouldClose) {
+        closeViewItem();
+        if (notifyOnClose) showMessage('Checklist saved.', 'success');
+      }
     } catch {
-      setChecklistDraft((current) => ({ ...current, saving: false }));
-      showMessage('The checklist could not be saved. Please try again.', 'error');
+      checklistAutoSaveRef.current.blockedRevision = savingRevision;
+      checklistAutoSaveRef.current.closeAfter = false;
+      checklistAutoSaveRef.current.notifyOnClose = false;
+      const failedDraft = { ...checklistDraftRef.current, saving: false, dirty: true };
+      checklistDraftRef.current = failedDraft;
+      setChecklistDraft(failedDraft);
+      if (!background || closeAfter) showMessage('The checklist could not be saved. Please try again.', 'error');
     }
+  }
+
+  function saveChecklistAndClose() {
+    persistChecklistDraft({ closeAfter: true, notify: true });
   }
 
   function requestCloseViewItem() {
     if (viewedItem && effectiveVaultItemType(viewedItem) === 'Checklists' && !isEmergencyImportedItem(viewedItem)) {
-      saveChecklistAndClose();
+      persistChecklistDraft({ closeAfter: true });
       return;
     }
     closeViewItem();
@@ -10852,6 +10935,8 @@ function App() {
       favourite: Boolean(item?.favourite),
       dirty: false,
       saving: false,
+      revision: 0,
+      savedRevision: 0,
       editingRowId: '',
       editingTitle: false
     };
@@ -10902,7 +10987,7 @@ function App() {
   function resetChecklistViewDrag(event, { clearSelection = false } = {}) {
     const state = checklistViewDragRef.current;
     if (state.timer) window.clearTimeout(state.timer);
-    checklistViewDragRef.current = { timer: null, itemId: '', rowId: '', phase: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, startScrollTop: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 };
+    checklistViewDragRef.current = { timer: null, itemId: '', rowId: '', phase: '', active: false, moved: false, inputMode: '', pointerId: null, touchId: null, startX: 0, startY: 0, startScrollTop: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 };
     checklistViewWorkingRowsRef.current = checklistDraftRef.current.rows;
     if (event?.currentTarget && state.pointerId !== null) {
       try {
@@ -10912,31 +10997,33 @@ function App() {
     if (clearSelection) setChecklistViewSelection({ itemId: '', displayIndex: -1 });
   }
 
-  function startChecklistViewLongPress(event, item, row, displayIndex) {
-    if (!event.isPrimary || !item?.id || !row?.id || event.button > 0) return;
+  function beginChecklistViewLongPress({ itemId, rowId, displayIndex, startX, startY, rowHeight, inputMode, pointerId = null, touchId = null }) {
     resetChecklistViewDrag();
-    const rowHeight = event.currentTarget.getBoundingClientRect?.().height || 52;
     checklistViewWorkingRowsRef.current = checklistDraftRef.current.rows;
     checklistViewDragRef.current = {
       timer: window.setTimeout(() => {
         const state = checklistViewDragRef.current;
-        if (state.rowId !== row.id) return;
+        if (state.rowId !== rowId) return;
         state.timer = null;
         state.phase = 'dragging';
         state.active = true;
-        try { checklistViewSurfaceRef.current?.setPointerCapture(state.pointerId); } catch { /* Native touch listener remains the mobile fallback. */ }
+        if (state.inputMode === 'pointer' && state.pointerId !== null) {
+          try { checklistViewSurfaceRef.current?.setPointerCapture(state.pointerId); } catch { /* Pointer capture may not be available. */ }
+        }
         checklistViewSuppressClickUntilRef.current = Date.now() + 700;
-        setChecklistViewSelection({ itemId: item.id, displayIndex });
+        setChecklistViewSelection({ itemId, displayIndex });
         if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
-      }, 420),
-      itemId: item.id,
-      rowId: row.id,
+      }, 360),
+      itemId,
+      rowId,
       phase: 'selecting',
       active: false,
       moved: false,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
+      inputMode,
+      pointerId,
+      touchId,
+      startX,
+      startY,
       startScrollTop: checklistViewSurfaceRef.current?.closest?.('.view-item-popup-body')?.scrollTop || 0,
       stepSize: Math.max(34, rowHeight * 0.72),
       appliedSteps: 0,
@@ -10944,10 +11031,24 @@ function App() {
     };
   }
 
+  function startChecklistViewLongPress(event, item, row, displayIndex) {
+    if (event.pointerType === 'touch' || !event.isPrimary || !item?.id || !row?.id || event.button > 0) return;
+    beginChecklistViewLongPress({
+      itemId: item.id,
+      rowId: row.id,
+      displayIndex,
+      startX: event.clientX,
+      startY: event.clientY,
+      rowHeight: event.currentTarget.getBoundingClientRect?.().height || 52,
+      inputMode: 'pointer',
+      pointerId: event.pointerId
+    });
+  }
+
   function moveChecklistViewLongPress(event) {
     const state = checklistViewDragRef.current;
-    if (!state.itemId || state.pointerId !== event.pointerId) return;
-    if (state.phase === 'selecting' && Math.hypot(event.clientX - state.startX, event.clientY - state.startY) > 10) {
+    if (state.inputMode !== 'pointer' || !state.itemId || state.pointerId !== event.pointerId) return;
+    if (state.phase === 'selecting' && Math.hypot(event.clientX - state.startX, event.clientY - state.startY) > 18) {
       resetChecklistViewDrag();
       return;
     }
@@ -10988,7 +11089,7 @@ function App() {
     if (!changed) return;
     state.moved = true;
     checklistViewWorkingRowsRef.current = workingRows;
-    setChecklistDraft((current) => ({ ...current, rows: workingRows, dirty: true, editingRowId: '' }));
+    markChecklistDraftChanged((current) => ({ ...current, rows: workingRows, editingRowId: '' }));
     setChecklistViewSelection({ itemId: state.itemId, displayIndex: state.displayIndex });
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(8);
   }
@@ -10998,7 +11099,7 @@ function App() {
     if (!state.itemId) return;
     if (state.active) checklistViewSuppressClickUntilRef.current = Date.now() + 700;
     if (state.timer) window.clearTimeout(state.timer);
-    checklistViewDragRef.current = { timer: null, itemId: '', rowId: '', phase: '', active: false, moved: false, pointerId: null, startX: 0, startY: 0, startScrollTop: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 };
+    checklistViewDragRef.current = { timer: null, itemId: '', rowId: '', phase: '', active: false, moved: false, inputMode: '', pointerId: null, touchId: null, startX: 0, startY: 0, startScrollTop: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 };
     if (event?.currentTarget && state.pointerId !== null) {
       try {
         if (event.currentTarget.hasPointerCapture?.(state.pointerId)) event.currentTarget.releasePointerCapture(state.pointerId);
@@ -11007,25 +11108,29 @@ function App() {
     setChecklistViewSelection({ itemId: '', displayIndex: -1 });
   }
 
+  function finishChecklistViewPointerDrag(event) {
+    if (checklistViewDragRef.current.inputMode !== 'pointer') return;
+    finishChecklistViewDrag(event);
+  }
+
   function updateChecklistDraftRow(rowId, changes) {
-    setChecklistDraft((current) => {
+    markChecklistDraftChanged((current) => {
       const rows = current.rows.map((row) => row.id === rowId ? { ...row, ...changes } : row);
       checklistViewWorkingRowsRef.current = rows;
-      return { ...current, rows, dirty: true };
+      return { ...current, rows };
     });
   }
 
   function editChecklistDraftRow(rowId) {
     if (Date.now() < checklistViewSuppressClickUntilRef.current) return;
     setChecklistDraft((current) => ({ ...current, editingRowId: rowId }));
-    window.requestAnimationFrame(() => document.querySelector(`[data-checklist-inline-input="${rowId}"]`)?.focus());
   }
 
   function deleteChecklistDraftRow(rowId) {
-    setChecklistDraft((current) => {
+    markChecklistDraftChanged((current) => {
       const rows = current.rows.filter((row) => row.id !== rowId);
       checklistViewWorkingRowsRef.current = rows;
-      return { ...current, rows, dirty: true, editingRowId: current.editingRowId === rowId ? '' : current.editingRowId };
+      return { ...current, rows, editingRowId: current.editingRowId === rowId ? '' : current.editingRowId };
     });
   }
 
@@ -11034,32 +11139,32 @@ function App() {
     const text = String(checklistQuickAdd.itemId === item?.id ? checklistQuickAdd.text : '').trim();
     if (!item?.id || !text) return;
     const row = createChecklistEditorRow(text, false);
-    setChecklistDraft((current) => {
+    markChecklistDraftChanged((current) => {
       const rows = [...current.rows];
       const firstDoneIndex = current.completedPosition === 'bottom' ? rows.findIndex((candidate) => candidate.done) : -1;
       rows.splice(firstDoneIndex >= 0 ? firstDoneIndex : rows.length, 0, row);
       checklistViewWorkingRowsRef.current = rows;
-      return { ...current, rows, dirty: true };
+      return { ...current, rows };
     });
     setChecklistQuickAdd({ itemId: item.id, text: '' });
   }
 
   function toggleChecklistDraftRow(rowId) {
     if (Date.now() < checklistViewSuppressClickUntilRef.current) return;
-    setChecklistDraft((current) => {
+    markChecklistDraftChanged((current) => {
       const rows = current.rows.map((row) => row.id === rowId ? { ...row, done: !row.done } : row);
       if (current.completedPosition === 'bottom') rows.sort((a, b) => Number(a.done) - Number(b.done));
       checklistViewWorkingRowsRef.current = rows;
-      return { ...current, rows, dirty: true, editingRowId: '' };
+      return { ...current, rows, editingRowId: '' };
     });
   }
 
   function setChecklistDraftCompletedPosition(position) {
-    setChecklistDraft((current) => {
+    markChecklistDraftChanged((current) => {
       const rows = [...current.rows];
       if (position === 'bottom') rows.sort((a, b) => Number(a.done) - Number(b.done));
       checklistViewWorkingRowsRef.current = rows;
-      return { ...current, rows, completedPosition: position === 'bottom' ? 'bottom' : 'stay', dirty: true };
+      return { ...current, rows, completedPosition: position === 'bottom' ? 'bottom' : 'stay' };
     });
     setChecklistMenuOpen(false);
   }
@@ -13699,7 +13804,7 @@ function App() {
           <article className="item-popup-card view-item-popup-card">
             <div className={`item-popup-header view-item-popup-header ${effectiveVaultItemType(viewedItem) === 'Checklists' ? 'has-checklist-progress' : ''}`}>
               {effectiveVaultItemType(viewedItem) === 'Checklists' && checklistDraft.itemId === viewedItem.id && checklistDraft.editingTitle && !isEmergencyImportedItem(viewedItem) ? (
-                <div className="checklist-title-editor"><ShieldCheck size={20} /><input value={checklistDraft.title} onChange={(event) => setChecklistDraft((current) => ({ ...current, title: event.target.value, dirty: true }))} onBlur={() => setChecklistDraft((current) => ({ ...current, editingTitle: false }))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} aria-label="Checklist title" autoFocus /></div>
+                <div className="checklist-title-editor"><ShieldCheck size={20} /><input value={checklistDraft.title} onChange={(event) => markChecklistDraftChanged((current) => ({ ...current, title: event.target.value }))} onBlur={() => setChecklistDraft((current) => ({ ...current, editingTitle: false }))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} aria-label="Checklist title" autoFocus /></div>
               ) : <h2><ShieldCheck size={20} /> {effectiveVaultItemType(viewedItem) === 'Checklists' && checklistDraft.itemId === viewedItem.id ? checklistDraft.title : viewedItem.title}</h2>}
               {effectiveVaultItemType(viewedItem) === 'Checklists' && (() => {
                 const headerRows = checklistDraft.itemId === viewedItem.id ? checklistDraft.rows : [];
@@ -13721,10 +13826,11 @@ function App() {
               {effectiveVaultItemType(viewedItem) === 'Checklists' && checklistMenuOpen && !isEmergencyImportedItem(viewedItem) && (
                 <div className="checklist-overflow-menu" role="menu" aria-label="Checklist actions">
                   <button type="button" role="menuitem" onClick={() => { setChecklistDraft((current) => ({ ...current, editingTitle: true })); setChecklistMenuOpen(false); }}><Pencil size={17} /><span>Rename checklist</span></button>
-                  <button type="button" role="menuitem" onClick={() => { setChecklistDraft((current) => ({ ...current, favourite: !current.favourite, dirty: true })); setChecklistMenuOpen(false); }}><Star size={17} fill={checklistDraft.favourite ? 'currentColor' : 'none'} /><span>{checklistDraft.favourite ? 'Remove from favourites' : 'Add to favourites'}</span></button>
+                  <button type="button" role="menuitem" onClick={() => { markChecklistDraftChanged((current) => ({ ...current, favourite: !current.favourite })); setChecklistMenuOpen(false); }}><Star size={17} fill={checklistDraft.favourite ? 'currentColor' : 'none'} /><span>{checklistDraft.favourite ? 'Remove from favourites' : 'Add to favourites'}</span></button>
                   <button type="button" role="menuitem" onClick={() => setChecklistDraftCompletedPosition(checklistDraft.completedPosition === 'bottom' ? 'stay' : 'bottom')}><ArrowDown size={17} /><span>{checklistDraft.completedPosition === 'bottom' ? 'Keep completed items in place' : 'Move completed items to bottom'}</span></button>
-                  <button type="button" role="menuitem" onClick={() => { setChecklistDraft((current) => ({ ...current, strikeThrough: !current.strikeThrough, dirty: true })); setChecklistMenuOpen(false); }}><Check size={17} /><span>{checklistDraft.strikeThrough ? 'Remove completed strike-through' : 'Strike through completed items'}</span></button>
+                  <button type="button" role="menuitem" onClick={() => { markChecklistDraftChanged((current) => ({ ...current, strikeThrough: !current.strikeThrough })); setChecklistMenuOpen(false); }}><Check size={17} /><span>{checklistDraft.strikeThrough ? 'Remove completed strike-through' : 'Strike through completed items'}</span></button>
                   <button type="button" role="menuitem" className="danger" onClick={() => { setChecklistMenuOpen(false); requestDeleteItem(viewedItem); }}><Trash2 size={17} /><span>Delete whole checklist</span></button>
+                  <button type="button" role="menuitem" className="close-list" onClick={() => { setChecklistMenuOpen(false); requestCloseViewItem(); }}><X size={17} /><span>Close list</span></button>
                 </div>
               )}
             </div>
@@ -13877,18 +13983,19 @@ function App() {
                     )}
                     {isChecklist ? (
                       <div className="app-field-block checklist-view-block">
-                        <div ref={checklistViewSurfaceRef} className={`checklist-display checklist-draft-display ${checklistSettings.strikeThrough ? '' : 'no-strikethrough'} ${importedItem ? 'is-readonly' : ''}`} onPointerMove={moveChecklistViewLongPress} onPointerUp={finishChecklistViewDrag} onPointerCancel={finishChecklistViewDrag} onLostPointerCapture={finishChecklistViewDrag}>
+                        <div ref={checklistViewSurfaceRef} className={`checklist-display checklist-draft-display ${checklistSettings.strikeThrough ? '' : 'no-strikethrough'} ${importedItem ? 'is-readonly' : ''}`} onPointerMove={moveChecklistViewLongPress} onPointerUp={finishChecklistViewPointerDrag} onPointerCancel={finishChecklistViewPointerDrag} onLostPointerCapture={finishChecklistViewPointerDrag}>
                           {checklistRows.length ? checklistRows.map((row, displayIndex) => (
                             <div
                               key={row.id}
                               className={`checklist-line ${row.done ? 'done' : ''} ${checklistViewSelection.itemId === viewedItem.id && checklistViewSelection.displayIndex === displayIndex ? 'is-selected' : ''}`}
                               data-checklist-view-row={displayIndex}
+                              data-checklist-row-id={row.id}
                               onPointerDown={(event) => { if (!importedItem && checklistDraft.editingRowId !== row.id) startChecklistViewLongPress(event, viewedItem, row, displayIndex); }}
                               onContextMenu={(event) => { if (!importedItem) event.preventDefault(); }}
                             >
                               <button type="button" className="checklist-line-check" onPointerDown={(event) => event.stopPropagation()} onClick={() => { if (!importedItem) toggleChecklistDraftRow(row.id); }} disabled={importedItem} aria-label={row.done ? `Mark ${row.text} as not completed` : `Mark ${row.text} as completed`}><span className="check-box">{row.done ? '✓' : ''}</span></button>
                               {checklistDraft.editingRowId === row.id && !importedItem ? (
-                                <input data-checklist-inline-input={row.id} className="checklist-line-inline-input" value={row.text} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => updateChecklistDraftRow(row.id, { text: event.target.value })} onBlur={() => setChecklistDraft((current) => ({ ...current, editingRowId: '' }))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} aria-label="Edit checklist item" />
+                                <textarea data-checklist-inline-input={row.id} className="checklist-line-inline-input" rows={2} value={row.text} onPointerDown={(event) => event.stopPropagation()} onChange={(event) => updateChecklistDraftRow(row.id, { text: event.target.value })} onBlur={() => setChecklistDraft((current) => ({ ...current, editingRowId: '' }))} aria-label="Edit checklist item" />
                               ) : (
                                 <button type="button" className="checklist-line-text" onClick={() => { if (!importedItem) editChecklistDraftRow(row.id); }} disabled={importedItem}>{row.text}</button>
                               )}
@@ -13925,7 +14032,7 @@ function App() {
             </div>
             <div className={`item-popup-footer view-item-footer ${effectiveVaultItemType(viewedItem) === 'Checklists' && !isEmergencyImportedItem(viewedItem) ? 'checklist-view-footer' : ''}`}>
               {effectiveVaultItemType(viewedItem) === 'Checklists' && !isEmergencyImportedItem(viewedItem) ? (
-                <button type="button" className="primary-button view-done-button checklist-save-close-button" onClick={saveChecklistAndClose} disabled={checklistDraft.saving}>{checklistDraft.saving ? 'Saving checklist...' : 'Save & close'}</button>
+                <button type="button" className="primary-button view-done-button checklist-save-close-button" onClick={saveChecklistAndClose} disabled={!checklistDraft.dirty || checklistDraft.saving}>{checklistDraft.saving ? 'Saving changes...' : 'Save & close'}</button>
               ) : (
                 <>
                   <div className="view-action-row">

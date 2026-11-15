@@ -21018,7 +21018,7 @@ body.guided-tour-active #root {
   }
 }
 
-/* Password-Encrypt Ver-1.031 — one-screen checklist draft workflow. */
+/* Password-Encrypt Ver-1.031.1 — reliable touch drag, wrapped inline edits and background save. */
 .view-item-popup-header.has-checklist-progress > .view-item-header-actions {
   grid-column: 3;
   grid-row: 1;
@@ -21102,6 +21102,13 @@ body.guided-tour-active #root {
   color: #a43737;
 }
 
+.checklist-overflow-menu button.close-list {
+  margin-top: 4px;
+  border-top: 1px solid #e3e9ee;
+  border-radius: 0 0 12px 12px;
+  padding-top: 12px;
+}
+
 .checklist-view-block {
   gap: 0;
 }
@@ -21173,6 +21180,8 @@ body.guided-tour-active #root {
 .checklist-line-inline-input {
   min-width: 0;
   width: 100%;
+  min-height: 58px;
+  max-height: 132px;
   padding: 7px 9px;
   border: 1px solid #b9cada;
   border-radius: 12px;
@@ -21180,6 +21189,14 @@ body.guided-tour-active #root {
   color: #1f2933;
   font-size: 1rem;
   font-weight: 400;
+  font-family: inherit;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: hidden;
+  overflow-y: auto;
+  resize: vertical;
   box-shadow: 0 0 0 3px rgba(51, 102, 153, .08);
 }
 
@@ -21230,6 +21247,15 @@ body.guided-tour-active #root {
   justify-content: center;
 }
 
+.checklist-save-close-button:disabled {
+  border-color: #cfd6dc;
+  background: #dfe4e8;
+  color: #7a858f;
+  box-shadow: none;
+  cursor: default;
+  opacity: 1;
+}
+
 .checklist-view-footer {
   grid-template-columns: 1fr;
 }
@@ -21253,15 +21279,16 @@ body.guided-tour-active #root {
     right: 14px;
   }
 
+  .view-item-popup-card .checklist-draft-display,
   .view-item-popup-card .checklist-draft-display .checklist-line,
   .view-item-popup-card .checklist-draft-display .checklist-line-text,
   .view-item-popup-card .checklist-draft-display .checklist-line-check {
-    touch-action: pan-y !important;
+    touch-action: auto !important;
   }
 
   .view-item-popup-card .checklist-draft-display .checklist-line.is-selected,
   .view-item-popup-card .checklist-draft-display .checklist-line.is-selected .checklist-line-text,
   .view-item-popup-card .checklist-draft-display .checklist-line.is-selected .checklist-line-check {
-    touch-action: none !important;
+    touch-action: auto !important;
   }
 }

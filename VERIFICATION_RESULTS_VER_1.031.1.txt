@@ -1,0 +1,49 @@
+Password-Encrypt Ver-1.031.1 verification
+========================================
+
+Production build: PASS
+
+Automated checks:
+- Security: 13/13 PASS
+- Reliability: 20/20 PASS
+- Legal/commercial readiness: 35/35 PASS
+- Landing/plan UX: 36/36 PASS
+- Mobile restoration: 6/6 PASS
+- Trusted Person / emergency flow: 75/75 PASS
+- Onboarding: 68/68 PASS
+- Push notifications: 32/32 PASS
+- Sync retry: 10/10 PASS
+- Secure-device refresh: 7/7 PASS
+- Settings guided tour: 13/13 PASS
+- Ver-1.031.1 feature regression: 67/67 PASS
+
+Total: 382/382 PASS
+
+Ver-1.031.1 checklist checks:
+- Mobile finger drag uses a dedicated native touch-start and touch-move path.
+- Browser pointer-cancel cannot terminate a touch drag.
+- Small natural finger movement is tolerated before long-press activation.
+- One held gesture can move through several positions up or down.
+- Normal scrolling remains available before the drag activates.
+- Edge auto-scroll and completion-group boundaries remain protected.
+- Opening inline actions does not automatically focus the editor or open the keyboard.
+- Long inline text wraps and remains accessible.
+- Draft revisions increase for every edit, addition, tick, delete, option change and reorder.
+- Background save waits 1.8 seconds so several quick changes are batched.
+- Edits made while a save is running remain outstanding for the following save.
+- A failed background save cannot retry indefinitely.
+- Background offline saves do not interrupt the checklist flow.
+- Save & close is disabled and visibly grey when there are no outstanding changes.
+- Header X, backdrop, hardware Back and Close list save outstanding changes before closing.
+- Close list is the final action in the three-dot menu.
+
+Version alignment:
+- App: Password-Encrypt Ver-1.031.1
+- Package: 1.31.1
+- Service worker cache: my-passwords-v1.031.1
+- Server APP_VERSION: Password-Encrypt Ver-1.031.1
+
+Deployment requirements:
+- Supabase SQL migration: NOT REQUIRED
+- Netlify environment-variable changes: NOT REQUIRED
+- Git commit or push performed by Codex: NO
