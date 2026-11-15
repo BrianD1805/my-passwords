@@ -1,0 +1,50 @@
+Password-Encrypt Ver-1.031 verification
+======================================
+
+Production build: PASS
+
+Automated checks:
+- Security: 13/13 PASS
+- Reliability: 20/20 PASS
+- Legal/commercial readiness: 35/35 PASS
+- Landing/plan UX: 36/36 PASS
+- Mobile restoration: 6/6 PASS
+- Trusted Person / emergency flow: 75/75 PASS
+- Onboarding: 68/68 PASS
+- Push notifications: 32/32 PASS
+- Sync retry: 10/10 PASS
+- Secure-device refresh: 7/7 PASS
+- Settings guided tour: 13/13 PASS
+- Ver-1.031 feature regression: 57/57 PASS
+
+Total: 372/372 PASS
+
+Checklist UX checks:
+- Existing checklist editing is consolidated into the View screen.
+- Each checklist item has its own rounded card.
+- A single text tap opens the inline editor.
+- Only the circular check control toggles completion.
+- Item deletion is distinct from whole-checklist deletion.
+- Quick add, inline edit, tick, delete, reorder and checklist options remain draft-only until exit.
+- Save and close performs one persisted write and one success confirmation.
+- Unchanged checklists close without an unnecessary write.
+- Save failures keep the draft open for retry.
+- The three-dot menu includes rename, favourite, completed-position, strike-through and whole-checklist delete.
+- Whole-checklist deletion has explicit confirmation wording.
+- Long press enters drag while the same finger remains held.
+- Multiple downward and upward positions can be crossed during one gesture.
+- Edge dragging auto-scrolls the single popup body.
+- No reorder handles or arrow controls clutter the View screen.
+- Progress stays visible in the fixed header with count and percentage.
+- The add-item field uses a rounded checklist-style container.
+
+Version alignment:
+- App: Password-Encrypt Ver-1.031
+- Package: 1.31.0
+- Service worker cache: my-passwords-v1.031
+- Server APP_VERSION: Password-Encrypt Ver-1.031
+
+Deployment requirements:
+- Supabase SQL migration: NOT REQUIRED
+- Netlify environment-variable changes: NOT REQUIRED
+- Git commit or push performed by Codex: NO
