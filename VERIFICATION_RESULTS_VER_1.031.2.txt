@@ -1,0 +1,45 @@
+Password-Encrypt Ver-1.031.2 verification
+========================================
+
+Production build: PASS
+
+Automated checks:
+- Security: 13/13 PASS
+- Reliability: 20/20 PASS
+- Legal/commercial readiness: 35/35 PASS
+- Landing/plan UX: 36/36 PASS
+- Mobile restoration: 6/6 PASS
+- Trusted Person / emergency flow: 75/75 PASS
+- Onboarding: 68/68 PASS
+- Push notifications: 32/32 PASS
+- Sync retry: 10/10 PASS
+- Secure-device refresh: 7/7 PASS
+- Settings guided tour: 13/13 PASS
+- Ver-1.031.2 feature regression: 74/74 PASS
+
+Total: 389/389 PASS
+
+Ver-1.031.2 checklist checks:
+- The checklist Save button is completely removed.
+- Background saving remains debounced so several quick changes are batched.
+- A continuously failing revision cannot generate unlimited automatic save requests.
+- The header spinner occupies the same size as the action buttons and appears directly before the three-dot menu.
+- The spinner rotates only while a background save is running.
+- A successful save writes one timestamp to the item and the checklist footer state.
+- The footer shows the last successfully updated date and time.
+- A labelled divider separates open and completed groups only when completed items move to the bottom and both groups exist.
+- Untick all clears completed rows through the draft and remains disabled when no row is completed.
+- The action menu opens as a right-side sheet extending to the popup bottom.
+- Close list remains the final action.
+- Existing mobile long-press reordering, native scrolling and completion-group boundaries remain protected.
+
+Version alignment:
+- App: Password-Encrypt Ver-1.031.2
+- Package: 1.31.2
+- Service worker cache: my-passwords-v1.031.2
+- Server APP_VERSION: Password-Encrypt Ver-1.031.2
+
+Deployment requirements:
+- Supabase SQL migration: NOT REQUIRED
+- Netlify environment-variable changes: NOT REQUIRED
+- Git commit or push performed by Codex: NO

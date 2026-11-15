@@ -10,7 +10,7 @@ import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateF
 import { checklistDragStepCount } from './checklistReorder.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.031.1';
+const VERSION = 'Password-Encrypt Ver-1.031.2';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3658,7 +3658,7 @@ function App() {
   const [form, setForm] = useState({ title: '', category: 'Passwords', url: '', username: '', password: '', notes: '', favourite: false, file: null, cardName: '', cardNickname: '', cardNumber: '', cardExpiry: '', cardCcv: '', checklistItems: [], checklistCompletedPosition: 'stay', checklistStrikeThrough: true });
   const [checklistViewSelection, setChecklistViewSelection] = useState({ itemId: '', displayIndex: -1 });
   const [checklistQuickAdd, setChecklistQuickAdd] = useState({ itemId: '', text: '' });
-  const [checklistDraft, setChecklistDraft] = useState({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, revision: 0, savedRevision: 0, editingRowId: '', editingTitle: false });
+  const [checklistDraft, setChecklistDraft] = useState({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, revision: 0, savedRevision: 0, lastSavedAt: '', editingRowId: '', editingTitle: false });
   const checklistDraftRef = useRef(checklistDraft);
   checklistDraftRef.current = checklistDraft;
   const checklistAutoSaveRef = useRef({ blockedRevision: -1, closeAfter: false, notifyOnClose: false });
@@ -10784,7 +10784,7 @@ function App() {
     setChecklistMenuOpen(false);
     checklistAutoSaveRef.current = { blockedRevision: -1, closeAfter: false, notifyOnClose: false };
     if (effectiveVaultItemType(item) === 'Checklists') setChecklistDraft(createChecklistViewDraft(item));
-    else setChecklistDraft({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, revision: 0, savedRevision: 0, editingRowId: '', editingTitle: false });
+    else setChecklistDraft({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, revision: 0, savedRevision: 0, lastSavedAt: '', editingRowId: '', editingTitle: false });
     setShowSecrets((current) => ({ ...current, [item.id]: false }));
   }
 
@@ -10793,7 +10793,7 @@ function App() {
     setChecklistQuickAdd({ itemId: '', text: '' });
     setChecklistMenuOpen(false);
     checklistAutoSaveRef.current = { blockedRevision: -1, closeAfter: false, notifyOnClose: false };
-    setChecklistDraft({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, revision: 0, savedRevision: 0, editingRowId: '', editingTitle: false });
+    setChecklistDraft({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, revision: 0, savedRevision: 0, lastSavedAt: '', editingRowId: '', editingTitle: false });
     setViewItemId('');
     setPicturePreview({ itemId: '', dataUrl: '', busy: false });
   }
@@ -10824,6 +10824,7 @@ function App() {
     checklistDraftRef.current = savingDraft;
     setChecklistDraft(savingDraft);
     const title = String(draft.title || '').trim() || item.title;
+    const savedAt = new Date().toISOString();
     const nextItems = latestSyncItemsRef.current.map((candidate) => candidate.id === item.id
       ? {
           ...candidate,
@@ -10835,7 +10836,7 @@ function App() {
             checklistCompletedPosition: draft.completedPosition === 'bottom' ? 'bottom' : 'stay',
             checklistStrikeThrough: draft.strikeThrough
           },
-          updatedAt: new Date().toISOString()
+          updatedAt: savedAt
         }
       : candidate);
     try {
@@ -10843,7 +10844,7 @@ function App() {
       checklistAutoSaveRef.current.blockedRevision = -1;
       const latestDraft = checklistDraftRef.current;
       const newerChanges = latestDraft.revision > savingRevision;
-      const savedDraft = { ...latestDraft, saving: false, savedRevision: Math.max(latestDraft.savedRevision, savingRevision), dirty: newerChanges };
+      const savedDraft = { ...latestDraft, saving: false, savedRevision: Math.max(latestDraft.savedRevision, savingRevision), lastSavedAt: savedAt, dirty: newerChanges };
       checklistDraftRef.current = savedDraft;
       setChecklistDraft(savedDraft);
       const shouldClose = checklistAutoSaveRef.current.closeAfter;
@@ -10863,10 +10864,6 @@ function App() {
       setChecklistDraft(failedDraft);
       if (!background || closeAfter) showMessage('The checklist could not be saved. Please try again.', 'error');
     }
-  }
-
-  function saveChecklistAndClose() {
-    persistChecklistDraft({ closeAfter: true, notify: true });
   }
 
   function requestCloseViewItem() {
@@ -10937,6 +10934,7 @@ function App() {
       saving: false,
       revision: 0,
       savedRevision: 0,
+      lastSavedAt: item?.updatedAt || '',
       editingRowId: '',
       editingTitle: false
     };
@@ -11157,6 +11155,19 @@ function App() {
       checklistViewWorkingRowsRef.current = rows;
       return { ...current, rows, editingRowId: '' };
     });
+  }
+
+  function untickAllChecklistRows() {
+    if (!checklistDraftRef.current.rows.some((row) => row.done)) {
+      setChecklistMenuOpen(false);
+      return;
+    }
+    markChecklistDraftChanged((current) => {
+      const rows = current.rows.map((row) => ({ ...row, done: false }));
+      checklistViewWorkingRowsRef.current = rows;
+      return { ...current, rows, editingRowId: '' };
+    });
+    setChecklistMenuOpen(false);
   }
 
   function setChecklistDraftCompletedPosition(position) {
@@ -13820,20 +13831,29 @@ function App() {
                 );
               })()}
               <div className="view-item-header-actions">
+                {effectiveVaultItemType(viewedItem) === 'Checklists' && !isEmergencyImportedItem(viewedItem) && (
+                  <span className={`checklist-background-save-indicator ${checklistDraft.saving ? 'is-saving' : ''}`} role="status" aria-live="polite" aria-label={checklistDraft.saving ? 'Saving checklist in the background' : 'Checklist saved'} title={checklistDraft.saving ? 'Saving in the background' : 'Saved'}>
+                    <RefreshCw size={20} aria-hidden="true" />
+                  </span>
+                )}
                 {effectiveVaultItemType(viewedItem) === 'Checklists' && !isEmergencyImportedItem(viewedItem) && <button type="button" className="icon-button checklist-menu-button" onClick={() => setChecklistMenuOpen((open) => !open)} aria-label="Checklist menu" aria-expanded={checklistMenuOpen}><MoreHorizontal size={21} /></button>}
                 <button type="button" className="icon-button" onClick={requestCloseViewItem} aria-label={effectiveVaultItemType(viewedItem) === 'Checklists' ? 'Save and close checklist' : 'Close'}><X size={18} /></button>
               </div>
-              {effectiveVaultItemType(viewedItem) === 'Checklists' && checklistMenuOpen && !isEmergencyImportedItem(viewedItem) && (
+            </div>
+            {effectiveVaultItemType(viewedItem) === 'Checklists' && checklistMenuOpen && !isEmergencyImportedItem(viewedItem) && (
+              <div className="checklist-menu-layer">
+                <button type="button" className="checklist-menu-dismiss" onClick={() => setChecklistMenuOpen(false)} aria-label="Close checklist menu" />
                 <div className="checklist-overflow-menu" role="menu" aria-label="Checklist actions">
                   <button type="button" role="menuitem" onClick={() => { setChecklistDraft((current) => ({ ...current, editingTitle: true })); setChecklistMenuOpen(false); }}><Pencil size={17} /><span>Rename checklist</span></button>
                   <button type="button" role="menuitem" onClick={() => { markChecklistDraftChanged((current) => ({ ...current, favourite: !current.favourite })); setChecklistMenuOpen(false); }}><Star size={17} fill={checklistDraft.favourite ? 'currentColor' : 'none'} /><span>{checklistDraft.favourite ? 'Remove from favourites' : 'Add to favourites'}</span></button>
                   <button type="button" role="menuitem" onClick={() => setChecklistDraftCompletedPosition(checklistDraft.completedPosition === 'bottom' ? 'stay' : 'bottom')}><ArrowDown size={17} /><span>{checklistDraft.completedPosition === 'bottom' ? 'Keep completed items in place' : 'Move completed items to bottom'}</span></button>
                   <button type="button" role="menuitem" onClick={() => { markChecklistDraftChanged((current) => ({ ...current, strikeThrough: !current.strikeThrough })); setChecklistMenuOpen(false); }}><Check size={17} /><span>{checklistDraft.strikeThrough ? 'Remove completed strike-through' : 'Strike through completed items'}</span></button>
+                  <button type="button" role="menuitem" onClick={untickAllChecklistRows} disabled={!checklistDraft.rows.some((row) => row.done)}><RefreshCw size={17} /><span>Untick all</span></button>
                   <button type="button" role="menuitem" className="danger" onClick={() => { setChecklistMenuOpen(false); requestDeleteItem(viewedItem); }}><Trash2 size={17} /><span>Delete whole checklist</span></button>
                   <button type="button" role="menuitem" className="close-list" onClick={() => { setChecklistMenuOpen(false); requestCloseViewItem(); }}><X size={17} /><span>Close list</span></button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
             <div className="item-popup-body view-item-popup-body">
               <div className="view-item-meta">
                 <span className="category-pill">{viewedItem.category}</span>
@@ -13884,6 +13904,9 @@ function App() {
                   ? { completedPosition: checklistDraft.completedPosition, strikeThrough: checklistDraft.strikeThrough }
                   : { completedPosition: 'bottom', strikeThrough: true };
                 const checklistRows = isChecklist && checklistDraft.itemId === viewedItem.id ? checklistDraft.rows : [];
+                const firstCompletedIndex = checklistSettings.completedPosition === 'bottom'
+                  ? checklistRows.findIndex((row) => row.done)
+                  : -1;
                 return (
                   <>
                     {viewedItem.payload?.url && !isChecklist && !isStoredFile && !isCard && (
@@ -13985,8 +14008,11 @@ function App() {
                       <div className="app-field-block checklist-view-block">
                         <div ref={checklistViewSurfaceRef} className={`checklist-display checklist-draft-display ${checklistSettings.strikeThrough ? '' : 'no-strikethrough'} ${importedItem ? 'is-readonly' : ''}`} onPointerMove={moveChecklistViewLongPress} onPointerUp={finishChecklistViewPointerDrag} onPointerCancel={finishChecklistViewPointerDrag} onLostPointerCapture={finishChecklistViewPointerDrag}>
                           {checklistRows.length ? checklistRows.map((row, displayIndex) => (
-                            <div
-                              key={row.id}
+                            <React.Fragment key={row.id}>
+                              {firstCompletedIndex > 0 && displayIndex === firstCompletedIndex && (
+                                <div className="checklist-completed-divider" role="separator" aria-label="Completed checklist items"><span>Completed</span></div>
+                              )}
+                              <div
                               className={`checklist-line ${row.done ? 'done' : ''} ${checklistViewSelection.itemId === viewedItem.id && checklistViewSelection.displayIndex === displayIndex ? 'is-selected' : ''}`}
                               data-checklist-view-row={displayIndex}
                               data-checklist-row-id={row.id}
@@ -14000,7 +14026,8 @@ function App() {
                                 <button type="button" className="checklist-line-text" onClick={() => { if (!importedItem) editChecklistDraftRow(row.id); }} disabled={importedItem}>{row.text}</button>
                               )}
                               {!importedItem && checklistDraft.editingRowId === row.id && <button type="button" className="checklist-line-delete" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); }} onClick={(event) => { event.stopPropagation(); deleteChecklistDraftRow(row.id); }} aria-label={`Delete checklist item ${row.text}`} title="Delete this checklist item"><X size={19} /></button>}
-                            </div>
+                              </div>
+                            </React.Fragment>
                           )) : <span className="app-field-value">No checklist items yet.</span>}
                           {!importedItem && (
                             <form className="checklist-quick-add" onSubmit={(event) => addChecklistLineFromView(event, viewedItem)}>
@@ -14025,14 +14052,14 @@ function App() {
                         </div>
                       </div>
                     )}
-                    <p className="updated">Updated {formatUserDate(viewedItem.updatedAt, true)}</p>
+                    {(!isChecklist || importedItem) && <p className="updated">Updated {formatUserDate(viewedItem.updatedAt, true)}</p>}
                   </>
                 );
               })()}
             </div>
             <div className={`item-popup-footer view-item-footer ${effectiveVaultItemType(viewedItem) === 'Checklists' && !isEmergencyImportedItem(viewedItem) ? 'checklist-view-footer' : ''}`}>
               {effectiveVaultItemType(viewedItem) === 'Checklists' && !isEmergencyImportedItem(viewedItem) ? (
-                <button type="button" className="primary-button view-done-button checklist-save-close-button" onClick={saveChecklistAndClose} disabled={!checklistDraft.dirty || checklistDraft.saving}>{checklistDraft.saving ? 'Saving changes...' : 'Save & close'}</button>
+                <p className="checklist-updated-footer">Updated {formatUserDate(checklistDraft.lastSavedAt || viewedItem.updatedAt, true)}</p>
               ) : (
                 <>
                   <div className="view-action-row">
