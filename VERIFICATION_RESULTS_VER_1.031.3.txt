@@ -1,0 +1,44 @@
+Password-Encrypt Ver-1.031.3 verification
+========================================
+
+Production build: PASS
+
+Automated checks:
+- Security: 13/13 PASS
+- Reliability: 20/20 PASS
+- Legal/commercial readiness: 35/35 PASS
+- Landing/plan UX: 36/36 PASS
+- Mobile restoration: 6/6 PASS
+- Trusted Person / emergency flow: 75/75 PASS
+- Onboarding: 68/68 PASS
+- Push notifications: 32/32 PASS
+- Sync retry: 10/10 PASS
+- Secure-device refresh: 7/7 PASS
+- Settings guided tour: 13/13 PASS
+- Ver-1.031.3 feature regression: 81/81 PASS
+
+Total: 396/396 PASS
+
+Ver-1.031.3 checklist checks:
+- The Updated date and time is centred in the checklist footer.
+- The mobile checklist title shield is hidden without hiding the background-save indicator.
+- The checklist title is two pixels smaller and uses font weight 600.
+- The header X keeps save-on-exit behaviour.
+- Clicking the header X with an active or outstanding save opens the save-wait popup.
+- The popup includes rotating save and moving progress animations.
+- Changes made during a running save are included in a follow-up save before closing.
+- A successful save closes the checklist and removes the waiting popup.
+- A failed save removes the waiting popup, leaves the checklist open and reports the failure.
+- Existing bounded background-save failure protection remains intact.
+- Existing mobile long-press reordering and popup scrolling remain protected.
+
+Version alignment:
+- App: Password-Encrypt Ver-1.031.3
+- Package: 1.31.3
+- Service worker cache: my-passwords-v1.031.3
+- Server APP_VERSION: Password-Encrypt Ver-1.031.3
+
+Deployment requirements:
+- Supabase SQL migration: NOT REQUIRED
+- Netlify environment-variable changes: NOT REQUIRED
+- Git commit or push performed by Codex: NO

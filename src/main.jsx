@@ -10,7 +10,7 @@ import { APP_DATE_FORMATS, formatAppDate, normaliseAppDateFormat } from './dateF
 import { checklistDragStepCount } from './checklistReorder.js';
 import { automaticSyncRetryEligible, nextAutomaticSyncRetry, normalisePersistedSyncSafetyState } from './syncRetryPolicy.js';
 
-const VERSION = 'Password-Encrypt Ver-1.031.2';
+const VERSION = 'Password-Encrypt Ver-1.031.3';
 const SMS_AUTH_VERIFICATION_UI_ENABLED = false;
 const SMS_MOBILE_CONTACT_VERIFICATION_ENABLED = true;
 const STORAGE_KEY = 'my-passwords-v0.002-local-vault';
@@ -3663,6 +3663,7 @@ function App() {
   checklistDraftRef.current = checklistDraft;
   const checklistAutoSaveRef = useRef({ blockedRevision: -1, closeAfter: false, notifyOnClose: false });
   const [checklistMenuOpen, setChecklistMenuOpen] = useState(false);
+  const [checklistSaveWaitOpen, setChecklistSaveWaitOpen] = useState(false);
   const checklistViewDragRef = useRef({ timer: null, itemId: '', rowId: '', phase: '', active: false, moved: false, inputMode: '', pointerId: null, touchId: null, startX: 0, startY: 0, startScrollTop: 0, stepSize: 44, appliedSteps: 0, displayIndex: -1 });
   const checklistViewWorkingRowsRef = useRef(null);
   const checklistViewSurfaceRef = useRef(null);
@@ -10782,6 +10783,7 @@ function App() {
     setViewItemId(item.id);
     setChecklistQuickAdd({ itemId: item.id, text: '' });
     setChecklistMenuOpen(false);
+    setChecklistSaveWaitOpen(false);
     checklistAutoSaveRef.current = { blockedRevision: -1, closeAfter: false, notifyOnClose: false };
     if (effectiveVaultItemType(item) === 'Checklists') setChecklistDraft(createChecklistViewDraft(item));
     else setChecklistDraft({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, revision: 0, savedRevision: 0, lastSavedAt: '', editingRowId: '', editingTitle: false });
@@ -10792,6 +10794,7 @@ function App() {
     resetChecklistViewDrag(null, { clearSelection: true });
     setChecklistQuickAdd({ itemId: '', text: '' });
     setChecklistMenuOpen(false);
+    setChecklistSaveWaitOpen(false);
     checklistAutoSaveRef.current = { blockedRevision: -1, closeAfter: false, notifyOnClose: false };
     setChecklistDraft({ itemId: '', title: '', rows: [], completedPosition: 'stay', strikeThrough: true, favourite: false, dirty: false, saving: false, revision: 0, savedRevision: 0, lastSavedAt: '', editingRowId: '', editingTitle: false });
     setViewItemId('');
@@ -10856,14 +10859,26 @@ function App() {
         if (notifyOnClose) showMessage('Checklist saved.', 'success');
       }
     } catch {
+      const wasWaitingToClose = checklistAutoSaveRef.current.closeAfter;
       checklistAutoSaveRef.current.blockedRevision = savingRevision;
       checklistAutoSaveRef.current.closeAfter = false;
       checklistAutoSaveRef.current.notifyOnClose = false;
       const failedDraft = { ...checklistDraftRef.current, saving: false, dirty: true };
       checklistDraftRef.current = failedDraft;
       setChecklistDraft(failedDraft);
-      if (!background || closeAfter) showMessage('The checklist could not be saved. Please try again.', 'error');
+      setChecklistSaveWaitOpen(false);
+      if (!background || closeAfter || wasWaitingToClose) showMessage('The checklist could not be saved. Please try again.', 'error');
     }
+  }
+
+  function requestHeaderCloseViewItem() {
+    if (viewedItem && effectiveVaultItemType(viewedItem) === 'Checklists' && !isEmergencyImportedItem(viewedItem)) {
+      const draft = checklistDraftRef.current;
+      if (draft.saving || draft.dirty) setChecklistSaveWaitOpen(true);
+      persistChecklistDraft({ closeAfter: true });
+      return;
+    }
+    closeViewItem();
   }
 
   function requestCloseViewItem() {
@@ -13837,7 +13852,7 @@ function App() {
                   </span>
                 )}
                 {effectiveVaultItemType(viewedItem) === 'Checklists' && !isEmergencyImportedItem(viewedItem) && <button type="button" className="icon-button checklist-menu-button" onClick={() => setChecklistMenuOpen((open) => !open)} aria-label="Checklist menu" aria-expanded={checklistMenuOpen}><MoreHorizontal size={21} /></button>}
-                <button type="button" className="icon-button" onClick={requestCloseViewItem} aria-label={effectiveVaultItemType(viewedItem) === 'Checklists' ? 'Save and close checklist' : 'Close'}><X size={18} /></button>
+                <button type="button" className="icon-button" onClick={requestHeaderCloseViewItem} aria-label={effectiveVaultItemType(viewedItem) === 'Checklists' ? 'Save and close checklist' : 'Close'}><X size={18} /></button>
               </div>
             </div>
             {effectiveVaultItemType(viewedItem) === 'Checklists' && checklistMenuOpen && !isEmergencyImportedItem(viewedItem) && (
@@ -13851,6 +13866,16 @@ function App() {
                   <button type="button" role="menuitem" onClick={untickAllChecklistRows} disabled={!checklistDraft.rows.some((row) => row.done)}><RefreshCw size={17} /><span>Untick all</span></button>
                   <button type="button" role="menuitem" className="danger" onClick={() => { setChecklistMenuOpen(false); requestDeleteItem(viewedItem); }}><Trash2 size={17} /><span>Delete whole checklist</span></button>
                   <button type="button" role="menuitem" className="close-list" onClick={() => { setChecklistMenuOpen(false); requestCloseViewItem(); }}><X size={17} /><span>Close list</span></button>
+                </div>
+              </div>
+            )}
+            {effectiveVaultItemType(viewedItem) === 'Checklists' && checklistSaveWaitOpen && !isEmergencyImportedItem(viewedItem) && (
+              <div className="checklist-save-wait-layer" role="status" aria-live="assertive" aria-label="Saving checklist changes">
+                <div className="checklist-save-wait-card">
+                  <div className="checklist-save-wait-animation" aria-hidden="true"><RefreshCw size={30} /></div>
+                  <h3>Hang on…</h3>
+                  <p>We’re saving your changes before closing the checklist.</p>
+                  <div className="checklist-save-wait-progress" aria-hidden="true"><span /></div>
                 </div>
               </div>
             )}
